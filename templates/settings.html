@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_badge %}
+{% block title %}Settings · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <h1>Settings</h1>
+    <p>Environment and registry configuration overview.</p>
+  </div>
+  <div class="page-meta">
+    <span class="badge badge-phase">Read-only</span>
+  </div>
+</section>
+
+<section class="panel panel-body">
+  <h2 style="margin:0 0 0.75rem;font-size:14px">Runtime</h2>
+  <dl class="detail-list">
+    <div><dt>App name</dt><dd>{{ app_name }}</dd></div>
+    <div><dt>Environment</dt><dd><span class="badge badge-env">{{ env_profile }}</span></dd></div>
+    <div><dt>Version</dt><dd>v{{ hub_version }}</dd></div>
+    <div><dt>Host</dt><dd><code>{{ settings_view.host }}:{{ settings_view.port }}</code></dd></div>
+    <div><dt>Debug</dt><dd>{{ settings_view.debug }}</dd></div>
+    <div><dt>Registry file</dt><dd><code>{{ settings_view.repositories_config }}</code></dd></div>
+    <div><dt>Request timeout</dt><dd>{{ settings_view.request_timeout_seconds }}s</dd></div>
+    <div><dt>ALLOW_DHIS2_WRITES</dt><dd>{{ status_badge('disabled') }} <span class="muted">always off in this phase</span></dd></div>
+  </dl>
+</section>
+{% endblock %}

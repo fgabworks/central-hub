@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_badge %}
+{% block title %}Jobs · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <h1>Jobs</h1>
+    <p>Unified job history and progress monitoring.</p>
+  </div>
+  <div class="page-meta">
+    <span class="badge badge-phase">Coming in next phase</span>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-body coming-box">
+    <h2>Jobs engine not active yet</h2>
+    <p>
+      Job submission, workers, logs, and history arrive in Phase 2.
+      The dashboard shows demo rows only — no real command execution runs from this page.
+    </p>
+    <div class="btn-row">
+      {{ status_badge('running') }}
+      {{ status_badge('completed') }}
+      {{ status_badge('failed') }}
+    </div>
+    <div class="btn-row" style="margin-top:1rem">
+      <a class="btn btn-primary" href="{{ url_for('dashboard') }}">Back to Dashboard</a>
+    </div>
+  </div>
+</section>
+{% endblock %}

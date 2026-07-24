@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_badge, type_badge %}
+{% block title %}{{ repository.name }} · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <p class="muted-2" style="margin:0 0 0.35rem">
+      <a href="{{ url_for('repositories') }}">Repositories</a> / {{ repository.id }}
+    </p>
+    <h1>{{ repository.name }}</h1>
+    <p>{{ repository.description or "No description provided." }}</p>
+  </div>
+  <div class="page-meta">
+    {{ type_badge(repository.type) }}
+    {% if repository.enabled %}{{ status_badge('healthy') }}{% else %}{{ status_badge('disabled') }}{% endif %}
+  </div>
+</section>
+
+<section class="dash-grid">
+  <section class="panel panel-body">
+    <h2 style="margin:0 0 0.75rem;font-size:14px">Connection</h2>
+    <dl class="detail-list">
+      <div><dt>ID</dt><dd><code>{{ repository.id }}</code></dd></div>
+      <div><dt>Type</dt><dd>{{ type_badge(repository.type) }}</dd></div>
+      {% if repository.base_url %}<div><dt>Base URL</dt><dd><code>{{ repository.base_url }}</code></dd></div>{% endif %}
+      {% if repository.local_path %}<div><dt>Local path</dt><dd><code>{{ repository.local_path }}</code></dd></div>{% endif %}
+      {% if repository.working_directory %}<div><dt>Working directory</dt><dd><code>{{ repository.working_directory }}</code></dd></div>{% endif %}
+    </dl>
+    <div class="btn-row" style="margin-top:1rem">
+      <a class="btn btn-primary" href="{{ url_for('health') }}">Open Health</a>
+      <a class="btn" href="{{ url_for('api_repository_health', repo_id=repository.id) }}">JSON health</a>
+    </div>
+  </section>
+
+  <section class="panel panel-body">
+    <h2 style="margin:0 0 0.75rem;font-size:14px">Health check config</h2>
+    {% if repository.health_check %}
+      <dl class="detail-list">
+        <div><dt>Type</dt><dd>{{ repository.health_check.type }}</dd></div>
+        {% if repository.health_check.path %}<div><dt>Path</dt><dd><code>{{ repository.health_check.path }}</code></dd></div>{% endif %}
+        {% if repository.health_check.command %}<div><dt>Command</dt><dd><code>{{ repository.health_check.command|join(' ') }}</code></dd></div>{% endif %}
+        <div><dt>Timeout</dt><dd>{{ repository.health_check.timeout_seconds }}s</dd></div>
+      </dl>
+    {% else %}
+      <p class="muted">No health check configured.</p>
+    {% endif %}
+  </section>
+</section>
+{% endblock %}

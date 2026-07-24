@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_badge, type_badge %}
+{% block title %}Health · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <h1>Health</h1>
+    <p>Repository and service health probes.</p>
+  </div>
+  <div class="page-meta">
+    <span>{{ healthy_count }} healthy</span>
+    <span>·</span>
+    <span>{{ offline_count }} offline</span>
+    <span>·</span>
+    <span>{{ disabled_count }} disabled</span>
+    <a class="btn btn-sm" href="{{ url_for('health') }}">Re-check</a>
+  </div>
+</section>
+
+<section class="summary-grid" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+  <article class="stat-card">
+    <div class="stat-label">Healthy</div>
+    <div class="stat-value">{{ healthy_count }}</div>
+    <div class="stat-sub">Responding normally</div>
+  </article>
+  <article class="stat-card">
+    <div class="stat-label">Offline</div>
+    <div class="stat-value">{{ offline_count }}</div>
+    <div class="stat-sub">Unreachable or unhealthy</div>
+  </article>
+  <article class="stat-card">
+    <div class="stat-label">Disabled</div>
+    <div class="stat-value">{{ disabled_count }}</div>
+    <div class="stat-sub">Skipped in registry</div>
+  </article>
+</section>
+
+<section class="panel">
+  <div class="panel-header">
+    <h2>Repository checks</h2>
+    <a class="quiet" href="{{ url_for('api_health_all') }}">JSON</a>
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Repository</th>
+          <th>Type</th>
+          <th>Enabled</th>
+          <th>Status</th>
+          <th>Latency</th>
+          <th>Detail</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in results %}
+          <tr>
+            <td>
+              <div class="cell-title">{{ item.name }}</div>
+              <div class="cell-sub"><code>{{ item.repository_id }}</code></div>
+            </td>
+            <td>{{ type_badge(item.type) }}</td>
+            <td>
+              {% if item.enabled %}{{ status_badge('healthy') }}{% else %}{{ status_badge('disabled') }}{% endif %}
+            </td>
+            <td>
+              {% if not item.enabled or item.status == 'skipped' %}
+                {{ status_badge('disabled') }}
+              {% elif item.ok %}
+                {{ status_badge('healthy') }}
+              {% else %}
+                {{ status_badge('offline') }}
+              {% endif %}
+            </td>
+            <td class="muted-2">{{ item.latency_ms }} ms</td>
+            <td class="muted" style="max-width:28rem;word-break:break-word">{{ item.detail }}</td>
+          </tr>
+        {% else %}
+          <tr class="empty-row"><td colspan="6">No health results available.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

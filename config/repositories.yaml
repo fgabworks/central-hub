@@ -1,0 +1,78 @@
+# Central Hub repository registry (Phase 1)
+# All entries below are safe demo/sample connections only.
+# Do not point at live PMNP / DHIS2 systems here.
+
+repositories:
+  - id: sample-cli
+    name: Sample CLI Repo
+    type: command
+    enabled: true
+    description: "Demo local repo for path and harmless command health checks."
+    local_path: "samples/sample-cli"
+    working_directory: "samples/sample-cli"
+    tags: ["demo", "command"]
+    health_check:
+      type: command
+      local_path: "samples/sample-cli"
+      # Allowlisted Phase 1 probe only; interpreter resolved via PATH.
+      command: ["python", "-c", "print('ok')"]
+      timeout_seconds: 5
+    capabilities:
+      - id: echo_dry_run
+        label: Echo (dry-run) — Phase 2+
+        adapter_type: command
+        input_types: ["text", "csv"]
+        dry_run_default: true
+
+  - id: sample-api
+    name: Sample API Repo
+    type: api
+    enabled: true
+    description: "Demo API repo. Expected unhealthy unless a local sample API is running."
+    base_url: "http://127.0.0.1:9099"
+    tags: ["demo", "api"]
+    health_check:
+      type: http
+      method: GET
+      path: "/health"
+      timeout_seconds: 3
+    capabilities:
+      - id: health
+        label: Health check
+        adapter_type: api
+        input_types: []
+        dry_run_default: true
+
+  - id: sample-missing-path
+    name: Sample Missing Path Repo
+    type: command
+    enabled: true
+    description: "Demo unhealthy command repo (path intentionally missing)."
+    local_path: "samples/does-not-exist"
+    working_directory: "samples/does-not-exist"
+    tags: ["demo", "unhealthy"]
+    health_check:
+      type: path
+      local_path: "samples/does-not-exist"
+      executable: "python"
+      timeout_seconds: 3
+    capabilities: []
+
+  - id: sample-disabled
+    name: Sample Disabled Repo
+    type: api
+    enabled: false
+    description: "Disabled demo entry to show registry enabled/disabled state."
+    base_url: "http://127.0.0.1:9100"
+    tags: ["demo", "disabled"]
+    health_check:
+      type: http
+      method: GET
+      path: "/health"
+      timeout_seconds: 2
+    capabilities: []
+
+defaults:
+  job_timeout_seconds: 3600
+  max_concurrent_jobs: 2
+  require_explicit_apply: true

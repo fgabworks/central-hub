@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ app_name }}{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  {% from "macros.html" import brand_icon %}
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-mark">{{ brand_icon() }}</div>
+        <div class="brand-text">
+          <strong>{{ app_name }}</strong>
+          <span>Personal Repository Control Center</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav" aria-label="Primary">
+        <div class="nav-label">Navigation</div>
+        {% for item in nav_items %}
+          <a
+            href="{{ url_for(item.endpoint) }}"
+            class="nav-link{% if request.endpoint == item.endpoint or (item.active_prefix and request.endpoint and request.endpoint.startswith(item.active_prefix)) %} is-active{% endif %}"
+          >
+            <span class="nav-ico" aria-hidden="true">{{ item.icon }}</span>
+            <span>{{ item.label }}</span>
+            {% if item.badge %}
+              <span class="nav-new">{{ item.badge }}</span>
+            {% endif %}
+          </a>
+        {% endfor %}
+      </nav>
+
+      <div class="sidebar-actions">
+        <div class="nav-label">Quick Actions</div>
+        {% for action in quick_actions %}
+          {% if action.available %}
+            <a class="action-link" href="{{ url_for(action.endpoint) }}">{{ action.label }}</a>
+          {% else %}
+            <span class="action-link is-disabled" title="{{ action.phase or 'Coming soon' }}">{{ action.label }}</span>
+          {% endif %}
+        {% endfor %}
+      </div>
+
+      <div class="sidebar-footer">
+        <strong>Central Hub v{{ hub_version }}</strong>
+        <span>Personal control center</span>
+      </div>
+    </aside>
+
+    <div class="main-column">
+      <header class="topbar">
+        <div class="topbar-left">
+          <span class="badge badge-env">Environment: {{ env_profile }}</span>
+          <span class="badge badge-healthy badge-dot">DHIS2 Connection: Online</span>
+        </div>
+        <div class="topbar-right">
+          <span class="icon-btn" title="Theme" aria-label="Theme">☾</span>
+          <span class="icon-btn" title="Notifications" aria-label="Notifications">
+            🔔
+            <span class="dot">3</span>
+          </span>
+          <div class="profile">
+            <span class="avatar">AD</span>
+            <span>Admin ▾</span>
+          </div>
+        </div>
+      </header>
+
+      <main class="content">
+        {% if registry_error %}
+          <div class="banner banner-error">Registry error: {{ registry_error }}</div>
+        {% endif %}
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+</body>
+</html>

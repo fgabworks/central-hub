@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Audit · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <h1>Audit</h1>
+    <p>Operator actions and configuration change history.</p>
+  </div>
+  <div class="page-meta">
+    <span class="badge badge-phase">Coming in next phase</span>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-header"><h2>Audit log</h2></div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>When</th>
+          <th>Action</th>
+          <th>Actor</th>
+          <th>Target</th>
+          <th>Detail</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="empty-row">
+          <td colspan="5">No persisted audit events yet. Dashboard activity rows are demo UI only.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

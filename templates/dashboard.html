@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_badge, type_badge %}
+{% block title %}Dashboard · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <h1>Dashboard</h1>
+    <p>Overview of your repositories, jobs, DHIS2 and system status.</p>
+  </div>
+  <div class="page-meta">
+    <span>Last updated: {{ last_updated }}</span>
+    <a class="icon-btn" href="{{ url_for('dashboard') }}" title="Refresh" aria-label="Refresh">↻</a>
+  </div>
+</section>
+
+<section class="summary-grid">
+  {% for card in summary_cards %}
+    <article class="stat-card">
+      <div class="stat-top">
+        <span class="stat-label">{{ card.label }}</span>
+        <span class="stat-ico" aria-hidden="true">{{ card.icon }}</span>
+      </div>
+      <div class="stat-value">{{ card.value }}</div>
+      <div class="stat-sub">{{ card.sub }}</div>
+      <a class="stat-link" href="{{ url_for(card.link_endpoint) }}">View all →</a>
+    </article>
+  {% endfor %}
+</section>
+
+<section class="dash-grid">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Connected Repositories</h2>
+        <a class="quiet" href="{{ url_for('repositories') }}">View all</a>
+      </div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead>
+            <tr>
+              <th>Repository</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th>Branch / Path</th>
+              <th>Last Check</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in demo_repos %}
+              <tr>
+                <td>
+                  <div class="cell-title">
+                    <span class="cell-ico" aria-hidden="true">{{ row.icon }}</span>
+                    <span>{{ row.name }}</span>
+                  </div>
+                  <div class="cell-sub">{{ row.subtitle }}</div>
+                </td>
+                <td>{{ type_badge(row.type) }}</td>
+                <td>{{ status_badge(row.status) }}</td>
+                <td class="mono muted">{{ row.branch_path }}</td>
+                <td class="muted-2">{{ row.last_check }}</td>
+                <td><a class="btn btn-sm" href="{{ url_for('repositories') }}">View</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Recent Jobs</h2>
+        <a class="quiet" href="{{ url_for('jobs') }}">View all</a>
+      </div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead>
+            <tr>
+              <th>Job</th>
+              <th>Repository</th>
+              <th>Status</th>
+              <th>Started At</th>
+              <th>Duration</th>
+              <th>Result</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for job in demo_jobs %}
+              <tr>
+                <td class="cell-title">{{ job.name }}</td>
+                <td class="muted">{{ job.repository }}</td>
+                <td>{{ status_badge(job.status) }}</td>
+                <td class="muted-2">{{ job.started_at }}</td>
+                <td class="muted-2">{{ job.duration }}</td>
+                <td>
+                  <a class="btn btn-sm" href="{{ url_for('jobs') }}">{{ job.action }}</a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <aside class="stack">
+    <section class="panel">
+      <div class="panel-header">
+        <h2>DHIS2 Maintenance</h2>
+        <a class="quiet" href="{{ url_for('dhis2') }}">Open</a>
+      </div>
+      <div class="panel-body">
+        <div class="dhis2-status">
+          <div class="dhis2-chip">
+            <span class="label">DHIS2 Connection</span>
+            {{ status_badge('connected') }}
+          </div>
+          <div class="dhis2-chip">
+            <span class="label">Environment</span>
+            <span class="badge badge-env">{{ env_profile }}</span>
+          </div>
+          <div class="dhis2-chip">
+            <span class="label">Write Mode</span>
+            {{ status_badge('disabled') }}
+          </div>
+        </div>
+
+        <div class="nav-label" style="padding-left:0">Available Tools</div>
+        <div class="tools-grid">
+          {% for tool in dhis2_tools %}
+            <a class="tool-btn" href="{{ url_for('dhis2') }}">
+              <span class="ico" aria-hidden="true">{{ tool.icon }}</span>
+              <span>{{ tool.label }}</span>
+            </a>
+          {% endfor %}
+        </div>
+
+        <div class="warning-banner">
+          <span class="shield" aria-hidden="true">🛡</span>
+          <div>
+            <strong>Write operations are disabled.</strong>
+            Enable <code>ALLOW_DHIS2_WRITES=true</code> to create or update metadata.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Recent Activity</h2>
+        <a class="quiet" href="{{ url_for('audit') }}">View all</a>
+      </div>
+      <ul class="activity-list">
+        {% for item in demo_activity %}
+          <li>
+            <span class="activity-time">{{ item.time }}</span>
+            <div class="activity-main">
+              <span class="badge badge-activity {{ item.tone }}">{{ item.action }}</span>
+              <div class="desc">{{ item.detail }}</div>
+            </div>
+            <span class="activity-user">{{ item.actor }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    </section>
+  </aside>
+</section>
+{% endblock %}

@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_badge, type_badge %}
+{% block title %}Repositories · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <h1>Repositories</h1>
+    <p>Connected repositories from <code>config/repositories.yaml</code>.</p>
+  </div>
+  <div class="page-meta">
+    <span>{{ repositories|length }} registered</span>
+    <a class="btn btn-sm" href="{{ url_for('health') }}">Check health</a>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-header">
+    <h2>Registry</h2>
+    <span class="quiet">Live config · not mock data</span>
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Repository</th>
+          <th>ID</th>
+          <th>Type</th>
+          <th>Status</th>
+          <th>Connection</th>
+          <th>Capabilities</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for repo in repositories %}
+          <tr>
+            <td>
+              <div class="cell-title">
+                <span class="cell-ico">▣</span>
+                <span>{{ repo.name }}</span>
+              </div>
+              <div class="cell-sub">{{ repo.description or '—' }}</div>
+            </td>
+            <td><code>{{ repo.id }}</code></td>
+            <td>{{ type_badge(repo.type) }}</td>
+            <td>
+              {% if repo.enabled %}
+                {{ status_badge('healthy') }}
+              {% else %}
+                {{ status_badge('disabled') }}
+              {% endif %}
+            </td>
+            <td class="mono muted">
+              {% if repo.type == 'api' %}{{ repo.base_url or '—' }}{% else %}{{ repo.local_path or '—' }}{% endif %}
+            </td>
+            <td class="muted">{{ repo.capabilities|length }}</td>
+            <td><a class="btn btn-sm" href="{{ url_for('repository_detail', repo_id=repo.id) }}">View</a></td>
+          </tr>
+        {% else %}
+          <tr class="empty-row"><td colspan="7">No repositories loaded.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

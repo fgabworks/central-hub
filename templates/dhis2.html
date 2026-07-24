@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_badge %}
+{% block title %}DHIS2 · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <h1>DHIS2</h1>
+    <p>Maintenance chrome for a connected DHIS2 instance. UI scaffold only — no live writes.</p>
+  </div>
+  <div class="page-meta">
+    <span class="badge badge-phase">Coming in next phase</span>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-body">
+    <div class="dhis2-status">
+      <div class="dhis2-chip">
+        <span class="label">DHIS2 Connection</span>
+        {{ status_badge('connected') }}
+      </div>
+      <div class="dhis2-chip">
+        <span class="label">Environment</span>
+        <span class="badge badge-env">{{ env_profile }}</span>
+      </div>
+      <div class="dhis2-chip">
+        <span class="label">Write Mode</span>
+        {{ status_badge('disabled') }}
+      </div>
+    </div>
+
+    <div class="tools-grid">
+      {% for tool in dhis2_tools %}
+        <span class="tool-btn" title="Placeholder — no action yet">
+          <span class="ico">{{ tool.icon }}</span>
+          <span>{{ tool.label }}</span>
+        </span>
+      {% endfor %}
+    </div>
+
+    <div class="warning-banner">
+      <span class="shield">🛡</span>
+      <div>
+        <strong>Write operations are disabled.</strong>
+        Enable <code>ALLOW_DHIS2_WRITES=true</code> to create or update metadata.
+        Central Hub does not perform DHIS2 writes in this phase.
+      </div>
+    </div>
+
+    <p class="muted" style="margin:1rem 0 0">
+      Coming in next phase: read-only status probes against a configured DHIS2/API adapter.
+      No PMNP domain logic is implemented here.
+    </p>
+  </div>
+</section>
+{% endblock %}

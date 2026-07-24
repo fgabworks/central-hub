@@ -1,0 +1,28 @@
+# Environment and secrets
+.env
+.env.local
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.envrc
+
+# Runtime data (Phase 2+)
+data/
+*.db
+*.sqlite3
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
