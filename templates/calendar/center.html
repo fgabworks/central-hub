@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}{{ page_title }} · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>{{ page_title }}</h1>
+    <p class="page-sub">
+      Read-only Google Calendar for the {{ workspace_labels[workspace] }} workspace.
+      Scopes <code>calendar.calendarlist.readonly</code> and <code>calendar.events.readonly</code> only.
+      Reuses encrypted Google account tokens. No create/update/delete/RSVP. No agent access.
+    </p>
+  </div>
+</div>
+
+{% if not oauth.configured %}
+<div class="banner banner-error">
+  Google OAuth is not configured. Set <code>GMAIL_CLIENT_ID</code> / <code>GMAIL_CLIENT_SECRET</code>
+  and enable the Google Calendar API. Manage accounts under
+  <a href="{{ url_for('google_connections') }}">Google Connections</a>.
+</div>
+{% endif %}
+
+{% if error %}
+<div class="banner banner-error">{{ error }}</div>
+{% endif %}
+
+<div class="cal-shell">
+  <aside class="cal-accounts card">
+    <div class="email-panel-head">
+      <strong>Accounts</strong>
+      <a class="btn btn-sm" href="{{ url_for('google_connections') }}">Manage</a>
+    </div>
+    <ul class="email-account-list">
+      {% for acct in calendar_accounts %}
+      <li class="email-account-row{% if selected_account_id == acct.id %} is-active{% endif %}">
+        <a href="{{ calendar_base }}?account={{ acct.id }}&view={{ view }}">
+          <strong>{{ acct.email or '(unnamed)' }}</strong>
+          <span class="badge badge-healthy">Calendar</span>
+        </a>
+      </li>
+      {% else %}
+      <li class="muted">No Calendar-enabled accounts for {{ workspace_labels[workspace] }}.
+        <a href="{{ url_for('google_connections') }}">Enable Calendar</a>
+      </li>
+      {% endfor %}
+    </ul>
+  </aside>
+
+  <section class="cal-main card">
+    {% if selected_account and selected_account.has_calendar %}
+    <div class="email-toolbar">
+      <nav class="email-views" aria-label="Calendar views">
+        {% for v in views %}
+        <a class="email-view{% if view == v %} is-active{% endif %}"
+           href="{{ calendar_base }}?account={{ selected_account.id }}&view={{ v }}&calendar={{ calendar_id }}&q={{ q }}&tz={{ tz }}">{{ v|capitalize }}</a>
+        {% endfor %}
+      </nav>
+      <form class="email-search" method="get" action="{{ calendar_base }}">
+        <input type="hidden" name="account" value="{{ selected_account.id }}">
+        <input type="hidden" name="view" value="{{ view }}">
+        <input type="search" name="q" value="{{ q }}" placeholder="Search events…" aria-label="Search">
+        <select name="calendar" aria-label="Calendar">
+          <option value="">All calendars</option>
+          {% if listing %}
+            {% for cal in listing.calendars %}
+            <option value="{{ cal.id }}" {% if calendar_id == cal.id %}selected{% endif %}>{{ cal.summary }}</option>
+            {% endfor %}
+          {% endif %}
+        </select>
+        <input type="date" name="from" value="{{ date_from }}" aria-label="From date">
+        <input type="date" name="to" value="{{ date_to }}" aria-label="To date">
+        <input type="text" name="tz" value="{{ tz }}" placeholder="Time zone" aria-label="Time zone" style="width:7rem">
+        <button class="btn btn-sm" type="submit">Apply</button>
+      </form>
+      <form method="post" action="{{ url_for('calendar_account_refresh', account_id=selected_account.id) }}">
+        <input type="hidden" name="view" value="{{ view }}">
+        <button class="btn btn-sm" type="submit">Refresh</button>
+      </form>
+    </div>
+
+    {% if listing and listing.from_cache %}
+    <p class="muted email-cache-hint">Showing limited local cache — use Refresh for latest.</p>
+    {% endif %}
+    {% if listing %}
+    <p class="muted mono" style="font-size:11px;margin:0 0 0.55rem">
+      {{ listing.time_min }} → {{ listing.time_max }} · {{ listing.time_zone }}
+    </p>
+    <div class="cal-event-list" role="list">
+      {% for ev in listing.events %}
+      <a class="email-row" role="listitem"
+         href="{{ url_for('calendar_event_detail', account_id=selected_account.id, calendar_id=ev.calendar_id, event_id=ev.id) }}">
+        <div class="email-row-top">
+          <span class="email-from">{{ ev.calendar_summary or 'Calendar' }}</span>
+          <span class="email-date muted">
+            {% if ev.all_day %}{{ ev.start.date }} (all day){% else %}{{ ev.start.date_time or ev.start.date }}{% endif %}
+          </span>
+        </div>
+        <div class="email-subject">{{ ev.summary }}
+          {% if ev.recurring_event_id %}<span class="badge">recurring</span>{% endif %}
+        </div>
+        <div class="email-snippet muted">{{ ev.location or ev.description or '' }}</div>
+      </a>
+      {% else %}
+      <div class="muted email-empty">No events in this range.</div>
+      {% endfor %}
+    </div>
+    {% if listing.next_page_token %}
+    <div class="email-pager">
+      <a class="btn btn-sm"
+         href="{{ calendar_base }}?account={{ selected_account.id }}&view={{ view }}&calendar={{ calendar_id }}&q={{ q }}&tz={{ tz }}&page={{ listing.next_page_token }}">Next page</a>
+    </div>
+    {% endif %}
+    {% endif %}
+    {% else %}
+    <div class="muted email-empty">Select a Calendar-enabled account, or enable Calendar under Google Connections.</div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

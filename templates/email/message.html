@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}{{ message.subject }} · Email · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <p class="page-sub"><a href="{{ email_base }}?account={{ account.id }}">← Email Center</a>
+      {% if message.thread_id %}
+      · <a href="{{ url_for('email_thread_detail', account_id=account.id, thread_id=message.thread_id) }}">View thread</a>
+      {% endif %}
+    </p>
+    <h1>{{ message.subject }}</h1>
+  </div>
+</div>
+
+<div class="email-detail card">
+  <dl class="email-meta">
+    <div><dt>From</dt><dd>{{ message.from_addr or '—' }}</dd></div>
+    <div><dt>To</dt><dd>{{ message.to_addr or '—' }}</dd></div>
+    <div><dt>Date</dt><dd>{{ message.date_header or message.internal_date or '—' }}</dd></div>
+    <div><dt>Account</dt><dd>{{ account.email }} · {{ workspace_labels[workspace] }}</dd></div>
+  </dl>
+
+  <div class="email-actions">
+    <form method="post" action="{{ url_for('email_convert_note', account_id=account.id, message_id=message.id) }}">
+      <button type="submit" class="btn btn-sm btn-primary">Convert to Note</button>
+    </form>
+    <form method="post" action="{{ url_for('email_convert_task', account_id=account.id, message_id=message.id) }}">
+      <button type="submit" class="btn btn-sm">Create Task</button>
+    </form>
+    {% if workspace == 'work' and registry_repos %}
+    <form method="post" action="{{ url_for('email_link_repo', account_id=account.id, message_id=message.id) }}" class="email-link-repo">
+      <select name="repository_id" required aria-label="Repository">
+        <option value="">Link repository…</option>
+        {% for repo in registry_repos %}
+        <option value="{{ repo.id }}">{{ repo.label }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-sm">Link Repository</button>
+    </form>
+    {% endif %}
+    <a class="btn btn-sm" href="{{ url_for('email_message_detail', account_id=account.id, message_id=message.id, refresh=1) }}">Refresh</a>
+  </div>
+
+  {% if message.attachments %}
+  <div class="email-attachments">
+    <strong>Attachments</strong>
+    <ul>
+      {% for att in message.attachments %}
+      <li>
+        <a href="{{ url_for('email_attachment_download', account_id=account.id, message_id=message.id, attachment_id=att.attachment_id) }}">
+          {{ att.filename }}
+        </a>
+        <span class="muted">{{ att.mime_type }}{% if att.size %} · {{ att.size }} bytes{% endif %}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <div class="email-body">
+    {% if message.body_text %}
+    <pre class="email-body-text">{{ message.body_text }}</pre>
+    {% elif message.snippet %}
+    <p class="muted">{{ message.snippet }}</p>
+    {% else %}
+    <p class="muted">No plaintext body available.</p>
+    {% endif %}
+  </div>
+  <p class="muted mono email-ids">message={{ message.id }} · thread={{ message.thread_id }}</p>
+</div>
+{% endblock %}

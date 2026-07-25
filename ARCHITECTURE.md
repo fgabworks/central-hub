@@ -10,7 +10,9 @@ Agent rules: [AGENTS.md](AGENTS.md). Current state: [AI_REFERENCE.md](AI_REFEREN
 The hub owns: registry, adapters, **job engine (SQLite + worker)**, UI, health checks,
 audit, a **read-only DHIS2 Web API client**, a **local metadata capability catalog**,
 a **local UID mapping index**, a preview-only metadata builder, a **Repository Notebook** (local SQLite notes
-linked to registry repos), and a **SQL Workspace** (read-only query library/runner).
+linked to registry repos), a **SQL Workspace** (read-only query library/runner), and an
+**Email Center** (Gmail `gmail.readonly` OAuth; shared Personal/Work service), and a
+**Calendar Center** (Calendar readonly; reuses the same Google accounts).
 Connected repos own: domain rules, data models, their own APIs and secrets handling.
 The hub must never duplicate PMNP, DHIS2 *domain/business* logic, reporting,
 convergence, immunization, DDS, tetanus, or scorecard rules — those stay in the
@@ -28,11 +30,22 @@ Browser ──HTTP──> Flask app (app.py, create_app)
   hub/settings.py  hub/registry/  hub/adapters/   hub/dhis2/     hub/jobs/
   hub/audit/       config/*.yaml  hub/notebook/   (GET-only)     SQLite worker
                                   hub/sql_workspace/             data/hub.db
+                                  hub/email/                     data/email.db
+                                  hub/calendar/
                                   data/notebook.db
                                   data/sql_workspace.db
                                                                  data/{uploads,results,jobs}/
 ```
 
+- **`hub/calendar/`** — Shared Calendar Center: readonly Google Calendar API, month/week/
+  day/agenda/upcoming views, event detail, convert-to-note/task. Reuses `hub/email/`
+  accounts, encrypted tokens, and incremental OAuth scopes. No writes/RSVP/push/agent access.
+- **`hub/email/`** — Shared Email Center: OAuth 2.0 web-server flow, multi-account
+  Personal/Work assignment, Fernet-encrypted refresh tokens in `data/email.db`,
+  Gmail REST readonly client, limited list/message cache + manual refresh.
+  Convert-to-note/task and work repo linking use `hub/notebook/`. No send/modify;
+  no automatic agent access to mail content.
+  Incremental Calendar scopes are requested via the same OAuth helpers.
 - **`hub/sql_workspace/`** — Read-only SQL Workspace: query library (folders, tags,
   favorites, versions), run history in `data/sql_workspace.db`, connection profiles
   from `config/sql_connections.yaml` + env secrets, sqlglot AST safety, RO executor

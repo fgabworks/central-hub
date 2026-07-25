@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}{{ event.summary }} · Calendar · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <p class="page-sub"><a href="{{ calendar_base }}?account={{ account.id }}">← {{ 'Calendar' if workspace == 'personal' else 'Work Calendar' }}</a></p>
+    <h1>{{ event.summary }}</h1>
+  </div>
+</div>
+
+<div class="email-detail card">
+  <dl class="email-meta">
+    <div><dt>When</dt>
+      <dd>
+        {% if event.all_day %}
+          {{ event.start.date }} → {{ event.end.date }} (all day)
+        {% else %}
+          {{ event.start.date_time or event.start.date }} → {{ event.end.date_time or event.end.date }}
+        {% endif %}
+      </dd>
+    </div>
+    <div><dt>Time zone</dt><dd>{{ event.start.time_zone or '—' }}</dd></div>
+    <div><dt>Calendar</dt><dd>{{ event.calendar_summary or event.calendar_id }}</dd></div>
+    <div><dt>Location</dt><dd>{{ event.location or '—' }}</dd></div>
+    <div><dt>Account</dt><dd>{{ account.email }} · {{ workspace_labels[workspace] }}</dd></div>
+    {% if event.hangout_link %}
+    <div><dt>Meet</dt><dd><a href="{{ event.hangout_link }}" target="_blank" rel="noopener">Join meeting</a></dd></div>
+    {% endif %}
+    {% if event.recurring_event_id %}
+    <div><dt>Recurring</dt><dd class="mono">{{ event.recurring_event_id }}</dd></div>
+    {% endif %}
+  </dl>
+
+  <div class="email-actions">
+    <form method="post" action="{{ url_for('calendar_convert_note', account_id=account.id, calendar_id=event.calendar_id, event_id=event.id) }}">
+      <button type="submit" class="btn btn-sm btn-primary">Convert to Note</button>
+    </form>
+    <form method="post" action="{{ url_for('calendar_convert_task', account_id=account.id, calendar_id=event.calendar_id, event_id=event.id) }}">
+      <button type="submit" class="btn btn-sm">Create Task</button>
+    </form>
+    {% if workspace == 'work' and registry_repos %}
+    <form method="post" action="{{ url_for('calendar_link_repo', account_id=account.id, calendar_id=event.calendar_id, event_id=event.id) }}" class="email-link-repo">
+      <select name="repository_id" required aria-label="Repository">
+        <option value="">Link repository…</option>
+        {% for repo in registry_repos %}
+        <option value="{{ repo.id }}">{{ repo.label }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-sm">Link Repository</button>
+    </form>
+    {% endif %}
+    {% if event.html_link %}
+    <a class="btn btn-sm" href="{{ event.html_link }}" target="_blank" rel="noopener">Open in Google</a>
+    {% endif %}
+  </div>
+
+  {% if event.attendees %}
+  <div class="email-attachments">
+    <strong>Attendees</strong>
+    <ul>
+      {% for att in event.attendees %}
+      <li>{{ att.display_name or att.email }} <span class="muted">{{ att.response_status }}</span></li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <div class="email-body">
+    <pre class="email-body-text">{{ event.description or '(no description)' }}</pre>
+  </div>
+</div>
+{% endblock %}

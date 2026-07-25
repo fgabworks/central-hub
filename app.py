@@ -88,6 +88,13 @@ from hub.sql_workspace import (
 )
 from hub.sql_workspace.demo import ensure_demo_database
 from hub.sql_workspace.safety import SqlSafetyError, extract_named_params, format_sql
+from hub.email.db import EmailDatabase
+from hub.email.routes import register_email_routes
+from hub.email.service import EmailService
+from hub.email.settings_gmail import load_gmail_oauth_settings
+from hub.email.store import EmailStore
+from hub.calendar.routes import register_calendar_routes
+from hub.calendar.service import CalendarService
 from hub.registry import load_registry
 from hub.registry.git_util import default_search_roots, find_local_checkout, slugify_repo_id
 from hub.registry.loader import RegistryError
@@ -181,6 +188,22 @@ def create_app() -> Flask:
         max_rows=int(os.environ.get("SQL_WS_MAX_ROWS") or 1000),
         statement_timeout_ms=int(os.environ.get("SQL_WS_STATEMENT_TIMEOUT_MS") or 15000),
     )
+    email_db_path = os.environ.get("CENTRAL_HUB_EMAIL_DATABASE") or str(
+        ROOT_DIR / "data" / "email.db"
+    )
+    email_store = EmailStore(
+        EmailDatabase(Path(email_db_path)),
+        secret_key=settings.secret_key,
+    )
+    app.config["EMAIL_STORE"] = email_store
+    app.config["EMAIL"] = EmailService(
+        email_store,
+        oauth_settings=load_gmail_oauth_settings(),
+    )
+    app.config["CALENDAR"] = CalendarService(
+        email_store,
+        email_service=app.config["EMAIL"],
+    )
 
     def _apply_dhis2_client(client: Dhis2Client, *, instance: str | None) -> None:
         previous = app.config.get("DHIS2")
@@ -211,6 +234,8 @@ def create_app() -> Flask:
     )
     worker.start()
     app.config["JOB_WORKER"] = worker
+    register_email_routes(app)
+    register_calendar_routes(app)
 
     @app.context_processor
     def inject_globals():
@@ -244,6 +269,8 @@ def create_app() -> Flask:
         if ep in {
             "work_dashboard",
             "work_notebook",
+            "work_email",
+            "work_calendar",
             "repositories",
             "repository_new",
             "repository_edit",
@@ -259,6 +286,8 @@ def create_app() -> Flask:
             "personal_dashboard",
             "personal_notebook",
             "personal_tasks",
+            "personal_email",
+            "personal_calendar",
         }:
             workspace = "personal"
 
@@ -287,6 +316,18 @@ def create_app() -> Flask:
                 "label": "Personal Tasks",
                 "icon": "☑",
                 "active_prefix": None,
+            },
+            {
+                "endpoint": "personal_email",
+                "label": "Email Center",
+                "icon": "✉",
+                "active_prefix": "personal_email",
+            },
+            {
+                "endpoint": "personal_calendar",
+                "label": "Calendar",
+                "icon": "📅",
+                "active_prefix": "personal_calendar",
             },
         ]
         work_nav = [
@@ -322,6 +363,18 @@ def create_app() -> Flask:
                 "active_prefix": "sql_workspace",
             },
             {
+                "endpoint": "work_email",
+                "label": "Email Center",
+                "icon": "✉",
+                "active_prefix": "work_email",
+            },
+            {
+                "endpoint": "work_calendar",
+                "label": "Work Calendar",
+                "icon": "📅",
+                "active_prefix": "work_calendar",
+            },
+            {
                 "endpoint": "dhis2",
                 "label": "DHIS2",
                 "icon": "⬡",
@@ -342,6 +395,12 @@ def create_app() -> Flask:
             },
         ]
         system_nav = [
+            {
+                "endpoint": "google_connections",
+                "label": "Google Connections",
+                "icon": "⧉",
+                "active_prefix": "google_connections",
+            },
             {
                 "endpoint": "audit",
                 "label": "Audit",
@@ -373,6 +432,7 @@ def create_app() -> Flask:
         work_actions = [
             {"label": "Add Repository", "endpoint": "repository_new", "available": True},
             {"label": "Run Health Check", "endpoint": "health", "available": True},
+            {"label": "Email Center", "endpoint": "work_email", "available": True},
             {"label": "DHIS2 Maintenance", "endpoint": "dhis2", "available": True},
             {
                 "label": "Create Demo Job",
@@ -385,6 +445,7 @@ def create_app() -> Flask:
         personal_actions = [
             {"label": "New Personal Note", "endpoint": "personal_notebook", "available": True},
             {"label": "Personal Tasks", "endpoint": "personal_tasks", "available": True},
+            {"label": "Email Center", "endpoint": "personal_email", "available": True},
             {"label": "View Logs", "endpoint": "audit", "available": True},
         ]
 
@@ -501,6 +562,24 @@ def create_app() -> Flask:
             ]
             live_repos: list = []
             dhis2_tools_local: list = []
+            upcoming_events: list = []
+            try:
+                cal: CalendarService = app.config["CALENDAR"]
+                upcoming_events = cal.upcoming_for_workspace("personal", limit=5)
+            except Exception:  # noqa: BLE001
+                upcoming_events = []
+            cards.insert(
+                2,
+                {
+                    "kind": "default",
+                    "label": "Upcoming Events",
+                    "value": str(len(upcoming_events)),
+                    "sub": "Personal Google Calendar",
+                    "icon": "📅",
+                    "href": url_for("personal_calendar", view="upcoming"),
+                    "link_label": "Open calendar →",
+                },
+            )
         else:
             health_results = adapters.check_all(enabled_only=False) if adapters else []
             live_repos = _repos_from_health(registry, health_results)
@@ -561,6 +640,7 @@ def create_app() -> Flask:
                 },
             ]
             dhis2_tools_local = _DHIS2_TOOLS
+            upcoming_events = []
 
         persist_workspace(notebook.db, scope_n)
         html = render_template(
@@ -574,6 +654,7 @@ def create_app() -> Flask:
             show_notepad=show_notepad,
             show_repos=scope_n == "work",
             show_dhis2=scope_n == "work",
+            upcoming_events=upcoming_events,
             note_scope=scope_n,
             scope_label=SCOPE_LABELS.get(scope_n, scope_n),
             notebook_endpoint=notebook_ep,
@@ -585,7 +666,7 @@ def create_app() -> Flask:
                 "Personal Dashboard" if scope_n == "personal" else "Work Dashboard"
             ),
             page_sub=(
-                "Personal notes, tasks, and Quick Notepad."
+                "Personal notes, tasks, calendar, and Quick Notepad."
                 if scope_n == "personal"
                 else "Repositories, work notebook tasks, DHIS2 and system status."
             ),

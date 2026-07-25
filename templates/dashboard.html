@@ -76,6 +76,33 @@
 
 <section class="dash-grid">
   <div class="stack">
+    {% if note_scope == 'personal' %}
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Upcoming Personal Events</h2>
+        <div class="panel-actions">
+          <a class="quiet" href="{{ url_for('personal_calendar', view='upcoming') }}">Open Calendar</a>
+        </div>
+      </div>
+      {% if upcoming_events %}
+      <ul class="cal-upcoming-list">
+        {% for ev in upcoming_events %}
+        <li>
+          <a href="{{ url_for('calendar_event_detail', account_id=ev.account_id, calendar_id=ev.calendar_id, event_id=ev.id) }}">
+            <strong>{{ ev.summary }}</strong>
+            <span class="muted">
+              {% if ev.all_day %}{{ ev.start.date }} (all day){% else %}{{ ev.start.date_time or ev.start.date }}{% endif %}
+              · {{ ev.calendar_summary or ev.account_email }}
+            </span>
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted">No upcoming events. Connect Calendar under Google Connections, then refresh.</p>
+      {% endif %}
+    </section>
+    {% endif %}
     {% if show_repos %}
     <section class="panel">
       <div class="panel-header">

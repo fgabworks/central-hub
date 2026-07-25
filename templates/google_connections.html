@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Google Connections · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Google Connections</h1>
+    <p class="page-sub">
+      Shared Google accounts for Email and Calendar. Tokens are encrypted server-side.
+      Grant Gmail (<code>gmail.readonly</code>) and Calendar
+      (<code>calendar.calendarlist.readonly</code>, <code>calendar.events.readonly</code>) incrementally.
+      Assign each account to Personal or Work. No passwords stored. No agent access to mail or calendar content.
+    </p>
+  </div>
+</div>
+
+{% if not oauth.configured %}
+<div class="banner banner-error">
+  Set <code>GMAIL_CLIENT_ID</code> and <code>GMAIL_CLIENT_SECRET</code> in <code>.env</code>.
+  Redirect URI: <code>{{ oauth.redirect_uri }}</code>. Enable Gmail API and Google Calendar API in Google Cloud.
+</div>
+{% endif %}
+
+<div class="card" style="padding:1rem;margin-bottom:1rem">
+  <div class="email-actions">
+    {% if oauth.configured and oauth.enabled %}
+    <a class="btn btn-sm btn-primary" href="{{ url_for('email_oauth_start', workspace='personal') }}">+ Connect (Gmail)</a>
+    <a class="btn btn-sm" href="{{ url_for('email_oauth_calendar_start', workspace='personal') }}">+ Connect (Calendar)</a>
+    <a class="btn btn-sm" href="{{ url_for('email_oauth_start', workspace='work') }}">+ Work Gmail</a>
+    <a class="btn btn-sm" href="{{ url_for('email_oauth_calendar_start', workspace='work') }}">+ Work Calendar</a>
+    {% endif %}
+  </div>
+</div>
+
+<table class="data">
+  <thead>
+    <tr>
+      <th>Email</th>
+      <th>Workspace</th>
+      <th>Status</th>
+      <th>Gmail</th>
+      <th>Calendar</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for acct in accounts %}
+    <tr>
+      <td>{{ acct.email or '—' }}</td>
+      <td>{{ workspace_labels.get(acct.workspace, acct.workspace) }}</td>
+      <td>
+        <span class="badge badge-{{ 'healthy' if acct.status == 'connected' else 'warning' if acct.status == 'needs_reauth' else 'offline' }}">
+          {{ status_labels.get(acct.status, acct.status) }}
+        </span>
+      </td>
+      <td>{% if acct.has_gmail %}Yes{% else %}No{% endif %}</td>
+      <td>{% if acct.has_calendar %}Yes{% else %}No{% endif %}</td>
+      <td>
+        <div class="email-account-actions">
+          <form method="post" action="{{ url_for('email_account_assign', account_id=acct.id) }}" class="email-inline-form">
+            <select name="workspace">
+              {% for ws in workspaces %}
+              <option value="{{ ws }}" {% if acct.workspace == ws %}selected{% endif %}>{{ workspace_labels[ws] }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-sm">Assign</button>
+          </form>
+          {% if not acct.has_calendar and oauth.configured %}
+          <a class="btn btn-sm" href="{{ url_for('email_oauth_calendar_start', workspace=acct.workspace, account=acct.id) }}">Enable Calendar</a>
+          {% endif %}
+          {% if not acct.has_gmail and oauth.configured %}
+          <a class="btn btn-sm" href="{{ url_for('email_oauth_start', workspace=acct.workspace, account=acct.id) }}">Enable Gmail</a>
+          {% endif %}
+          {% if acct.status in ['needs_reauth', 'error'] and oauth.configured %}
+          <a class="btn btn-sm" href="{{ url_for('email_oauth_start', workspace=acct.workspace, account=acct.id) }}">Reconnect</a>
+          {% endif %}
+          <form method="post" action="{{ url_for('email_account_disconnect', account_id=acct.id) }}"
+                onsubmit="return confirm('Disconnect and revoke this Google account?');">
+            <input type="hidden" name="revoke" value="1">
+            <button type="submit" class="btn btn-sm">Disconnect</button>
+          </form>
+          {% if acct.has_gmail %}
+          <a class="btn btn-sm" href="{{ url_for('personal_email' if acct.workspace == 'personal' else 'work_email', account=acct.id) }}">Email</a>
+          {% endif %}
+          {% if acct.has_calendar %}
+          <a class="btn btn-sm" href="{{ url_for('personal_calendar' if acct.workspace == 'personal' else 'work_calendar', account=acct.id) }}">Calendar</a>
+          {% endif %}
+        </div>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">No Google accounts connected yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

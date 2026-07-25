@@ -16,6 +16,9 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 | Personal Dashboard + Tasks + Quick Notepad | `/personal`, `/personal/tasks` |
 | Repository Notebook (scoped personal\|work notes) | `/personal/notebook`, `/work/notebook`, `hub/notebook/` |
 | SQL Workspace (read-only query library/runner) | `/sql`, `hub/sql_workspace/`, `data/sql_workspace.db` |
+| Email Center (Gmail readonly OAuth) | `/personal/email`, `/work/email`, `hub/email/`, `data/email.db` |
+| Calendar Center (Calendar readonly) | `/personal/calendar`, `/work/calendar`, `hub/calendar/` |
+| Google Connections | `/system/google-connections` — shared accounts + incremental scopes |
 | Dashboard Notebook Work Queue | `/work` Open Tasks + queue tabs (work scope only) |
 | Health probe cache + parallel checks | `hub/adapters/manager.py`, `CENTRAL_HUB_HEALTH_CACHE_TTL` |
 | UID index controlled update (LP-style) | `/dhis2/uid-index/manage`, `hub/dhis2/uid_mapping/admin.py` |
@@ -43,6 +46,8 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 | UID conflict resolve | Conflicts skipped by default; no per-UID take/keep form yet |
 | Enrichment raw metadata | Not bulk-stored; live GET only when detail `?tab=raw&raw=1` |
 | SQL Workspace | Implemented — SELECT/WITH/EXPLAIN only; Live warning; never auto-run |
+| Email Center | Implemented — `gmail.readonly` only; encrypted tokens; no send/modify; no agent mail access; limited cache |
+| Calendar Center | Implemented — calendar list/events readonly; reuses Google accounts; no create/RSVP; no agent access; limited cache |
 | Repository Notebook | Manual notes with `personal`\|`work` scope + separate Quick Notepads per workspace — no agent assist |
 | Quick Notepad | Personal and Work pads are independent; legacy content → personal |
 | API writes | Blocked even if YAML `allow_write` (Phase 4 GET-only) |

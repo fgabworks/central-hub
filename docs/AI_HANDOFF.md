@@ -4,36 +4,33 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**Personal / Work workspace organization** — single Notebook model with `scope`,
-sidebar switcher, **separate** Quick Notepads per workspace.
+**Calendar Center (Google Calendar readonly)** — shared `hub/calendar/` reusing Email
+Center Google accounts, encrypted tokens, and Personal/Work assignment.
 
-- Nav groups: Personal · Work · System; last workspace remembered (cookie + `hub_prefs`)
-- Existing notes categorized as **work**; personal notes need no repositories
-- Existing Quick Notepad content kept on the **personal** pad; work pad is separate
-- `/` and `/notebook` remain via redirects / POST compat
-- Prior: SQL Workspace, registry, enrichment, GET-only DHIS2
+- Incremental OAuth: `calendar.calendarlist.readonly` + `calendar.events.readonly`
+- Nav: Personal → Calendar · Work → Work Calendar · System → Google Connections
+- Views: month / week / day / agenda / upcoming; search; date filters; pagination; TZ
+- Event detail: attendees, location, description, Meet link, source calendar, recurrence
+- Convert to Note / Create Task / Work-only Link Repository
+- Personal Dashboard: Upcoming Personal Events
+- Read-only only — no create/update/delete/RSVP, no push, no agent access
+- Prior: Email Center, Personal/Work workspaces, SQL Workspace, GET-only DHIS2
 
 ## Verify
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-python -m unittest tests.test_workspace_scope tests.test_quick_notepad tests.test_dashboard_notebook tests.test_notebook tests.test_sql_workspace -v
+python -m unittest tests.test_calendar_center tests.test_email_center -v
 python -m unittest discover -s tests -v
 python app.py
 ```
 
-1. Switcher Personal ↔ Work remembers selection after refresh
-2. Work Dashboard queue shows only work notes; Personal Dashboard shows Quick Notepad
-3. `/notebook?note=<id>` opens the correct scoped notebook
-4. `/sql`, repositories, jobs, health, audit, DHIS2 still load
+1. Enable Calendar API on the Google Cloud OAuth client; grant Calendar from Google Connections
+2. Personal / Work calendar pages load; charcoal/crimson (Work) preserved
+3. Personal Dashboard shows upcoming events panel
+4. Email, SQL, repos, jobs, health, audit, DHIS2 still load
 
 ## Next task
 
 Optional: set `DATA_SCRIPT_PATH` / `REPORT_TEMPLATE_PATH` after manual clone.
-Optional: enrichment Phase A completeness; Notebook agent assist (deferred).
-Keep DHIS2 writes off.
-
-## Research (2026-07-25)
-
-[docs/LIVE_PROCESSING_DHIS2_DATA_SOURCES.md](LIVE_PROCESSING_DHIS2_DATA_SOURCES.md) —
-API + repository mappings (provenance-aware); no hub SQL/SSH for metadata.
+Keep DHIS2 / Gmail / Calendar writes off. Do not auto-feed mail or calendar to agents.

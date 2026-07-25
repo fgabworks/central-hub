@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Email Center · {{ workspace_labels[workspace] }} · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Email Center</h1>
+    <p class="page-sub">
+      Read-only Gmail for the {{ workspace_labels[workspace] }} workspace.
+      Scope <code>gmail.readonly</code> only — no send, reply, delete, or mark-read.
+      Tokens stay encrypted server-side. No automatic agent access to mail content.
+    </p>
+  </div>
+</div>
+
+{% if not oauth.configured %}
+<div class="banner banner-error">
+  Gmail OAuth is not configured. Set <code>GMAIL_CLIENT_ID</code> and <code>GMAIL_CLIENT_SECRET</code>
+  in <code>.env</code> (see <code>.env.example</code>). Redirect URI:
+  <code>{{ oauth.redirect_uri }}</code>
+</div>
+{% elif not oauth.enabled %}
+<div class="banner banner-error">Gmail integration is disabled (<code>GMAIL_ENABLED=false</code>).</div>
+{% endif %}
+
+{% if error %}
+<div class="banner banner-error">{{ error }}</div>
+{% endif %}
+
+<div class="email-shell">
+  <aside class="email-accounts card" aria-label="Gmail accounts">
+    <div class="email-panel-head">
+      <strong>Accounts</strong>
+      {% if oauth.configured and oauth.enabled %}
+      <a class="btn btn-sm btn-primary"
+         href="{{ url_for('email_oauth_start', workspace=workspace) }}">+ Connect</a>
+      {% endif %}
+    </div>
+    <ul class="email-account-list">
+      {% for acct in accounts %}
+      <li class="email-account-row{% if selected_account_id == acct.id %} is-active{% endif %}">
+        <a href="{{ email_base }}?account={{ acct.id }}&view={{ view }}">
+          <strong>{{ acct.email or '(unnamed)' }}</strong>
+          <span class="badge badge-{{ 'healthy' if acct.status == 'connected' else 'warning' if acct.status == 'needs_reauth' else 'offline' }}">
+            {{ status_labels.get(acct.status, acct.status) }}
+          </span>
+        </a>
+        <div class="email-account-actions">
+          <form method="post" action="{{ url_for('email_account_assign', account_id=acct.id) }}" class="email-inline-form">
+            <select name="workspace" aria-label="Assign workspace">
+              {% for ws in workspaces %}
+              <option value="{{ ws }}" {% if acct.workspace == ws %}selected{% endif %}>{{ workspace_labels[ws] }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-sm">Assign</button>
+          </form>
+          {% if acct.status in ['needs_reauth', 'error'] and oauth.configured %}
+          <a class="btn btn-sm" href="{{ url_for('email_oauth_start', workspace=workspace, account=acct.id) }}">Reconnect</a>
+          {% endif %}
+          <form method="post" action="{{ url_for('email_account_disconnect', account_id=acct.id) }}"
+                onsubmit="return confirm('Disconnect and revoke this Google account access?');">
+            <input type="hidden" name="revoke" value="1">
+            <button type="submit" class="btn btn-sm">Disconnect</button>
+          </form>
+        </div>
+      </li>
+      {% else %}
+      <li class="muted">No Gmail accounts for {{ workspace_labels[workspace] }} yet.</li>
+      {% endfor %}
+    </ul>
+  </aside>
+
+  <section class="email-main card">
+    {% if selected_account %}
+    <div class="email-toolbar">
+      <nav class="email-views" aria-label="Mailbox views">
+        {% for key, meta in views.items() %}
+        <a class="email-view{% if view == key %} is-active{% endif %}"
+           href="{{ email_base }}?account={{ selected_account.id }}&view={{ key }}&q={{ q }}&label={{ label }}">{{ meta.label }}</a>
+        {% endfor %}
+      </nav>
+      <form class="email-search" method="get" action="{{ email_base }}">
+        <input type="hidden" name="account" value="{{ selected_account.id }}">
+        <input type="hidden" name="view" value="{{ view }}">
+        <input type="search" name="q" value="{{ q }}" placeholder="Search mail…" aria-label="Search">
+        <select name="label" aria-label="Label">
+          <option value="">All labels</option>
+          {% for lbl in labels %}
+          <option value="{{ lbl.name }}" {% if label == lbl.name %}selected{% endif %}>{{ lbl.name }}</option>
+          {% endfor %}
+        </select>
+        <button class="btn btn-sm" type="submit">Search</button>
+      </form>
+      <form method="post" action="{{ url_for('email_account_refresh', account_id=selected_account.id) }}">
+        <input type="hidden" name="view" value="{{ view }}">
+        <input type="hidden" name="q" value="{{ q }}">
+        <input type="hidden" name="label" value="{{ label }}">
+        <button class="btn btn-sm" type="submit" title="Clear local cache and reload">Refresh</button>
+      </form>
+    </div>
+
+    {% if listing and listing.from_cache %}
+    <p class="muted email-cache-hint">Showing limited local cache — use Refresh for latest from Gmail.</p>
+    {% endif %}
+
+    <div class="email-list" role="list">
+      {% if listing %}
+        {% for msg in listing.messages %}
+        <a class="email-row{% if msg.is_unread %} is-unread{% endif %}" role="listitem"
+           href="{{ url_for('email_message_detail', account_id=selected_account.id, message_id=msg.id) }}">
+          <div class="email-row-top">
+            <span class="email-from">{{ msg.from_addr or '—' }}</span>
+            <span class="email-date muted">{{ msg.date_header or msg.internal_date }}</span>
+          </div>
+          <div class="email-subject">
+            {% if msg.is_starred %}<span class="email-star" title="Starred">★</span>{% endif %}
+            {{ msg.subject }}
+          </div>
+          <div class="email-snippet muted">{{ msg.snippet }}</div>
+        </a>
+        {% else %}
+        <div class="muted email-empty">No messages in this view.</div>
+        {% endfor %}
+        {% if listing.next_page_token %}
+        <div class="email-pager">
+          <a class="btn btn-sm"
+             href="{{ email_base }}?account={{ selected_account.id }}&view={{ view }}&q={{ q }}&label={{ label }}&page={{ listing.next_page_token }}">Next page</a>
+        </div>
+        {% endif %}
+      {% else %}
+        <div class="muted email-empty">Select a connected account to load mail.</div>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="muted email-empty">Connect a Google account assigned to {{ workspace_labels[workspace] }} to begin.</div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

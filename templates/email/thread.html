@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Thread · Email · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <p class="page-sub"><a href="{{ email_base }}?account={{ account.id }}">← Email Center</a></p>
+    <h1>Thread</h1>
+    <p class="page-sub muted mono">{{ thread_id }}</p>
+  </div>
+</div>
+
+<div class="email-thread">
+  {% for message in messages %}
+  <article class="email-detail card">
+    <h2 class="email-thread-subject">
+      <a href="{{ url_for('email_message_detail', account_id=account.id, message_id=message.id) }}">{{ message.subject }}</a>
+    </h2>
+    <dl class="email-meta">
+      <div><dt>From</dt><dd>{{ message.from_addr or '—' }}</dd></div>
+      <div><dt>Date</dt><dd>{{ message.date_header or '—' }}</dd></div>
+    </dl>
+    <pre class="email-body-text">{{ message.body_text or message.snippet or '' }}</pre>
+  </article>
+  {% else %}
+  <p class="muted">No messages in thread.</p>
+  {% endfor %}
+</div>
+{% endblock %}
