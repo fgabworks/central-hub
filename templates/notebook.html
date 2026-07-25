@@ -17,6 +17,15 @@
 {% if flash %}<div class="banner" style="background:var(--success-soft);border-color:rgba(34,197,94,.35)">{{ flash }}</div>{% endif %}
 {% if error %}<div class="banner banner-error">{{ error }}</div>{% endif %}
 
+<div class="nb-workspace qn-host{% if notepad.panel_open %} is-qn-open{% endif %}"
+     id="qn-host"
+     style="--qn-width: {{ notepad.panel_width }}px"
+     data-qn-open="{{ '1' if notepad.panel_open else '0' }}"
+     data-qn-width="{{ notepad.panel_width }}"
+     data-qn-save-url="{{ url_for('api_notebook_notepad_put') }}"
+     data-qn-clear-url="{{ url_for('api_notebook_notepad_clear') }}"
+     data-qn-convert-url="{{ url_for('api_notebook_notepad_convert') }}"
+     data-qn-restore-url="{{ url_for('api_notebook_notepad_restore') }}">
 <div class="nb-shell">
   <aside class="nb-rail card" aria-label="Note statuses">
     <div class="nav-label">Statuses</div>
@@ -280,6 +289,9 @@
   </section>
 </div>
 
+{% include "partials/quick_notepad_panel.html" %}
+</div>
+
 <template id="nb-repo-template">
   <div class="nb-repeat-row">
     <select name="repo_id">
@@ -365,4 +377,5 @@
   }
 })();
 </script>
+<script src="{{ url_for('static', filename='js/quick_notepad.js') }}"></script>
 {% endblock %}

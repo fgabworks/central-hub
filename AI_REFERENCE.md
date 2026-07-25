@@ -1,12 +1,12 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-07-25 (Repository registry management + connected GitHub repos).
+Last verified: 2026-07-25 (SQL Workspace + Notebook + registry).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
 
 **Phases 1–6 MVP + connected Live Processing + DHIS2 enrichment + Repository Notebook
-+ registry Add/Edit/Disable.**
++ registry Add/Edit/Disable + SQL Workspace (read-only).**
 Hub coordinates repos via registry/adapters; DHIS2 stays GET-only; jobs run
 allowlisted capabilities only.
 
@@ -17,8 +17,9 @@ allowlisted capabilities only.
 | Health probes | Parallel checks; states: Healthy / Unreachable / Not Cloned / Disabled |
 | Live Processing | `live-processing` (API GET-only) + `live-processing-local` (path + git_url) |
 | Data-Script / Report Template | Registered with GitHub URLs; local path optional (`DATA_SCRIPT_PATH`, `REPORT_TEMPLATE_PATH`) |
-| Dashboard | Live health cards; Open Tasks from Notebook; Notebook Work Queue + Recent Activity |
-| Repository Notebook | Local SQLite notes; pin + work queue; no agent scan |
+| Dashboard | Live health cards; Open Tasks; Work Queue; shared Quick Notepad |
+| Repository Notebook | Local SQLite notes; pin + work queue; shared Quick Notepad; no agent scan |
+| SQL Workspace | Read-only query library/runner (`/sql`); sqlglot allowlist; Live warning |
 | DHIS2 | GET client, discovery, UID mapping, preview builder |
 | UID index admin | LP-style controlled update: dry-run → preview → typed confirm → archive/versions/restore |
 | Metadata enrichment | Read-only DHIS2 enrich → local SQLite relationships + audit statuses |
@@ -47,15 +48,34 @@ Demo `sample-*` entries removed from the active registry; job tests use
 
 | Route | Purpose |
 |---|---|
-| `/notebook` | Status rail + filters + list + editor (New / Save / Archive / Restore; pin) |
+| `/notebook` | Status rail + filters + list + editor + Quick Notepad panel |
 | `/notebook/<id>/export` | Download note JSON |
 | `/api/notebook/preview` | Markdown → HTML preview |
-| `/` (dashboard) | Open Tasks card + Notebook Work Queue (Open / Pinned / Overdue / Due Today / Upcoming / Blocked); excludes Done & Archived |
+| `/api/notebook/notepad` | GET/PUT Quick Notepad content + panel prefs |
+| `/api/notebook/notepad/clear` | Clear scratchpad (keeps revision) |
+| `/api/notebook/notepad/convert` | Convert scratchpad → structured note |
+| `/api/notebook/notepad/restore` | Restore a notepad revision |
+| `/` (dashboard) | Open Tasks + Work Queue + shared Quick Notepad panel; excludes Done & Archived from queue |
 
-Store: `data/notebook.db` (`hub/notebook/`) with schema migrations (`pinned` column).
+Store: `data/notebook.db` (`hub/notebook/`) with schema migrations (`pinned`, `quick_notepad`).
+Quick Notepad is a **single** local scratchpad (plain/markdown) shared by Dashboard and Notebook — autosave, collapsible/resizable (drawer on small screens), revision history; no agent send.
 Notes keep denormalized repository labels when a registry repo becomes unavailable.
 Dashboard reuses `NotebookStore` / `hub/notebook/dashboard.py` — no duplicated note data.
-No browser-only storage; no agent integration yet.
+No browser-only storage for notepad content; no agent integration yet.
+
+## SQL Workspace
+
+| Route | Purpose |
+|---|---|
+| `/sql` | Query library + editor + results (Save / Format / Explain / Run) |
+| `/api/sql/run` | Validate + execute one read-only statement |
+| `/api/sql/queries` | Create/update saved queries (versions; never auto-run) |
+| `/api/sql/connections/<id>/test` | Server-side connection probe |
+| `/api/sql/runs/<id>/csv` | Export run results CSV |
+| `/api/sql/runs/<id>/cancel` | Cooperative cancel |
+
+Local store: `data/sql_workspace.db`. Connections: `config/sql_connections.yaml` + env secrets (`.env.example`).
+Safety: sqlglot AST validation (not regex-only); SELECT / read-only WITH / EXPLAIN only; one statement; RO transaction + statement timeout + row cap; credentials never in UI/logs; Live connections show a strong warning.
 
 ## Connected Live Processing
 

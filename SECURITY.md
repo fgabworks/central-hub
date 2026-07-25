@@ -14,6 +14,10 @@ Scope: personal, local-first tool. Canonical agent rules: [AGENTS.md](AGENTS.md)
 - Secrets only in `.env` (gitignored). See `.env.example`.
 - DHIS2 passwords never rendered; errors redacted (`hub/dhis2/redact.py`).
 - DHIS2 client is GET-only; `ALLOW_DHIS2_WRITES` must stay false.
+- **SQL Workspace:** connection passwords only in `.env`; never returned to UI.
+  Dedicated read-only DB roles recommended. Execution uses sqlglot AST allowlist
+  (SELECT / read-only WITH / EXPLAIN only), one statement, read-only transaction,
+  statement timeout, and row cap (`hub/sql_workspace/`).
 
 ## Job / command controls (Phases 3–6)
 

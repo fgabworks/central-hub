@@ -1,0 +1,393 @@
+{% extends "base.html" %}
+{% block title %}SQL Workspace · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>SQL Workspace</h1>
+    <p class="page-sub">Save, organize, and run safe read-only SQL against configured connections. Never auto-runs saved queries.</p>
+  </div>
+</div>
+
+<div class="sql-live-warn" id="sql-live-warn" hidden>
+  <strong>Live connection selected.</strong>
+  You are targeting a Live read-only database. Prefer Stage for exploration. Credentials stay server-side; only SELECT / read-only WITH / EXPLAIN are allowed.
+</div>
+
+<div class="sql-shell">
+  <aside class="sql-library card" aria-label="Query library">
+    <div class="sql-lib-head">
+      <strong>Query Library</strong>
+      <button type="button" class="btn btn-sm btn-primary" id="sql-new">+ New</button>
+    </div>
+    <form class="sql-lib-filters" method="get" action="{{ url_for('sql_workspace') }}">
+      <input type="search" name="q" value="{{ filters.q }}" placeholder="Search…" aria-label="Search queries">
+      <input type="text" name="tag" value="{{ filters.tag }}" placeholder="Tag" aria-label="Filter by tag">
+      <label class="sql-fav-filter">
+        <input type="checkbox" name="favorites" value="1" {% if filters.favorites %}checked{% endif %}>
+        Favorites
+      </label>
+      <button class="btn btn-sm" type="submit">Filter</button>
+    </form>
+    <div class="sql-folders muted">
+      {% for folder in folders %}
+        <a href="{{ url_for('sql_workspace', folder=folder.id, q=filters.q, tag=filters.tag) }}">{{ folder.name }}</a>
+      {% else %}
+        <span>No folders yet.</span>
+      {% endfor %}
+      <button type="button" class="btn btn-sm" id="sql-add-folder">+ Folder</button>
+    </div>
+    <div class="sql-query-list" role="list">
+      {% for query in queries %}
+      <a class="sql-query-row{% if selected_id == query.id %} is-active{% endif %}" role="listitem"
+         href="{{ url_for('sql_workspace', query=query.id, q=filters.q, tag=filters.tag, folder=filters.folder, favorites='1' if filters.favorites else None) }}">
+        <div class="sql-query-title">
+          {% if query.favorite %}<span class="sql-star" title="Favorite">★</span>{% endif %}
+          {{ query.title }}
+        </div>
+        <div class="sql-query-meta muted">
+          <span>v{{ query.current_version }}</span>
+          {% for t in query.tags[:3] %}<span class="badge">{{ t }}</span>{% endfor %}
+        </div>
+      </a>
+      {% else %}
+      <div class="muted sql-empty">No saved queries. Create one with <strong>New</strong>.</div>
+      {% endfor %}
+    </div>
+    <details class="sql-history">
+      <summary>Run history</summary>
+      <ul class="sql-run-list">
+        {% for run in recent_runs %}
+        <li>
+          <span class="badge badge-{{ 'healthy' if run.status == 'ok' else 'offline' }}">{{ run.status }}</span>
+          <span class="mono muted">{{ (run.created_at or '')[:16].replace('T',' ') }}</span>
+          <span class="muted">{{ run.connection_id }}</span>
+          <div class="muted mono">{{ run.sql_preview }}</div>
+        </li>
+        {% else %}
+        <li class="muted">No runs yet.</li>
+        {% endfor %}
+      </ul>
+    </details>
+  </aside>
+
+  <section class="sql-main card">
+    <div class="sql-toolbar">
+      <label class="sql-field">
+        <span>Connection</span>
+        <select id="sql-connection" aria-label="Database connection">
+          {% for c in connections %}
+          <option value="{{ c.id }}"
+                  data-env="{{ c.environment }}"
+                  data-live="{{ '1' if c.is_live else '0' }}"
+                  data-configured="{{ '1' if c.configured else '0' }}"
+                  {% if selected and selected.connection_id == c.id %}selected{% endif %}>
+            {{ c.label }} · {{ c.environment }}{% if not c.configured %} (not configured){% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+      <span class="badge" id="sql-env-badge">dev</span>
+      <button type="button" class="btn btn-sm" id="sql-test">Test</button>
+      <div class="sql-toolbar-spacer"></div>
+      <button type="button" class="btn btn-sm" id="sql-format">Format</button>
+      <button type="button" class="btn btn-sm" id="sql-explain">Explain</button>
+      <button type="button" class="btn btn-sm" id="sql-save">Save</button>
+      <button type="button" class="btn btn-sm btn-primary" id="sql-run">Run</button>
+      <button type="button" class="btn btn-sm" id="sql-cancel" disabled>Cancel</button>
+    </div>
+
+    <div class="sql-meta-grid">
+      <label class="sql-field">
+        <span>Title</span>
+        <input type="text" id="sql-title" value="{{ selected.title if selected else 'Untitled query' }}">
+      </label>
+      <label class="sql-field">
+        <span>Tags</span>
+        <input type="text" id="sql-tags" value="{{ selected.tags|join(', ') if selected else '' }}" placeholder="comma,separated">
+      </label>
+      <label class="sql-field sql-check">
+        <input type="checkbox" id="sql-favorite" {% if selected and selected.favorite %}checked{% endif %}>
+        <span>Favorite</span>
+      </label>
+      <label class="sql-field">
+        <span>Repository (optional)</span>
+        <select id="sql-repo">
+          <option value="">—</option>
+          {% for repo in registry_repos %}
+          <option value="{{ repo.id }}" {% if selected and selected.repository_id == repo.id %}selected{% endif %}>{{ repo.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="sql-field">
+        <span>Notebook note id (optional)</span>
+        <input type="text" id="sql-note" value="{{ selected.notebook_note_id if selected else '' }}" placeholder="note id">
+      </label>
+    </div>
+
+    <input type="hidden" id="sql-query-id" value="{{ selected.id if selected else '' }}">
+    <textarea id="sql-editor" class="sql-editor" spellcheck="false"
+              placeholder="SELECT …  — named params use :name">{{ selected.sql_text if selected else 'SELECT id, name, role\nFROM demo_people\nWHERE active = :active\nORDER BY id\nLIMIT 50' }}</textarea>
+
+    <div class="sql-params card" id="sql-params-panel">
+      <div class="sql-params-head">
+        <strong>Named parameters</strong>
+        <button type="button" class="btn btn-sm" id="sql-refresh-params">Detect</button>
+      </div>
+      <div class="sql-params-grid" id="sql-params-grid"></div>
+    </div>
+
+    <div class="sql-result-head">
+      <strong>Results</strong>
+      <span class="muted" id="sql-result-meta">Not run yet. Saved queries never auto-run.</span>
+      <a class="btn btn-sm" id="sql-csv" hidden href="#">CSV</a>
+    </div>
+    <div class="sql-result-wrap">
+      <table class="data sql-result-table" id="sql-result-table">
+        <thead></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="sql-pager">
+      <button type="button" class="btn btn-sm" id="sql-prev" disabled>Prev</button>
+      <span class="muted" id="sql-page-label">Page 1</span>
+      <button type="button" class="btn btn-sm" id="sql-next" disabled>Next</button>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  var editor = document.getElementById('sql-editor');
+  var connection = document.getElementById('sql-connection');
+  var envBadge = document.getElementById('sql-env-badge');
+  var liveWarn = document.getElementById('sql-live-warn');
+  var queryIdEl = document.getElementById('sql-query-id');
+  var paramsGrid = document.getElementById('sql-params-grid');
+  var meta = document.getElementById('sql-result-meta');
+  var table = document.getElementById('sql-result-table');
+  var csvLink = document.getElementById('sql-csv');
+  var cancelBtn = document.getElementById('sql-cancel');
+  var pageSize = {{ page_size|int }};
+  var state = { page: 1, runId: null, totalRows: 0, lastSql: null, lastExplain: false };
+
+  function selectedOption() {
+    return connection.options[connection.selectedIndex];
+  }
+  function refreshEnv() {
+    var opt = selectedOption();
+    if (!opt) return;
+    var env = opt.getAttribute('data-env') || 'dev';
+    envBadge.textContent = env;
+    envBadge.className = 'badge ' + (opt.getAttribute('data-live') === '1' ? 'badge-offline' : 'badge-env');
+    liveWarn.hidden = opt.getAttribute('data-live') !== '1';
+  }
+  connection.addEventListener('change', refreshEnv);
+  refreshEnv();
+
+  function collectParams() {
+    var out = {};
+    paramsGrid.querySelectorAll('[data-param]').forEach(function (input) {
+      out[input.getAttribute('data-param')] = input.value;
+    });
+    return out;
+  }
+
+  function renderParams(names) {
+    var existing = collectParams();
+    paramsGrid.innerHTML = '';
+    (names || []).forEach(function (name) {
+      var label = document.createElement('label');
+      label.className = 'sql-field';
+      label.innerHTML = '<span>:' + name + '</span>';
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.setAttribute('data-param', name);
+      input.value = existing[name] != null ? existing[name] : (name === 'active' ? '1' : '');
+      label.appendChild(input);
+      paramsGrid.appendChild(label);
+    });
+    if (!(names || []).length) {
+      paramsGrid.innerHTML = '<span class="muted">No :name parameters detected.</span>';
+    }
+  }
+
+  function detectParams() {
+    return fetch({{ url_for('api_sql_params')|tojson }}, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sql: editor.value })
+    }).then(function (r) { return r.json(); }).then(function (data) {
+      if (data && data.ok) renderParams(data.params || []);
+    });
+  }
+  document.getElementById('sql-refresh-params').addEventListener('click', detectParams);
+  detectParams();
+
+  function renderResult(data) {
+    var thead = table.querySelector('thead');
+    var tbody = table.querySelector('tbody');
+    thead.innerHTML = '';
+    tbody.innerHTML = '';
+    if (!data || !data.ok) {
+      meta.textContent = (data && data.error) ? ('Error: ' + data.error) : 'Error';
+      meta.className = 'muted';
+      csvLink.hidden = true;
+      cancelBtn.disabled = true;
+      return;
+    }
+    state.runId = data.run_id;
+    state.totalRows = data.total_rows || 0;
+    state.page = data.page || 1;
+    var hr = document.createElement('tr');
+    (data.columns || []).forEach(function (col) {
+      var th = document.createElement('th');
+      th.textContent = col;
+      hr.appendChild(th);
+    });
+    thead.appendChild(hr);
+    (data.rows || []).forEach(function (row) {
+      var tr = document.createElement('tr');
+      row.forEach(function (cell) {
+        var td = document.createElement('td');
+        td.textContent = cell == null ? '' : String(cell);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    var bits = [
+      (data.total_rows || 0) + ' row(s)',
+      (data.duration_ms || 0) + ' ms',
+      data.kind || '',
+      data.truncated ? 'row cap reached' : ''
+    ].filter(Boolean);
+    meta.textContent = bits.join(' · ');
+    document.getElementById('sql-page-label').textContent = 'Page ' + state.page;
+    document.getElementById('sql-prev').disabled = state.page <= 1;
+    document.getElementById('sql-next').disabled = (state.page * pageSize) >= state.totalRows;
+    csvLink.hidden = false;
+    csvLink.href = '/api/sql/runs/' + encodeURIComponent(data.run_id) + '/csv';
+    cancelBtn.disabled = true;
+  }
+
+  function runSql(explain) {
+    var opt = selectedOption();
+    if (!opt) return;
+    if (opt.getAttribute('data-configured') !== '1') {
+      meta.textContent = 'Error: connection is not configured.';
+      return;
+    }
+    if (opt.getAttribute('data-live') === '1') {
+      if (!window.confirm('Run against LIVE read-only connection? Prefer Stage when exploring.')) return;
+    }
+    state.lastSql = editor.value;
+    state.lastExplain = !!explain;
+    cancelBtn.disabled = false;
+    meta.textContent = 'Running…';
+    fetch({{ url_for('api_sql_run')|tojson }}, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        connection_id: connection.value,
+        sql: editor.value,
+        params: collectParams(),
+        query_id: queryIdEl.value || '',
+        explain: !!explain,
+        page: state.page,
+        page_size: pageSize
+      })
+    }).then(function (r) { return r.json(); }).then(renderResult)
+      .catch(function () { meta.textContent = 'Error: request failed'; cancelBtn.disabled = true; });
+  }
+
+  document.getElementById('sql-run').addEventListener('click', function () {
+    state.page = 1;
+    runSql(false);
+  });
+  document.getElementById('sql-explain').addEventListener('click', function () {
+    state.page = 1;
+    runSql(true);
+  });
+  document.getElementById('sql-cancel').addEventListener('click', function () {
+    if (!state.runId) return;
+    fetch('/api/sql/runs/' + encodeURIComponent(state.runId) + '/cancel', { method: 'POST' });
+  });
+  document.getElementById('sql-prev').addEventListener('click', function () {
+    if (state.page <= 1) return;
+    state.page -= 1;
+    runSql(state.lastExplain);
+  });
+  document.getElementById('sql-next').addEventListener('click', function () {
+    state.page += 1;
+    runSql(state.lastExplain);
+  });
+
+  document.getElementById('sql-format').addEventListener('click', function () {
+    fetch({{ url_for('api_sql_format')|tojson }}, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sql: editor.value, dialect: 'postgres' })
+    }).then(function (r) { return r.json(); }).then(function (data) {
+      if (data && data.ok) editor.value = data.sql;
+      else meta.textContent = 'Format error: ' + ((data && data.error) || 'failed');
+    });
+  });
+
+  document.getElementById('sql-test').addEventListener('click', function () {
+    meta.textContent = 'Testing connection…';
+    fetch('/api/sql/connections/' + encodeURIComponent(connection.value) + '/test', { method: 'POST' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        meta.textContent = data.ok
+          ? ('Connection OK · ' + (data.latency_ms || 0) + ' ms')
+          : ('Connection error: ' + (data.error || data.detail || 'failed'));
+      });
+  });
+
+  function saveQuery(isNew) {
+    var payload = {
+      title: document.getElementById('sql-title').value,
+      sql: editor.value,
+      tags: document.getElementById('sql-tags').value,
+      favorite: document.getElementById('sql-favorite').checked,
+      connection_id: connection.value,
+      repository_id: document.getElementById('sql-repo').value,
+      notebook_note_id: document.getElementById('sql-note').value,
+      new_version: true
+    };
+    var qid = queryIdEl.value;
+    var url = isNew || !qid ? {{ url_for('api_sql_create_query')|tojson }} : ('/api/sql/queries/' + encodeURIComponent(qid));
+    var method = isNew || !qid ? 'POST' : 'PUT';
+    fetch(url, {
+      method: method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function (r) { return r.json(); }).then(function (data) {
+      if (!data || !data.ok) {
+        meta.textContent = 'Save error: ' + ((data && data.error) || 'failed');
+        return;
+      }
+      window.location.href = {{ url_for('sql_workspace')|tojson }} + '?query=' + encodeURIComponent(data.query.id);
+    });
+  }
+  document.getElementById('sql-save').addEventListener('click', function () { saveQuery(false); });
+  document.getElementById('sql-new').addEventListener('click', function () {
+    queryIdEl.value = '';
+    document.getElementById('sql-title').value = 'Untitled query';
+    editor.value = '';
+    document.getElementById('sql-tags').value = '';
+    document.getElementById('sql-favorite').checked = false;
+    detectParams();
+    meta.textContent = 'New query — not saved yet. Will not auto-run.';
+  });
+  document.getElementById('sql-add-folder').addEventListener('click', function () {
+    var name = window.prompt('Folder name');
+    if (!name) return;
+    fetch({{ url_for('api_sql_create_folder')|tojson }}, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name })
+    }).then(function () { window.location.reload(); });
+  });
+})();
+</script>
+{% endblock %}

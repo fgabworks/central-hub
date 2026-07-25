@@ -1,0 +1,56 @@
+{# Shared Quick Notepad panel — same SQLite scratchpad on Dashboard + Notebook. #}
+<aside class="qn-panel card" id="qn-panel" aria-label="Quick Notepad">
+  {% if show_resize|default(true) %}
+  <div class="qn-resize" id="qn-resize" role="separator" aria-orientation="vertical" aria-label="Resize Quick Notepad" tabindex="0"></div>
+  {% endif %}
+  <header class="qn-header">
+    <div class="qn-header-main">
+      <h2>Quick Notepad</h2>
+      <span class="qn-status" id="qn-status" data-state="saved">Saved</span>
+    </div>
+    <button type="button" class="btn btn-sm qn-collapse" id="qn-collapse" title="Collapse" aria-label="Collapse Quick Notepad">⟨</button>
+  </header>
+  <p class="qn-hint muted">Local scratchpad — separate from structured notes. Autosaves here only. Never sent to agents.</p>
+  <div class="qn-toolbar">
+    <label class="qn-format">
+      <span class="muted">Format</span>
+      <select id="qn-format" aria-label="Notepad format">
+        <option value="plain"{% if notepad.content_format != 'markdown' %} selected{% endif %}>Plain text</option>
+        <option value="markdown"{% if notepad.content_format == 'markdown' %} selected{% endif %}>Markdown</option>
+      </select>
+    </label>
+    <div class="qn-actions">
+      <button type="button" class="btn btn-sm" id="qn-copy">Copy</button>
+      <button type="button" class="btn btn-sm" id="qn-clear">Clear</button>
+      <button type="button" class="btn btn-sm btn-primary" id="qn-convert">Convert to Note</button>
+    </div>
+  </div>
+  <textarea id="qn-body" class="qn-body" spellcheck="true"
+            placeholder="Scratch thoughts, paste snippets, draft markdown…"
+            aria-label="Quick Notepad content">{{ notepad.content }}</textarea>
+  {% if show_history|default(true) %}
+  <details class="qn-history" id="qn-history">
+    <summary>Revision history <span class="muted">({{ (notepad.revisions or [])|length }})</span></summary>
+    <ul class="qn-rev-list" id="qn-rev-list">
+      {% for rev in notepad.revisions or [] %}
+      <li>
+        <div class="qn-rev-meta">
+          <span class="mono muted">{{ (rev.created_at or '')[:19].replace('T',' ') }}</span>
+          <span class="badge">{{ rev.reason }}</span>
+        </div>
+        <div class="qn-rev-preview muted">{{ rev.preview }}</div>
+        <button type="button" class="btn btn-sm qn-restore" data-rev="{{ rev.id }}">Restore</button>
+      </li>
+      {% else %}
+      <li class="muted qn-rev-empty">No revisions yet. Clearing or converting saves a snapshot.</li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+</aside>
+
+<button type="button" class="qn-open-btn btn btn-sm btn-primary" id="qn-open-btn"
+        aria-controls="qn-panel" aria-expanded="{{ 'true' if notepad.panel_open else 'false' }}">
+  Quick Notepad
+</button>
+<div class="qn-backdrop" id="qn-backdrop" hidden></div>

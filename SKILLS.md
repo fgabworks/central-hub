@@ -12,7 +12,8 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 | Live Processing (GET-only API + path health) | `config/repositories.yaml` |
 | Data-Script / Report Template (git + optional path) | `config/repositories.yaml` |
 | Live dashboard (health / notebook queue / audit) | `/` |
-| Repository Notebook (local notes) | `/notebook`, `hub/notebook/`, `data/notebook.db` |
+| Repository Notebook (local notes + Quick Notepad) | `/notebook`, `hub/notebook/`, `data/notebook.db` |
+| SQL Workspace (read-only query library/runner) | `/sql`, `hub/sql_workspace/`, `data/sql_workspace.db` |
 | Dashboard Notebook Work Queue | `/` Open Tasks + queue tabs; reuses Notebook store |
 | Health probe cache + parallel checks | `hub/adapters/manager.py`, `CENTRAL_HUB_HEALTH_CACHE_TTL` |
 | UID index controlled update (LP-style) | `/dhis2/uid-index/manage`, `hub/dhis2/uid_mapping/admin.py` |
@@ -39,7 +40,9 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 | Enrichment dry-run preview | In-process until confirm; run progress in SQLite; lost on process restart before apply |
 | UID conflict resolve | Conflicts skipped by default; no per-UID take/keep form yet |
 | Enrichment raw metadata | Not bulk-stored; live GET only when detail `?tab=raw&raw=1` |
-| Repository Notebook | Manual notes only — no agent assist, no automatic repo scanning |
+| SQL Workspace | Implemented — SELECT/WITH/EXPLAIN only; Live warning; never auto-run |
+| Repository Notebook | Manual notes + shared Quick Notepad (Dashboard + Notebook) — no agent assist |
+| Dashboard Quick Notepad | Same scratchpad record as Notebook; collapsible / drawer |
 | API writes | Blocked even if YAML `allow_write` (Phase 4 GET-only) |
 | Pause | Cooperative between capability steps (short demos finish quickly) |
 | Owner auth | Single shared token; not multi-user RBAC |

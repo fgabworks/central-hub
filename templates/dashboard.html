@@ -2,6 +2,16 @@
 {% from "macros.html" import status_badge, type_badge %}
 {% block title %}Dashboard · {{ app_name }}{% endblock %}
 {% block content %}
+<div class="dash-workspace qn-host{% if notepad.panel_open %} is-qn-open{% endif %}"
+     id="qn-host"
+     style="--qn-width: {{ notepad.panel_width }}px"
+     data-qn-open="{{ '1' if notepad.panel_open else '0' }}"
+     data-qn-width="{{ notepad.panel_width }}"
+     data-qn-save-url="{{ url_for('api_notebook_notepad_put') }}"
+     data-qn-clear-url="{{ url_for('api_notebook_notepad_clear') }}"
+     data-qn-convert-url="{{ url_for('api_notebook_notepad_convert') }}"
+     data-qn-restore-url="{{ url_for('api_notebook_notepad_restore') }}">
+<div class="dash-workspace-main">
 <section class="page-header">
   <div>
     <h1>Dashboard</h1>
@@ -278,4 +288,9 @@
     </section>
   </aside>
 </section>
+</div>
+
+{% include "partials/quick_notepad_panel.html" %}
+</div>
+<script src="{{ url_for('static', filename='js/quick_notepad.js') }}"></script>
 {% endblock %}

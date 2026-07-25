@@ -195,6 +195,19 @@ def _normalize_tab(tab: str | None) -> str:
     return key if key in QUEUE_TABS else "open"
 
 
+def _status_sort_rank(status: str | None) -> int:
+    """Pending first, Done last; other open statuses in between."""
+    order = {
+        "pending": 0,
+        "inbox": 1,
+        "ongoing": 2,
+        "blocked": 3,
+        "done": 4,
+        "archived": 5,
+    }
+    return order.get(str(status or "").strip().lower(), 3)
+
+
 def filter_queue(
     notes: list[dict[str, Any]],
     tab: str,
@@ -226,10 +239,11 @@ def filter_queue(
         return False
 
     matched = [n for n in classified if matches(n)]
-    # Newest first, then stable-sort by pin / overdue / due so ties keep recency.
+    # Newest first, then stable-sort: Pending → … → Done, then pin / due.
     matched.sort(key=lambda n: str(n.get("updated_at") or ""), reverse=True)
     matched.sort(
         key=lambda item: (
+            _status_sort_rank(item.get("status")),
             0 if item["flags"]["pinned"] else 1,
             0 if item["flags"]["overdue"] else 1,
             0 if item["flags"]["due_today"] else 1,

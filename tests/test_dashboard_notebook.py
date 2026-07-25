@@ -117,6 +117,58 @@ class WorkQueueHelperTests(unittest.TestCase):
         blocked = filter_queue(notes, "blocked", today=self.today)
         self.assertEqual([n["title"] for n in blocked], ["Blocked item"])
 
+        # Open tab: Pending first among statuses (Done last when present).
+        open_sorted = filter_queue(notes, "open", today=self.today, limit=10)
+        self.assertEqual(open_sorted[0]["status"], "pending")
+        self.assertEqual(open_sorted[0]["title"], "Due today")
+        status_order = [n["status"] for n in open_sorted]
+        self.assertEqual(status_order, ["pending", "inbox", "ongoing", "blocked"])
+
+    def test_queue_pending_first_done_last(self) -> None:
+        notes = [
+            {
+                "title": "Done item",
+                "status": "done",
+                "due_date": "2026-07-20",
+                "pinned": True,
+                "priority": "high",
+                "note_type": "task",
+                "updated_at": "2026-07-25T12:00:00",
+            },
+            {
+                "title": "Ongoing item",
+                "status": "ongoing",
+                "due_date": "2026-07-28",
+                "pinned": False,
+                "priority": "medium",
+                "note_type": "task",
+                "updated_at": "2026-07-25T11:00:00",
+            },
+            {
+                "title": "Pending item",
+                "status": "pending",
+                "due_date": None,
+                "pinned": False,
+                "priority": "low",
+                "note_type": "note",
+                "updated_at": "2026-07-25T10:00:00",
+            },
+            {
+                "title": "Blocked item",
+                "status": "blocked",
+                "due_date": "2026-07-26",
+                "pinned": False,
+                "priority": "urgent",
+                "note_type": "bug",
+                "updated_at": "2026-07-25T13:00:00",
+            },
+        ]
+        ordered = filter_queue(notes, "open", today=self.today, limit=10)
+        self.assertEqual(
+            [n["title"] for n in ordered],
+            ["Pending item", "Ongoing item", "Blocked item", "Done item"],
+        )
+
     def test_classify_due_labels(self) -> None:
         item = classify_open_note(
             {"due_date": "2026-07-25", "status": "pending", "pinned": False, "priority": "medium", "note_type": "task"},

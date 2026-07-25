@@ -6,7 +6,7 @@ import json
 import os
 from pathlib import Path
 
-from flask import Flask, abort, jsonify, redirect, render_template, request, send_file, session, url_for
+from flask import Flask, abort, jsonify, redirect, render_template, request, send_file, session, url_for, Response
 
 from hub import __version__
 from hub.adapters import AdapterManager
@@ -70,6 +70,13 @@ from hub.notebook import (
     render_markdown,
 )
 from hub.notebook.dashboard import dashboard_work_queue, open_tasks_severity
+from hub.sql_workspace import (
+    SqlExecutor,
+    SqlWorkspaceStore,
+    load_connection_registry,
+)
+from hub.sql_workspace.demo import ensure_demo_database
+from hub.sql_workspace.safety import SqlSafetyError, extract_named_params, format_sql
 from hub.registry import load_registry
 from hub.registry.git_util import default_search_roots, find_local_checkout, slugify_repo_id
 from hub.registry.loader import RegistryError
@@ -154,6 +161,15 @@ def create_app() -> Flask:
         enrichment_store=enrichment_store,
     )
     app.config["NOTEBOOK"] = NotebookStore()
+    ensure_demo_database()
+    sql_store = SqlWorkspaceStore()
+    app.config["SQL_WS_STORE"] = sql_store
+    app.config["SQL_WS_CONNECTIONS"] = load_connection_registry()
+    app.config["SQL_WS_EXECUTOR"] = SqlExecutor(
+        sql_store,
+        max_rows=int(os.environ.get("SQL_WS_MAX_ROWS") or 1000),
+        statement_timeout_ms=int(os.environ.get("SQL_WS_STATEMENT_TIMEOUT_MS") or 15000),
+    )
 
     def _apply_dhis2_client(client: Dhis2Client, *, instance: str | None) -> None:
         previous = app.config.get("DHIS2")
@@ -244,6 +260,12 @@ def create_app() -> Flask:
                     "label": "Notebook",
                     "icon": "✎",
                     "active_prefix": "notebook",
+                },
+                {
+                    "endpoint": "sql_workspace",
+                    "label": "SQL",
+                    "icon": "▦",
+                    "active_prefix": "sql_workspace",
                 },
                 {
                     "endpoint": "dhis2",
@@ -395,6 +417,7 @@ def create_app() -> Flask:
             live_repos=live_repos,
             work_queue=work_queue,
             activity_rows=activity_rows,
+            notepad=QuickNotepadStore(notebook.db).get(),
         )
 
     def _reload_registry() -> None:
@@ -1142,6 +1165,7 @@ def create_app() -> Flask:
             repo_roles=REPO_ROLES,
             repo_role_labels=REPO_ROLE_LABELS,
             preview_html=preview_html,
+            notepad=QuickNotepadStore(store.db).get(),
             flash=flash,
             error=error,
         )
@@ -1159,8 +1183,6 @@ def create_app() -> Flask:
             detail="Exported notebook note JSON",
             ok=True,
         )
-        from flask import Response
-
         body = json.dumps(payload, indent=2, ensure_ascii=True)
         return Response(
             body,
@@ -1175,6 +1197,337 @@ def create_app() -> Flask:
         data = request.get_json(silent=True) or {}
         html_out = render_markdown(str(data.get("markdown") or ""))
         return jsonify({"ok": True, "html": html_out})
+
+    def _quick_notepad() -> QuickNotepadStore:
+        store: NotebookStore = app.config["NOTEBOOK"]
+        return QuickNotepadStore(store.db)
+
+    @app.get("/api/notebook/notepad")
+    def api_notebook_notepad_get():
+        return jsonify({"ok": True, "notepad": _quick_notepad().get()})
+
+    @app.put("/api/notebook/notepad")
+    def api_notebook_notepad_put():
+        data = request.get_json(silent=True) or {}
+        pad = _quick_notepad()
+        kwargs: dict = {}
+        if "content" in data:
+            kwargs["content"] = str(data.get("content") or "")
+        if "content_format" in data:
+            kwargs["content_format"] = str(data.get("content_format") or "plain")
+        if "panel_open" in data:
+            kwargs["panel_open"] = bool(data.get("panel_open"))
+        if "panel_width" in data:
+            kwargs["panel_width"] = data.get("panel_width")
+        try:
+            saved = pad.save(**kwargs)
+            return jsonify({"ok": True, "notepad": saved})
+        except Exception as exc:  # noqa: BLE001 — surface as UI Error status
+            return jsonify({"ok": False, "error": str(exc) or "Save failed"}), 500
+
+    @app.post("/api/notebook/notepad/clear")
+    def api_notebook_notepad_clear():
+        audit: AuditStore = app.config["AUDIT"]
+        saved = _quick_notepad().clear()
+        audit.append(
+            action=audit_actions.NOTEBOOK_NOTEPAD_CLEAR,
+            target="quick-notepad",
+            detail="Cleared Quick Notepad (revision kept)",
+            ok=True,
+        )
+        return jsonify({"ok": True, "notepad": saved})
+
+    @app.post("/api/notebook/notepad/convert")
+    def api_notebook_notepad_convert():
+        store: NotebookStore = app.config["NOTEBOOK"]
+        audit: AuditStore = app.config["AUDIT"]
+        note = _quick_notepad().convert_to_note(store)
+        if not note:
+            return jsonify({"ok": False, "error": "Quick Notepad is empty."}), 400
+        audit.append(
+            action=audit_actions.NOTEBOOK_NOTEPAD_CONVERT,
+            target=note["id"],
+            detail="Converted Quick Notepad to note",
+            ok=True,
+        )
+        audit.append(
+            action=audit_actions.NOTEBOOK_CREATE,
+            target=note["id"],
+            detail="Created note from Quick Notepad",
+            ok=True,
+        )
+        return jsonify(
+            {
+                "ok": True,
+                "note_id": note["id"],
+                "redirect": url_for("notebook", note=note["id"]),
+            }
+        )
+
+    @app.post("/api/notebook/notepad/restore")
+    def api_notebook_notepad_restore():
+        audit: AuditStore = app.config["AUDIT"]
+        data = request.get_json(silent=True) or {}
+        revision_id = str(data.get("revision_id") or "").strip()
+        restored = _quick_notepad().restore(revision_id)
+        if not restored:
+            return jsonify({"ok": False, "error": "Revision not found."}), 404
+        audit.append(
+            action=audit_actions.NOTEBOOK_NOTEPAD_RESTORE,
+            target=revision_id,
+            detail="Restored Quick Notepad revision",
+            ok=True,
+        )
+        return jsonify({"ok": True, "notepad": restored})
+
+    # ----- SQL Workspace (read-only) -----
+    def _sql_store() -> SqlWorkspaceStore:
+        return app.config["SQL_WS_STORE"]
+
+    def _sql_executor() -> SqlExecutor:
+        return app.config["SQL_WS_EXECUTOR"]
+
+    def _sql_connections():
+        return app.config["SQL_WS_CONNECTIONS"]
+
+    @app.get("/sql")
+    def sql_workspace():
+        store = _sql_store()
+        audit: AuditStore = app.config["AUDIT"]
+        registry = _sql_connections()
+        query_id = (request.args.get("query") or "").strip()
+        selected = store.get_query(query_id) if query_id else None
+        q = (request.args.get("q") or "").strip()
+        tag = (request.args.get("tag") or "").strip()
+        folder_id = (request.args.get("folder") or "").strip()
+        fav = request.args.get("favorites") in {"1", "true", "on"}
+        queries = store.list_queries(
+            q=q, folder_id=folder_id, tag=tag, favorites_only=fav, limit=200
+        )
+        audit.append(
+            action=audit_actions.SQL_WS_VIEW,
+            target=query_id or "library",
+            detail=f"SQL Workspace view matched={len(queries)}",
+            ok=True,
+        )
+        page_size = int(os.environ.get("SQL_WS_PAGE_SIZE") or 100)
+        return render_template(
+            "sql_workspace.html",
+            connections=registry.list_public(),
+            folders=store.list_folders(),
+            queries=queries,
+            selected=selected,
+            selected_id=query_id,
+            filters={"q": q, "tag": tag, "folder": folder_id, "favorites": fav},
+            recent_runs=store.list_runs(limit=30),
+            page_size=page_size,
+            max_rows=int(os.environ.get("SQL_WS_MAX_ROWS") or 1000),
+            registry_repos=_notebook_registry_options(),
+        )
+
+    @app.get("/api/sql/connections")
+    def api_sql_connections():
+        return jsonify({"ok": True, "connections": _sql_connections().list_public()})
+
+    @app.post("/api/sql/connections/<connection_id>/test")
+    def api_sql_connection_test(connection_id: str):
+        audit: AuditStore = app.config["AUDIT"]
+        registry = _sql_connections()
+        profile = registry.get(connection_id)
+        if profile is None or not profile.enabled:
+            return jsonify({"ok": False, "error": "Connection not found."}), 404
+        if not profile.configured:
+            detail = "Connection is not configured."
+            audit.append(
+                action=audit_actions.SQL_WS_TEST,
+                target=connection_id,
+                detail=detail,
+                ok=False,
+            )
+            return jsonify({"ok": False, "error": detail}), 400
+        result = _sql_executor().test_connection(profile)
+        audit.append(
+            action=audit_actions.SQL_WS_TEST,
+            target=connection_id,
+            detail=result.get("detail") or "",
+            ok=bool(result.get("ok")),
+            metadata={"latency_ms": result.get("latency_ms"), "environment": profile.environment},
+        )
+        return jsonify({"ok": bool(result.get("ok")), **result})
+
+    @app.post("/api/sql/format")
+    def api_sql_format():
+        data = request.get_json(silent=True) or {}
+        sql_text = str(data.get("sql") or "")
+        dialect = str(data.get("dialect") or "postgres")
+        try:
+            return jsonify({"ok": True, "sql": format_sql(sql_text, dialect=dialect)})
+        except SqlSafetyError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+
+    @app.post("/api/sql/params")
+    def api_sql_params():
+        data = request.get_json(silent=True) or {}
+        names = extract_named_params(str(data.get("sql") or ""))
+        return jsonify({"ok": True, "params": names})
+
+    @app.post("/api/sql/run")
+    def api_sql_run():
+        audit: AuditStore = app.config["AUDIT"]
+        data = request.get_json(silent=True) or {}
+        connection_id = str(data.get("connection_id") or "").strip()
+        sql_text = str(data.get("sql") or "")
+        params = data.get("params") if isinstance(data.get("params"), dict) else {}
+        query_id = str(data.get("query_id") or "").strip()
+        explain = bool(data.get("explain"))
+        page = int(data.get("page") or 1)
+        page_size = int(data.get("page_size") or os.environ.get("SQL_WS_PAGE_SIZE") or 100)
+        registry = _sql_connections()
+        try:
+            profile = registry.get_configured(connection_id)
+        except LookupError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+        result = _sql_executor().execute(
+            profile,
+            sql_text,
+            params=params,
+            query_id=query_id,
+            page=page,
+            page_size=page_size,
+            explain=explain,
+        )
+        audit.append(
+            action=audit_actions.SQL_WS_RUN,
+            target=result.run_id,
+            detail=(
+                f"SQL run status={result.status} conn={connection_id} "
+                f"env={profile.environment} rows={result.total_rows}"
+            ),
+            ok=result.ok,
+            metadata={
+                "connection_id": connection_id,
+                "environment": profile.environment,
+                "status": result.status,
+                "kind": result.kind,
+                "duration_ms": result.duration_ms,
+                "truncated": result.truncated,
+                "query_id": query_id or None,
+            },
+        )
+        return jsonify(
+            {
+                "ok": result.ok,
+                "run_id": result.run_id,
+                "status": result.status,
+                "columns": result.columns,
+                "rows": result.rows,
+                "row_count": result.row_count,
+                "total_rows": result.total_rows,
+                "truncated": result.truncated,
+                "duration_ms": round(result.duration_ms, 1),
+                "error": result.error,
+                "kind": result.kind,
+                "page": result.page,
+                "page_size": result.page_size,
+                "is_live": profile.is_live,
+            }
+        )
+
+    @app.post("/api/sql/runs/<run_id>/cancel")
+    def api_sql_cancel(run_id: str):
+        audit: AuditStore = app.config["AUDIT"]
+        ok = _sql_executor().cancel(run_id)
+        audit.append(
+            action=audit_actions.SQL_WS_CANCEL,
+            target=run_id,
+            detail="Cancel requested" if ok else "Cancel ignored",
+            ok=ok,
+        )
+        return jsonify({"ok": ok})
+
+    @app.get("/api/sql/runs/<run_id>/csv")
+    def api_sql_export_csv(run_id: str):
+        audit: AuditStore = app.config["AUDIT"]
+        path = _sql_executor().export_csv_path(run_id)
+        if path is None:
+            return jsonify({"ok": False, "error": "Result not found."}), 404
+        audit.append(
+            action=audit_actions.SQL_WS_EXPORT,
+            target=run_id,
+            detail="Exported SQL run CSV",
+            ok=True,
+        )
+        return send_file(
+            path,
+            mimetype="text/csv",
+            as_attachment=True,
+            download_name=f"sql-run-{run_id[:12]}.csv",
+        )
+
+    @app.get("/api/sql/runs")
+    def api_sql_runs():
+        query_id = (request.args.get("query_id") or "").strip()
+        return jsonify(
+            {"ok": True, "runs": _sql_store().list_runs(query_id=query_id, limit=50)}
+        )
+
+    @app.post("/api/sql/queries")
+    def api_sql_create_query():
+        audit: AuditStore = app.config["AUDIT"]
+        data = request.get_json(silent=True) or {}
+        # Never auto-run on save
+        saved = _sql_store().create_query(
+            title=str(data.get("title") or "Untitled query"),
+            sql_text=str(data.get("sql") or ""),
+            description=str(data.get("description") or ""),
+            folder_id=(str(data.get("folder_id") or "").strip() or None),
+            connection_id=str(data.get("connection_id") or ""),
+            tags=data.get("tags"),
+            favorite=bool(data.get("favorite")),
+            repository_id=str(data.get("repository_id") or ""),
+            notebook_note_id=str(data.get("notebook_note_id") or ""),
+        )
+        audit.append(
+            action=audit_actions.SQL_WS_SAVE,
+            target=saved["id"],
+            detail="Created SQL query",
+            ok=True,
+        )
+        return jsonify({"ok": True, "query": saved})
+
+    @app.put("/api/sql/queries/<query_id>")
+    def api_sql_save_query(query_id: str):
+        audit: AuditStore = app.config["AUDIT"]
+        data = request.get_json(silent=True) or {}
+        saved = _sql_store().save_query(
+            query_id,
+            title=data.get("title"),
+            sql_text=data.get("sql"),
+            description=data.get("description"),
+            folder_id=data.get("folder_id"),
+            connection_id=data.get("connection_id"),
+            tags=data.get("tags"),
+            favorite=data.get("favorite"),
+            repository_id=data.get("repository_id"),
+            notebook_note_id=data.get("notebook_note_id"),
+            new_version=bool(data.get("new_version", True)),
+            version_note=str(data.get("version_note") or "saved"),
+        )
+        if not saved:
+            return jsonify({"ok": False, "error": "Query not found."}), 404
+        audit.append(
+            action=audit_actions.SQL_WS_SAVE,
+            target=query_id,
+            detail=f"Saved SQL query v{saved.get('current_version')}",
+            ok=True,
+        )
+        return jsonify({"ok": True, "query": saved})
+
+    @app.post("/api/sql/folders")
+    def api_sql_create_folder():
+        data = request.get_json(silent=True) or {}
+        folder = _sql_store().create_folder(str(data.get("name") or "Folder"))
+        return jsonify({"ok": True, "folder": folder})
 
     @app.route("/dhis2", methods=["GET", "POST"])
     def dhis2():

@@ -1,0 +1,35 @@
+# Read-only SQL Workspace connections.
+# Secrets come from environment variables named below — never commit passwords.
+# Prefer dedicated read-only database roles for each connection.
+
+connections:
+  - id: local-demo
+    label: Local Demo (SQLite)
+    environment: dev
+    driver: sqlite
+    path: data/sql_workspace_demo.db
+    enabled: true
+
+  - id: stage-ro
+    label: Stage Analytics (read-only)
+    environment: stage
+    driver: postgresql
+    host_env: SQL_WS_STAGE_HOST
+    port_env: SQL_WS_STAGE_PORT
+    database_env: SQL_WS_STAGE_DATABASE
+    user_env: SQL_WS_STAGE_USER
+    password_env: SQL_WS_STAGE_PASSWORD
+    sslmode: prefer
+    enabled: true
+
+  - id: live-ro
+    label: Live Analytics (read-only)
+    environment: live
+    driver: postgresql
+    host_env: SQL_WS_LIVE_HOST
+    port_env: SQL_WS_LIVE_PORT
+    database_env: SQL_WS_LIVE_DATABASE
+    user_env: SQL_WS_LIVE_USER
+    password_env: SQL_WS_LIVE_PASSWORD
+    sslmode: prefer
+    enabled: true

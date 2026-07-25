@@ -4,31 +4,26 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**Repository registry management** (Add / Edit / Enable / Disable) plus connected
-GitHub repos (Data-Script, PMNP Live Processing, Report Template). Builds on
-Notebook Work Queue, DHIS2 enrichment, Phases 1–6.
+**Dashboard Quick Notepad** (same scratchpad as Notebook) plus SQL Workspace and
+registry management.
 
-- Active `config/repositories.yaml`: LP API + LP local checkout + Data-Script +
-  Report Template (`git_url` + optional local path; no auto-clone)
-- Demo `sample-*` removed from active registry → `tests/fixtures/repositories.yaml`
-- UI: `/repositories/new`, edit, enable/disable; statuses Healthy / Unreachable /
-  Not Cloned / Disabled
-- Reuses matching local checkout when remote URL matches (depth-1 scan)
-- Prior work unchanged: Notebook, enrichment, GET-only DHIS2
+- Dashboard right-side Quick Notepad reuses `QuickNotepadStore` / `/api/notebook/notepad*`
+  (no second pad); collapsible + drawer; Saving… / Saved / Save failed
+- `/sql` read-only SQL Workspace unchanged in scope
+- Prior work: Notebook, registry, enrichment, GET-only DHIS2
 
 ## Verify
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-python -m unittest tests.test_registry_store tests.test_registry_loader tests.test_jobs -v
+python -m unittest tests.test_quick_notepad tests.test_dashboard_notebook tests.test_sql_workspace -v
 python app.py
 ```
 
-1. Repositories → see Data-Script / PMNP Live Processing / Report Template (no sample demos)
-2. Add Repository form validates duplicates; Enable/Disable works; YAML updates
-3. Missing local path with git_url → Not Cloned (hub does not clone)
-4. LP API health still GET-only; Jobs page still works with fixture samples in tests
-5. DHIS2 write methods still absent
+1. Dashboard → Quick Notepad shows same text as Notebook; edit autosaves
+2. Collapse on Dashboard → still collapsed on Notebook refresh
+3. Clear / Convert to Note still work from Dashboard
+4. `/sql`, repositories, jobs, health, audit, DHIS2 still load
 
 ## Next task
 

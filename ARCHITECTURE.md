@@ -9,8 +9,8 @@ Agent rules: [AGENTS.md](AGENTS.md). Current state: [AI_REFERENCE.md](AI_REFEREN
 
 The hub owns: registry, adapters, **job engine (SQLite + worker)**, UI, health checks,
 audit, a **read-only DHIS2 Web API client**, a **local metadata capability catalog**,
-a **local UID mapping index**, a preview-only metadata builder, and a **Repository
-Notebook** (local SQLite notes linked to registry repos).
+a **local UID mapping index**, a preview-only metadata builder, a **Repository Notebook** (local SQLite notes
+linked to registry repos), and a **SQL Workspace** (read-only query library/runner).
 Connected repos own: domain rules, data models, their own APIs and secrets handling.
 The hub must never duplicate PMNP, DHIS2 *domain/business* logic, reporting,
 convergence, immunization, DDS, tetanus, or scorecard rules — those stay in the
@@ -27,10 +27,17 @@ Browser ──HTTP──> Flask app (app.py, create_app)
         ▼             ▼              ▼                  ▼            ▼
   hub/settings.py  hub/registry/  hub/adapters/   hub/dhis2/     hub/jobs/
   hub/audit/       config/*.yaml  hub/notebook/   (GET-only)     SQLite worker
-                                  data/notebook.db               data/hub.db
+                                  hub/sql_workspace/             data/hub.db
+                                  data/notebook.db
+                                  data/sql_workspace.db
                                                                  data/{uploads,results,jobs}/
 ```
 
+- **`hub/sql_workspace/`** — Read-only SQL Workspace: query library (folders, tags,
+  favorites, versions), run history in `data/sql_workspace.db`, connection profiles
+  from `config/sql_connections.yaml` + env secrets, sqlglot AST safety, RO executor
+  (timeout, cancel, row cap, CSV). Does not import connected-repo packages or copy
+  LP domain SQL.
 - **`hub/notebook/`** — Repository Notebook: local notes with statuses, filters,
   Markdown body, checklist, links, multi-repo relationship roles, pin flag, and
   activity history. SQLite + migrations under `data/notebook.db`. Dashboard Open
