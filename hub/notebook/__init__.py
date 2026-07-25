@@ -3,14 +3,21 @@
 from hub.notebook.db import NotebookDatabase, default_notebook_db_path
 from hub.notebook.markdown_util import render_markdown
 from hub.notebook.models import (
+    DEFAULT_SCOPE,
+    DEFAULT_WORKSPACE,
     NOTE_TYPE_LABELS,
     NOTE_TYPES,
     PRIORITIES,
     PRIORITY_LABELS,
     REPO_ROLE_LABELS,
     REPO_ROLES,
+    SCOPE_LABELS,
+    SCOPES,
     STATUS_LABELS,
     STATUSES,
+    WORKSPACES,
+    normalize_scope,
+    normalize_workspace,
 )
 from hub.notebook.notepad import (
     DEFAULT_WIDTH,
@@ -22,6 +29,8 @@ from hub.notebook.notepad import (
 from hub.notebook.store import NotebookStore
 
 __all__ = [
+    "DEFAULT_SCOPE",
+    "DEFAULT_WORKSPACE",
     "NOTE_TYPE_LABELS",
     "NOTE_TYPES",
     "NOTEPAD_FORMATS",
@@ -29,8 +38,11 @@ __all__ = [
     "PRIORITY_LABELS",
     "REPO_ROLE_LABELS",
     "REPO_ROLES",
+    "SCOPE_LABELS",
+    "SCOPES",
     "STATUS_LABELS",
     "STATUSES",
+    "WORKSPACES",
     "DEFAULT_WIDTH",
     "MAX_WIDTH",
     "MIN_WIDTH",
@@ -38,5 +50,7 @@ __all__ = [
     "NotebookStore",
     "QuickNotepadStore",
     "default_notebook_db_path",
+    "normalize_scope",
+    "normalize_workspace",
     "render_markdown",
 ]

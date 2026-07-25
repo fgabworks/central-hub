@@ -69,6 +69,46 @@ code, .mono { font-family: var(--mono); font-size: 12px; }
   border-bottom: 1px solid var(--border);
 }
 
+.workspace-switcher {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+  padding: 0.75rem 0.85rem 0.35rem;
+}
+.workspace-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: none;
+}
+.workspace-btn:hover {
+  color: var(--text);
+  border-color: rgba(139, 0, 0, 0.45);
+}
+.workspace-btn.is-active {
+  color: #fff;
+  background: linear-gradient(180deg, var(--crimson), var(--burgundy));
+  border-color: rgba(139, 0, 0, 0.65);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .brand-mark {
   width: 36px;
   height: 36px;
@@ -1580,11 +1620,14 @@ button.btn:disabled {
   position: relative;
   display: none;
   flex-direction: column;
-  gap: 0.55rem;
+  gap: 0.45rem;
   padding: 0.75rem 0.75rem 0.75rem 1rem;
-  min-height: 28rem;
-  max-height: calc(100vh - 7rem);
+  /* Taller default: fill most of the viewport; width unchanged (host --qn-width). */
+  min-height: min(48rem, calc(100vh - 5.5rem));
+  height: calc(100vh - 5.5rem);
+  max-height: calc(100vh - 5.5rem);
   overflow: hidden;
+  align-self: start;
 }
 .nb-workspace.is-qn-open .qn-panel,
 .dash-workspace.is-qn-open .qn-panel,
@@ -1610,6 +1653,7 @@ body.qn-resizing { cursor: col-resize; user-select: none; }
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+  flex: 0 0 auto;
 }
 .qn-header-main {
   display: flex;
@@ -1630,13 +1674,18 @@ body.qn-resizing { cursor: col-resize; user-select: none; }
 .qn-status[data-state="saving"] { color: #fcd34d; }
 .qn-status[data-state="saved"] { color: #86efac; }
 .qn-status[data-state="error"] { color: #fecaca; }
-.qn-hint { margin: 0; font-size: 12px; }
+.qn-hint {
+  margin: 0;
+  font-size: 12px;
+  flex: 0 0 auto;
+}
 .qn-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: end;
   justify-content: space-between;
   gap: 0.45rem;
+  flex: 0 0 auto;
 }
 .qn-format {
   display: flex;
@@ -1658,9 +1707,11 @@ body.qn-resizing { cursor: col-resize; user-select: none; }
   gap: 0.35rem;
 }
 .qn-body {
+  /* Editor claims remaining panel height; less empty space below. */
   flex: 1 1 auto;
   width: 100%;
-  min-height: 14rem;
+  min-height: 24rem;
+  height: 100%;
   max-height: none;
   overflow: auto;
   resize: vertical;
@@ -1675,10 +1726,16 @@ body.qn-resizing { cursor: col-resize; user-select: none; }
   line-height: 1.45;
 }
 .qn-history {
+  /* Secondary: collapsed by default (details); limited when expanded. */
+  flex: 0 0 auto;
   border-top: 1px solid var(--border);
-  padding-top: 0.45rem;
+  padding-top: 0.35rem;
   font-size: 12px;
-  max-height: 10rem;
+  max-height: none;
+  overflow: visible;
+}
+.qn-history[open] {
+  max-height: 8rem;
   overflow: auto;
 }
 .qn-history summary {
@@ -1718,7 +1775,7 @@ body.qn-resizing { cursor: col-resize; user-select: none; }
   bottom: 1rem;
   z-index: 40;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-  /* ~2◊ the default btn-sm floating tab */
+  /* ~2ù the default btn-sm floating tab */
   padding: 0.55rem 1.2rem;
   font-size: 15px;
   font-weight: 700;
@@ -1755,6 +1812,8 @@ body.qn-resizing { cursor: col-resize; user-select: none; }
     right: 0;
     bottom: 0;
     width: min(92vw, 420px);
+    height: 100vh;
+    min-height: 100vh;
     max-height: none;
     z-index: 60;
     border-radius: 12px 0 0 12px;

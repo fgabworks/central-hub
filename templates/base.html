@@ -18,19 +18,33 @@
         </div>
       </div>
 
-      <nav class="sidebar-nav" aria-label="Primary">
-        <div class="nav-label">Navigation</div>
-        {% for item in nav_items %}
+      <div class="workspace-switcher" role="group" aria-label="Workspace">
+        {% for ws in workspaces %}
           <a
-            href="{{ url_for(item.endpoint) }}"
-            class="nav-link{% if request.endpoint == item.endpoint or (item.active_prefix and request.endpoint and request.endpoint.startswith(item.active_prefix)) %} is-active{% endif %}"
-          >
-            <span class="nav-ico" aria-hidden="true">{{ item.icon }}</span>
-            <span>{{ item.label }}</span>
-            {% if item.badge %}
-              <span class="nav-new">{{ item.badge }}</span>
-            {% endif %}
-          </a>
+            class="workspace-btn{% if workspace == ws %} is-active{% endif %}"
+            href="{{ url_for('switch_workspace', workspace_name=ws) }}"
+            {% if workspace == ws %}aria-current="true"{% endif %}
+          >{{ workspace_labels[ws] }}</a>
+        {% endfor %}
+      </div>
+
+      <nav class="sidebar-nav" aria-label="Primary">
+        {% for section in nav_sections %}
+          {% if section['items'] %}
+            <div class="nav-label">{{ section['label'] }}</div>
+            {% for item in section['items'] %}
+              <a
+                href="{{ url_for(item.endpoint) }}{% if item.anchor %}#{{ item.anchor }}{% endif %}"
+                class="nav-link{% if request.endpoint == item.endpoint or (item.active_prefix and request.endpoint and request.endpoint.startswith(item.active_prefix)) %} is-active{% endif %}"
+              >
+                <span class="nav-ico" aria-hidden="true">{{ item.icon }}</span>
+                <span>{{ item.label }}</span>
+                {% if item.badge %}
+                  <span class="nav-new">{{ item.badge }}</span>
+                {% endif %}
+              </a>
+            {% endfor %}
+          {% endif %}
         {% endfor %}
       </nav>
 
@@ -47,7 +61,7 @@
 
       <div class="sidebar-footer">
         <strong>Central Hub v{{ hub_version }}</strong>
-        <span>Personal control center</span>
+        <span>{{ workspace_labels[workspace] }} workspace</span>
       </div>
     </aside>
 

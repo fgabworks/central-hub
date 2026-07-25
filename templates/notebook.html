@@ -1,13 +1,13 @@
 {% extends "base.html" %}
-{% block title %}Repository Notebook · {{ app_name }}{% endblock %}
+{% block title %}{{ page_title }} · {{ app_name }}{% endblock %}
 {% block content %}
 <div class="page-header">
   <div>
-    <h1>Repository Notebook</h1>
-    <p class="page-sub">Local notes linked to registry repositories. Survives missing repos. No agent scan yet.</p>
+    <h1>{{ page_title }}</h1>
+    <p class="page-sub">{{ page_sub }}</p>
   </div>
   <div class="page-actions">
-    <form method="post" action="{{ url_for('notebook') }}">
+    <form method="post" action="{{ url_for(notebook_endpoint) }}">
       <input type="hidden" name="action" value="new">
       <button class="btn btn-primary" type="submit">+ New Note</button>
     </form>
@@ -17,42 +17,45 @@
 {% if flash %}<div class="banner" style="background:var(--success-soft);border-color:rgba(34,197,94,.35)">{{ flash }}</div>{% endif %}
 {% if error %}<div class="banner banner-error">{{ error }}</div>{% endif %}
 
-<div class="nb-workspace qn-host{% if notepad.panel_open %} is-qn-open{% endif %}"
-     id="qn-host"
+{% set show_np = show_notepad and notepad %}
+<div class="nb-workspace{% if show_np %} qn-host{% if notepad.panel_open %} is-qn-open{% endif %}{% endif %}"
+     {% if show_np %}id="qn-host"
      style="--qn-width: {{ notepad.panel_width }}px"
      data-qn-open="{{ '1' if notepad.panel_open else '0' }}"
      data-qn-width="{{ notepad.panel_width }}"
      data-qn-save-url="{{ url_for('api_notebook_notepad_put') }}"
      data-qn-clear-url="{{ url_for('api_notebook_notepad_clear') }}"
      data-qn-convert-url="{{ url_for('api_notebook_notepad_convert') }}"
-     data-qn-restore-url="{{ url_for('api_notebook_notepad_restore') }}">
+     data-qn-restore-url="{{ url_for('api_notebook_notepad_restore') }}"{% endif %}>
 <div class="nb-shell">
   <aside class="nb-rail card" aria-label="Note statuses">
     <div class="nav-label">Statuses</div>
-    <a class="nb-status{% if status == 'all' %} is-active{% endif %}" href="{{ url_for('notebook', status='all', repo=filters.repo, type=filters.type, priority=filters.priority, tag=filters.tag, q=filters.q) }}">
+    <a class="nb-status{% if status == 'all' %} is-active{% endif %}" href="{{ url_for(notebook_endpoint, status='all', repo=filters.repo, type=filters.type, priority=filters.priority, tag=filters.tag, q=filters.q) }}">
       <span>All Notes</span><span class="nb-count">{{ counts.all }}</span>
     </a>
-    <a class="nb-status{% if status == 'open' %} is-active{% endif %}" href="{{ url_for('notebook', status='open', repo=filters.repo, type=filters.type, priority=filters.priority, tag=filters.tag, q=filters.q) }}">
+    <a class="nb-status{% if status == 'open' %} is-active{% endif %}" href="{{ url_for(notebook_endpoint, status='open', repo=filters.repo, type=filters.type, priority=filters.priority, tag=filters.tag, q=filters.q) }}">
       <span>Open</span><span class="nb-count">{{ counts.open }}</span>
     </a>
     {% for key in statuses %}
-    <a class="nb-status{% if status == key %} is-active{% endif %}" href="{{ url_for('notebook', status=key, repo=filters.repo, type=filters.type, priority=filters.priority, tag=filters.tag, q=filters.q) }}">
+    <a class="nb-status{% if status == key %} is-active{% endif %}" href="{{ url_for(notebook_endpoint, status=key, repo=filters.repo, type=filters.type, priority=filters.priority, tag=filters.tag, q=filters.q) }}">
       <span>{{ status_labels[key] }}</span><span class="nb-count">{{ counts[key] }}</span>
     </a>
     {% endfor %}
   </aside>
 
   <section class="nb-list card">
-    <form class="nb-filters" method="get" action="{{ url_for('notebook') }}">
+    <form class="nb-filters" method="get" action="{{ url_for(notebook_endpoint) }}">
       <input type="hidden" name="status" value="{{ status }}">
       {% if selected_id %}<input type="hidden" name="note" value="{{ selected_id }}">{% endif %}
       <input type="search" name="q" value="{{ filters.q }}" placeholder="Search notes…" aria-label="Search notes">
+      {% if allow_repositories %}
       <select name="repo" aria-label="Repository">
         <option value="">All repositories</option>
         {% for repo in registry_repos %}
           <option value="{{ repo.id }}" {% if filters.repo == repo.id %}selected{% endif %}>{{ repo.name }}{% if not repo.enabled %} (unavailable){% endif %}</option>
         {% endfor %}
       </select>
+      {% endif %}
       <select name="type" aria-label="Type">
         <option value="">All types</option>
         {% for t in note_types %}
@@ -77,13 +80,13 @@
     <div class="nb-note-list" role="list">
       {% for note in notes %}
       <a class="nb-note-row status-{{ note.status }}{% if selected_id == note.id %} is-active{% endif %}" role="listitem"
-         href="{{ url_for('notebook', note=note.id, status=status, repo=filters.repo, type=filters.type, priority=filters.priority, tag=filters.tag, q=filters.q) }}">
+         href="{{ url_for(notebook_endpoint, note=note.id, status=status, repo=filters.repo, type=filters.type, priority=filters.priority, tag=filters.tag, q=filters.q) }}">
         <div class="nb-note-row-main">
           <div class="nb-note-title">{{ note.title or 'Untitled note' }}</div>
           <div class="nb-note-meta">
             <span class="badge badge-status-{{ note.status }}">{{ status_labels.get(note.status, note.status) }}</span>
             <span class="badge badge-priority-{{ note.priority }}">{{ priority_labels.get(note.priority, note.priority) }}</span>
-            <span class="muted">{{ note.primary_repository }}</span>
+            {% if allow_repositories %}<span class="muted">{{ note.primary_repository }}</span>{% else %}<span class="muted">{{ scope_label }}</span>{% endif %}
             <span class="muted">{{ note_type_labels.get(note.note_type, note.note_type) }}</span>
             <span class="muted mono">{{ (note.updated_at or '')[:16].replace('T',' ') }}</span>
           </div>
@@ -98,7 +101,7 @@
 
   <section class="nb-editor card">
     {% if selected %}
-    <form method="post" action="{{ url_for('notebook') }}" class="nb-editor-form" id="nb-editor-form">
+    <form method="post" action="{{ url_for(notebook_endpoint) }}" class="nb-editor-form" id="nb-editor-form">
       <input type="hidden" name="note_id" value="{{ selected.id }}">
 
       <div class="nb-editor-toolbar">
@@ -156,6 +159,7 @@
         </label>
       </div>
 
+{% if allow_repositories %}
       <div class="nb-field">
         <div class="nb-field-head">
           <span>Repositories</span>
@@ -202,6 +206,8 @@
           {% endfor %}
         </div>
       </div>
+
+{% endif %}
 
       <label class="nb-field">
         <span>Tags <span class="muted">(comma-separated)</span></span>
@@ -289,9 +295,12 @@
   </section>
 </div>
 
+{% if show_np %}
 {% include "partials/quick_notepad_panel.html" %}
+{% endif %}
 </div>
 
+{% if allow_repositories %}
 <template id="nb-repo-template">
   <div class="nb-repeat-row">
     <select name="repo_id">
@@ -308,6 +317,8 @@
     </select>
   </div>
 </template>
+{% endif %}
+
 <template id="nb-check-template">
   <div class="nb-repeat-row nb-check-row">
     <label class="nb-check">
@@ -349,7 +360,9 @@
       bindCheckFlags(container);
     });
   }
-  addFromTemplate('nb-add-repo', 'nb-repo-rows', 'nb-repo-template');
+  if (document.getElementById('nb-add-repo')) {
+    addFromTemplate('nb-add-repo', 'nb-repo-rows', 'nb-repo-template');
+  }
   addFromTemplate('nb-add-check', 'nb-check-rows', 'nb-check-template');
   addFromTemplate('nb-add-link', 'nb-link-rows', 'nb-link-template');
 
@@ -377,5 +390,5 @@
   }
 })();
 </script>
-<script src="{{ url_for('static', filename='js/quick_notepad.js') }}"></script>
+{% if show_np %}<script src="{{ url_for('static', filename='js/quick_notepad.js') }}"></script>{% endif %}
 {% endblock %}

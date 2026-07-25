@@ -4,25 +4,26 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**Dashboard Quick Notepad** (same scratchpad as Notebook) plus SQL Workspace and
-registry management.
+**Personal / Work workspace organization** — single Notebook model with `scope`,
+sidebar switcher, Quick Notepad under Personal.
 
-- Dashboard right-side Quick Notepad reuses `QuickNotepadStore` / `/api/notebook/notepad*`
-  (no second pad); collapsible + drawer; Saving… / Saved / Save failed
-- `/sql` read-only SQL Workspace unchanged in scope
-- Prior work: Notebook, registry, enrichment, GET-only DHIS2
+- Nav groups: Personal · Work · System; last workspace remembered (cookie + `hub_prefs`)
+- Existing notes categorized as **work**; personal notes need no repositories
+- `/` and `/notebook` remain via redirects / POST compat
+- Prior: Dashboard Quick Notepad, SQL Workspace, registry, enrichment, GET-only DHIS2
 
 ## Verify
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-python -m unittest tests.test_quick_notepad tests.test_dashboard_notebook tests.test_sql_workspace -v
+python -m unittest tests.test_workspace_scope tests.test_quick_notepad tests.test_dashboard_notebook tests.test_notebook tests.test_sql_workspace -v
+python -m unittest discover -s tests -v
 python app.py
 ```
 
-1. Dashboard → Quick Notepad shows same text as Notebook; edit autosaves
-2. Collapse on Dashboard → still collapsed on Notebook refresh
-3. Clear / Convert to Note still work from Dashboard
+1. Switcher Personal ↔ Work remembers selection after refresh
+2. Work Dashboard queue shows only work notes; Personal Dashboard shows Quick Notepad
+3. `/notebook?note=<id>` opens the correct scoped notebook
 4. `/sql`, repositories, jobs, health, audit, DHIS2 still load
 
 ## Next task

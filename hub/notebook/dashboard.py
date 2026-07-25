@@ -261,9 +261,10 @@ def dashboard_work_queue(
     limit: int = 5,
     today: date | None = None,
     registered_ids: Iterable[str] | None = None,
+    scope: str | None = "work",
 ) -> dict[str, Any]:
     day = today or _today()
-    open_notes = store.list_open(limit=500)
+    open_notes = store.list_open(limit=500, scope=scope)
     stats = open_task_stats(open_notes, today=day, registered_ids=registered_ids)
     active = _normalize_tab(tab)
     items = filter_queue(

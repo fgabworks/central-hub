@@ -47,6 +47,8 @@ class QuickNotepadStoreTests(unittest.TestCase):
         note = self.pad.convert_to_note(self.notes)
         assert note is not None
         self.assertEqual(note["title"], "Draft title")
+        self.assertEqual(note.get("scope"), "personal")
+        self.assertEqual(note.get("repositories") or [], [])
         self.assertIn("Body line", note["body_md"])
         self.assertIn("from-quick-notepad", note.get("tags") or [])
         # Scratchpad content preserved after convert
@@ -100,7 +102,7 @@ class QuickNotepadRouteTests(unittest.TestCase):
         cls._tmp.cleanup()
 
     def test_notebook_page_includes_quick_notepad(self) -> None:
-        r = self.client.get("/notebook")
+        r = self.client.get("/personal/notebook")
         self.assertEqual(r.status_code, 200)
         html = r.get_data(as_text=True)
         self.assertIn("Quick Notepad", html)
@@ -121,6 +123,19 @@ class QuickNotepadRouteTests(unittest.TestCase):
         self.assertIn("max-width: 980px", css)
         self.assertIn(".qn-backdrop", css)
         self.assertIn(".dash-workspace", css)
+        # Taller panel: editor fills remaining height; history stays secondary.
+        self.assertRegex(
+            css,
+            r"\.qn-panel\s*\{[^}]*height:\s*calc\(100vh\s*-\s*5\.5rem\)",
+        )
+        self.assertRegex(
+            css,
+            r"\.qn-body\s*\{[^}]*min-height:\s*24rem",
+        )
+        self.assertRegex(
+            css,
+            r"\.qn-history\[open\]\s*\{[^}]*max-height:\s*8rem",
+        )
         js = (Path(__file__).resolve().parents[1] / "static" / "js" / "quick_notepad.js").read_text(
             encoding="utf-8",
             errors="replace",
@@ -143,7 +158,7 @@ class QuickNotepadRouteTests(unittest.TestCase):
             ),
             content_type="application/json",
         )
-        dash = self.client.get("/")
+        dash = self.client.get("/personal")
         self.assertEqual(dash.status_code, 200)
         dash_html = dash.get_data(as_text=True)
         self.assertIn('id="qn-host"', dash_html)
@@ -157,7 +172,7 @@ class QuickNotepadRouteTests(unittest.TestCase):
         )
         self.assertRegex(css, r"\.qn-body\s*\{[^}]*overflow:\s*auto")
 
-        nb = self.client.get("/notebook")
+        nb = self.client.get("/personal/notebook")
         nb_html = nb.get_data(as_text=True)
         self.assertIn("Shared dash/notebook scratch", nb_html)
         self.assertIn('id="qn-body"', nb_html)
@@ -170,9 +185,9 @@ class QuickNotepadRouteTests(unittest.TestCase):
         )
         self.assertTrue(collapsed.get_json()["ok"])
         self.assertFalse(collapsed.get_json()["notepad"]["panel_open"])
-        dash2 = self.client.get("/").get_data(as_text=True)
+        dash2 = self.client.get("/personal").get_data(as_text=True)
         self.assertIn('data-qn-open="0"', dash2)
-        nb2 = self.client.get("/notebook").get_data(as_text=True)
+        nb2 = self.client.get("/personal/notebook").get_data(as_text=True)
         self.assertIn('data-qn-open="0"', nb2)
 
     def test_autosave_survives_reload_and_clear_convert(self) -> None:
@@ -182,8 +197,8 @@ class QuickNotepadRouteTests(unittest.TestCase):
             content_type="application/json",
         )
         self.assertEqual(put.status_code, 200)
-        self.assertIn("Persist me", self.client.get("/").get_data(as_text=True))
-        self.assertIn("Persist me", self.client.get("/notebook").get_data(as_text=True))
+        self.assertIn("Persist me", self.client.get("/personal").get_data(as_text=True))
+        self.assertIn("Persist me", self.client.get("/personal/notebook").get_data(as_text=True))
 
         cleared = self.client.post("/api/notebook/notepad/clear")
         self.assertTrue(cleared.get_json()["ok"])
@@ -198,7 +213,7 @@ class QuickNotepadRouteTests(unittest.TestCase):
         conv = self.client.post("/api/notebook/notepad/convert")
         self.assertEqual(conv.status_code, 200)
         self.assertTrue(conv.get_json()["ok"])
-        self.assertIn("/notebook", conv.get_json()["redirect"])
+        self.assertIn("/personal/notebook", conv.get_json()["redirect"])
 
     def test_autosave_failure_returns_error_payload(self) -> None:
         """Client shows Save failed when API rejects; API still returns structured JSON."""
@@ -259,7 +274,7 @@ class QuickNotepadRouteTests(unittest.TestCase):
         c = conv.get_json()
         self.assertTrue(c["ok"])
         self.assertIn("note_id", c)
-        self.assertIn("/notebook", c["redirect"])
+        self.assertIn("/personal/notebook", c["redirect"])
 
         page = self.client.get(c["redirect"])
         self.assertEqual(page.status_code, 200)

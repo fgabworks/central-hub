@@ -347,7 +347,12 @@ class SqlWorkspaceRegressionRoutes(unittest.TestCase):
     def test_core_routes_still_load(self) -> None:
         for path in (
             "/",
+            "/work",
+            "/personal",
             "/notebook",
+            "/work/notebook",
+            "/personal/notebook",
+            "/personal/tasks",
             "/repositories",
             "/jobs",
             "/audit",
@@ -357,7 +362,7 @@ class SqlWorkspaceRegressionRoutes(unittest.TestCase):
             "/settings",
         ):
             with self.subTest(path=path):
-                r = self.client.get(path)
+                r = self.client.get(path, follow_redirects=True)
                 self.assertEqual(r.status_code, 200, path)
 
 

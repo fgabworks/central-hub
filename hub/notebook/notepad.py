@@ -144,7 +144,8 @@ class QuickNotepadStore:
             return None
         self._add_revision(body, pad["content_format"], reason="convert")
         title = _title_from_content(body)
-        note = notes_store.create(title=title, actor="owner")
+        # Quick Notepad lives under Personal — convert into a personal note.
+        note = notes_store.create(title=title, actor="owner", scope="personal")
         saved = notes_store.save(
             note["id"],
             title=title,
@@ -159,6 +160,7 @@ class QuickNotepadStore:
             links=[],
             pinned=False,
             actor="owner",
+            scope="personal",
         )
         return saved
 

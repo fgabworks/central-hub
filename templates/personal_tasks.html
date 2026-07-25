@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Personal Tasks · {{ app_name }}{% endblock %}
+{% block content %}
+{% set show_np = notepad and notepad.panel_open is defined %}
+<div class="dash-workspace qn-host{% if notepad.panel_open %} is-qn-open{% endif %}"
+     id="qn-host"
+     style="--qn-width: {{ notepad.panel_width }}px"
+     data-qn-open="{{ '1' if notepad.panel_open else '0' }}"
+     data-qn-width="{{ notepad.panel_width }}"
+     data-qn-save-url="{{ url_for('api_notebook_notepad_put') }}"
+     data-qn-clear-url="{{ url_for('api_notebook_notepad_clear') }}"
+     data-qn-convert-url="{{ url_for('api_notebook_notepad_convert') }}"
+     data-qn-restore-url="{{ url_for('api_notebook_notepad_restore') }}">
+<div class="dash-workspace-main">
+<section class="page-header">
+  <div>
+    <h1>Personal Tasks</h1>
+    <p>Open personal notes and tasks — no repository required.</p>
+  </div>
+  <div class="page-actions">
+    <form method="post" action="{{ url_for(notebook_endpoint) }}">
+      <input type="hidden" name="action" value="new">
+      <input type="hidden" name="new_type" value="task">
+      <button class="btn btn-primary" type="submit">+ New Task</button>
+    </form>
+  </div>
+</section>
+
+<section class="panel panel-queue">
+  <div class="panel-header">
+    <h2>Tasks</h2>
+    <a class="quiet" href="{{ url_for(notebook_endpoint, status='open', type='task') }}">Open in notebook</a>
+  </div>
+  <div class="table-wrap">
+    <table class="data queue-table">
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Status</th>
+          <th>Priority</th>
+          <th>Due</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for note in task_notes %}
+          <tr class="status-{{ note.status }}">
+            <td>{{ note.title }}</td>
+            <td><span class="badge badge-status-{{ note.status }}">{{ note.status_label }}</span></td>
+            <td><span class="badge badge-priority-{{ note.priority }}">{{ note.priority_label }}</span></td>
+            <td><span class="due-chip due-{{ note.due_meta.kind }}">{{ note.due_meta.label }}</span></td>
+            <td><a class="btn btn-sm" href="{{ url_for(notebook_endpoint, note=note.id) }}">Open</a></td>
+          </tr>
+        {% else %}
+          <tr><td colspan="5" class="muted">No open personal tasks yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% if other_notes %}
+<section class="panel" style="margin-top:1rem">
+  <div class="panel-header">
+    <h2>Other open personal notes</h2>
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Type</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for note in other_notes %}
+          <tr>
+            <td>{{ note.title }}</td>
+            <td>{{ note.type_label }}</td>
+            <td><span class="badge badge-status-{{ note.status }}">{{ note.status_label }}</span></td>
+            <td><a class="btn btn-sm" href="{{ url_for(notebook_endpoint, note=note.id) }}">Open</a></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+</div>
+
+{% include "partials/quick_notepad_panel.html" %}
+</div>
+<script src="{{ url_for('static', filename='js/quick_notepad.js') }}"></script>
+{% endblock %}

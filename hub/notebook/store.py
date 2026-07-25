@@ -8,11 +8,13 @@ from typing import Any
 
 from hub.notebook.db import NotebookDatabase, utcnow
 from hub.notebook.models import (
+    DEFAULT_SCOPE,
     NOTE_TYPES,
     PRIORITIES,
     STATUSES,
     normalize_priority,
     normalize_role,
+    normalize_scope,
     normalize_status,
     normalize_type,
     parse_tags,
@@ -23,12 +25,21 @@ class NotebookStore:
     def __init__(self, db: NotebookDatabase | None = None) -> None:
         self.db = db or NotebookDatabase()
 
-    def status_counts(self) -> dict[str, int]:
+    def status_counts(self, *, scope: str | None = None) -> dict[str, int]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if scope:
+            clauses.append("scope = ?")
+            params.append(normalize_scope(scope))
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
         with self.db.connect() as conn:
             rows = conn.execute(
-                "SELECT status, COUNT(*) AS n FROM notes GROUP BY status"
+                f"SELECT status, COUNT(*) AS n FROM notes{where} GROUP BY status",
+                tuple(params),
             ).fetchall()
-            total = conn.execute("SELECT COUNT(*) AS n FROM notes").fetchone()
+            total = conn.execute(
+                f"SELECT COUNT(*) AS n FROM notes{where}", tuple(params)
+            ).fetchone()
         counts = {s: 0 for s in STATUSES}
         for row in rows:
             status = str(row["status"])
@@ -40,9 +51,17 @@ class NotebookStore:
         )
         return counts
 
-    def list_tags(self) -> list[str]:
+    def list_tags(self, *, scope: str | None = None) -> list[str]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if scope:
+            clauses.append("scope = ?")
+            params.append(normalize_scope(scope))
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
         with self.db.connect() as conn:
-            rows = conn.execute("SELECT tags_json FROM notes").fetchall()
+            rows = conn.execute(
+                f"SELECT tags_json FROM notes{where}", tuple(params)
+            ).fetchall()
         tags: set[str] = set()
         for row in rows:
             try:
@@ -53,17 +72,25 @@ class NotebookStore:
                 continue
         return sorted(tags, key=str.lower)
 
-    def list_open(self, *, limit: int = 500) -> list[dict[str, Any]]:
+    def list_open(
+        self, *, limit: int = 500, scope: str | None = None
+    ) -> list[dict[str, Any]]:
         """Open notes for dashboard (excludes done + archived)."""
-        sql = """
+        clauses = ["n.status NOT IN ('done', 'archived')"]
+        params: list[Any] = []
+        if scope:
+            clauses.append("n.scope = ?")
+            params.append(normalize_scope(scope))
+        params.append(max(1, min(int(limit), 2000)))
+        sql = f"""
             SELECT n.*
             FROM notes n
-            WHERE n.status NOT IN ('done', 'archived')
+            WHERE {" AND ".join(clauses)}
             ORDER BY n.pinned DESC, n.due_date IS NULL, n.due_date ASC, n.updated_at DESC
             LIMIT ?
         """
         with self.db.connect() as conn:
-            rows = conn.execute(sql, (max(1, min(int(limit), 2000)),)).fetchall()
+            rows = conn.execute(sql, tuple(params)).fetchall()
             return [self._hydrate_note(dict(row), conn, light=True) for row in rows]
 
     def search(
@@ -75,10 +102,15 @@ class NotebookStore:
         priority: str = "",
         tag: str = "",
         q: str = "",
+        scope: str | None = None,
         limit: int = 200,
     ) -> list[dict[str, Any]]:
         clauses: list[str] = []
         params: list[Any] = []
+
+        if scope:
+            clauses.append("n.scope = ?")
+            params.append(normalize_scope(scope))
 
         status = (status or "").strip().lower()
         if status and status != "all":
@@ -145,20 +177,34 @@ class NotebookStore:
         actor: str = "owner",
         repository_id: str = "",
         repository_label: str = "",
+        scope: str = DEFAULT_SCOPE,
+        note_type: str = "note",
     ) -> dict[str, Any]:
         note_id = uuid.uuid4().hex
         now = utcnow()
+        scope_n = normalize_scope(scope)
+        type_n = normalize_type(note_type)
+        # Personal notes never require repositories.
+        if scope_n == "personal":
+            repository_id = ""
         with self.db.connect() as conn:
             conn.execute(
                 """
                 INSERT INTO notes (
                     id, title, body_md, note_type, status, priority, due_date,
-                    tags_json, created_at, updated_at, archived_at, pinned
-                ) VALUES (?, ?, '', 'note', 'inbox', 'medium', NULL, '[]', ?, ?, NULL, 0)
+                    tags_json, created_at, updated_at, archived_at, pinned, scope
+                ) VALUES (?, ?, '', ?, 'inbox', 'medium', NULL, '[]', ?, ?, NULL, 0, ?)
                 """,
-                (note_id, (title or "Untitled note").strip() or "Untitled note", now, now),
+                (
+                    note_id,
+                    (title or "Untitled note").strip() or "Untitled note",
+                    type_n,
+                    now,
+                    now,
+                    scope_n,
+                ),
             )
-            if repository_id:
+            if repository_id and scope_n == "work":
                 conn.execute(
                     """
                     INSERT INTO note_repositories
@@ -176,7 +222,7 @@ class NotebookStore:
                 conn,
                 note_id,
                 action="created",
-                detail="Note created",
+                detail=f"Note created ({scope_n})",
                 actor=actor,
                 when=now,
             )
@@ -198,6 +244,7 @@ class NotebookStore:
         links: list[dict[str, str]],
         pinned: bool = False,
         actor: str = "owner",
+        scope: str | None = None,
     ) -> dict[str, Any] | None:
         existing = self.get(note_id)
         if not existing:
@@ -205,18 +252,26 @@ class NotebookStore:
 
         now = utcnow()
         status_n = normalize_status(status)
+        scope_n = normalize_scope(
+            scope if scope is not None else existing.get("scope"),
+            default=normalize_scope(existing.get("scope")),
+        )
         archived_at = existing.get("archived_at")
         if status_n == "archived" and not archived_at:
             archived_at = now
         if status_n != "archived":
             archived_at = None
+        # Personal notes do not keep repository links.
+        if scope_n == "personal":
+            repositories = []
 
         with self.db.connect() as conn:
             conn.execute(
                 """
                 UPDATE notes SET
                     title = ?, body_md = ?, note_type = ?, status = ?, priority = ?,
-                    due_date = ?, tags_json = ?, updated_at = ?, archived_at = ?, pinned = ?
+                    due_date = ?, tags_json = ?, updated_at = ?, archived_at = ?,
+                    pinned = ?, scope = ?
                 WHERE id = ?
                 """,
                 (
@@ -230,6 +285,7 @@ class NotebookStore:
                     now,
                     archived_at,
                     1 if pinned else 0,
+                    scope_n,
                     note_id,
                 ),
             )
@@ -365,6 +421,7 @@ class NotebookStore:
     ) -> dict[str, Any]:
         note = dict(row)
         note["pinned"] = bool(note.get("pinned"))
+        note["scope"] = normalize_scope(note.get("scope"))
         try:
             note["tags"] = json.loads(note.get("tags_json") or "[]")
         except json.JSONDecodeError:

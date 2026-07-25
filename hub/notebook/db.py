@@ -113,6 +113,22 @@ _MIGRATIONS: list[tuple[str, str]] = [
             ON quick_notepad_revisions(created_at DESC);
         """,
     ),
+    (
+        "004_note_scope_workspace",
+        """
+        ALTER TABLE notes ADD COLUMN scope TEXT NOT NULL DEFAULT 'work';
+        UPDATE notes SET scope = 'work' WHERE scope IS NULL OR TRIM(scope) = '';
+        CREATE INDEX IF NOT EXISTS idx_notes_scope ON notes(scope);
+
+        CREATE TABLE IF NOT EXISTS hub_prefs (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        INSERT OR IGNORE INTO hub_prefs (key, value, updated_at)
+        VALUES ('workspace', 'work', datetime('now'));
+        """,
+    ),
 ]
 
 

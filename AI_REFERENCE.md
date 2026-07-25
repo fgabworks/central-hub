@@ -1,12 +1,12 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-07-25 (SQL Workspace + Notebook + registry).
+Last verified: 2026-07-25 (Personal/Work workspaces + SQL Workspace + Notebook).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
 
 **Phases 1–6 MVP + connected Live Processing + DHIS2 enrichment + Repository Notebook
-+ registry Add/Edit/Disable + SQL Workspace (read-only).**
++ Personal/Work workspace switcher + registry Add/Edit/Disable + SQL Workspace (read-only).**
 Hub coordinates repos via registry/adapters; DHIS2 stays GET-only; jobs run
 allowlisted capabilities only.
 
@@ -17,8 +17,10 @@ allowlisted capabilities only.
 | Health probes | Parallel checks; states: Healthy / Unreachable / Not Cloned / Disabled |
 | Live Processing | `live-processing` (API GET-only) + `live-processing-local` (path + git_url) |
 | Data-Script / Report Template | Registered with GitHub URLs; local path optional (`DATA_SCRIPT_PATH`, `REPORT_TEMPLATE_PATH`) |
-| Dashboard | Live health cards; Open Tasks; Work Queue; shared Quick Notepad |
-| Repository Notebook | Local SQLite notes; pin + work queue; shared Quick Notepad; no agent scan |
+| Workspaces | Personal / Work switcher (cookie + `hub_prefs`); System nav always visible |
+| Personal Dashboard | `/personal` — personal tasks/notes + Quick Notepad (no repos/DHIS2) |
+| Work Dashboard | `/work` (legacy `/` redirects here by remembered workspace) — repos, work queue, DHIS2 |
+| Repository Notebook | Scoped notes (`personal` \| `work`); work keeps repo links; personal needs none |
 | SQL Workspace | Read-only query library/runner (`/sql`); sqlglot allowlist; Live warning |
 | DHIS2 | GET client, discovery, UID mapping, preview builder |
 | UID index admin | LP-style controlled update: dry-run → preview → typed confirm → archive/versions/restore |
@@ -44,24 +46,27 @@ allowlisted capabilities only.
 Demo `sample-*` entries removed from the active registry; job tests use
 `tests/fixtures/repositories.yaml`.
 
-## Repository Notebook
+## Repository Notebook + workspaces
 
 | Route | Purpose |
 |---|---|
-| `/notebook` | Status rail + filters + list + editor + Quick Notepad panel |
+| `/` | Redirects to remembered Personal or Work dashboard |
+| `/workspace/<personal\|work>` | Switch workspace (cookie + `hub_prefs`) |
+| `/personal` | Personal Dashboard + Quick Notepad |
+| `/personal/notebook` | Personal notes/tasks (no repository required) |
+| `/personal/tasks` | Personal open tasks list + Quick Notepad |
+| `/work` | Work Dashboard (repos, work queue, DHIS2) |
+| `/work/notebook` | Work notes with repository links |
+| `/notebook` | Compat: GET redirects by note scope / workspace; POST handled in scope |
 | `/notebook/<id>/export` | Download note JSON |
 | `/api/notebook/preview` | Markdown → HTML preview |
-| `/api/notebook/notepad` | GET/PUT Quick Notepad content + panel prefs |
-| `/api/notebook/notepad/clear` | Clear scratchpad (keeps revision) |
-| `/api/notebook/notepad/convert` | Convert scratchpad → structured note |
-| `/api/notebook/notepad/restore` | Restore a notepad revision |
-| `/` (dashboard) | Open Tasks + Work Queue + shared Quick Notepad panel; excludes Done & Archived from queue |
+| `/api/notebook/notepad*` | Quick Notepad (Personal) GET/PUT/clear/convert/restore |
 
-Store: `data/notebook.db` (`hub/notebook/`) with schema migrations (`pinned`, `quick_notepad`).
-Quick Notepad is a **single** local scratchpad (plain/markdown) shared by Dashboard and Notebook — autosave, collapsible/resizable (drawer on small screens), revision history; no agent send.
-Notes keep denormalized repository labels when a registry repo becomes unavailable.
-Dashboard reuses `NotebookStore` / `hub/notebook/dashboard.py` — no duplicated note data.
-No browser-only storage for notepad content; no agent integration yet.
+Store: `data/notebook.db` (`hub/notebook/`) migrations include `pinned`, `quick_notepad`,
+`scope` (`personal`\|`work`) + `hub_prefs`. Existing notes migrate to **work**.
+Quick Notepad remains a **single** scratchpad under Personal (not a second pad).
+Convert → creates a **personal** structured note. Work Dashboard queue shows work-scoped
+notes only. No agent integration yet.
 
 ## SQL Workspace
 

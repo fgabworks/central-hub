@@ -1,25 +1,28 @@
 {% extends "base.html" %}
 {% from "macros.html" import status_badge, type_badge %}
-{% block title %}Dashboard · {{ app_name }}{% endblock %}
+{% block title %}{{ page_title }} · {{ app_name }}{% endblock %}
 {% block content %}
-<div class="dash-workspace qn-host{% if notepad.panel_open %} is-qn-open{% endif %}"
-     id="qn-host"
+{% set nb_ep = notebook_endpoint %}
+{% set dash_ep = dashboard_endpoint %}
+{% set show_np = show_notepad and notepad %}
+<div class="dash-workspace{% if show_np %} qn-host{% if notepad.panel_open %} is-qn-open{% endif %}{% endif %}"
+     {% if show_np %}id="qn-host"
      style="--qn-width: {{ notepad.panel_width }}px"
      data-qn-open="{{ '1' if notepad.panel_open else '0' }}"
      data-qn-width="{{ notepad.panel_width }}"
      data-qn-save-url="{{ url_for('api_notebook_notepad_put') }}"
      data-qn-clear-url="{{ url_for('api_notebook_notepad_clear') }}"
      data-qn-convert-url="{{ url_for('api_notebook_notepad_convert') }}"
-     data-qn-restore-url="{{ url_for('api_notebook_notepad_restore') }}">
+     data-qn-restore-url="{{ url_for('api_notebook_notepad_restore') }}"{% endif %}>
 <div class="dash-workspace-main">
 <section class="page-header">
   <div>
-    <h1>Dashboard</h1>
-    <p>Overview of your repositories, notebook tasks, DHIS2 and system status.</p>
+    <h1>{{ page_title }}</h1>
+    <p>{{ page_sub }}</p>
   </div>
   <div class="page-meta">
     <span>Last updated: {{ last_updated }}</span>
-    <a class="icon-btn" href="{{ url_for('dashboard', queue=work_queue.tab) }}" title="Refresh" aria-label="Refresh">↻</a>
+    <a class="icon-btn" href="{{ url_for(dash_ep, queue=work_queue.tab) }}" title="Refresh" aria-label="Refresh">↻</a>
   </div>
 </section>
 
@@ -28,7 +31,7 @@
     {% if card.kind == 'open_tasks' %}
       <a class="stat-card stat-card-tasks severity-{{ card.severity }}"
          href="{{ card.href }}"
-         aria-label="Open Tasks: {{ card.metrics.open }} open, {{ card.metrics.overdue }} overdue, {{ card.metrics.due_this_week }} due this week, {{ card.metrics.blocked }} blocked. Open Notebook active tasks.">
+         aria-label="{{ card.label }}: {{ card.metrics.open }} open, {{ card.metrics.overdue }} overdue, {{ card.metrics.due_this_week }} due this week, {{ card.metrics.blocked }} blocked.">
         <div class="stat-top">
           <span class="stat-label">{{ card.label }}</span>
           <span class="stat-top-end">
@@ -72,6 +75,7 @@
 
 <section class="dash-grid">
   <div class="stack">
+    {% if show_repos %}
     <section class="panel">
       <div class="panel-header">
         <h2>Connected Repositories</h2>
@@ -118,31 +122,32 @@
         </table>
       </div>
     </section>
+    {% endif %}
 
     <section class="panel panel-queue">
       <div class="panel-header panel-header-queue">
-        <h2>Notebook Work Queue</h2>
+        <h2>{{ queue_title }}</h2>
         <div class="panel-actions">
-          <a class="quiet" href="{{ url_for('notebook') }}">View all</a>
-          <form method="post" action="{{ url_for('notebook') }}" class="inline-form">
+          <a class="quiet" href="{{ url_for(nb_ep) }}">View all</a>
+          <form method="post" action="{{ url_for(nb_ep) }}" class="inline-form">
             <input type="hidden" name="action" value="new">
             <button class="btn btn-sm btn-primary" type="submit">+ New Note</button>
           </form>
         </div>
       </div>
-      <div class="queue-tabs" role="tablist" aria-label="Notebook work queue filters">
+      <div class="queue-tabs" role="tablist" aria-label="Notebook queue filters">
         <a class="queue-tab{% if work_queue.tab == 'open' %} is-active{% endif %}"
-           href="{{ url_for('dashboard', queue='open') }}">Open ({{ work_queue.tabs.open }})</a>
+           href="{{ url_for(dash_ep, queue='open') }}">Open ({{ work_queue.tabs.open }})</a>
         <a class="queue-tab{% if work_queue.tab == 'pinned' %} is-active{% endif %}"
-           href="{{ url_for('dashboard', queue='pinned') }}">Pinned ({{ work_queue.tabs.pinned }})</a>
+           href="{{ url_for(dash_ep, queue='pinned') }}">Pinned ({{ work_queue.tabs.pinned }})</a>
         <a class="queue-tab{% if work_queue.tab == 'overdue' %} is-active{% endif %}"
-           href="{{ url_for('dashboard', queue='overdue') }}">Overdue ({{ work_queue.tabs.overdue }})</a>
+           href="{{ url_for(dash_ep, queue='overdue') }}">Overdue ({{ work_queue.tabs.overdue }})</a>
         <a class="queue-tab{% if work_queue.tab == 'due_today' %} is-active{% endif %}"
-           href="{{ url_for('dashboard', queue='due_today') }}">Due Today ({{ work_queue.tabs.due_today }})</a>
+           href="{{ url_for(dash_ep, queue='due_today') }}">Due Today ({{ work_queue.tabs.due_today }})</a>
         <a class="queue-tab{% if work_queue.tab == 'upcoming' %} is-active{% endif %}"
-           href="{{ url_for('dashboard', queue='upcoming') }}">Upcoming ({{ work_queue.tabs.upcoming }})</a>
+           href="{{ url_for(dash_ep, queue='upcoming') }}">Upcoming ({{ work_queue.tabs.upcoming }})</a>
         <a class="queue-tab{% if work_queue.tab == 'blocked' %} is-active{% endif %}"
-           href="{{ url_for('dashboard', queue='blocked') }}">Blocked ({{ work_queue.tabs.blocked }})</a>
+           href="{{ url_for(dash_ep, queue='blocked') }}">Blocked ({{ work_queue.tabs.blocked }})</a>
       </div>
       <div class="table-wrap">
         <table class="data queue-table">
@@ -150,7 +155,7 @@
             <tr>
               <th class="col-pin" aria-label="Pinned"></th>
               <th>Title</th>
-              <th class="col-repo">Repository</th>
+              {% if show_repos %}<th class="col-repo">Repository</th>{% endif %}
               <th>Type</th>
               <th>Status</th>
               <th>Priority</th>
@@ -173,6 +178,7 @@
                   <div class="cell-title">{{ note.title }}</div>
                   <div class="cell-sub">{{ note.type_label }}</div>
                 </td>
+                {% if show_repos %}
                 <td class="col-repo">
                   <span class="repo-cell{% if note.repo_primary_unavailable %} is-unavailable{% endif %}"
                         title="{{ note.repo_tooltip }}">
@@ -184,6 +190,7 @@
                     {% endif %}
                   </span>
                 </td>
+                {% endif %}
                 <td class="muted">{{ note.type_label }}</td>
                 <td><span class="badge badge-status-{{ note.status }}">{{ note.status_label }}</span></td>
                 <td><span class="badge badge-priority-{{ note.priority }}">{{ note.priority_label }}</span></td>
@@ -201,14 +208,14 @@
                   {% endif %}
                 </td>
                 <td>
-                  <a class="btn btn-sm" href="{{ url_for('notebook', note=note.id) }}">Open</a>
+                  <a class="btn btn-sm" href="{{ url_for(nb_ep, note=note.id) }}">Open</a>
                 </td>
               </tr>
             {% else %}
               <tr>
-                <td colspan="9" class="muted">
+                <td colspan="{{ 9 if show_repos else 8 }}" class="muted">
                   No open notebook items in this tab.
-                  <a href="{{ url_for('notebook') }}">Create a note</a>
+                  <a href="{{ url_for(nb_ep) }}">Create a note</a>
                   or switch tabs. Done and archived notes are excluded.
                 </td>
               </tr>
@@ -223,6 +230,7 @@
   </div>
 
   <aside class="stack">
+    {% if show_dhis2 %}
     <section class="panel">
       <div class="panel-header">
         <h2>DHIS2 Maintenance</h2>
@@ -263,6 +271,7 @@
         </div>
       </div>
     </section>
+    {% endif %}
 
     <section class="panel panel-activity">
       <div class="panel-header">
@@ -290,7 +299,12 @@
 </section>
 </div>
 
+{% if show_np %}
+<span id="quick-notepad" class="sr-only" aria-hidden="true"></span>
 {% include "partials/quick_notepad_panel.html" %}
 </div>
 <script src="{{ url_for('static', filename='js/quick_notepad.js') }}"></script>
+{% else %}
+</div>
+{% endif %}
 {% endblock %}

@@ -351,7 +351,7 @@ class DashboardRouteTests(unittest.TestCase):
             pinned=True,
         )
 
-        r = self.client.get("/")
+        r = self.client.get("/work")
         self.assertEqual(r.status_code, 200)
         html = r.get_data(as_text=True)
         self.assertIn("Notebook Work Queue", html)
@@ -359,7 +359,7 @@ class DashboardRouteTests(unittest.TestCase):
         self.assertIn("Dash queue note", html)
         self.assertIn("stat-card-tasks", html)
         self.assertIn("severity-", html)
-        self.assertIn('href="/notebook?status=open"', html)
+        self.assertIn('href="/work/notebook?status=open"', html)
         self.assertIn("stat-badge", html)
         self.assertIn("open", html.lower())
         self.assertIn("overdue", html.lower())
@@ -387,7 +387,7 @@ class DashboardRouteTests(unittest.TestCase):
             links=[],
             pinned=True,
         )
-        html_empty = self.client.get("/?queue=open").get_data(as_text=True)
+        html_empty = self.client.get("/work?queue=open").get_data(as_text=True)
         self.assertIn("Empty progress note", html_empty)
         # Progress cell for zero-total uses the empty label class (not a 0/0 bar).
         self.assertIn('check-progress-label is-empty', html_empty)
@@ -420,9 +420,9 @@ class DashboardRouteTests(unittest.TestCase):
             links=[],
             pinned=False,
         )
-        r_open = self.client.get("/?queue=open")
+        r_open = self.client.get("/work?queue=open")
         self.assertIn("Undated open note", r_open.get_data(as_text=True))
-        r_pinned = self.client.get("/?queue=pinned")
+        r_pinned = self.client.get("/work?queue=pinned")
         self.assertNotIn("Undated open note", r_pinned.get_data(as_text=True))
 
         # Jobs page still exists.
@@ -445,14 +445,14 @@ class DashboardRouteTests(unittest.TestCase):
             links=[],
             pinned=True,
         )
-        r2 = self.client.get("/?queue=open")
+        r2 = self.client.get("/work?queue=open")
         html2 = r2.get_data(as_text=True)
         self.assertNotIn("Dash queue note", html2)
         self.assertIn("Undated open note", html2)
 
     def test_recent_activity_scroll_region(self) -> None:
         """Recent Activity keeps header fixed and scrolls the list body on desktop."""
-        r = self.client.get("/")
+        r = self.client.get("/work")
         self.assertEqual(r.status_code, 200)
         html = r.get_data(as_text=True)
         self.assertIn("Recent Activity", html)
@@ -499,12 +499,12 @@ class DashboardRouteTests(unittest.TestCase):
             pinned=False,
         )
 
-        dash = self.client.get("/?queue=open").get_data(as_text=True)
+        dash = self.client.get("/work?queue=open").get_data(as_text=True)
         self.assertIn('class="status-pending"', dash)
         self.assertIn("badge-status-pending", dash)
         self.assertIn("Accent row note", dash)
 
-        nb = self.client.get(f"/notebook?note={note['id']}").get_data(as_text=True)
+        nb = self.client.get(f"/work/notebook?note={note['id']}").get_data(as_text=True)
         self.assertIn("nb-note-row status-pending", nb)
         self.assertIn("is-active", nb)
         self.assertIn("badge-status-pending", nb)

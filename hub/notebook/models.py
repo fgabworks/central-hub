@@ -63,6 +63,16 @@ REPO_ROLE_LABELS = {
     "references": "References",
 }
 
+# Notebook / dashboard workspace scope (single note system, filtered views).
+SCOPES = ("personal", "work")
+SCOPE_LABELS = {
+    "personal": "Personal",
+    "work": "Work",
+}
+DEFAULT_SCOPE = "work"
+WORKSPACES = SCOPES  # Personal | Work switcher values
+DEFAULT_WORKSPACE = "work"
+
 
 def normalize_status(value: str | None, *, default: str = "inbox") -> str:
     raw = (value or "").strip().lower()
@@ -82,6 +92,16 @@ def normalize_priority(value: str | None, *, default: str = "medium") -> str:
 def normalize_role(value: str | None, *, default: str = "related") -> str:
     raw = (value or "").strip().lower()
     return raw if raw in REPO_ROLES else default
+
+
+def normalize_scope(value: str | None, *, default: str = DEFAULT_SCOPE) -> str:
+    raw = (value or "").strip().lower()
+    return raw if raw in SCOPES else default
+
+
+def normalize_workspace(value: str | None, *, default: str = DEFAULT_WORKSPACE) -> str:
+    """Alias for UI workspace switcher (personal | work)."""
+    return normalize_scope(value, default=default)
 
 
 def parse_tags(value: str | list[str] | None) -> list[str]:

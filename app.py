@@ -63,13 +63,24 @@ from hub.notebook import (
     PRIORITY_LABELS,
     REPO_ROLE_LABELS,
     REPO_ROLES,
+    SCOPE_LABELS,
     STATUS_LABELS,
     STATUSES,
+    WORKSPACES,
     NotebookStore,
     QuickNotepadStore,
+    normalize_scope,
+    normalize_workspace,
     render_markdown,
 )
 from hub.notebook.dashboard import dashboard_work_queue, open_tasks_severity
+from hub.notebook.workspace import (
+    apply_workspace_cookie,
+    dashboard_endpoint,
+    notebook_endpoint,
+    persist_workspace,
+    read_workspace,
+)
 from hub.sql_workspace import (
     SqlExecutor,
     SqlWorkspaceStore,
@@ -227,6 +238,149 @@ def create_app() -> Flask:
                 "class": "badge-warning",
             }
 
+        notebook: NotebookStore = app.config["NOTEBOOK"]
+        workspace = read_workspace(request, notebook.db)
+        ep = request.endpoint or ""
+        if ep in {
+            "work_dashboard",
+            "work_notebook",
+            "repositories",
+            "repository_new",
+            "repository_edit",
+            "repository_detail",
+            "sql_workspace",
+            "dhis2",
+            "jobs",
+            "job_detail",
+            "health",
+        } or (ep.startswith("dhis2") if ep else False) or (ep.startswith("repository") if ep else False) or (ep.startswith("sql_") if ep else False):
+            workspace = "work"
+        elif ep in {
+            "personal_dashboard",
+            "personal_notebook",
+            "personal_tasks",
+        }:
+            workspace = "personal"
+
+        personal_nav = [
+            {
+                "endpoint": "personal_dashboard",
+                "label": "Personal Dashboard",
+                "icon": "⌂",
+                "active_prefix": None,
+            },
+            {
+                "endpoint": "personal_notebook",
+                "label": "Personal Notebook",
+                "icon": "✎",
+                "active_prefix": "personal_notebook",
+            },
+            {
+                "endpoint": "personal_dashboard",
+                "label": "Quick Notepad",
+                "icon": "▦",
+                "active_prefix": None,
+                "anchor": "quick-notepad",
+            },
+            {
+                "endpoint": "personal_tasks",
+                "label": "Personal Tasks",
+                "icon": "☑",
+                "active_prefix": None,
+            },
+        ]
+        work_nav = [
+            {
+                "endpoint": "work_dashboard",
+                "label": "Work Dashboard",
+                "icon": "⌂",
+                "active_prefix": None,
+            },
+            {
+                "endpoint": "repositories",
+                "label": "Repositories",
+                "icon": "▣",
+                "active_prefix": "repository",
+            },
+            {
+                "endpoint": "work_notebook",
+                "label": "Work Notebook",
+                "icon": "✎",
+                "active_prefix": "work_notebook",
+            },
+            {
+                "endpoint": "sql_workspace",
+                "label": "SQL Workspace",
+                "icon": "▦",
+                "active_prefix": "sql_workspace",
+            },
+            {
+                "endpoint": "dhis2",
+                "label": "DHIS2",
+                "icon": "⬡",
+                "badge": None,
+                "active_prefix": "dhis2",
+            },
+            {
+                "endpoint": "jobs",
+                "label": "Jobs",
+                "icon": "▶",
+                "active_prefix": None,
+            },
+            {
+                "endpoint": "health",
+                "label": "Health",
+                "icon": "♡",
+                "active_prefix": None,
+            },
+        ]
+        system_nav = [
+            {
+                "endpoint": "audit",
+                "label": "Audit",
+                "icon": "☰",
+                "active_prefix": None,
+            },
+            {
+                "endpoint": "settings_page",
+                "label": "Settings",
+                "icon": "⚙",
+                "active_prefix": None,
+            },
+        ]
+        nav_sections = [
+            {
+                "id": "personal",
+                "label": "Personal",
+                "items": personal_nav if workspace == "personal" else [],
+            },
+            {
+                "id": "work",
+                "label": "Work",
+                "items": work_nav if workspace == "work" else [],
+            },
+            {"id": "system", "label": "System", "items": system_nav},
+        ]
+        nav_items = [item for section in nav_sections for item in section["items"]]
+
+        work_actions = [
+            {"label": "Add Repository", "endpoint": "repository_new", "available": True},
+            {"label": "Run Health Check", "endpoint": "health", "available": True},
+            {"label": "DHIS2 Maintenance", "endpoint": "dhis2", "available": True},
+            {
+                "label": "Create Demo Job",
+                "endpoint": "jobs",
+                "available": False,
+                "phase": "Phase 2",
+            },
+            {"label": "View Logs", "endpoint": "audit", "available": True},
+        ]
+        personal_actions = [
+            {"label": "New Personal Note", "endpoint": "personal_notebook", "available": True},
+            {"label": "Personal Tasks", "endpoint": "personal_tasks", "available": True},
+            {"label": "View Logs", "endpoint": "audit", "available": True},
+        ]
+
         return {
             "app_name": settings.app_name,
             "env_profile": settings.env_profile,
@@ -236,99 +390,35 @@ def create_app() -> Flask:
             "topbar_dhis2": topbar_dhis2,
             "actor": current_actor(),
             "owner_token_configured": settings.owner_token_configured,
-            "nav_items": [
-                {
-                    "endpoint": "dashboard",
-                    "label": "Dashboard",
-                    "icon": "⌂",
-                    "active_prefix": None,
-                },
-                {
-                    "endpoint": "repositories",
-                    "label": "Repositories",
-                    "icon": "▣",
-                    "active_prefix": "repository",
-                },
-                {
-                    "endpoint": "jobs",
-                    "label": "Jobs",
-                    "icon": "▶",
-                    "active_prefix": None,
-                },
-                {
-                    "endpoint": "notebook",
-                    "label": "Notebook",
-                    "icon": "✎",
-                    "active_prefix": "notebook",
-                },
-                {
-                    "endpoint": "sql_workspace",
-                    "label": "SQL",
-                    "icon": "▦",
-                    "active_prefix": "sql_workspace",
-                },
-                {
-                    "endpoint": "dhis2",
-                    "label": "DHIS2",
-                    "icon": "⬡",
-                    "badge": None,
-                    "active_prefix": "dhis2",
-                },
-                {
-                    "endpoint": "health",
-                    "label": "Health",
-                    "icon": "♡",
-                    "active_prefix": None,
-                },
-                {
-                    "endpoint": "audit",
-                    "label": "Audit",
-                    "icon": "☰",
-                    "active_prefix": None,
-                },
-                {
-                    "endpoint": "settings_page",
-                    "label": "Settings",
-                    "icon": "⚙",
-                    "active_prefix": None,
-                },
-            ],
-            "quick_actions": [
-                {
-                    "label": "Add Repository",
-                    "endpoint": "repository_new",
-                    "available": True,
-                },
-                {
-                    "label": "Run Health Check",
-                    "endpoint": "health",
-                    "available": True,
-                },
-                {
-                    "label": "DHIS2 Maintenance",
-                    "endpoint": "dhis2",
-                    "available": True,
-                },
-                {
-                    "label": "Create Demo Job",
-                    "endpoint": "jobs",
-                    "available": False,
-                    "phase": "Phase 2",
-                },
-                {
-                    "label": "View Logs",
-                    "endpoint": "audit",
-                    "available": True,
-                },
-            ],
+            "workspace": workspace,
+            "workspaces": WORKSPACES,
+            "workspace_labels": SCOPE_LABELS,
+            "nav_sections": nav_sections,
+            "nav_items": nav_items,
+            "quick_actions": personal_actions if workspace == "personal" else work_actions,
         }
 
-    @app.get("/")
-    def dashboard():
+    def _set_workspace_and_redirect(workspace: str, next_url: str | None = None):
+        notebook: NotebookStore = app.config["NOTEBOOK"]
+        value = persist_workspace(notebook.db, workspace)
+        target = next_url or url_for(dashboard_endpoint(value))
+        resp = redirect(target)
+        return apply_workspace_cookie(resp, value)
+
+    @app.route("/workspace/<workspace_name>", methods=["GET", "POST"])
+    def switch_workspace(workspace_name: str):
+        value = normalize_workspace(workspace_name)
+        next_url = (request.values.get("next") or "").strip() or None
+        if next_url and not next_url.startswith("/"):
+            next_url = None
+        return _set_workspace_and_redirect(value, next_url)
+
+    def _render_dashboard(*, scope: str):
         audit: AuditStore = app.config["AUDIT"]
         adapters: AdapterManager | None = app.config["ADAPTERS"]
         registry = app.config["REGISTRY"]
         notebook: NotebookStore = app.config["NOTEBOOK"]
+        scope_n = normalize_scope(scope)
         queue_tab = (request.args.get("queue") or "open").strip().lower()
         registered_ids = (
             {repo.id for repo in registry.repositories} if registry else set()
@@ -338,6 +428,7 @@ def create_app() -> Flask:
             tab=queue_tab,
             limit=5,
             registered_ids=registered_ids,
+            scope=scope_n,
         )
         task_stats = work_queue["stats"]
         events = audit.list_recent(limit=8)
@@ -351,74 +442,165 @@ def create_app() -> Flask:
             }
             for ev in events
         ]
-        # Cached parallel probes — Health page uses force=True for a fresh pass.
-        health_results = adapters.check_all(enabled_only=False) if adapters else []
-        live_repos = _repos_from_health(registry, health_results)
-        healthy = sum(1 for item in health_results if item.get("ok"))
-        enabled = sum(1 for item in health_results if item.get("enabled"))
-        dhis2_cfg = app.config["DHIS2"].public_config()
-        last_dhis2 = app.config.get("DHIS2_LAST_STATUS")
-        dhis2_instance = app.config.get("DHIS2_INSTANCE")
-        dhis2_sub = "Read-only"
-        if dhis2_instance:
-            dhis2_sub = f"{str(dhis2_instance).title()} · Read-only"
-        cards = [
-            {
-                "kind": "default",
-                "label": "Repositories",
-                "value": str(len(registry.repositories) if registry else 0),
-                "sub": f"{enabled} enabled · {healthy} healthy",
-                "icon": "▣",
-                "href": url_for("repositories"),
-                "link_label": "View all →",
-            },
-            {
-                "kind": "open_tasks",
-                "label": "Open Tasks",
-                "value": str(task_stats["open"]),
-                "badge": task_stats["open"],
-                "severity": open_tasks_severity(task_stats),
-                "metrics": {
-                    "open": task_stats["open"],
-                    "overdue": task_stats["overdue"],
-                    "due_this_week": task_stats["due_this_week"],
-                    "blocked": task_stats["blocked"],
+        notebook_ep = notebook_endpoint(scope_n)
+        dash_ep = dashboard_endpoint(scope_n)
+        show_notepad = scope_n == "personal"
+        notepad = QuickNotepadStore(notebook.db).get() if show_notepad else None
+
+        if scope_n == "personal":
+            cards = [
+                {
+                    "kind": "open_tasks",
+                    "label": "Personal Tasks",
+                    "value": str(task_stats["open"]),
+                    "badge": task_stats["open"],
+                    "severity": open_tasks_severity(task_stats),
+                    "metrics": {
+                        "open": task_stats["open"],
+                        "overdue": task_stats["overdue"],
+                        "due_this_week": task_stats["due_this_week"],
+                        "blocked": task_stats["blocked"],
+                    },
+                    "href": url_for("personal_tasks"),
+                    "link_label": "View all →",
                 },
-                "href": url_for("notebook", status="open"),
-                "link_label": "View all →",
-            },
-            {
-                "kind": "default",
-                "label": "DHIS2",
-                "value": (
-                    "Online"
-                    if last_dhis2 and last_dhis2.get("ok")
-                    else ("Configured" if dhis2_cfg.get("configured") else "Off")
-                ),
-                "sub": dhis2_sub,
-                "icon": "◎",
-                "href": url_for("dhis2"),
-                "link_label": "View details →",
-            },
-            {
-                "kind": "default",
-                "label": "Audit Events",
-                "value": str(len(events)),
-                "sub": "Recent JSONL activity",
-                "icon": "🛡",
-                "href": url_for("audit"),
-                "link_label": "View all →",
-            },
-        ]
-        return render_template(
+                {
+                    "kind": "default",
+                    "label": "Personal Notes",
+                    "value": str(notebook.status_counts(scope="personal")["all"]),
+                    "sub": "Scoped to Personal",
+                    "icon": "✎",
+                    "href": url_for("personal_notebook"),
+                    "link_label": "Open notebook →",
+                },
+                {
+                    "kind": "default",
+                    "label": "Quick Notepad",
+                    "value": "Ready",
+                    "sub": "Local scratchpad",
+                    "icon": "▦",
+                    "href": url_for("personal_dashboard") + "#quick-notepad",
+                    "link_label": "Open panel →",
+                },
+                {
+                    "kind": "default",
+                    "label": "Audit Events",
+                    "value": str(len(events)),
+                    "sub": "Recent JSONL activity",
+                    "icon": "🛡",
+                    "href": url_for("audit"),
+                    "link_label": "View all →",
+                },
+            ]
+            live_repos: list = []
+            dhis2_tools_local: list = []
+        else:
+            health_results = adapters.check_all(enabled_only=False) if adapters else []
+            live_repos = _repos_from_health(registry, health_results)
+            healthy = sum(1 for item in health_results if item.get("ok"))
+            enabled = sum(1 for item in health_results if item.get("enabled"))
+            dhis2_cfg = app.config["DHIS2"].public_config()
+            last_dhis2 = app.config.get("DHIS2_LAST_STATUS")
+            dhis2_instance = app.config.get("DHIS2_INSTANCE")
+            dhis2_sub = "Read-only"
+            if dhis2_instance:
+                dhis2_sub = f"{str(dhis2_instance).title()} · Read-only"
+            cards = [
+                {
+                    "kind": "default",
+                    "label": "Repositories",
+                    "value": str(len(registry.repositories) if registry else 0),
+                    "sub": f"{enabled} enabled · {healthy} healthy",
+                    "icon": "▣",
+                    "href": url_for("repositories"),
+                    "link_label": "View all →",
+                },
+                {
+                    "kind": "open_tasks",
+                    "label": "Open Tasks",
+                    "value": str(task_stats["open"]),
+                    "badge": task_stats["open"],
+                    "severity": open_tasks_severity(task_stats),
+                    "metrics": {
+                        "open": task_stats["open"],
+                        "overdue": task_stats["overdue"],
+                        "due_this_week": task_stats["due_this_week"],
+                        "blocked": task_stats["blocked"],
+                    },
+                    "href": url_for(notebook_ep, status="open"),
+                    "link_label": "View all →",
+                },
+                {
+                    "kind": "default",
+                    "label": "DHIS2",
+                    "value": (
+                        "Online"
+                        if last_dhis2 and last_dhis2.get("ok")
+                        else ("Configured" if dhis2_cfg.get("configured") else "Off")
+                    ),
+                    "sub": dhis2_sub,
+                    "icon": "◎",
+                    "href": url_for("dhis2"),
+                    "link_label": "View details →",
+                },
+                {
+                    "kind": "default",
+                    "label": "Audit Events",
+                    "value": str(len(events)),
+                    "sub": "Recent JSONL activity",
+                    "icon": "🛡",
+                    "href": url_for("audit"),
+                    "link_label": "View all →",
+                },
+            ]
+            dhis2_tools_local = _DHIS2_TOOLS
+
+        persist_workspace(notebook.db, scope_n)
+        html = render_template(
             "dashboard.html",
             last_updated="live",
             summary_cards=cards,
             live_repos=live_repos,
             work_queue=work_queue,
             activity_rows=activity_rows,
-            notepad=QuickNotepadStore(notebook.db).get(),
+            notepad=notepad,
+            show_notepad=show_notepad,
+            show_repos=scope_n == "work",
+            show_dhis2=scope_n == "work",
+            note_scope=scope_n,
+            scope_label=SCOPE_LABELS.get(scope_n, scope_n),
+            notebook_endpoint=notebook_ep,
+            dashboard_endpoint=dash_ep,
+            queue_title=(
+                "Personal Task Queue" if scope_n == "personal" else "Notebook Work Queue"
+            ),
+            page_title=(
+                "Personal Dashboard" if scope_n == "personal" else "Work Dashboard"
+            ),
+            page_sub=(
+                "Personal notes, tasks, and Quick Notepad."
+                if scope_n == "personal"
+                else "Repositories, work notebook tasks, DHIS2 and system status."
+            ),
+            dhis2_tools=dhis2_tools_local,
         )
+        resp = app.make_response(html)
+        return apply_workspace_cookie(resp, scope_n)
+
+    @app.get("/")
+    def dashboard():
+        notebook: NotebookStore = app.config["NOTEBOOK"]
+        workspace = read_workspace(request, notebook.db)
+        args = request.args.to_dict(flat=True)
+        return redirect(url_for(dashboard_endpoint(workspace), **args))
+
+    @app.get("/personal")
+    def personal_dashboard():
+        return _render_dashboard(scope="personal")
+
+    @app.get("/work")
+    def work_dashboard():
+        return _render_dashboard(scope="work")
 
     def _reload_registry() -> None:
         path = app.config["REGISTRY_CONFIG_PATH"]
@@ -997,13 +1179,14 @@ def create_app() -> Flask:
             )
         return repositories, checklist, links
 
-    @app.route("/notebook", methods=["GET", "POST"])
-    def notebook():
+    def _render_notebook(*, scope: str):
         store: NotebookStore = app.config["NOTEBOOK"]
         audit: AuditStore = app.config["AUDIT"]
+        scope_n = normalize_scope(scope)
         flash = None
         error = None
         selected_id = (request.values.get("note") or "").strip()
+        nb_ep = notebook_endpoint(scope_n)
 
         if request.method == "POST":
             action = (request.form.get("action") or "").strip()
@@ -1011,66 +1194,81 @@ def create_app() -> Flask:
             if action == "new":
                 repo_id = (request.form.get("new_repo") or "").strip()
                 label = ""
-                for opt in _notebook_registry_options():
-                    if opt["id"] == repo_id:
-                        label = opt["name"]
-                        break
+                if scope_n == "work":
+                    for opt in _notebook_registry_options():
+                        if opt["id"] == repo_id:
+                            label = opt["name"]
+                            break
+                else:
+                    repo_id = ""
+                note_type = (request.form.get("new_type") or "note").strip()
                 note = store.create(
                     title="Untitled note",
                     actor=actor,
                     repository_id=repo_id,
                     repository_label=label,
+                    scope=scope_n,
+                    note_type=note_type if scope_n == "personal" else "note",
                 )
                 audit.append(
                     action=audit_actions.NOTEBOOK_CREATE,
                     target=note["id"],
-                    detail="Created notebook note",
+                    detail=f"Created {scope_n} notebook note",
                     ok=True,
                 )
-                return redirect(url_for("notebook", note=note["id"]))
+                return redirect(url_for(nb_ep, note=note["id"]))
             note_id = (request.form.get("note_id") or "").strip()
             if action == "save" and note_id:
-                repositories, checklist, links = _parse_notebook_form(request.form)
-                # Prefer explicit done flags from checkboxes named check_done_flag
-                check_texts = request.form.getlist("check_text")
-                check_flags = request.form.getlist("check_done_flag")
-                if check_texts:
-                    checklist = [
-                        {
-                            "text": t,
-                            "done": (check_flags[i] if i < len(check_flags) else "0")
-                            in {"1", "on", "true"},
-                        }
-                        for i, t in enumerate(check_texts)
-                    ]
-                saved = store.save(
-                    note_id,
-                    title=request.form.get("title") or "",
-                    body_md=request.form.get("body_md") or "",
-                    note_type=request.form.get("note_type") or "note",
-                    status=request.form.get("status") or "inbox",
-                    priority=request.form.get("priority") or "medium",
-                    due_date=request.form.get("due_date") or None,
-                    tags=request.form.get("tags") or "",
-                    repositories=repositories,
-                    checklist=checklist,
-                    links=links,
-                    pinned=request.form.get("pinned") in {"1", "on", "true"},
-                    actor=actor,
-                )
-                if saved:
-                    audit.append(
-                        action=audit_actions.NOTEBOOK_SAVE,
-                        target=note_id,
-                        detail="Saved notebook note",
-                        ok=True,
-                    )
-                    flash = "Note saved."
-                    selected_id = note_id
+                existing = store.get(note_id)
+                if existing and normalize_scope(existing.get("scope")) != scope_n:
+                    error = "Note belongs to a different workspace."
                 else:
-                    error = "Note not found."
+                    repositories, checklist, links = _parse_notebook_form(request.form)
+                    if scope_n == "personal":
+                        repositories = []
+                    check_texts = request.form.getlist("check_text")
+                    check_flags = request.form.getlist("check_done_flag")
+                    if check_texts:
+                        checklist = [
+                            {
+                                "text": t,
+                                "done": (check_flags[i] if i < len(check_flags) else "0")
+                                in {"1", "on", "true"},
+                            }
+                            for i, t in enumerate(check_texts)
+                        ]
+                    saved = store.save(
+                        note_id,
+                        title=request.form.get("title") or "",
+                        body_md=request.form.get("body_md") or "",
+                        note_type=request.form.get("note_type") or "note",
+                        status=request.form.get("status") or "inbox",
+                        priority=request.form.get("priority") or "medium",
+                        due_date=request.form.get("due_date") or None,
+                        tags=request.form.get("tags") or "",
+                        repositories=repositories,
+                        checklist=checklist,
+                        links=links,
+                        pinned=request.form.get("pinned") in {"1", "on", "true"},
+                        actor=actor,
+                        scope=scope_n,
+                    )
+                    if saved:
+                        audit.append(
+                            action=audit_actions.NOTEBOOK_SAVE,
+                            target=note_id,
+                            detail=f"Saved {scope_n} notebook note",
+                            ok=True,
+                        )
+                        flash = "Note saved."
+                        selected_id = note_id
+                    else:
+                        error = "Note not found."
             elif action == "archive" and note_id:
-                if store.archive(note_id, actor=actor):
+                existing = store.get(note_id)
+                if existing and normalize_scope(existing.get("scope")) != scope_n:
+                    error = "Note belongs to a different workspace."
+                elif store.archive(note_id, actor=actor):
                     audit.append(
                         action=audit_actions.NOTEBOOK_ARCHIVE,
                         target=note_id,
@@ -1082,7 +1280,10 @@ def create_app() -> Flask:
                 else:
                     error = "Note not found."
             elif action == "restore" and note_id:
-                if store.restore(note_id, actor=actor):
+                existing = store.get(note_id)
+                if existing and normalize_scope(existing.get("scope")) != scope_n:
+                    error = "Note belongs to a different workspace."
+                elif store.restore(note_id, actor=actor):
                     audit.append(
                         action=audit_actions.NOTEBOOK_RESTORE,
                         target=note_id,
@@ -1096,24 +1297,29 @@ def create_app() -> Flask:
             elif action == "delete" and note_id:
                 title = ""
                 existing = store.get(note_id)
-                if existing:
-                    title = existing.get("title") or note_id
-                if store.delete(note_id, actor=actor):
-                    audit.append(
-                        action=audit_actions.NOTEBOOK_DELETE,
-                        target=note_id,
-                        detail=f"Deleted notebook note: {title}",
-                        ok=True,
-                    )
-                    flash = "Note deleted."
-                    selected_id = ""
+                if existing and normalize_scope(existing.get("scope")) != scope_n:
+                    error = "Note belongs to a different workspace."
                 else:
-                    error = "Note not found."
+                    if existing:
+                        title = existing.get("title") or note_id
+                    if store.delete(note_id, actor=actor):
+                        audit.append(
+                            action=audit_actions.NOTEBOOK_DELETE,
+                            target=note_id,
+                            detail=f"Deleted notebook note: {title}",
+                            ok=True,
+                        )
+                        flash = "Note deleted."
+                        selected_id = ""
+                    else:
+                        error = "Note not found."
             elif action:
                 error = f"Unknown action: {action}"
 
         status = (request.args.get("status") or "all").strip().lower()
         repository_id = (request.args.get("repo") or "").strip()
+        if scope_n == "personal":
+            repository_id = ""
         note_type = (request.args.get("type") or "").strip()
         priority = (request.args.get("priority") or "").strip()
         tag = (request.args.get("tag") or "").strip()
@@ -1126,21 +1332,28 @@ def create_app() -> Flask:
             priority=priority,
             tag=tag,
             q=q,
+            scope=scope_n,
         )
         selected = store.get(selected_id) if selected_id else None
+        if selected and normalize_scope(selected.get("scope")) != scope_n:
+            selected = None
+            selected_id = ""
         if selected is None and notes:
             selected = store.get(notes[0]["id"])
             selected_id = selected["id"] if selected else ""
 
         preview_html = render_markdown((selected or {}).get("body_md") or "")
-        counts = store.status_counts()
+        counts = store.status_counts(scope=scope_n)
+        show_notepad = scope_n == "personal"
+        notepad = QuickNotepadStore(store.db).get() if show_notepad else None
         audit.append(
             action=audit_actions.NOTEBOOK_VIEW,
             target=selected_id or "list",
-            detail=f"Notebook view status={status} matched={len(notes)}",
+            detail=f"Notebook view scope={scope_n} status={status} matched={len(notes)}",
             ok=True,
         )
-        return render_template(
+        persist_workspace(store.db, scope_n)
+        html = render_template(
             "notebook.html",
             notes=notes,
             selected=selected,
@@ -1154,8 +1367,8 @@ def create_app() -> Flask:
                 "tag": tag,
                 "q": q,
             },
-            registry_repos=_notebook_registry_options(),
-            all_tags=store.list_tags(),
+            registry_repos=_notebook_registry_options() if scope_n == "work" else [],
+            all_tags=store.list_tags(scope=scope_n),
             statuses=STATUSES,
             status_labels=STATUS_LABELS,
             note_types=NOTE_TYPES,
@@ -1165,10 +1378,86 @@ def create_app() -> Flask:
             repo_roles=REPO_ROLES,
             repo_role_labels=REPO_ROLE_LABELS,
             preview_html=preview_html,
-            notepad=QuickNotepadStore(store.db).get(),
+            notepad=notepad,
+            show_notepad=show_notepad,
+            note_scope=scope_n,
+            scope_label=SCOPE_LABELS.get(scope_n, scope_n),
+            notebook_endpoint=nb_ep,
+            allow_repositories=scope_n == "work",
+            page_title=(
+                "Personal Notebook" if scope_n == "personal" else "Work Notebook"
+            ),
+            page_sub=(
+                "Personal notes and tasks — no repository required."
+                if scope_n == "personal"
+                else "Local notes linked to registry repositories. Survives missing repos."
+            ),
             flash=flash,
             error=error,
         )
+        resp = app.make_response(html)
+        return apply_workspace_cookie(resp, scope_n)
+
+    @app.route("/notebook", methods=["GET", "POST"])
+    def notebook():
+        """Backward-compatible entry: redirect GET; handle POST in scoped notebook."""
+        store: NotebookStore = app.config["NOTEBOOK"]
+        note_id = (request.values.get("note") or "").strip()
+        if note_id:
+            existing = store.get(note_id)
+            if existing:
+                scope_n = normalize_scope(existing.get("scope"))
+                if request.method == "POST":
+                    return _render_notebook(scope=scope_n)
+                args = {
+                    k: v
+                    for k, v in request.args.to_dict(flat=True).items()
+                    if k != "note"
+                }
+                return redirect(url_for(notebook_endpoint(scope_n), note=note_id, **args))
+        workspace = read_workspace(request, store.db)
+        if request.method == "POST":
+            return _render_notebook(scope=workspace)
+        args = request.args.to_dict(flat=True)
+        return redirect(url_for(notebook_endpoint(workspace), **args))
+
+    @app.route("/personal/notebook", methods=["GET", "POST"])
+    def personal_notebook():
+        return _render_notebook(scope="personal")
+
+    @app.route("/work/notebook", methods=["GET", "POST"])
+    def work_notebook():
+        return _render_notebook(scope="work")
+
+    @app.get("/personal/tasks")
+    def personal_tasks():
+        store: NotebookStore = app.config["NOTEBOOK"]
+        registered_ids: set[str] = set()
+        queue = dashboard_work_queue(
+            store,
+            tab=(request.args.get("queue") or "open").strip().lower(),
+            limit=50,
+            registered_ids=registered_ids,
+            scope="personal",
+        )
+        # Prefer task-typed items but keep other open personal notes visible.
+        task_notes = [
+            n for n in queue["notes"] if str(n.get("note_type") or "") == "task"
+        ]
+        other_notes = [
+            n for n in queue["notes"] if str(n.get("note_type") or "") != "task"
+        ]
+        persist_workspace(store.db, "personal")
+        html = render_template(
+            "personal_tasks.html",
+            work_queue=queue,
+            task_notes=task_notes,
+            other_notes=other_notes,
+            notebook_endpoint="personal_notebook",
+            notepad=QuickNotepadStore(store.db).get(),
+        )
+        resp = app.make_response(html)
+        return apply_workspace_cookie(resp, "personal")
 
     @app.get("/notebook/<note_id>/export")
     def notebook_export(note_id: str):
@@ -1260,7 +1549,7 @@ def create_app() -> Flask:
             {
                 "ok": True,
                 "note_id": note["id"],
-                "redirect": url_for("notebook", note=note["id"]),
+                "redirect": url_for("personal_notebook", note=note["id"]),
             }
         )
 

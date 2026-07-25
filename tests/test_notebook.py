@@ -33,6 +33,7 @@ class NotebookStoreTests(unittest.TestCase):
         applied = self.store.db.applied_migrations()
         self.assertIn("001_initial_notebook", applied)
         self.assertIn("002_note_pinned", applied)
+        self.assertIn("004_note_scope_workspace", applied)
 
     def test_create_save_archive_restore_export(self) -> None:
         note = self.store.create(
@@ -191,13 +192,13 @@ class NotebookRouteTests(unittest.TestCase):
         cls._tmp.cleanup()
 
     def test_routes_smoke(self) -> None:
-        r = self.client.get("/notebook")
+        r = self.client.get("/work/notebook")
         self.assertEqual(r.status_code, 200)
-        self.assertIn(b"Repository Notebook", r.data)
+        self.assertIn(b"Work Notebook", r.data)
         self.assertIn(b"All Notes", r.data)
         self.assertIn(b"Inbox", r.data)
 
-        r_new = self.client.post("/notebook", data={"action": "new"}, follow_redirects=True)
+        r_new = self.client.post("/work/notebook", data={"action": "new"}, follow_redirects=True)
         self.assertEqual(r_new.status_code, 200)
         self.assertIn(b"Untitled note", r_new.data)
 
@@ -208,7 +209,7 @@ class NotebookRouteTests(unittest.TestCase):
         note_id = html[start : start + 32]
 
         r_save = self.client.post(
-            "/notebook",
+            "/work/notebook",
             data={
                 "action": "save",
                 "note_id": note_id,
@@ -247,7 +248,7 @@ class NotebookRouteTests(unittest.TestCase):
         self.assertEqual(payload["note"]["title"], "Smoke note")
 
         r_arch = self.client.post(
-            "/notebook",
+            "/work/notebook",
             data={"action": "archive", "note_id": note_id},
             follow_redirects=True,
         )
@@ -255,7 +256,7 @@ class NotebookRouteTests(unittest.TestCase):
         self.assertIn(b"archived", r_arch.data.lower())
 
         r_rest = self.client.post(
-            "/notebook",
+            "/work/notebook",
             data={"action": "restore", "note_id": note_id},
             follow_redirects=True,
         )

@@ -11,10 +11,12 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 | `${VAR:-default}` in registry YAML | `hub/registry/loader.py` |
 | Live Processing (GET-only API + path health) | `config/repositories.yaml` |
 | Data-Script / Report Template (git + optional path) | `config/repositories.yaml` |
-| Live dashboard (health / notebook queue / audit) | `/` |
-| Repository Notebook (local notes + Quick Notepad) | `/notebook`, `hub/notebook/`, `data/notebook.db` |
+| Live dashboard (health / notebook queue / audit) | `/work` (legacy `/` redirects) |
+| Personal / Work workspace switcher | `/workspace/<name>`, cookie + `hub_prefs` |
+| Personal Dashboard + Tasks + Quick Notepad | `/personal`, `/personal/tasks` |
+| Repository Notebook (scoped personal\|work notes) | `/personal/notebook`, `/work/notebook`, `hub/notebook/` |
 | SQL Workspace (read-only query library/runner) | `/sql`, `hub/sql_workspace/`, `data/sql_workspace.db` |
-| Dashboard Notebook Work Queue | `/` Open Tasks + queue tabs; reuses Notebook store |
+| Dashboard Notebook Work Queue | `/work` Open Tasks + queue tabs (work scope only) |
 | Health probe cache + parallel checks | `hub/adapters/manager.py`, `CENTRAL_HUB_HEALTH_CACHE_TTL` |
 | UID index controlled update (LP-style) | `/dhis2/uid-index/manage`, `hub/dhis2/uid_mapping/admin.py` |
 | UID audit mapping profile | answer kind, program/stage, option-set choices on detail |
@@ -41,8 +43,8 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 | UID conflict resolve | Conflicts skipped by default; no per-UID take/keep form yet |
 | Enrichment raw metadata | Not bulk-stored; live GET only when detail `?tab=raw&raw=1` |
 | SQL Workspace | Implemented — SELECT/WITH/EXPLAIN only; Live warning; never auto-run |
-| Repository Notebook | Manual notes + shared Quick Notepad (Dashboard + Notebook) — no agent assist |
-| Dashboard Quick Notepad | Same scratchpad record as Notebook; collapsible / drawer |
+| Repository Notebook | Manual notes with `personal`\|`work` scope + Quick Notepad under Personal — no agent assist |
+| Dashboard Quick Notepad | Same scratchpad; Personal Dashboard + Personal Notebook only |
 | API writes | Blocked even if YAML `allow_write` (Phase 4 GET-only) |
 | Pause | Cooperative between capability steps (short demos finish quickly) |
 | Owner auth | Single shared token; not multi-user RBAC |
