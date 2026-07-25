@@ -6,7 +6,7 @@
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-<body>
+<body class="theme-{{ workspace|default('work') }}">
   {% from "macros.html" import brand_icon %}
   <div class="app-shell">
     <aside class="sidebar">
@@ -30,9 +30,9 @@
 
       <nav class="sidebar-nav" aria-label="Primary">
         {% for section in nav_sections %}
-          {% if section['items'] %}
-            <div class="nav-label">{{ section['label'] }}</div>
-            {% for item in section['items'] %}
+          {% if section.entries %}
+            <div class="nav-label">{{ section.label }}</div>
+            {% for item in section.entries %}
               <a
                 href="{{ url_for(item.endpoint) }}{% if item.anchor %}#{{ item.anchor }}{% endif %}"
                 class="nav-link{% if request.endpoint == item.endpoint or (item.active_prefix and request.endpoint and request.endpoint.startswith(item.active_prefix)) %} is-active{% endif %}"

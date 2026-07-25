@@ -5,12 +5,13 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 ## Current milestone
 
 **Personal / Work workspace organization** — single Notebook model with `scope`,
-sidebar switcher, Quick Notepad under Personal.
+sidebar switcher, **separate** Quick Notepads per workspace.
 
 - Nav groups: Personal · Work · System; last workspace remembered (cookie + `hub_prefs`)
 - Existing notes categorized as **work**; personal notes need no repositories
+- Existing Quick Notepad content kept on the **personal** pad; work pad is separate
 - `/` and `/notebook` remain via redirects / POST compat
-- Prior: Dashboard Quick Notepad, SQL Workspace, registry, enrichment, GET-only DHIS2
+- Prior: SQL Workspace, registry, enrichment, GET-only DHIS2
 
 ## Verify
 

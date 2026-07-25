@@ -129,6 +129,48 @@ _MIGRATIONS: list[tuple[str, str]] = [
         VALUES ('workspace', 'work', datetime('now'));
         """,
     ),
+    (
+        "005_notepad_personal_work",
+        """
+        CREATE TABLE IF NOT EXISTS quick_notepad_v2 (
+            id TEXT PRIMARY KEY CHECK (id IN ('personal', 'work')),
+            content TEXT NOT NULL DEFAULT '',
+            content_format TEXT NOT NULL DEFAULT 'plain',
+            panel_open INTEGER NOT NULL DEFAULT 1,
+            panel_width INTEGER NOT NULL DEFAULT 320,
+            updated_at TEXT NOT NULL
+        );
+        INSERT INTO quick_notepad_v2
+            (id, content, content_format, panel_open, panel_width, updated_at)
+        SELECT 'personal', content, content_format, panel_open, panel_width, updated_at
+        FROM quick_notepad WHERE id = 'default';
+        INSERT OR IGNORE INTO quick_notepad_v2
+            (id, content, content_format, panel_open, panel_width, updated_at)
+        VALUES ('personal', '', 'plain', 1, 320, datetime('now'));
+        INSERT OR IGNORE INTO quick_notepad_v2
+            (id, content, content_format, panel_open, panel_width, updated_at)
+        VALUES ('work', '', 'plain', 1, 320, datetime('now'));
+        DROP TABLE quick_notepad;
+        ALTER TABLE quick_notepad_v2 RENAME TO quick_notepad;
+
+        CREATE TABLE IF NOT EXISTS quick_notepad_revisions_v2 (
+            id TEXT PRIMARY KEY,
+            notepad_id TEXT NOT NULL DEFAULT 'personal',
+            content TEXT NOT NULL,
+            content_format TEXT NOT NULL DEFAULT 'plain',
+            reason TEXT NOT NULL DEFAULT 'snapshot',
+            created_at TEXT NOT NULL
+        );
+        INSERT INTO quick_notepad_revisions_v2
+            (id, notepad_id, content, content_format, reason, created_at)
+        SELECT id, 'personal', content, content_format, reason, created_at
+        FROM quick_notepad_revisions;
+        DROP TABLE quick_notepad_revisions;
+        ALTER TABLE quick_notepad_revisions_v2 RENAME TO quick_notepad_revisions;
+        CREATE INDEX IF NOT EXISTS idx_qn_rev_pad_created
+            ON quick_notepad_revisions(notepad_id, created_at DESC);
+        """,
+    ),
 ]
 
 

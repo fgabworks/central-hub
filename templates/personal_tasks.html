@@ -7,10 +7,11 @@
      style="--qn-width: {{ notepad.panel_width }}px"
      data-qn-open="{{ '1' if notepad.panel_open else '0' }}"
      data-qn-width="{{ notepad.panel_width }}"
-     data-qn-save-url="{{ url_for('api_notebook_notepad_put') }}"
-     data-qn-clear-url="{{ url_for('api_notebook_notepad_clear') }}"
-     data-qn-convert-url="{{ url_for('api_notebook_notepad_convert') }}"
-     data-qn-restore-url="{{ url_for('api_notebook_notepad_restore') }}">
+     data-qn-scope="{{ note_scope|default('personal') }}"
+     data-qn-save-url="{{ url_for('api_notebook_notepad_put', scope=note_scope|default('personal')) }}"
+     data-qn-clear-url="{{ url_for('api_notebook_notepad_clear', scope=note_scope|default('personal')) }}"
+     data-qn-convert-url="{{ url_for('api_notebook_notepad_convert', scope=note_scope|default('personal')) }}"
+     data-qn-restore-url="{{ url_for('api_notebook_notepad_restore', scope=note_scope|default('personal')) }}">
 <div class="dash-workspace-main">
 <section class="page-header">
   <div>

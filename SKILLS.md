@@ -43,8 +43,8 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 | UID conflict resolve | Conflicts skipped by default; no per-UID take/keep form yet |
 | Enrichment raw metadata | Not bulk-stored; live GET only when detail `?tab=raw&raw=1` |
 | SQL Workspace | Implemented — SELECT/WITH/EXPLAIN only; Live warning; never auto-run |
-| Repository Notebook | Manual notes with `personal`\|`work` scope + Quick Notepad under Personal — no agent assist |
-| Dashboard Quick Notepad | Same scratchpad; Personal Dashboard + Personal Notebook only |
+| Repository Notebook | Manual notes with `personal`\|`work` scope + separate Quick Notepads per workspace — no agent assist |
+| Quick Notepad | Personal and Work pads are independent; legacy content → personal |
 | API writes | Blocked even if YAML `allow_write` (Phase 4 GET-only) |
 | Pause | Cooperative between capability steps (short demos finish quickly) |
 | Owner auth | Single shared token; not multi-user RBAC |

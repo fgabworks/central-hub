@@ -63,10 +63,10 @@ Demo `sample-*` entries removed from the active registry; job tests use
 | `/api/notebook/notepad*` | Quick Notepad (Personal) GET/PUT/clear/convert/restore |
 
 Store: `data/notebook.db` (`hub/notebook/`) migrations include `pinned`, `quick_notepad`,
-`scope` (`personal`\|`work`) + `hub_prefs`. Existing notes migrate to **work**.
-Quick Notepad remains a **single** scratchpad under Personal (not a second pad).
-Convert → creates a **personal** structured note. Work Dashboard queue shows work-scoped
-notes only. No agent integration yet.
+`scope` (`personal`\|`work`) + `hub_prefs`, and separate Quick Notepads (`personal` / `work`).
+Existing notes migrate to **work**. Existing Quick Notepad content migrates to the
+**personal** pad; work starts empty. Convert → note uses the same scope as the pad.
+Work Dashboard queue shows work-scoped notes only. No agent integration yet.
 
 ## SQL Workspace
 

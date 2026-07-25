@@ -24,6 +24,7 @@ from hub.notebook.notepad import (
     FORMATS as NOTEPAD_FORMATS,
     MAX_WIDTH,
     MIN_WIDTH,
+    NOTEPAD_IDS,
     QuickNotepadStore,
 )
 from hub.notebook.store import NotebookStore
@@ -46,6 +47,7 @@ __all__ = [
     "DEFAULT_WIDTH",
     "MAX_WIDTH",
     "MIN_WIDTH",
+    "NOTEPAD_IDS",
     "NotebookDatabase",
     "NotebookStore",
     "QuickNotepadStore",

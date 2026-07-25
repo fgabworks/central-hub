@@ -26,15 +26,24 @@ class QuickNotepadStoreTests(unittest.TestCase):
 
     def test_migration_and_singleton_persist(self) -> None:
         self.assertIn("003_quick_notepad", self.db.applied_migrations())
+        self.assertIn("005_notepad_personal_work", self.db.applied_migrations())
         saved = self.pad.save(content="hello scratch", content_format="markdown", panel_width=400)
         self.assertEqual(saved["content"], "hello scratch")
         self.assertEqual(saved["content_format"], "markdown")
         self.assertEqual(saved["panel_width"], 400)
+        self.assertEqual(saved["scope"], "personal")
 
-        again = QuickNotepadStore(NotebookDatabase(self.db.path)).get()
+        again = QuickNotepadStore(NotebookDatabase(self.db.path), scope="personal").get()
         self.assertEqual(again["content"], "hello scratch")
         self.assertEqual(again["content_format"], "markdown")
         self.assertEqual(again["panel_width"], 400)
+
+        # Separate work pad does not share content.
+        work = QuickNotepadStore(self.db, scope="work")
+        self.assertEqual(work.get(include_revisions=False)["content"], "")
+        work.save(content="work only")
+        self.assertEqual(self.pad.get(include_revisions=False)["content"], "hello scratch")
+        self.assertEqual(work.get(include_revisions=False)["content"], "work only")
 
     def test_clear_keeps_revision_and_convert_creates_note(self) -> None:
         self.pad.save(content="# Draft title\n\nBody line", content_format="markdown")
@@ -145,11 +154,12 @@ class QuickNotepadRouteTests(unittest.TestCase):
         self.assertIn("overflow", css)  # long-content scrolling on .qn-body
 
     def test_dashboard_loads_same_scratchpad(self) -> None:
-        """Dashboard reuses the Notebook Quick Notepad record (no second pad)."""
+        """Personal pages share the personal pad; Work pad is separate."""
         self.client.put(
-            "/api/notebook/notepad",
+            "/api/notebook/notepad?scope=personal",
             data=json.dumps(
                 {
+                    "scope": "personal",
                     "content": "Shared dash/notebook scratch",
                     "content_format": "markdown",
                     "panel_open": True,
@@ -158,12 +168,19 @@ class QuickNotepadRouteTests(unittest.TestCase):
             ),
             content_type="application/json",
         )
+        self.client.put(
+            "/api/notebook/notepad?scope=work",
+            data=json.dumps({"scope": "work", "content": "Work pad only"}),
+            content_type="application/json",
+        )
         dash = self.client.get("/personal")
         self.assertEqual(dash.status_code, 200)
         dash_html = dash.get_data(as_text=True)
         self.assertIn('id="qn-host"', dash_html)
         self.assertIn('id="qn-panel"', dash_html)
         self.assertIn("Shared dash/notebook scratch", dash_html)
+        self.assertNotIn("Work pad only", dash_html)
+        self.assertIn('data-qn-scope="personal"', dash_html)
         self.assertIn("dash-workspace", dash_html)
         self.assertIn("quick_notepad.js", dash_html)
         css = (Path(__file__).resolve().parents[1] / "static" / "css" / "style.css").read_text(
@@ -175,12 +192,18 @@ class QuickNotepadRouteTests(unittest.TestCase):
         nb = self.client.get("/personal/notebook")
         nb_html = nb.get_data(as_text=True)
         self.assertIn("Shared dash/notebook scratch", nb_html)
+        self.assertNotIn("Work pad only", nb_html)
         self.assertIn('id="qn-body"', nb_html)
 
-        # Collapse persistence via same API
+        work_dash = self.client.get("/work").get_data(as_text=True)
+        self.assertIn("Work pad only", work_dash)
+        self.assertNotIn("Shared dash/notebook scratch", work_dash)
+        self.assertIn('data-qn-scope="work"', work_dash)
+
+        # Collapse persistence via same personal API
         collapsed = self.client.put(
-            "/api/notebook/notepad",
-            data=json.dumps({"panel_open": False, "panel_width": 340}),
+            "/api/notebook/notepad?scope=personal",
+            data=json.dumps({"scope": "personal", "panel_open": False, "panel_width": 340}),
             content_type="application/json",
         )
         self.assertTrue(collapsed.get_json()["ok"])

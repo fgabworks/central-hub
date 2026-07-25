@@ -309,6 +309,13 @@ def create_app() -> Flask:
                 "active_prefix": "work_notebook",
             },
             {
+                "endpoint": "work_dashboard",
+                "label": "Quick Notepad",
+                "icon": "▤",
+                "active_prefix": None,
+                "anchor": "quick-notepad",
+            },
+            {
                 "endpoint": "sql_workspace",
                 "label": "SQL Workspace",
                 "icon": "▦",
@@ -352,16 +359,16 @@ def create_app() -> Flask:
             {
                 "id": "personal",
                 "label": "Personal",
-                "items": personal_nav if workspace == "personal" else [],
+                "entries": personal_nav if workspace == "personal" else [],
             },
             {
                 "id": "work",
                 "label": "Work",
-                "items": work_nav if workspace == "work" else [],
+                "entries": work_nav if workspace == "work" else [],
             },
-            {"id": "system", "label": "System", "items": system_nav},
+            {"id": "system", "label": "System", "entries": system_nav},
         ]
-        nav_items = [item for section in nav_sections for item in section["items"]]
+        nav_items = [item for section in nav_sections for item in section["entries"]]
 
         work_actions = [
             {"label": "Add Repository", "endpoint": "repository_new", "available": True},
@@ -444,8 +451,8 @@ def create_app() -> Flask:
         ]
         notebook_ep = notebook_endpoint(scope_n)
         dash_ep = dashboard_endpoint(scope_n)
-        show_notepad = scope_n == "personal"
-        notepad = QuickNotepadStore(notebook.db).get() if show_notepad else None
+        show_notepad = True
+        notepad = QuickNotepadStore(notebook.db, scope=scope_n).get()
 
         if scope_n == "personal":
             cards = [
@@ -1344,8 +1351,8 @@ def create_app() -> Flask:
 
         preview_html = render_markdown((selected or {}).get("body_md") or "")
         counts = store.status_counts(scope=scope_n)
-        show_notepad = scope_n == "personal"
-        notepad = QuickNotepadStore(store.db).get() if show_notepad else None
+        show_notepad = True
+        notepad = QuickNotepadStore(store.db, scope=scope_n).get()
         audit.append(
             action=audit_actions.NOTEBOOK_VIEW,
             target=selected_id or "list",
@@ -1454,7 +1461,8 @@ def create_app() -> Flask:
             task_notes=task_notes,
             other_notes=other_notes,
             notebook_endpoint="personal_notebook",
-            notepad=QuickNotepadStore(store.db).get(),
+            notepad=QuickNotepadStore(store.db, scope="personal").get(),
+            note_scope="personal",
         )
         resp = app.make_response(html)
         return apply_workspace_cookie(resp, "personal")
@@ -1487,13 +1495,26 @@ def create_app() -> Flask:
         html_out = render_markdown(str(data.get("markdown") or ""))
         return jsonify({"ok": True, "html": html_out})
 
-    def _quick_notepad() -> QuickNotepadStore:
+    def _notepad_scope_from_request() -> str:
+        data = request.get_json(silent=True) or {}
+        raw = (
+            request.args.get("scope")
+            or data.get("scope")
+            or request.values.get("scope")
+            or ""
+        )
+        return normalize_scope(str(raw), default="personal")
+
+    def _quick_notepad(scope: str | None = None) -> QuickNotepadStore:
         store: NotebookStore = app.config["NOTEBOOK"]
-        return QuickNotepadStore(store.db)
+        return QuickNotepadStore(
+            store.db, scope=scope or _notepad_scope_from_request()
+        )
 
     @app.get("/api/notebook/notepad")
     def api_notebook_notepad_get():
-        return jsonify({"ok": True, "notepad": _quick_notepad().get()})
+        pad = _quick_notepad()
+        return jsonify({"ok": True, "notepad": pad.get()})
 
     @app.put("/api/notebook/notepad")
     def api_notebook_notepad_put():
@@ -1517,11 +1538,12 @@ def create_app() -> Flask:
     @app.post("/api/notebook/notepad/clear")
     def api_notebook_notepad_clear():
         audit: AuditStore = app.config["AUDIT"]
-        saved = _quick_notepad().clear()
+        pad = _quick_notepad()
+        saved = pad.clear()
         audit.append(
             action=audit_actions.NOTEBOOK_NOTEPAD_CLEAR,
-            target="quick-notepad",
-            detail="Cleared Quick Notepad (revision kept)",
+            target=f"quick-notepad:{pad.notepad_id}",
+            detail=f"Cleared {pad.notepad_id} Quick Notepad (revision kept)",
             ok=True,
         )
         return jsonify({"ok": True, "notepad": saved})
@@ -1530,26 +1552,29 @@ def create_app() -> Flask:
     def api_notebook_notepad_convert():
         store: NotebookStore = app.config["NOTEBOOK"]
         audit: AuditStore = app.config["AUDIT"]
-        note = _quick_notepad().convert_to_note(store)
+        pad = _quick_notepad()
+        note = pad.convert_to_note(store)
         if not note:
             return jsonify({"ok": False, "error": "Quick Notepad is empty."}), 400
         audit.append(
             action=audit_actions.NOTEBOOK_NOTEPAD_CONVERT,
             target=note["id"],
-            detail="Converted Quick Notepad to note",
+            detail=f"Converted {pad.notepad_id} Quick Notepad to note",
             ok=True,
         )
         audit.append(
             action=audit_actions.NOTEBOOK_CREATE,
             target=note["id"],
-            detail="Created note from Quick Notepad",
+            detail=f"Created {pad.notepad_id} note from Quick Notepad",
             ok=True,
         )
         return jsonify(
             {
                 "ok": True,
                 "note_id": note["id"],
-                "redirect": url_for("personal_notebook", note=note["id"]),
+                "redirect": url_for(
+                    notebook_endpoint(pad.notepad_id), note=note["id"]
+                ),
             }
         )
 
@@ -1558,13 +1583,14 @@ def create_app() -> Flask:
         audit: AuditStore = app.config["AUDIT"]
         data = request.get_json(silent=True) or {}
         revision_id = str(data.get("revision_id") or "").strip()
-        restored = _quick_notepad().restore(revision_id)
+        pad = _quick_notepad()
+        restored = pad.restore(revision_id)
         if not restored:
             return jsonify({"ok": False, "error": "Revision not found."}), 404
         audit.append(
             action=audit_actions.NOTEBOOK_NOTEPAD_RESTORE,
             target=revision_id,
-            detail="Restored Quick Notepad revision",
+            detail=f"Restored {pad.notepad_id} Quick Notepad revision",
             ok=True,
         )
         return jsonify({"ok": True, "notepad": restored})

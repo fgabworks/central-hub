@@ -1,6 +1,6 @@
 /**
- * Quick Notepad — shared Dashboard / Notebook client.
- * Expects a host element #qn-host with data-qn-*-url attributes.
+ * Quick Notepad — scoped Personal / Work client.
+ * Expects a host element #qn-host with data-qn-*-url and data-qn-scope.
  */
 (function () {
   function initQuickNotepad() {
@@ -16,6 +16,7 @@
     var revList = document.getElementById("qn-rev-list");
     if (!workspace || !panel || !bodyEl || !statusEl) return;
 
+    var scope = workspace.getAttribute("data-qn-scope") || "personal";
     var urls = {
       save: workspace.getAttribute("data-qn-save-url") || "",
       clear: workspace.getAttribute("data-qn-clear-url") || "",
@@ -132,6 +133,7 @@
     function doSave(extra) {
       var payload = Object.assign(
         {
+          scope: scope,
           content: bodyEl.value,
           content_format: formatEl ? formatEl.value : "plain",
           panel_open: isOpen(),
@@ -243,7 +245,7 @@
         fetch(urls.clear, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: "{}",
+          body: JSON.stringify({ scope: scope }),
         })
           .then(function (r) {
             return r.json();
@@ -276,7 +278,7 @@
         fetch(urls.convert, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: "{}",
+          body: JSON.stringify({ scope: scope }),
         })
           .then(function (r) {
             return r.json().then(function (data) {
@@ -307,7 +309,7 @@
         fetch(urls.restore, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ revision_id: rid }),
+          body: JSON.stringify({ revision_id: rid, scope: scope }),
         })
           .then(function (r) {
             return r.json();

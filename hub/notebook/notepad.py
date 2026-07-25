@@ -1,4 +1,4 @@
-"""Persistent Quick Notepad — one local scratchpad, separate from structured notes."""
+"""Persistent Quick Notepad — separate personal and work scratchpads."""
 
 from __future__ import annotations
 
@@ -6,8 +6,11 @@ import uuid
 from typing import Any
 
 from hub.notebook.db import NotebookDatabase, utcnow
+from hub.notebook.models import normalize_scope
 
-NOTEPAD_ID = "default"
+NOTEPAD_IDS = ("personal", "work")
+# Legacy alias kept for imports/tests that referenced the old singleton id.
+NOTEPAD_ID = "personal"
 FORMATS = ("plain", "markdown")
 DEFAULT_WIDTH = 320
 MIN_WIDTH = 240
@@ -28,36 +31,48 @@ def clamp_width(value: Any) -> int:
     return max(MIN_WIDTH, min(MAX_WIDTH, width))
 
 
-class QuickNotepadStore:
-    """Singleton scratchpad + small revision history in the notebook SQLite DB."""
+def normalize_notepad_id(value: str | None, *, default: str = "personal") -> str:
+    """Map scope / notepad id; treat legacy 'default' as personal."""
+    raw = (value or "").strip().lower()
+    if raw == "default":
+        return "personal"
+    return normalize_scope(raw, default=default)
 
-    def __init__(self, db: NotebookDatabase) -> None:
+
+class QuickNotepadStore:
+    """Scoped scratchpad + revision history in the notebook SQLite DB."""
+
+    def __init__(
+        self, db: NotebookDatabase, *, scope: str = "personal"
+    ) -> None:
         self.db = db
+        self.notepad_id = normalize_notepad_id(scope)
         self.ensure_row()
 
     def ensure_row(self) -> None:
         now = utcnow()
         with self.db.connect() as conn:
-            conn.execute(
-                """
-                INSERT OR IGNORE INTO quick_notepad
-                    (id, content, content_format, panel_open, panel_width, updated_at)
-                VALUES (?, '', 'plain', 1, ?, ?)
-                """,
-                (NOTEPAD_ID, DEFAULT_WIDTH, now),
-            )
+            for pad_id in NOTEPAD_IDS:
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO quick_notepad
+                        (id, content, content_format, panel_open, panel_width, updated_at)
+                    VALUES (?, '', 'plain', 1, ?, ?)
+                    """,
+                    (pad_id, DEFAULT_WIDTH, now),
+                )
 
     def get(self, *, include_revisions: bool = True) -> dict[str, Any]:
         with self.db.connect() as conn:
             row = conn.execute(
                 "SELECT * FROM quick_notepad WHERE id = ?",
-                (NOTEPAD_ID,),
+                (self.notepad_id,),
             ).fetchone()
             if not row:
                 self.ensure_row()
                 row = conn.execute(
                     "SELECT * FROM quick_notepad WHERE id = ?",
-                    (NOTEPAD_ID,),
+                    (self.notepad_id,),
                 ).fetchone()
             payload = self._row_to_dict(row)
             if include_revisions:
@@ -98,7 +113,7 @@ class QuickNotepadStore:
                     1 if next_open else 0,
                     next_width,
                     now,
-                    NOTEPAD_ID,
+                    self.notepad_id,
                 ),
             )
         return self.get()
@@ -119,8 +134,11 @@ class QuickNotepadStore:
             return None
         with self.db.connect() as conn:
             row = conn.execute(
-                "SELECT * FROM quick_notepad_revisions WHERE id = ?",
-                (rid,),
+                """
+                SELECT * FROM quick_notepad_revisions
+                WHERE id = ? AND notepad_id = ?
+                """,
+                (rid, self.notepad_id),
             ).fetchone()
         if not row:
             return None
@@ -137,15 +155,15 @@ class QuickNotepadStore:
         )
 
     def convert_to_note(self, notes_store: Any) -> dict[str, Any] | None:
-        """Create a structured notebook note from scratchpad content. Does not clear."""
+        """Create a structured notebook note from this pad. Does not clear."""
         pad = self.get(include_revisions=False)
         body = pad["content"] or ""
         if not body.strip():
             return None
         self._add_revision(body, pad["content_format"], reason="convert")
         title = _title_from_content(body)
-        # Quick Notepad lives under Personal — convert into a personal note.
-        note = notes_store.create(title=title, actor="owner", scope="personal")
+        scope = self.notepad_id
+        note = notes_store.create(title=title, actor="owner", scope=scope)
         saved = notes_store.save(
             note["id"],
             title=title,
@@ -160,7 +178,7 @@ class QuickNotepadStore:
             links=[],
             pinned=False,
             actor="owner",
-            scope="personal",
+            scope=scope,
         )
         return saved
 
@@ -170,11 +188,12 @@ class QuickNotepadStore:
             conn.execute(
                 """
                 INSERT INTO quick_notepad_revisions
-                    (id, content, content_format, reason, created_at)
-                VALUES (?, ?, ?, ?, ?)
+                    (id, notepad_id, content, content_format, reason, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
                     uuid.uuid4().hex,
+                    self.notepad_id,
                     content,
                     normalize_format(content_format),
                     (reason or "snapshot")[:40],
@@ -184,8 +203,10 @@ class QuickNotepadStore:
             rows = conn.execute(
                 """
                 SELECT id FROM quick_notepad_revisions
+                WHERE notepad_id = ?
                 ORDER BY created_at DESC, id DESC
-                """
+                """,
+                (self.notepad_id,),
             ).fetchall()
             for stale in rows[MAX_REVISIONS:]:
                 conn.execute(
@@ -196,12 +217,13 @@ class QuickNotepadStore:
     def _list_revisions(self, conn: Any) -> list[dict[str, Any]]:
         rows = conn.execute(
             """
-            SELECT id, content, content_format, reason, created_at
+            SELECT id, notepad_id, content, content_format, reason, created_at
             FROM quick_notepad_revisions
+            WHERE notepad_id = ?
             ORDER BY created_at DESC, id DESC
             LIMIT ?
             """,
-            (MAX_REVISIONS,),
+            (self.notepad_id, MAX_REVISIONS),
         ).fetchall()
         out: list[dict[str, Any]] = []
         for row in rows:
@@ -212,6 +234,7 @@ class QuickNotepadStore:
             out.append(
                 {
                     "id": str(row["id"]),
+                    "notepad_id": str(row["notepad_id"] or self.notepad_id),
                     "content": text,
                     "content_format": normalize_format(str(row["content_format"])),
                     "reason": str(row["reason"] or "snapshot"),
@@ -221,10 +244,10 @@ class QuickNotepadStore:
             )
         return out
 
-    @staticmethod
-    def _row_to_dict(row: Any) -> dict[str, Any]:
+    def _row_to_dict(self, row: Any) -> dict[str, Any]:
         return {
-            "id": NOTEPAD_ID,
+            "id": self.notepad_id,
+            "scope": self.notepad_id,
             "content": str(row["content"] or "") if row else "",
             "content_format": normalize_format(
                 str(row["content_format"]) if row else "plain"
