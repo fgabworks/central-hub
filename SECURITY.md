@@ -4,52 +4,42 @@ Scope: personal, local-first tool. Canonical agent rules: [AGENTS.md](AGENTS.md)
 
 ## General posture
 
-- **Read-only by default.** Phase 1 performs no writes to any external system and
-  executes no jobs. New capabilities must start read-only/dry-run.
-- Binds to `127.0.0.1` by default (`CENTRAL_HUB_HOST`); not designed for public exposure.
-- No authentication layer yet — acceptable only while local and personal
-  (single `owner` role is planned in Phase 6).
+- **Read-only by default** for external systems. Jobs default to dry-run.
+- Binds to `127.0.0.1` by default (`CENTRAL_HUB_HOST`).
+- Optional single **owner** token (`CENTRAL_HUB_OWNER_TOKEN`) gates job mutations.
+  Empty token = open local single-user mode.
 
 ## Secrets and environment
 
-- Secrets live only in `.env` (gitignored). `.env.example` ships placeholders only.
-- No credentials, tokens, or live hostnames in code, YAML, templates, or docs.
-- Code reads only `CENTRAL_HUB_*` variables (`hub/settings.py`).
-  `ALLOW_DHIS2_WRITES` in `.env.example` is a documented safety gate for future
-  work; nothing reads it yet ([docs/DHIS2_SAFETY.md](docs/DHIS2_SAFETY.md)).
-- Registry entries are demo-only; do not point them at live PMNP/DHIS2 systems.
+- Secrets only in `.env` (gitignored). See `.env.example`.
+- DHIS2 passwords never rendered; errors redacted (`hub/dhis2/redact.py`).
+- DHIS2 client is GET-only; `ALLOW_DHIS2_WRITES` must stay false.
 
-## Command execution controls
+## Job / command controls (Phases 3–6)
 
-Current (Phase 1, health probes only — `hub/adapters/command_adapter.py`):
+- Capability argv comes **only** from YAML `command_template` / `dry_run_command_template`.
+- `subprocess.run(..., shell=False)`; shell metacharacters rejected.
+- Working directory jailed under the repository path when under the hub root.
+- Timeouts from capability/registry defaults.
+- Cooperative cancel/pause flags on disk-backed jobs.
+- Non-dry-run requires confirm when `defaults.require_explicit_apply=true`.
+- API capabilities: **GET/HEAD only** (POST/PUT/PATCH/DELETE blocked in hub).
+- Max concurrent workers from `defaults.max_concurrent_jobs`.
 
-- **Exact-match allowlist:** only `python|py -c print('ok')` variants may run.
-  Anything else returns status `blocked` without executing.
-- **No shell:** `subprocess.run(..., shell=False)` with fixed argv; interpreter
-  resolved via `PATH` (`shutil.which`).
-- **Timeouts:** per-config `timeout_seconds` (default 5s).
-- **Working directory:** resolved relative to the hub root or the repo's configured
-  path; probe runs in that directory only.
+## File controls (Phase 5)
 
-Required for future execution (Phases 3+): allowlisted argv templates from YAML
-only, cwd jail under the repo's `local_path`, timeouts, cooperative cancel flags,
-dry-run defaults, and explicit confirm before non-dry-run
-(lifecycle in [ARCHITECTURE.md](ARCHITECTURE.md#sensitive-operation-lifecycle)).
+- Uploads under `data/uploads/{job_id}/` — allowlisted suffixes, 5 MiB cap,
+  `secure_filename`, path-escape blocked.
+- Downloads from `data/results/{job_id}/` only; audited as `DOWNLOAD_RESULT`.
 
-## File controls
+## Audit
 
-- No file upload or download endpoints exist yet.
-- Future uploads (Phase 5) go under a gitignored `data/` tree, scoped per job,
-  with validation before use and audited downloads.
+- JSONL at `CENTRAL_HUB_AUDIT_LOG` plus job rows in SQLite `CENTRAL_HUB_DATABASE`.
+- Job actions: `SUBMIT_JOB`, `START_JOB`, `JOB_*`, `UPLOAD_INPUT`, `DOWNLOAD_RESULT`,
+  `OWNER_LOGIN`, plus existing DHIS2 events.
 
-## Audit controls
+## Known gaps
 
-- Not yet persisted. Dashboard "Recent Activity" rows are demo UI.
-- Phase 2 adds an append-only audit store (separate from job logs), recording
-  who/when/action/target without secrets.
-
-## Known gaps (accepted for Phase 1)
-
-- Flask debug mode defaults on (`CENTRAL_HUB_DEBUG=true`) — fine locally; disable
-  if ever exposed beyond localhost.
-- No CSRF/auth — no state-changing endpoints exist yet; must be added before any.
+- No CSRF tokens yet (localhost personal use).
+- Flask debug may be on locally — disable if exposed.
+- Owner token is shared-secret, not full multi-user RBAC.

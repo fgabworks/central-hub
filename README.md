@@ -1,103 +1,53 @@
-# Central Hub
+# README.md — Central Hub
 
-Personal multi-repository control center.
+Personal multi-repository control center. Coordinates connected repositories through
+a config-driven registry and adapters. Connected repos remain the source of truth
+for their own logic.
 
-Central Hub registers connected repositories, checks their health, and (in later phases) routes jobs, monitors progress, and keeps audit history. Connected repositories remain the source of truth for their own business logic.
+**Current status: Phases 1–6 MVP** — registry, health, DHIS2 read-only tools,
+job engine (SQLite), safe command/API capabilities, uploads/results, owner role.
 
-**Current status: Phase 1** — skeleton, repository registry, health checks, basic UI.
+## What is included
 
-## What Phase 1 includes
+- Repository registry (`config/repositories.yaml`) + health checks
+- DHIS2 GET client, discovery/catalog, UID mapping explorer, preview metadata builder
+- Job engine: submit / list / poll / cancel / pause / resume
+- Allowlisted command templates + GET-only API capabilities
+- Uploads under `data/uploads/{job_id}/`, results under `data/results/{job_id}/`
+- Confirm gates for non-dry-run; optional `CENTRAL_HUB_OWNER_TOKEN`
+- Audit JSONL + SQLite job history
 
-- Flask app entry (`app.py`)
-- Config-driven repository registry (`config/repositories.yaml`)
-- Registry loader and typed models (`hub/registry/`)
-- API + command adapters with health probes only (`hub/adapters/`)
-- UI pages: Dashboard, Repositories, Health
-- Demo/sample repositories only (safe, fake connections)
+## What is *not* included
 
-## What Phase 1 does *not* include
+- DHIS2 create/update/delete/import (writes stay off)
+- PMNP / Live Processing domain logic (convergence, immunization, etc.)
+- Free-form shell execution
+- Multi-user auth beyond a single local owner token
 
-- Job submission or execution
-- File uploads / result collection
-- Audit log persistence
-- Live PMNP, DHIS2, or other production systems
-- Free-form terminal command execution from the UI
-
-## Setup
+## Quick start
 
 ```powershell
-cd C:\PMNP\personal\central-hub
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 copy .env.example .env
-```
-
-## Run locally
-
-```powershell
 python app.py
 ```
 
-Then open [http://127.0.0.1:8080](http://127.0.0.1:8080).
+Open `http://127.0.0.1:8080`.
 
-Useful endpoints:
+Optional sample API for healthy `sample-api` checks:
 
-| Path | Purpose |
-|------|---------|
-| `/` | Dashboard |
-| `/repositories` | Registry list |
-| `/health` | Per-repo health checks |
-| `/api/healthz` | Hub process health JSON |
-| `/api/repositories` | Registry JSON |
-| `/api/health` | All repo health JSON |
+```powershell
+python samples/sample-api/app.py
+```
 
-## Configure repositories
+## Tests
 
-Edit `config/repositories.yaml`. Relative `local_path` values resolve from the hub root.
+```powershell
+python -m unittest discover -s tests -v
+```
 
-Sample entries shipped with Phase 1:
+## Docs for agents
 
-| ID | Type | Expected health |
-|----|------|-----------------|
-| `sample-cli` | command | Healthy if `samples/sample-cli` exists and `python` is on PATH |
-| `sample-api` | api | Unhealthy unless something listens on `http://127.0.0.1:9099/health` |
-| `sample-missing-path` | command | Unhealthy (path intentionally missing) |
-| `sample-disabled` | api | Shown as disabled; still listed |
-
-Command health probes are allowlisted. Phase 1 only permits the harmless `python -c "print('ok')"` style check (or path/executable existence checks).
-
-## Manual test checklist
-
-1. Start the app and open the Dashboard — summary counts should show 4 registered repos.
-2. Open **Repositories** — confirm sample entries and enabled/disabled pills.
-3. Open a repository detail page — connection + health config should render.
-4. Open **Health**:
-   - `sample-cli` should be healthy
-   - `sample-api` should be unreachable/unhealthy (unless you start a fake API)
-   - `sample-missing-path` should be unhealthy
-5. Hit `/api/healthz` — `ok: true` and `registry_loaded: true`.
-6. Hit `/api/repositories` — JSON list matches the YAML registry.
-7. Confirm no job-run UI or command execution beyond health probes.
-
-## Safety
-
-- Secrets belong in `.env` (never commit them). Use `.env.example` as the template.
-- Repository connections stay config-driven.
-- Keep demo repos fake until a later phase intentionally wires a real personal repo.
-- Do not copy PMNP domain logic into this project.
-
-## Architecture note
-
-`CENTRAL_HUB_REFERENCE.md` is an architecture guide adapted from Live Processing infrastructure patterns. It is not a license to recreate convergence, immunization, DHIS2, scorecard, DDS, tetanus, or indicator logic here.
-
-## Next: Phase 2 plan
-
-Recommended next slice:
-
-1. SQLite schema for jobs + audit events under `db/` / `data/`
-2. Job create / list / get APIs (queued only — no worker yet, or a stub worker)
-3. Dashboard job history panel
-4. Per-job log file path scaffolding
-5. Audit actions: `SUBMIT_JOB`, `VIEW_LOGS`, `HEALTH_CHECK`
-6. Still no real command/API job execution (Phase 3/4)
+Start at [AI_START_HERE.md](AI_START_HERE.md) → [AGENTS.md](AGENTS.md).

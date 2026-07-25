@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from hub.adapters.api_adapter import ApiAdapter
@@ -10,9 +12,19 @@ from hub.registry.models import Registry, Repository
 
 
 class AdapterManager:
-    def __init__(self, registry: Registry, default_timeout: float = 5.0) -> None:
+    def __init__(
+        self,
+        registry: Registry,
+        default_timeout: float = 5.0,
+        *,
+        cache_ttl_seconds: float = 30.0,
+        max_workers: int = 6,
+    ) -> None:
         self.registry = registry
         self.default_timeout = default_timeout
+        self.cache_ttl_seconds = max(0.0, float(cache_ttl_seconds))
+        self.max_workers = max(1, int(max_workers))
+        self._cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 
     def get_adapter(self, repository: Repository) -> ApiAdapter | CommandAdapter:
         if repository.type == "api":
@@ -45,10 +57,39 @@ class AdapterManager:
             **result,
         }
 
-    def check_all(self, *, enabled_only: bool = False) -> list[dict[str, Any]]:
+    def check_all(
+        self,
+        *,
+        enabled_only: bool = False,
+        force: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Probe all repositories (parallel). Cached briefly unless force=True."""
+        cache_key = "enabled" if enabled_only else "all"
+        now = time.monotonic()
+        if not force and self.cache_ttl_seconds > 0:
+            cached = self._cache.get(cache_key)
+            if cached is not None:
+                expires_at, results = cached
+                if now < expires_at:
+                    return [dict(item) for item in results]
+
         repos = (
             self.registry.enabled_repositories()
             if enabled_only
             else self.registry.repositories
         )
-        return [self.check_repository(repo) for repo in repos]
+        if not repos:
+            results: list[dict[str, Any]] = []
+        elif len(repos) == 1:
+            results = [self.check_repository(repos[0])]
+        else:
+            workers = min(self.max_workers, len(repos))
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                results = list(pool.map(self.check_repository, repos))
+
+        if self.cache_ttl_seconds > 0:
+            self._cache[cache_key] = (now + self.cache_ttl_seconds, results)
+        return [dict(item) for item in results]
+
+    def invalidate_health_cache(self) -> None:
+        self._cache.clear()

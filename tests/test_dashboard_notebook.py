@@ -1,0 +1,495 @@
+"""Dashboard Notebook Work Queue helpers and route smoke tests."""
+
+from __future__ import annotations
+
+import tempfile
+import unittest
+from datetime import date
+from pathlib import Path
+
+from hub.notebook.dashboard import (
+    build_repo_summary,
+    classify_open_note,
+    dashboard_work_queue,
+    filter_queue,
+    open_task_stats,
+    open_tasks_severity,
+)
+from hub.notebook.db import NotebookDatabase
+from hub.notebook.store import NotebookStore
+
+
+class WorkQueueHelperTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.today = date(2026, 7, 25)
+        self.tmp = tempfile.TemporaryDirectory()
+        self.store = NotebookStore(NotebookDatabase(Path(self.tmp.name) / "notebook.db"))
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def _seed(self) -> None:
+        specs = [
+            ("Pinned overdue", "ongoing", "2026-07-20", True, True),
+            ("Due today", "pending", "2026-07-25", False, False),
+            ("Upcoming week", "inbox", "2026-07-28", False, False),
+            ("Blocked item", "blocked", "2026-08-01", False, True),
+            ("Done excluded", "done", "2026-07-20", True, False),
+            ("Archived excluded", "archived", "2026-07-20", True, False),
+        ]
+        for title, status, due, pinned, with_checks in specs:
+            note = self.store.create(title=title)
+            checklist = (
+                [{"text": "A", "done": True}, {"text": "B", "done": False}, {"text": "C", "done": False}]
+                if with_checks
+                else []
+            )
+            self.store.save(
+                note["id"],
+                title=title,
+                body_md="",
+                note_type="task",
+                status=status,
+                priority="high",
+                due_date=due,
+                tags="",
+                repositories=[
+                    {
+                        "repository_id": "sample-cli",
+                        "repository_label": "Sample CLI",
+                        "role": "primary",
+                    }
+                ],
+                checklist=checklist,
+                links=[],
+                pinned=pinned,
+            )
+
+    def test_migration_includes_pinned(self) -> None:
+        applied = self.store.db.applied_migrations()
+        self.assertIn("001_initial_notebook", applied)
+        self.assertIn("002_note_pinned", applied)
+
+    def test_list_open_excludes_done_and_archived(self) -> None:
+        self._seed()
+        open_notes = self.store.list_open()
+        titles = {n["title"] for n in open_notes}
+        self.assertEqual(
+            titles,
+            {"Pinned overdue", "Due today", "Upcoming week", "Blocked item"},
+        )
+        pinned = next(n for n in open_notes if n["title"] == "Pinned overdue")
+        self.assertTrue(pinned["pinned"])
+        self.assertEqual(pinned["checklist_progress"], "1/3")
+
+    def test_open_task_stats_and_tabs(self) -> None:
+        self._seed()
+        notes = self.store.list_open()
+        stats = open_task_stats(notes, today=self.today)
+        self.assertEqual(stats["open"], 4)
+        self.assertEqual(stats["overdue"], 1)
+        self.assertEqual(stats["due_today"], 1)
+        self.assertEqual(stats["upcoming"], 2)
+        self.assertEqual(stats["blocked"], 1)
+        self.assertEqual(stats["pinned"], 1)
+        # due_this_week: today <= due <= today+7 → Due today, Jul 28, Aug 1 blocked
+        self.assertEqual(stats["due_this_week"], 3)
+
+        queue = dashboard_work_queue(self.store, tab="open", limit=5, today=self.today)
+        self.assertEqual(queue["tabs"]["open"], 4)
+        self.assertEqual(len(queue["notes"]), 4)
+        titles = {n["title"] for n in queue["notes"]}
+        self.assertIn("Pinned overdue", titles)
+        self.assertIn("Due today", titles)
+
+        pinned_q = dashboard_work_queue(self.store, tab="pinned", limit=5, today=self.today)
+        self.assertEqual(pinned_q["tabs"]["pinned"], 1)
+        self.assertEqual(len(pinned_q["notes"]), 1)
+        self.assertEqual(pinned_q["notes"][0]["title"], "Pinned overdue")
+        self.assertEqual(pinned_q["notes"][0]["due_meta"]["kind"], "overdue")
+
+        overdue = filter_queue(notes, "overdue", today=self.today)
+        self.assertEqual([n["title"] for n in overdue], ["Pinned overdue"])
+
+        due_today = filter_queue(notes, "due_today", today=self.today)
+        self.assertEqual([n["title"] for n in due_today], ["Due today"])
+
+        blocked = filter_queue(notes, "blocked", today=self.today)
+        self.assertEqual([n["title"] for n in blocked], ["Blocked item"])
+
+    def test_classify_due_labels(self) -> None:
+        item = classify_open_note(
+            {"due_date": "2026-07-25", "status": "pending", "pinned": False, "priority": "medium", "note_type": "task"},
+            today=self.today,
+        )
+        self.assertEqual(item["due_meta"]["label"], "Today")
+        overdue = classify_open_note(
+            {"due_date": "2026-07-01", "status": "ongoing", "pinned": True, "priority": "high", "note_type": "bug"},
+            today=self.today,
+        )
+        self.assertTrue(overdue["flags"]["overdue"])
+        self.assertEqual(overdue["due_meta"]["label"], "Overdue")
+
+    def test_open_tasks_severity_levels(self) -> None:
+        self.assertEqual(open_tasks_severity({"open": 0, "overdue": 0, "blocked": 0}), "neutral")
+        self.assertEqual(
+            open_tasks_severity({"open": 3, "overdue": 0, "blocked": 0, "due_this_week": 1}),
+            "attention",
+        )
+        self.assertEqual(
+            open_tasks_severity({"open": 2, "overdue": 1, "blocked": 0}),
+            "alert",
+        )
+        self.assertEqual(
+            open_tasks_severity({"open": 1, "overdue": 0, "blocked": 1}),
+            "alert",
+        )
+
+    def test_progress_with_and_without_checklist(self) -> None:
+        with_items = self.store.create(title="Has checklist")
+        self.store.save(
+            with_items["id"],
+            title="Has checklist",
+            body_md="",
+            note_type="task",
+            status="ongoing",
+            priority="medium",
+            due_date=None,
+            tags="",
+            repositories=[],
+            checklist=[{"text": "A", "done": True}, {"text": "B", "done": False}],
+            links=[],
+            pinned=False,
+        )
+        without = self.store.create(title="No checklist")
+        self.store.save(
+            without["id"],
+            title="No checklist",
+            body_md="",
+            note_type="note",
+            status="inbox",
+            priority="low",
+            due_date=None,
+            tags="",
+            repositories=[],
+            checklist=[],
+            links=[],
+            pinned=False,
+        )
+
+        queue = dashboard_work_queue(self.store, tab="open", limit=10, today=self.today)
+        by_title = {n["title"]: n for n in queue["notes"]}
+        self.assertEqual(by_title["Has checklist"]["checklist_total"], 2)
+        self.assertEqual(by_title["Has checklist"]["checklist_done"], 1)
+        self.assertEqual(by_title["Has checklist"]["checklist_progress"], "1/2")
+        self.assertEqual(by_title["No checklist"]["checklist_total"], 0)
+        self.assertEqual(by_title["No checklist"]["checklist_done"], 0)
+
+    def test_repo_summary_primary_plus_n_and_unavailable(self) -> None:
+        note = {
+            "repositories": [
+                {
+                    "repository_id": "gone-repo",
+                    "repository_label": "Removed Repo",
+                    "role": "related",
+                    "sort_order": 1,
+                },
+                {
+                    "repository_id": "live-processing",
+                    "repository_label": "PMNP Live Processing",
+                    "role": "primary",
+                    "sort_order": 0,
+                },
+                {
+                    "repository_id": "data-script",
+                    "repository_label": "Data-Script",
+                    "role": "depends-on",
+                    "sort_order": 2,
+                },
+            ]
+        }
+        summary = build_repo_summary(note, registered_ids={"live-processing", "data-script"})
+        self.assertEqual(summary["repo_primary_name"], "PMNP Live Processing")
+        self.assertEqual(summary["repo_extra_count"], 2)
+        self.assertEqual(summary["repo_cell"], "PMNP Live Processing +2")
+        self.assertFalse(summary["repo_primary_unavailable"])
+        self.assertIn("Primary: PMNP Live Processing", summary["repo_tooltip"])
+        self.assertIn("Related: Removed Repo (Unavailable)", summary["repo_tooltip"])
+        self.assertIn("Depends on: Data-Script", summary["repo_tooltip"])
+
+        missing = build_repo_summary(
+            {
+                "repositories": [
+                    {
+                        "repository_id": "gone-repo",
+                        "repository_label": "Removed Repo",
+                        "role": "primary",
+                        "sort_order": 0,
+                    }
+                ]
+            },
+            registered_ids={"live-processing"},
+        )
+        self.assertEqual(missing["repo_cell"], "Removed Repo (Unavailable)")
+        self.assertTrue(missing["repo_primary_unavailable"])
+
+        # Persisted associations still drive the queue when registry ids are passed through.
+        self._seed()
+        queue = dashboard_work_queue(
+            self.store,
+            tab="open",
+            limit=5,
+            today=self.today,
+            registered_ids={"sample-cli"},
+        )
+        for item in queue["notes"]:
+            self.assertEqual(item["repo_cell"], "Sample CLI")
+            self.assertIn("Primary: Sample CLI", item["repo_tooltip"])
+
+
+class DashboardRouteTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        import os
+        import importlib
+
+        cls._tmp = tempfile.TemporaryDirectory()
+        root = Path(cls._tmp.name)
+        os.environ["CENTRAL_HUB_AUDIT_LOG"] = str(root / "audit.jsonl")
+        os.environ["CENTRAL_HUB_DATABASE"] = str(root / "hub.db")
+        for key in ("DHIS2_BASE_URL", "DHIS2_USERNAME", "DHIS2_PASSWORD"):
+            os.environ.pop(key, None)
+
+        import hub.settings as settings_mod
+        import app as app_mod
+
+        importlib.reload(settings_mod)
+        importlib.reload(app_mod)
+        from app import create_app
+
+        cls.app = create_app()
+        cls.app.config["NOTEBOOK"] = NotebookStore(NotebookDatabase(root / "notebook.db"))
+        cls.client = cls.app.test_client()
+        cls.store = cls.app.config["NOTEBOOK"]
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._tmp.cleanup()
+
+    def test_dashboard_shows_work_queue_not_recent_jobs(self) -> None:
+        note = self.store.create(title="Dash queue note")
+        self.store.save(
+            note["id"],
+            title="Dash queue note",
+            body_md="",
+            note_type="task",
+            status="ongoing",
+            priority="high",
+            due_date="2026-07-20",
+            tags="",
+            repositories=[
+                {
+                    "repository_id": "sample-cli",
+                    "repository_label": "Sample CLI",
+                    "role": "primary",
+                }
+            ],
+            checklist=[{"text": "One", "done": True}, {"text": "Two", "done": False}],
+            links=[],
+            pinned=True,
+        )
+
+        r = self.client.get("/")
+        self.assertEqual(r.status_code, 200)
+        html = r.get_data(as_text=True)
+        self.assertIn("Notebook Work Queue", html)
+        self.assertIn("Open Tasks", html)
+        self.assertIn("Dash queue note", html)
+        self.assertIn("stat-card-tasks", html)
+        self.assertIn("severity-", html)
+        self.assertIn('href="/notebook?status=open"', html)
+        self.assertIn("stat-badge", html)
+        self.assertIn("open", html.lower())
+        self.assertIn("overdue", html.lower())
+        self.assertIn("due this week", html.lower())
+        self.assertIn("blocked", html.lower())
+        self.assertIn("Dash queue note", html)
+        self.assertIn("Sample CLI", html)
+        self.assertIn(">Repository<", html)
+        self.assertIn('class="col-repo"', html)
+        self.assertIn("1/2", html)
+        self.assertIn("Open (", html)
+        # Empty checklist notes render an em dash, not 0/0, and omit the bar.
+        empty = self.store.create(title="Empty progress note")
+        self.store.save(
+            empty["id"],
+            title="Empty progress note",
+            body_md="",
+            note_type="note",
+            status="inbox",
+            priority="low",
+            due_date=None,
+            tags="",
+            repositories=[],
+            checklist=[],
+            links=[],
+            pinned=True,
+        )
+        html_empty = self.client.get("/?queue=open").get_data(as_text=True)
+        self.assertIn("Empty progress note", html_empty)
+        # Progress cell for zero-total uses the empty label class (not a 0/0 bar).
+        self.assertIn('check-progress-label is-empty', html_empty)
+        self.assertNotRegex(
+            html_empty,
+            r"Empty progress note[\s\S]{0,400}?check-progress-bar",
+        )
+        self.assertIn("Pinned (", html)
+        self.assertIn("Overdue (", html)
+        self.assertIn("Due Today (", html)
+        self.assertIn("Upcoming (", html)
+        self.assertIn("Blocked (", html)
+        self.assertIn("+ New Note", html)
+        self.assertNotIn("Recent Jobs", html)
+        self.assertNotIn("Active jobs", html)
+
+        # Unpinned / undated open notes still appear on the default Open tab.
+        undated = self.store.create(title="Undated open note")
+        self.store.save(
+            undated["id"],
+            title="Undated open note",
+            body_md="",
+            note_type="note",
+            status="inbox",
+            priority="medium",
+            due_date=None,
+            tags="",
+            repositories=[],
+            checklist=[],
+            links=[],
+            pinned=False,
+        )
+        r_open = self.client.get("/?queue=open")
+        self.assertIn("Undated open note", r_open.get_data(as_text=True))
+        r_pinned = self.client.get("/?queue=pinned")
+        self.assertNotIn("Undated open note", r_pinned.get_data(as_text=True))
+
+        # Jobs page still exists.
+        jobs = self.client.get("/jobs")
+        self.assertEqual(jobs.status_code, 200)
+        self.assertIn(b"Jobs", jobs.data)
+
+        # Done notes excluded from open tasks card value path.
+        self.store.save(
+            note["id"],
+            title="Dash queue note",
+            body_md="",
+            note_type="task",
+            status="done",
+            priority="high",
+            due_date="2026-07-20",
+            tags="",
+            repositories=[],
+            checklist=[],
+            links=[],
+            pinned=True,
+        )
+        r2 = self.client.get("/?queue=open")
+        html2 = r2.get_data(as_text=True)
+        self.assertNotIn("Dash queue note", html2)
+        self.assertIn("Undated open note", html2)
+
+    def test_recent_activity_scroll_region(self) -> None:
+        """Recent Activity keeps header fixed and scrolls the list body on desktop."""
+        r = self.client.get("/")
+        self.assertEqual(r.status_code, 200)
+        html = r.get_data(as_text=True)
+        self.assertIn("Recent Activity", html)
+        self.assertIn('class="panel panel-activity"', html)
+        self.assertIn('class="activity-scroll"', html)
+        self.assertIn('href="/audit"', html)
+        # Header + View all stay outside the scroll region.
+        header_idx = html.find("Recent Activity")
+        scroll_idx = html.find('class="activity-scroll"')
+        view_all_idx = html.find("View all", header_idx)
+        self.assertGreater(scroll_idx, 0)
+        self.assertGreater(view_all_idx, 0)
+        self.assertLess(view_all_idx, scroll_idx)
+
+        css = (Path(__file__).resolve().parents[1] / "static" / "css" / "style.css").read_text(
+            encoding="utf-8",
+            errors="replace",
+        )
+        self.assertIn(".panel-activity .activity-scroll", css)
+        self.assertIn("overflow-y: auto", css)
+        self.assertIn(".dash-grid > .stack > .panel:last-child", css)
+        # Small screens restore normal page scrolling.
+        self.assertIn("max-width: 1180px", css)
+        self.assertRegex(
+            css,
+            r"@media \(max-width: 1180px\)[\s\S]*?\.panel-activity \.activity-scroll\s*\{[\s\S]*?overflow:\s*visible",
+        )
+
+    def test_task_row_status_accent_only(self) -> None:
+        """Dashboard + Notebook task rows use left status accents, not full-row tints."""
+        note = self.store.create(title="Accent row note")
+        self.store.save(
+            note["id"],
+            title="Accent row note",
+            body_md="",
+            note_type="task",
+            status="pending",
+            priority="medium",
+            due_date="2026-07-26",
+            tags="",
+            repositories=[],
+            checklist=[],
+            links=[],
+            pinned=False,
+        )
+
+        dash = self.client.get("/?queue=open").get_data(as_text=True)
+        self.assertIn('class="status-pending"', dash)
+        self.assertIn("badge-status-pending", dash)
+        self.assertIn("Accent row note", dash)
+
+        nb = self.client.get(f"/notebook?note={note['id']}").get_data(as_text=True)
+        self.assertIn("nb-note-row status-pending", nb)
+        self.assertIn("is-active", nb)
+        self.assertIn("badge-status-pending", nb)
+
+        css = (Path(__file__).resolve().parents[1] / "static" / "css" / "style.css").read_text(
+            encoding="utf-8",
+            errors="replace",
+        )
+        # Left accents by status (Notebook border + Dashboard inset line).
+        self.assertIn(".nb-note-row.status-pending { border-left-color: #f59e0b; }", css)
+        self.assertIn(".nb-note-row.status-ongoing { border-left-color: #8b5cf6; }", css)
+        self.assertIn(".nb-note-row.status-blocked { border-left-color: #ef4444; }", css)
+        self.assertIn(".nb-note-row.status-done { border-left-color: #4ade80; }", css)
+        self.assertIn("border-left-color: #64748b;", css)
+        self.assertIn("inset 3px 0 0 #f59e0b", css)
+        self.assertIn("inset 3px 0 0 #8b5cf6", css)
+        self.assertIn("inset 3px 0 0 #ef4444", css)
+        self.assertIn("inset 3px 0 0 #4ade80", css)
+        # No full-row status background tints.
+        self.assertNotRegex(
+            css,
+            r"\.nb-note-row\.status-\w+\s*\{[^}]*background:\s*color-mix",
+        )
+        self.assertNotRegex(
+            css,
+            r"queue-table tbody tr\.status-\w+ td\s*\{[^}]*background:\s*color-mix",
+        )
+        # Selected + keyboard focus remain defined.
+        self.assertIn(".nb-note-row.is-active", css)
+        self.assertIn(".nb-note-row:focus-visible", css)
+        self.assertIn("table.data tbody tr:focus-within", css)
+        # Status badges remain colored independently.
+        self.assertIn(".badge-status-pending", css)
+        self.assertIn(".badge-status-ongoing", css)
+        self.assertIn(".badge-status-blocked", css)
+        self.assertIn(".badge-status-done", css)
+
+
+if __name__ == "__main__":
+    unittest.main()

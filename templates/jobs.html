@@ -5,28 +5,107 @@
 <section class="page-header">
   <div>
     <h1>Jobs</h1>
-    <p>Unified job history and progress monitoring.</p>
+    <p>Submit allowlisted repository capabilities. Dry-run by default; confirm required for apply.</p>
   </div>
   <div class="page-meta">
-    <span class="badge badge-phase">Coming in next phase</span>
+    <span>{{ jobs|length }} shown</span>
+    <span class="badge badge-phase">Phases 2–6</span>
   </div>
 </section>
 
-<section class="panel">
-  <div class="panel-body coming-box">
-    <h2>Jobs engine not active yet</h2>
-    <p>
-      Job submission, workers, logs, and history arrive in Phase 2.
-      The dashboard shows demo rows only — no real command execution runs from this page.
-    </p>
-    <div class="btn-row">
-      {{ status_badge('running') }}
-      {{ status_badge('completed') }}
-      {{ status_badge('failed') }}
-    </div>
-    <div class="btn-row" style="margin-top:1rem">
-      <a class="btn btn-primary" href="{{ url_for('dashboard') }}">Back to Dashboard</a>
-    </div>
+{% if flash_error %}<div class="banner banner-error">{{ flash_error }}</div>{% endif %}
+{% if flash_notice %}<div class="banner" style="background:rgba(59,130,246,0.12);border-color:rgba(59,130,246,0.35);color:#93c5fd">{{ flash_notice }}</div>{% endif %}
+
+<section class="dash-grid">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-header"><h2>Submit job</h2></div>
+      <div class="panel-body">
+        {% if actor != 'owner' %}
+          <div class="warning-banner">
+            <span class="shield">!</span>
+            <div>Owner token required for job mutations. Set <code>CENTRAL_HUB_OWNER_TOKEN</code> and sign in under Settings.</div>
+          </div>
+        {% endif %}
+        <form method="post" action="{{ url_for('jobs') }}" enctype="multipart/form-data" class="builder-form">
+          <input type="hidden" name="action" value="submit">
+          <label>
+            <span>Repository</span>
+            <select name="repository_id" id="job-repo" required>
+              {% for repo in repositories %}
+                <option value="{{ repo.id }}">{{ repo.name }} ({{ repo.type }})</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>
+            <span>Capability</span>
+            <select name="capability_id" id="job-cap" required>
+              {% for repo in repositories %}
+                {% for cap in repo.capabilities %}
+                  <option value="{{ repo.id }}::{{ cap.id }}" data-repo="{{ repo.id }}" data-dry="{{ 1 if cap.dry_run_default else 0 }}">
+                    {{ repo.id }} / {{ cap.label }}
+                  </option>
+                {% endfor %}
+              {% endfor %}
+            </select>
+          </label>
+          <label style="display:flex;gap:0.5rem;align-items:center">
+            <input type="checkbox" name="dry_run" value="1" id="job-dry" checked>
+            <span>Dry-run (default)</span>
+          </label>
+          <label style="display:flex;gap:0.5rem;align-items:center">
+            <input type="checkbox" name="confirm" value="1">
+            <span>I confirm non-dry-run execution (required when apply is requested)</span>
+          </label>
+          <label>
+            <span>Optional input file (.txt/.csv/.json)</span>
+            <input type="file" name="input_file" accept=".txt,.csv,.json,.log,.md">
+          </label>
+          <button class="btn btn-primary" type="submit" {% if actor != 'owner' %}disabled{% endif %}>Submit job</button>
+        </form>
+        <p class="muted" style="margin-top:0.75rem">
+          Max concurrent workers: {{ max_concurrent }}.
+          Require explicit apply: {{ 'yes' if require_explicit_apply else 'no' }}.
+          Active jobs: {{ active_count }}.
+        </p>
+      </div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-header"><h2>Job history</h2></div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead>
+            <tr>
+              <th>Job</th>
+              <th>Repo / capability</th>
+              <th>Status</th>
+              <th>Mode</th>
+              <th>%</th>
+              <th>Updated</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for job in jobs %}
+            <tr>
+              <td><code>{{ job.id }}</code></td>
+              <td>{{ job.repository_id }} / {{ job.capability_id }}</td>
+              <td>{{ status_badge(job.status) }}</td>
+              <td class="muted">{% if job.dry_run %}dry-run{% else %}apply{% endif %}</td>
+              <td>{{ '%.0f'|format(job.percent or 0) }}%</td>
+              <td class="muted-2">{{ (job.updated_at or '')[:19].replace('T',' ') }}</td>
+              <td><a href="{{ url_for('job_detail', job_id=job.id) }}">Open</a></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="muted">No jobs yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
   </div>
 </section>
 {% endblock %}

@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_badge %}
+{% block title %}DHIS2 Overview · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <h1>DHIS2 Overview</h1>
+    <p>Read-only connection, discovery, and metadata capability catalog.</p>
+  </div>
+  <div class="page-meta">
+    {% if status and status.ok %}{{ status_badge('online') }}{% elif not dhis2_instance %}{{ status_badge('disabled') }}{% elif not config.configured %}{{ status_badge('disabled') }}{% else %}{{ status_badge('offline') }}{% endif %}
+    {% if discovery_ready %}
+      <a class="btn btn-sm btn-primary" href="{{ url_for('dhis2_discover') }}">Run discovery</a>
+    {% else %}
+      <button class="btn btn-sm" type="button" disabled title="Select and connect a DHIS2 instance first">Run discovery</button>
+    {% endif %}
+  </div>
+</section>
+
+{% if error %}<div class="banner banner-error">{{ error }}</div>{% endif %}
+{% if notice %}<div class="banner" style="background:rgba(59,130,246,0.12);border-color:rgba(59,130,246,0.35);color:#93c5fd">{{ notice }}</div>{% endif %}
+{% if live_warning %}
+<div class="banner banner-error">
+  <strong>Live instance selected.</strong>
+  Central Hub remains read-only (<code>ALLOW_DHIS2_WRITES=false</code>). Prefer Stage for exploration when possible.
+</div>
+{% endif %}
+
+<section class="panel" style="margin-bottom:1rem">
+  <div class="panel-header"><h2>DHIS2 instance</h2></div>
+  <div class="panel-body">
+    <div class="summary-grid" style="grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:0.85rem">
+      <article class="stat-card card">
+        <div class="stat-label">Central Hub environment</div>
+        <div class="stat-value" style="font-size:1.1rem"><code>{{ hub_environment }}</code></div>
+        <div class="stat-sub">App profile (<code>CENTRAL_HUB_ENV</code>) — not the DHIS2 target</div>
+      </article>
+      <article class="stat-card card">
+        <div class="stat-label">Active DHIS2 instance</div>
+        <div class="stat-value" style="font-size:1.1rem">
+          {% if dhis2_instance %}<code>{{ dhis2_instance }}</code>{% else %}— not selected —{% endif %}
+        </div>
+        <div class="stat-sub">Uses <code>STAGE_DHIS2_*</code> / <code>LIVE_DHIS2_*</code> credentials</div>
+      </article>
+    </div>
+
+    <form method="post" action="{{ url_for('dhis2') }}" class="nb-filters" style="grid-template-columns:1fr auto;align-items:end">
+      <input type="hidden" name="action" value="select_instance">
+      <label class="nb-field" style="margin:0">
+        <span>Select configured profile</span>
+        <select name="instance" required>
+          <option value="">Choose Stage or Live…</option>
+          {% for profile in dhis2_profiles %}
+            <option value="{{ profile.id }}"
+              {% if dhis2_instance == profile.id %}selected{% endif %}
+              {% if not profile.available %}disabled{% endif %}>
+              {{ profile.label }}{% if profile.available %} (configured){% else %} (missing: {{ profile.missing_fields|join(', ') }}){% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </label>
+      <button class="btn btn-primary" type="submit">Switch &amp; check connection</button>
+    </form>
+    <p class="muted" style="margin:0.65rem 0 0">
+      Selection is stored locally under <code>data/dhis2/active_instance.json</code> (not in the browser).
+      Defaults from <code>DHIS2_ENVIRONMENT</code> when set. Credentials are never shown.
+    </p>
+  </div>
+</section>
+
+<section class="summary-grid" style="grid-template-columns:repeat(4,minmax(0,1fr))">
+  <article class="stat-card card">
+    <div class="stat-label">Version</div>
+    <div class="stat-value" style="font-size:1.2rem">{{ catalog.dhis2_version if catalog else (status.system.version if status and status.system else '—') }}</div>
+    <div class="stat-sub">Connected instance</div>
+  </article>
+  <article class="stat-card card">
+    <div class="stat-label">Types discovered</div>
+    <div class="stat-value">{{ catalog.type_count if catalog else 0 }}</div>
+    <div class="stat-sub">From /api/schemas.json</div>
+  </article>
+  <article class="stat-card card">
+    <div class="stat-label">Authorities</div>
+    <div class="stat-value">{{ catalog.authority_count if catalog else 0 }}</div>
+    <div class="stat-sub">From /api/me/authorization</div>
+  </article>
+  <article class="stat-card card">
+    <div class="stat-label">Last discovery</div>
+    <div class="stat-value" style="font-size:1rem">{{ catalog.discovered_at.replace('T',' ')[:16] if catalog and catalog.discovered_at else 'Never' }}</div>
+    <div class="stat-sub">Local catalog</div>
+  </article>
+</section>
+
+<section class="dash-grid">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-header"><h2>DHIS2 areas</h2></div>
+      <div class="panel-body">
+        <div class="tools-grid">
+          <a class="tool-btn" href="{{ url_for('dhis2_instance') }}"><span class="ico">◎</span><span>Instance Details</span></a>
+          <a class="tool-btn" href="{{ url_for('dhis2_catalog') }}"><span class="ico">▦</span><span>Metadata Type Catalog</span></a>
+          <a class="tool-btn" href="{{ url_for('dhis2_authorities') }}"><span class="ico">☰</span><span>Permissions / Authorities</span></a>
+          <a class="tool-btn" href="{{ url_for('dhis2_lookup') }}"><span class="ico">⌕</span><span>Metadata Lookup</span></a>
+          <a class="tool-btn" href="{{ url_for('dhis2_uid_explorer') }}"><span class="ico">⇄</span><span>UID &amp; Mapping Explorer</span></a>
+          <a class="tool-btn" href="{{ url_for('dhis2_uid_index_manage') }}"><span class="ico">⧉</span><span>UID Index Management</span></a>
+          <a class="tool-btn" href="{{ url_for('dhis2_metadata_builder') }}"><span class="ico">✎</span><span>Metadata Builder (preview)</span></a>
+          {% if discovery_ready %}
+            <a class="tool-btn" href="{{ url_for('dhis2_discover') }}"><span class="ico">↻</span><span>Run Discovery</span></a>
+          {% else %}
+            <span class="tool-btn is-disabled" title="Select and connect a DHIS2 instance first"><span class="ico">↻</span><span>Run Discovery</span></span>
+          {% endif %}
+        </div>
+        <div class="warning-banner" style="margin-top:1rem">
+          <span class="shield">🛡</span>
+          <div>
+            <strong>Read-only.</strong>
+            Mode <code>{{ config.mode or 'readonly' }}</code>.
+            Discovery fetches schemas and small samples only. No create/update/delete/import.
+            GET client uses session reuse, probe timeouts, and capped pagination
+            (max {{ config.max_pages or 10 }} pages).
+            <code>ALLOW_DHIS2_WRITES=false</code>.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header"><h2>Builder readiness (from last catalog)</h2></div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Mode</th><th>Count</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>specialized_builder</code></td>
+              <td>{{ (catalog.builder_modes.specialized_builder if catalog and catalog.builder_modes else 0) or 0 }}</td>
+              <td class="muted">Has a dedicated preview builder in Central Hub</td>
+            </tr>
+            <tr>
+              <td><code>generic_schema_builder</code></td>
+              <td>{{ (catalog.builder_modes.generic_schema_builder if catalog and catalog.builder_modes else 0) or 0 }}</td>
+              <td class="muted">Uses the unified schema-driven preview builder</td>
+            </tr>
+            <tr>
+              <td><code>read_only_explorer</code></td>
+              <td>{{ (catalog.builder_modes.read_only_explorer if catalog and catalog.builder_modes else 0) or 0 }}</td>
+              <td class="muted">Browse/inspect only</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <aside class="stack">
+    <section class="panel panel-body">
+      <h2 style="margin:0 0 0.75rem;font-size:14px">Connection</h2>
+      <dl class="detail-list">
+        <div><dt>DHIS2 instance</dt><dd><code>{{ dhis2_instance or '—' }}</code></dd></div>
+        <div><dt>Base URL</dt><dd><code>{{ config.base_url or '—' }}</code></dd></div>
+        <div><dt>Username</dt><dd><code>{% if config.username_set %}••••••••{% else %}—{% endif %}</code></dd></div>
+        <div><dt>Password</dt><dd><code>{% if config.password_set %}••••••••{% else %}—{% endif %}</code></dd></div>
+        {% for field, field_status in (config.credential_fields or {}).items() %}
+          <div><dt><code>{{ field }}</code></dt><dd>{{ field_status }}</dd></div>
+        {% endfor %}
+        {% for item in config.configuration_errors or [] %}
+          <div><dt>Configuration</dt><dd>{{ item }}</dd></div>
+        {% endfor %}
+        <div><dt>Write mode</dt><dd>{{ status_badge('disabled') }}</dd></div>
+      </dl>
+    </section>
+    {% if catalog and catalog.categories %}
+    <section class="panel panel-body">
+      <h2 style="margin:0 0 0.75rem;font-size:14px">Categories</h2>
+      <ul class="plain-checks">
+        {% for name, count in catalog.categories.items() %}
+          <li><a href="{{ url_for('dhis2_catalog', category=name) }}">{{ name }}</a>: {{ count }}</li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+  </aside>
+</section>
+{% endblock %}

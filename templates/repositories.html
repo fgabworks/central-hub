@@ -5,18 +5,22 @@
 <section class="page-header">
   <div>
     <h1>Repositories</h1>
-    <p>Connected repositories from <code>config/repositories.yaml</code>.</p>
+    <p>Connected repositories from <code>config/repositories.yaml</code>. Hub never auto-clones or pulls.</p>
   </div>
   <div class="page-meta">
-    <span>{{ repositories|length }} registered</span>
+    <span>{{ rows|length }} registered</span>
     <a class="btn btn-sm" href="{{ url_for('health') }}">Check health</a>
+    <a class="btn btn-sm btn-primary" href="{{ url_for('repository_new') }}">+ Add Repository</a>
   </div>
 </section>
+
+{% if flash %}<div class="banner" style="background:var(--success-soft);border-color:rgba(34,197,94,.35)">{{ flash }}</div>{% endif %}
+{% if error %}<div class="banner banner-error">{{ error }}</div>{% endif %}
 
 <section class="panel">
   <div class="panel-header">
     <h2>Registry</h2>
-    <span class="quiet">Live config · not mock data</span>
+    <span class="quiet">Live config · Healthy / Unreachable / Not Cloned / Disabled</span>
   </div>
   <div class="table-wrap">
     <table class="data">
@@ -26,35 +30,42 @@
           <th>ID</th>
           <th>Type</th>
           <th>Status</th>
-          <th>Connection</th>
+          <th>Git / Connection</th>
           <th>Capabilities</th>
-          <th>Action</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
-        {% for repo in repositories %}
+        {% for row in rows %}
           <tr>
             <td>
               <div class="cell-title">
                 <span class="cell-ico">▣</span>
-                <span>{{ repo.name }}</span>
+                <span>{{ row.name }}</span>
               </div>
-              <div class="cell-sub">{{ repo.description or '—' }}</div>
+              <div class="cell-sub">{{ row.description or '—' }}</div>
             </td>
-            <td><code>{{ repo.id }}</code></td>
-            <td>{{ type_badge(repo.type) }}</td>
-            <td>
-              {% if repo.enabled %}
-                {{ status_badge('healthy') }}
+            <td><code>{{ row.id }}</code></td>
+            <td>{{ type_badge(row.type) }}</td>
+            <td>{{ status_badge(row.status) }}</td>
+            <td class="mono muted">
+              {% if row.git_url %}<div>{{ row.git_url }}</div>{% endif %}
+              <div>{{ row.connection }}</div>
+            </td>
+            <td class="muted">{{ row.capability_count }}</td>
+            <td class="repo-actions">
+              <a class="btn btn-sm" href="{{ url_for('repository_detail', repo_id=row.id) }}">View</a>
+              <a class="btn btn-sm" href="{{ url_for('repository_edit', repo_id=row.id) }}">Edit</a>
+              {% if row.enabled %}
+                <form method="post" action="{{ url_for('repository_disable', repo_id=row.id) }}" class="inline-form">
+                  <button class="btn btn-sm" type="submit">Disable</button>
+                </form>
               {% else %}
-                {{ status_badge('disabled') }}
+                <form method="post" action="{{ url_for('repository_enable', repo_id=row.id) }}" class="inline-form">
+                  <button class="btn btn-sm btn-primary" type="submit">Enable</button>
+                </form>
               {% endif %}
             </td>
-            <td class="mono muted">
-              {% if repo.type == 'api' %}{{ repo.base_url or '—' }}{% else %}{{ repo.local_path or '—' }}{% endif %}
-            </td>
-            <td class="muted">{{ repo.capabilities|length }}</td>
-            <td><a class="btn btn-sm" href="{{ url_for('repository_detail', repo_id=repo.id) }}">View</a></td>
           </tr>
         {% else %}
           <tr class="empty-row"><td colspan="7">No repositories loaded.</td></tr>

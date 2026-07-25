@@ -12,6 +12,9 @@
   </div>
 </section>
 
+{% if flash_error %}<div class="banner banner-error">{{ flash_error }}</div>{% endif %}
+{% if flash_notice %}<div class="banner" style="background:rgba(59,130,246,0.12);border-color:rgba(59,130,246,0.35);color:#93c5fd">{{ flash_notice }}</div>{% endif %}
+
 <section class="panel panel-body">
   <h2 style="margin:0 0 0.75rem;font-size:14px">Runtime</h2>
   <dl class="detail-list">
@@ -20,9 +23,43 @@
     <div><dt>Version</dt><dd>v{{ hub_version }}</dd></div>
     <div><dt>Host</dt><dd><code>{{ settings_view.host }}:{{ settings_view.port }}</code></dd></div>
     <div><dt>Debug</dt><dd>{{ settings_view.debug }}</dd></div>
+    <div><dt>Actor</dt><dd><code>{{ actor }}</code></dd></div>
     <div><dt>Registry file</dt><dd><code>{{ settings_view.repositories_config }}</code></dd></div>
+    <div><dt>Database</dt><dd><code>{{ settings_view.database_path }}</code></dd></div>
     <div><dt>Request timeout</dt><dd>{{ settings_view.request_timeout_seconds }}s</dd></div>
-    <div><dt>ALLOW_DHIS2_WRITES</dt><dd>{{ status_badge('disabled') }} <span class="muted">always off in this phase</span></dd></div>
+    <div><dt>Audit log</dt><dd><code>{{ settings_view.audit_log_path }}</code></dd></div>
+  </dl>
+</section>
+
+<section class="panel panel-body" style="margin-top:0.85rem">
+  <h2 style="margin:0 0 0.75rem;font-size:14px">Owner role (Phase 6)</h2>
+  {% if settings_view.owner_token_configured %}
+    <p class="muted">Owner token is configured. Sign in to submit/cancel jobs.</p>
+    <form method="post" class="builder-form">
+      <input type="hidden" name="action" value="owner_login">
+      <label><span>Owner token</span><input type="password" name="owner_token" autocomplete="current-password"></label>
+      <button class="btn btn-primary" type="submit">Sign in as owner</button>
+    </form>
+  {% else %}
+    <p class="muted">Open local mode: no <code>CENTRAL_HUB_OWNER_TOKEN</code> set — actor is always <code>owner</code>.</p>
+  {% endif %}
+</section>
+
+<section class="panel panel-body" style="margin-top:0.85rem">
+  <h2 style="margin:0 0 0.75rem;font-size:14px">DHIS2 (read-only)</h2>
+  <dl class="detail-list">
+    <div><dt>Configured</dt><dd>{% if dhis2_config.configured %}yes{% else %}no{% endif %}</dd></div>
+    <div><dt>Enabled</dt><dd>{{ dhis2_config.enabled }}</dd></div>
+    <div><dt>Base URL</dt><dd><code>{{ dhis2_config.base_url or '—' }}</code></dd></div>
+    <div><dt>Username</dt><dd><code>{{ dhis2_config.username or '—' }}</code></dd></div>
+    <div><dt>Password</dt><dd><code>{% if dhis2_config.password_set %}••••••••{% else %}—{% endif %}</code></dd></div>
+    <div><dt>Mode</dt><dd><code>{{ dhis2_config.mode or 'readonly' }}</code></dd></div>
+    <div><dt>Operation timeout</dt><dd>{{ dhis2_config.timeout_seconds }}s</dd></div>
+    <div><dt>Probe timeout</dt><dd>{{ dhis2_config.probe_timeout_seconds }}s</dd></div>
+    <div><dt>GET retries</dt><dd>{{ dhis2_config.retry_max }} (backoff {{ dhis2_config.retry_backoff_seconds }}s)</dd></div>
+    <div><dt>Page size / max pages</dt><dd>{{ dhis2_config.page_size }} / {{ dhis2_config.max_pages }}</dd></div>
+    <div><dt>HTTP pool maxsize</dt><dd>{{ dhis2_config.http_pool_maxsize }}</dd></div>
+    <div><dt>ALLOW_DHIS2_WRITES</dt><dd>{{ status_badge('disabled') }} <span class="muted">forced off — write APIs not implemented</span></dd></div>
   </dl>
 </section>
 {% endblock %}

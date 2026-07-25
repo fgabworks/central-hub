@@ -1,75 +1,96 @@
-# Central Hub repository registry (Phase 1)
-# All entries below are safe demo/sample connections only.
-# Do not point at live PMNP / DHIS2 systems here.
+# Central Hub repository registry
+# Connected repositories only. Secrets stay in .env — use ${VAR:-default} when useful.
+# Demo/sample repos live in tests/fixtures/ — not in the active registry.
 
 repositories:
-  - id: sample-cli
-    name: Sample CLI Repo
-    type: command
-    enabled: true
-    description: "Demo local repo for path and harmless command health checks."
-    local_path: "samples/sample-cli"
-    working_directory: "samples/sample-cli"
-    tags: ["demo", "command"]
-    health_check:
-      type: command
-      local_path: "samples/sample-cli"
-      # Allowlisted Phase 1 probe only; interpreter resolved via PATH.
-      command: ["python", "-c", "print('ok')"]
-      timeout_seconds: 5
-    capabilities:
-      - id: echo_dry_run
-        label: Echo (dry-run) — Phase 2+
-        adapter_type: command
-        input_types: ["text", "csv"]
-        dry_run_default: true
-
-  - id: sample-api
-    name: Sample API Repo
+  # GET-only hub jobs. Domain writes stay in Live Processing.
+  # Set LIVE_PROCESSING_BASE_URL in .env (see .env.example).
+  - id: live-processing
+    name: PMNP Live Processing (API)
     type: api
     enabled: true
-    description: "Demo API repo. Expected unhealthy unless a local sample API is running."
-    base_url: "http://127.0.0.1:9099"
-    tags: ["demo", "api"]
+    description: "PMNP Live Processing API. Hub exposes GET health/history/preview only — no apply/write proxies."
+    git_url: "https://github.com/PMNP-IS/pmnp-live-processing.git"
+    base_url: "${LIVE_PROCESSING_BASE_URL:-http://127.0.0.1:5050}"
+    tags: ["pmnp", "api", "connected"]
     health_check:
       type: http
       method: GET
-      path: "/health"
-      timeout_seconds: 3
+      path: "/api/healthz"
+      timeout_seconds: 1.5
     capabilities:
-      - id: health
-        label: Health check
+      - id: healthz
+        label: Healthz (GET)
         adapter_type: api
         input_types: []
         dry_run_default: true
+        http_method: GET
+        http_path: "/api/healthz"
+        timeout_seconds: 10
+      - id: bulk_apply_history
+        label: Bulk apply history (GET)
+        adapter_type: api
+        input_types: []
+        dry_run_default: true
+        http_method: GET
+        http_path: "/api/bulk-apply-history"
+        timeout_seconds: 15
+      - id: bulk_preview
+        label: Bulk preview dry-run (GET)
+        adapter_type: api
+        input_types: []
+        dry_run_default: true
+        http_method: GET
+        http_path: "/api/bulk-preview"
+        timeout_seconds: 60
 
-  - id: sample-missing-path
-    name: Sample Missing Path Repo
+  # Local checkout for the same GitHub repo (path presence only — no domain commands).
+  - id: live-processing-local
+    name: PMNP Live Processing
     type: command
     enabled: true
-    description: "Demo unhealthy command repo (path intentionally missing)."
-    local_path: "samples/does-not-exist"
-    working_directory: "samples/does-not-exist"
-    tags: ["demo", "unhealthy"]
+    description: "Local checkout of PMNP Live Processing. Reuses LIVE_PROCESSING_PATH when present. No auto-clone."
+    git_url: "https://github.com/PMNP-IS/pmnp-live-processing.git"
+    local_path: "${LIVE_PROCESSING_PATH:-C:/PMNP/pmnp-live-processing}"
+    working_directory: "${LIVE_PROCESSING_PATH:-C:/PMNP/pmnp-live-processing}"
+    tags: ["pmnp", "command", "connected"]
     health_check:
       type: path
-      local_path: "samples/does-not-exist"
+      local_path: "${LIVE_PROCESSING_PATH:-C:/PMNP/pmnp-live-processing}"
       executable: "python"
       timeout_seconds: 3
     capabilities: []
 
-  - id: sample-disabled
-    name: Sample Disabled Repo
-    type: api
-    enabled: false
-    description: "Disabled demo entry to show registry enabled/disabled state."
-    base_url: "http://127.0.0.1:9100"
-    tags: ["demo", "disabled"]
+  - id: data-script
+    name: Data-Script
+    type: command
+    enabled: true
+    description: "PMNP Data-Script repository. Optional local path — hub does not auto-clone."
+    git_url: "https://github.com/PMNP-IS/Data-Script"
+    local_path: "${DATA_SCRIPT_PATH:-}"
+    working_directory: "${DATA_SCRIPT_PATH:-}"
+    tags: ["pmnp", "command", "connected"]
     health_check:
-      type: http
-      method: GET
-      path: "/health"
-      timeout_seconds: 2
+      type: path
+      local_path: "${DATA_SCRIPT_PATH:-}"
+      executable: "python"
+      timeout_seconds: 3
+    capabilities: []
+
+  - id: report-template
+    name: Report Template
+    type: command
+    enabled: true
+    description: "PMNP REPORT_TEMPLATE repository. Optional local path — hub does not auto-clone."
+    git_url: "https://github.com/PMNP-IS/REPORT_TEMPLATE.git"
+    local_path: "${REPORT_TEMPLATE_PATH:-}"
+    working_directory: "${REPORT_TEMPLATE_PATH:-}"
+    tags: ["pmnp", "command", "connected"]
+    health_check:
+      type: path
+      local_path: "${REPORT_TEMPLATE_PATH:-}"
+      executable: "python"
+      timeout_seconds: 3
     capabilities: []
 
 defaults:

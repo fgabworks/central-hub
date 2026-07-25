@@ -66,12 +66,22 @@ class CommandAdapter:
     def _check_path(self, config: HealthCheckConfig, checked_at: str) -> dict[str, Any]:
         started = time.perf_counter()
         target = config.local_path or self.repository.local_path
+        git_url = self.repository.git_url
         if not target:
+            latency_ms = int((time.perf_counter() - started) * 1000)
+            if git_url:
+                return _result(
+                    ok=False,
+                    status="not_cloned",
+                    detail=f"No local path configured. Git remote registered: {git_url} (clone not automatic)",
+                    latency_ms=latency_ms,
+                    checked_at=checked_at,
+                )
             return _result(
                 ok=False,
                 status="misconfigured",
-                detail="Command repository is missing local_path",
-                latency_ms=0,
+                detail="Command repository is missing local_path (and git_url)",
+                latency_ms=latency_ms,
                 checked_at=checked_at,
             )
 
@@ -83,6 +93,15 @@ class CommandAdapter:
             details.append(f"path exists: {path}")
         else:
             ok = False
+            latency_ms = int((time.perf_counter() - started) * 1000)
+            if git_url:
+                return _result(
+                    ok=False,
+                    status="not_cloned",
+                    detail=f"path missing: {path}; git_url={git_url} (not cloned — hub will not auto-clone)",
+                    latency_ms=latency_ms,
+                    checked_at=checked_at,
+                )
             details.append(f"path missing: {path}")
 
         executable = config.executable
@@ -95,9 +114,14 @@ class CommandAdapter:
                 details.append(f"executable not found on PATH: {executable}")
 
         latency_ms = int((time.perf_counter() - started) * 1000)
+        if ok:
+            status = "healthy"
+        else:
+            # Path present but probe failed → unreachable for UI clarity.
+            status = "unreachable"
         return _result(
             ok=ok,
-            status="healthy" if ok else "unhealthy",
+            status=status,
             detail="; ".join(details),
             latency_ms=latency_ms,
             checked_at=checked_at,

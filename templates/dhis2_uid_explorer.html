@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+{% block title %}UID & Mapping Explorer · DHIS2 · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <p class="muted-2" style="margin:0 0 0.35rem"><a href="{{ url_for('dhis2') }}">DHIS2</a> / UID Explorer</p>
+    <h1>UID &amp; Data Mapping Explorer</h1>
+    <p>Search the local repository UID index. Live DHIS2 compare stays read-only (GET).</p>
+  </div>
+  <div class="page-meta">
+    {% if total %}
+      <span>{{ range_start }}–{{ range_end }} of {{ matched }} matched · {{ total }}{% if mode == 'enrichment' %} enriched{% else %} indexed{% endif %}</span>
+    {% else %}
+      <span>0 indexed</span>
+    {% endif %}
+    <span class="badge badge-env">{{ mode or 'repository' }}</span>
+    <a class="btn btn-sm" href="{{ url_for('dhis2_enrichment') }}">Enrichment</a>
+    <a class="btn btn-sm" href="{{ url_for('dhis2_uid_index_manage') }}">Manage index</a>
+  </div>
+</section>
+
+{% if total == 0 %}
+<section class="panel panel-body">
+  <p class="muted">No UID index yet. <a href="{{ url_for('dhis2_uid_index_manage') }}">Scan configured sources</a> or import a JSON/CSV index.</p>
+</section>
+{% else %}
+<section class="summary-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:1rem">
+  <article class="stat-card card">
+    <div class="stat-label">Indexed records</div>
+    <div class="stat-value">{{ total }}</div>
+    <div class="stat-sub">{{ index_meta.updated_at.replace('T',' ')[:16] if index_meta and index_meta.updated_at else '—' }}</div>
+  </article>
+  <article class="stat-card card">
+    <div class="stat-label">Duplicate UIDs</div>
+    <div class="stat-value">{{ offline_stats.duplicates }}</div>
+    <div class="stat-sub">Same UID, multiple index rows</div>
+  </article>
+  <article class="stat-card card">
+    <div class="stat-label">Internal conflicts</div>
+    <div class="stat-value">{{ offline_stats.conflicts }}</div>
+    <div class="stat-sub">Disagreeing name/code/type</div>
+  </article>
+</section>
+
+<form method="get" class="builder-controls" style="margin-bottom:1rem">
+  <label>
+    <span>Search</span>
+    <input type="search" name="q" value="{{ filters.q }}" placeholder="UID, name, or code">
+  </label>
+  <label>
+    <span>Metadata type</span>
+    <select name="type" onchange="this.form.submit()">
+      <option value="">All</option>
+      {% for name in facets.object_types %}
+        <option value="{{ name }}" {% if filters.type == name %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>
+    <span>Source repository</span>
+    <select name="repo" onchange="this.form.submit()">
+      <option value="">All</option>
+      {% for name in facets.source_repositories %}
+        <option value="{{ name }}" {% if filters.repo == name %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>
+    <span>Environment</span>
+    <select name="env" onchange="this.form.submit()">
+      <option value="">All</option>
+      {% for name in facets.environments %}
+        <option value="{{ name }}" {% if filters.env == name %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>
+    <span>Domain</span>
+    <select name="domain" onchange="this.form.submit()">
+      <option value="">All</option>
+      {% for name in facets.domain_types or [] %}
+        <option value="{{ name }}" {% if filters.domain == name %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>
+    <span>Value type</span>
+    <select name="value_type" onchange="this.form.submit()">
+      <option value="">All</option>
+      {% for name in facets.value_types or [] %}
+        <option value="{{ name }}" {% if filters.value_type == name %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>
+    <span>Answer type</span>
+    <select name="answer" onchange="this.form.submit()">
+      <option value="">All</option>
+      {% for name in facets.answer_types or [] %}
+        <option value="{{ name }}" {% if filters.answer == name %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>
+    <span>Program</span>
+    <select name="program" onchange="this.form.submit()">
+      <option value="">All</option>
+      {% for name in facets.programs or [] %}
+        <option value="{{ name }}" {% if filters.program == name %}selected{% endif %}>{{ name.split('|')[1] if '|' in name else name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>
+    <span>Program stage</span>
+    <select name="program_stage" onchange="this.form.submit()">
+      <option value="">All</option>
+      {% for name in facets.program_stages or [] %}
+        <option value="{{ name }}" {% if filters.program_stage == name %}selected{% endif %}>{{ name.split('|')[1] if '|' in name else name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>
+    <span>Option set</span>
+    <select name="option_set" onchange="this.form.submit()">
+      <option value="">All</option>
+      {% for name in facets.option_sets or [] %}
+        <option value="{{ name }}" {% if filters.option_set == name %}selected{% endif %}>{{ name.split('|')[1] if '|' in name else name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>
+    <span>Audit status</span>
+    <select name="audit" onchange="this.form.submit()">
+      <option value="">All</option>
+      {% for name in facets.audit_statuses or [] %}
+        <option value="{{ name }}" {% if filters.audit == name %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>
+    <span>Per page</span>
+    <select name="per_page" onchange="this.form.submit()">
+      {% for n in [100, 200, 500, 1000] %}
+        <option value="{{ n }}" {% if per_page == n %}selected{% endif %}>{{ n }}</option>
+      {% endfor %}
+      <option value="all" {% if per_page == 'all' %}selected{% endif %}>All</option>
+    </select>
+  </label>
+  <input type="hidden" name="page" value="1">
+  <div style="display:flex;align-items:end">
+    <button class="btn btn-primary" type="submit">Filter</button>
+  </div>
+</form>
+
+{% if matched > shown %}
+<p class="muted" style="margin:0 0 0.75rem">
+  Showing {{ range_start }}–{{ range_end }} of {{ matched }} matches.
+  {% if per_page != 'all' %}
+    Use <strong>Per page → All</strong> or the pager below to browse the rest.
+  {% endif %}
+</p>
+{% endif %}
+
+<section class="panel">
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>UID</th>
+          <th>Name</th>
+          <th>Kind</th>
+          <th>Value type</th>
+          <th>Answer</th>
+          <th>Program / stage</th>
+          <th>Flags</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in records %}
+        <tr>
+          <td><code>{{ row.uid }}</code></td>
+          <td>
+            <div>{{ row.name or '—' }}</div>
+            {% if row.code %}<div class="cell-sub">{{ row.code }}</div>{% endif %}
+          </td>
+          <td>{{ row.object_type or '—' }}</td>
+          <td class="muted">{{ row.value_type or (row.extras.valueType if row.extras else '') or '—' }}</td>
+          <td>{{ row.answer_label or '—' }}</td>
+          <td class="muted" style="max-width:14rem;word-break:break-word">{{ row.program_label or '—' }}</td>
+          <td>
+            {% for flag in row.flags %}
+              <span class="badge badge-warning">{{ flag }}</span>
+            {% endfor %}
+          </td>
+          <td><a href="{{ url_for('dhis2_uid_detail', uid=row.uid) }}">Open</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="muted">No matches for the current filters.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if total_pages > 1 %}
+  <div class="panel-body btn-row" style="justify-content:space-between;align-items:center">
+    <span class="muted">Page {{ page }} / {{ total_pages }}</span>
+    <div class="btn-row">
+      {% if page > 1 %}
+        <a class="btn btn-sm" href="{{ url_for('dhis2_uid_explorer', q=filters.q, type=filters.type, repo=filters.repo, env=filters.env, per_page=per_page, page=page-1) }}">← Prev</a>
+      {% endif %}
+      {% if page < total_pages %}
+        <a class="btn btn-sm" href="{{ url_for('dhis2_uid_explorer', q=filters.q, type=filters.type, repo=filters.repo, env=filters.env, per_page=per_page, page=page+1) }}">Next →</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

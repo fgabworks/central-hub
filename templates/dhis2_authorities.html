@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Authorities · DHIS2 · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <p class="muted-2" style="margin:0 0 0.35rem"><a href="{{ url_for('dhis2') }}">DHIS2</a> / Authorities</p>
+    <h1>Permissions / Authorities</h1>
+    <p>Authorities from <code>/api/me/authorization</code> for the authenticated Stage user.</p>
+  </div>
+  <div class="page-meta">
+    <span>{{ authorities|length }} authorities</span>
+    <a class="btn btn-sm" href="{{ url_for('dhis2_discover') }}">Re-discover</a>
+  </div>
+</section>
+
+<form method="get" class="builder-controls" style="grid-template-columns:1fr auto;margin-bottom:1rem">
+  <label>
+    <span>Filter</span>
+    <input type="search" name="q" value="{{ q }}" placeholder="e.g. F_DATAELEMENT, M_">
+  </label>
+  <div style="display:flex;align-items:end">
+    <button class="btn btn-primary" type="submit">Filter</button>
+  </div>
+</form>
+
+<section class="panel">
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Authority</th></tr></thead>
+      <tbody>
+        {% for item in authorities %}
+          <tr><td><code>{{ item }}</code></td></tr>
+        {% else %}
+          <tr class="empty-row"><td>No authorities available. Run discovery while connected.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_badge %}
+{% block title %}Metadata Builder · DHIS2 · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <p class="muted-2" style="margin:0 0 0.35rem"><a href="{{ url_for('dhis2') }}">DHIS2</a> / Metadata Builder</p>
+    <h1>Unified Metadata Builder</h1>
+    <p>Catalog-driven validation and exact payload preview. Nothing is sent to DHIS2.</p>
+  </div>
+  <div class="page-meta">
+    {{ status_badge('disabled') }}
+    <span class="muted-2">Create · Update · Delete · Import disabled</span>
+  </div>
+</section>
+
+{% if flash_error %}<div class="banner banner-error">{{ flash_error }}</div>{% endif %}
+{% if flash_notice %}<div class="banner banner-info">{{ flash_notice }}</div>{% endif %}
+
+<section class="dash-grid metadata-workspace">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Builder workspace</h2>
+        <span class="quiet">Discovered catalog · preview only</span>
+      </div>
+      <div class="panel-body">
+        <form method="get" action="{{ url_for('dhis2_metadata_builder') }}" class="builder-controls" id="builder-controls">
+          <label><span>DHIS2 instance / environment</span>
+            <select name="instance" onchange="this.form.submit()">
+              {% for item in instances %}<option value="{{ item.id }}" {% if item.id == selected.instance %}selected{% endif %}>{{ item.label }}</option>{% endfor %}
+            </select>
+          </label>
+          <label><span>Operation preview</span>
+            <select name="operation" onchange="this.form.submit()">
+              {% for item in operations %}<option value="{{ item.id }}" {% if item.id == selected.operation %}selected{% endif %}>{{ item.label }}</option>{% endfor %}
+            </select>
+          </label>
+          <label><span>Discovered metadata type</span>
+            <select name="type" id="metadata-type" onchange="this.form.submit()" {% if not metadata_types %}disabled{% endif %}>
+              {% for item in metadata_types %}
+                <option value="{{ item.id }}" {% if item.id == selected.type %}selected{% endif %}>{{ item.label }}</option>
+              {% else %}<option>No catalog available</option>{% endfor %}
+            </select>
+          </label>
+        </form>
+
+        {% if not type_spec %}
+          <div class="warning-banner">
+            <span class="shield">!</span><div><strong>Run instance discovery first.</strong> Metadata types are populated only from the discovered DHIS2 catalog.</div>
+          </div>
+        {% else %}
+        <div class="builder-mode-line">
+          <span class="badge badge-phase">{{ type_spec.builder_mode }}</span>
+          <span class="muted">{{ type_spec.plural }} · {{ type_spec.schema_klass }}</span>
+          {% if workspace_stats %}
+          <span class="muted-2">· workspace {{ workspace_stats.total }} types
+            ({{ workspace_stats.specialized_builder }} specialized /
+             {{ workspace_stats.generic_schema_builder }} generic)</span>
+          {% endif %}
+        </div>
+        <form method="post" action="{{ url_for('dhis2_metadata_builder') }}" class="builder-form" id="builder-form">
+          <input type="hidden" name="instance" value="{{ selected.instance }}">
+          <input type="hidden" name="operation" value="{{ selected.operation }}">
+          <input type="hidden" name="type" value="{{ selected.type }}">
+          {% if draft_id %}<input type="hidden" name="draft_id" value="{{ draft_id }}">{% endif %}
+
+          <div class="builder-fields" data-builder="{{ type_spec.builder }}" data-type="{{ selected.type }}">
+            {% for field in type_spec.fields %}
+              <label class="builder-field {% if field.input in ['textarea', 'json', 'option_list'] %}builder-field-wide{% endif %}">
+                <span>{{ field.label }}{% if field.required %}<em class="req">*</em>{% endif %}</span>
+                {% if field.input in ['textarea', 'json'] %}
+                  <textarea id="field-{{ field.id }}" name="{{ field.id }}" rows="4" placeholder="{{ field.help or '' }}">{{ form.get(field.id, '') }}</textarea>
+                {% elif field.input == 'select' %}
+                  <select id="field-{{ field.id }}" name="{{ field.id }}">
+                    <option value="">— select —</option>
+                    {% for opt in field.options %}<option value="{{ opt }}" {% if form.get(field.id) == opt %}selected{% endif %}>{{ opt }}</option>{% endfor %}
+                  </select>
+                {% elif field.input == 'checkbox' %}
+                  <input id="field-{{ field.id }}" type="checkbox" name="{{ field.id }}" value="true" {% if form.get(field.id) in ['true','on','1',True] %}checked{% endif %}>
+                {% elif field.input == 'dependency' %}
+                  <input id="field-{{ field.id }}" type="text" name="{{ field.id }}" list="deps-{{ field.resource }}" value="{{ form.get(field.id, '') }}" placeholder="Search UID or name — {{ field.resource }}" autocomplete="off">
+                  <datalist id="deps-{{ field.resource }}">
+                    {% for item in dependencies.get(field.resource, []) %}<option value="{{ item.id }}">{{ item.name }}{% if item.code %} ({{ item.code }}){% endif %}{% if item.conflict %} [conflict]{% endif %}</option>{% endfor %}
+                  </datalist>
+                {% elif field.input == 'option_list' %}
+                  <input type="hidden" id="options-json" name="{{ field.id }}" value="{{ form.get(field.id, '') }}">
+                  <div class="option-editor">
+                    <table class="data"><thead><tr><th>#</th><th>Code</th><th>Name</th><th>Order</th><th></th></tr></thead><tbody id="option-rows"></tbody></table>
+                    <button class="btn btn-sm" type="button" id="add-option">Add option</button>
+                    <h3>CSV preview</h3><pre class="code-block" id="option-csv">sortOrder,code,name</pre>
+                  </div>
+                {% elif field.input == 'number' %}
+                  <input id="field-{{ field.id }}" type="number" name="{{ field.id }}" value="{{ form.get(field.id, '') }}">
+                {% else %}
+                  <input id="field-{{ field.id }}" type="text" name="{{ field.id }}" value="{{ form.get(field.id, '') }}" placeholder="{{ field.help or '' }}">
+                {% endif %}
+                {% if field.help and field.input not in ['textarea','json'] %}<small class="muted">{{ field.help }}</small>{% endif %}
+              </label>
+            {% endfor %}
+          </div>
+
+          {% if type_spec.builder == 'program_indicator' %}
+          <section class="subpanel expression-tools" id="expression-tools">
+            <h3>Expression &amp; filter UID insertion</h3>
+            <div class="expression-search">
+              <select id="uid-target"><option value="expression">Expression</option><option value="filter">Filter</option></select>
+              <select id="uid-resource">
+                {% for resource in ['dataElements','programStages','optionSets','categoryCombos','constants','attributes'] %}<option value="{{ resource }}">{{ resource }}</option>{% endfor %}
+              </select>
+              <input id="uid-query" type="search" placeholder="Search UID, name, or code">
+              <button class="btn btn-sm" id="uid-search" type="button">Search</button>
+              <select id="uid-results"><option value="">— results —</option></select>
+              <button class="btn btn-sm" id="uid-insert" type="button">Insert UID</button>
+            </div>
+            <h3>Expression preview</h3><pre class="code-block" id="expression-preview"></pre>
+          </section>
+          {% endif %}
+
+          <section class="raw-editor">
+            <h3>Raw JSON editor</h3>
+            <p class="muted">Edit either the metadata object or the exact <code>{{ type_spec.plural }}</code> envelope, then revalidate.</p>
+            <textarea name="raw_json" id="raw-json" rows="16" spellcheck="false">{{ raw_json }}</textarea>
+          </section>
+
+          <div class="btn-row">
+            <button class="btn btn-primary" type="submit" name="action" value="preview">Validate &amp; Preview form</button>
+            <button class="btn" type="submit" name="action" value="revalidate_raw">Revalidate raw JSON</button>
+            <button class="btn" type="submit" name="action" value="save_draft">Save local draft</button>
+            <button class="btn" type="button" disabled>Create</button><button class="btn" type="button" disabled>Update</button><button class="btn" type="button" disabled>Delete</button><button class="btn" type="button" disabled>Import</button>
+          </div>
+        </form>
+        {% endif %}
+      </div>
+    </section>
+
+    {% if preview %}
+    <section class="panel"><div class="panel-header"><h2>Validation &amp; exact payload</h2><span class="quiet">{{ preview.validation_summary }}</span></div>
+      <div class="panel-body">
+        <div class="dhis2-status"><div class="dhis2-chip"><span class="label">Result</span>{% if preview.ok %}{{ status_badge('healthy') }}{% else %}{{ status_badge('failed') }}{% endif %}</div><div class="dhis2-chip"><span class="label">Apply</span>{{ status_badge('disabled') }}</div></div>
+        {% if preview.errors %}<div class="banner banner-error"><strong>Errors</strong><ul>{% for item in preview.errors %}<li>{{ item }}</li>{% endfor %}</ul></div>{% endif %}
+        {% if preview.warnings %}<div class="warning-banner"><span class="shield">!</span><div><strong>Warnings</strong><ul>{% for item in preview.warnings %}<li>{{ item }}</li>{% endfor %}</ul></div></div>{% endif %}
+        <h3>Required fields</h3><ul class="plain-checks">{% for item in preview.required_fields %}<li>{% if item.filled %}✓{% else %}○{% endif %} {{ item.label }} <code>{{ item.id }}</code></li>{% else %}<li class="muted">None reported</li>{% endfor %}</ul>
+        <h3>Dependencies</h3><ul class="plain-checks">{% for dep in preview.dependencies %}<li>{% if dep.resolved %}✓{% elif dep.value %}!{% else %}○{% endif %} {{ dep.label }}{% if dep.value %} <code>{{ dep.value }}</code>{% endif %}{% if dep.resolved_name %} → {{ dep.resolved_name }}{% endif %}</li>{% else %}<li class="muted">No dependency fields</li>{% endfor %}</ul>
+        <h3>Duplicate check</h3><p class="muted">{{ preview.duplicates.detail }}</p>
+        <h3>Exact JSON payload</h3><pre class="code-block">{{ preview.payload_json }}</pre>
+        {% if preview.options_csv is defined %}<h3>Option Set CSV preview</h3><pre class="code-block">{{ preview.options_csv }}</pre>{% endif %}
+      </div>
+    </section>
+    {% endif %}
+  </div>
+
+  <aside class="stack">
+    <section class="panel panel-body"><h2>Discovered schema</h2>{% if schema and schema.ok %}<p class="muted">{{ schema.source }} · {{ schema.raw_property_count }} fields</p><ul class="plain-checks">{% for item in schema.required %}<li><code>{{ item.name }}</code> {{ item.propertyType }}</li>{% else %}<li class="muted">No required fields reported</li>{% endfor %}</ul>{% else %}<p class="muted">Run discovery to load schema guidance.</p>{% endif %}</section>
+    <section class="panel panel-body"><h2>UID mapping index</h2><ul class="plain-checks">{% for resource,count in index_status.loaded.items() %}<li>{{ resource }}: {{ count }}</li>{% else %}<li class="muted">No dependency resources for this type.</li>{% endfor %}</ul><p class="muted">Conflicting UID rows are shown but never resolved automatically.</p></section>
+    <section class="panel"><div class="panel-header"><h2>Local drafts</h2></div><ul class="activity-list">{% for draft in drafts %}<li><span class="activity-time">{{ draft.saved_at[11:16] if draft.saved_at else '—' }}</span><div class="activity-main"><span class="badge badge-activity repo">{{ draft.metadata_type }}</span><div class="desc">{{ draft.name or draft.id }} · {{ draft.operation }}</div></div><a class="btn btn-sm" href="{{ url_for('dhis2_metadata_builder', draft=draft.id) }}">Open</a></li>{% else %}<li><div class="activity-main"><div class="desc muted">No drafts saved yet.</div></div></li>{% endfor %}</ul></section>
+    <section class="panel panel-body"><div class="warning-banner"><span class="shield">■</span><div><strong>Preview only.</strong> <code>ALLOW_DHIS2_WRITES=false</code>. No create, update, delete, or import request exists.</div></div></section>
+  </aside>
+</section>
+
+{% if type_spec %}
+<script>
+(function () {
+  const expression = document.getElementById('field-expression');
+  const filter = document.getElementById('field-filter');
+  const expressionPreview = document.getElementById('expression-preview');
+  function refreshExpressionPreview() {
+    if (expressionPreview) expressionPreview.textContent = (expression ? expression.value : '') + (filter && filter.value ? '\nFilter: ' + filter.value : '');
+  }
+  [expression, filter].forEach(el => { if (el) el.addEventListener('input', refreshExpressionPreview); });
+  refreshExpressionPreview();
+
+  const searchButton = document.getElementById('uid-search');
+  if (searchButton) searchButton.addEventListener('click', async function () {
+    const resource = document.getElementById('uid-resource').value;
+    const query = document.getElementById('uid-query').value;
+    const response = await fetch('{{ url_for("api_dhis2_builder_deps") }}?resource=' + encodeURIComponent(resource) + '&q=' + encodeURIComponent(query));
+    const data = await response.json();
+    const results = document.getElementById('uid-results');
+    results.replaceChildren(new Option('— results —', ''));
+    (data.results || []).forEach(item => results.add(new Option((item.name || item.id) + ' · ' + item.id + (item.conflict ? ' [conflict]' : ''), item.conflict ? '' : item.id)));
+  });
+  const insertButton = document.getElementById('uid-insert');
+  if (insertButton) insertButton.addEventListener('click', function () {
+    const uid = document.getElementById('uid-results').value;
+    const target = document.getElementById('field-' + document.getElementById('uid-target').value);
+    if (!uid || !target) return;
+    target.setRangeText(uid, target.selectionStart, target.selectionEnd, 'end');
+    target.dispatchEvent(new Event('input'));
+  });
+
+  const optionRows = document.getElementById('option-rows');
+  const optionsJson = document.getElementById('options-json');
+  if (!optionRows || !optionsJson) return;
+  let options = [];
+  try { options = JSON.parse(optionsJson.value || '[]'); } catch (_) { options = []; }
+  function csvCell(value) { const text = String(value || ''); return /[",\n]/.test(text) ? '"' + text.replaceAll('"', '""') + '"' : text; }
+  function syncOptions() {
+    options = Array.from(optionRows.querySelectorAll('tr')).map((row, index) => ({code: row.querySelector('[data-code]').value, name: row.querySelector('[data-name]').value, sortOrder: index + 1}));
+    optionsJson.value = JSON.stringify(options);
+    document.getElementById('option-csv').textContent = ['sortOrder,code,name'].concat(options.map((item, index) => [index + 1, csvCell(item.code), csvCell(item.name)].join(','))).join('\n');
+  }
+  function renderOptions() {
+    optionRows.replaceChildren();
+    options.forEach((item, index) => {
+      const row = document.createElement('tr');
+      const number = document.createElement('td'); number.textContent = String(index + 1);
+      const codeCell = document.createElement('td'); const code = document.createElement('input'); code.dataset.code = '1'; code.value = item.code || ''; codeCell.append(code);
+      const nameCell = document.createElement('td'); const name = document.createElement('input'); name.dataset.name = '1'; name.value = item.name || ''; nameCell.append(name);
+      const order = document.createElement('td');
+      [['↑', -1], ['↓', 1]].forEach(([label, delta]) => { const button = document.createElement('button'); button.type='button'; button.className='btn btn-sm'; button.textContent=label; button.addEventListener('click', () => { const next=index+delta; if(next<0||next>=options.length)return; [options[index],options[next]]=[options[next],options[index]]; renderOptions(); }); order.append(button); });
+      const removeCell = document.createElement('td'); const remove = document.createElement('button'); remove.type='button'; remove.className='btn btn-sm'; remove.textContent='Remove'; remove.addEventListener('click',()=>{options.splice(index,1);renderOptions();}); removeCell.append(remove);
+      row.append(number, codeCell, nameCell, order, removeCell); optionRows.append(row);
+    });
+    optionRows.querySelectorAll('input').forEach(input => input.addEventListener('input', syncOptions));
+    syncOptions();
+  }
+  document.getElementById('add-option').addEventListener('click', () => { options.push({code:'',name:''}); renderOptions(); });
+  renderOptions();
+})();
+</script>
+{% endif %}
+{% endblock %}

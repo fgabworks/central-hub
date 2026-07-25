@@ -4,10 +4,10 @@
 <section class="page-header">
   <div>
     <h1>Audit</h1>
-    <p>Operator actions and configuration change history.</p>
+    <p>Operator actions recorded by Central Hub (no secrets).</p>
   </div>
   <div class="page-meta">
-    <span class="badge badge-phase">Coming in next phase</span>
+    <span>{{ events|length }} recent</span>
   </div>
 </section>
 
@@ -25,9 +25,21 @@
         </tr>
       </thead>
       <tbody>
-        <tr class="empty-row">
-          <td colspan="5">No persisted audit events yet. Dashboard activity rows are demo UI only.</td>
-        </tr>
+        {% for event in events %}
+          <tr>
+            <td class="muted-2">{{ event.timestamp }}</td>
+            <td><code>{{ event.action }}</code></td>
+            <td>{{ event.actor or '—' }}</td>
+            <td class="muted">{{ event.target or '—' }}</td>
+            <td class="muted" style="max-width:28rem;word-break:break-word">
+              {% if event.ok is sameas false %}⚠ {% endif %}{{ event.detail or '—' }}
+            </td>
+          </tr>
+        {% else %}
+          <tr class="empty-row">
+            <td colspan="5">No audit events yet. DHIS2 status checks and lookups will appear here.</td>
+          </tr>
+        {% endfor %}
       </tbody>
     </table>
   </div>

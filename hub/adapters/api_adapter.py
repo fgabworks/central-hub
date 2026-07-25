@@ -52,8 +52,13 @@ class ApiAdapter:
             timeout = config.timeout_seconds or self.default_timeout
 
         started = time.perf_counter()
+        # Short connect timeout so dead localhost ports fail fast; keep read for slow APIs.
+        connect_timeout = min(1.0, float(timeout))
+        read_timeout = float(timeout)
         try:
-            response = requests.request(method, url, timeout=timeout)
+            response = requests.request(
+                method, url, timeout=(connect_timeout, read_timeout)
+            )
             latency_ms = int((time.perf_counter() - started) * 1000)
             ok = 200 <= response.status_code < 300
             return _result(

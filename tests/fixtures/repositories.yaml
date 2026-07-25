@@ -1,0 +1,67 @@
+# Test-only demo repositories. Not loaded by the active hub registry.
+# Point CENTRAL_HUB_REPOSITORIES_CONFIG here in tests that need sample-cli / sample-api.
+
+repositories:
+  - id: sample-cli
+    name: Sample CLI Repo
+    type: command
+    enabled: true
+    description: "Demo local repo for path checks and allowlisted command jobs."
+    local_path: "samples/sample-cli"
+    working_directory: "samples/sample-cli"
+    tags: ["demo", "command"]
+    health_check:
+      type: path
+      local_path: "samples/sample-cli"
+      executable: "python"
+      timeout_seconds: 2
+    capabilities:
+      - id: echo_dry_run
+        label: Echo (dry-run)
+        adapter_type: command
+        input_types: ["text", "csv", "json"]
+        dry_run_default: true
+        timeout_seconds: 30
+        dry_run_command_template: ["python", "echo_job.py"]
+        command_template: ["python", "echo_job.py"]
+      - id: echo_apply
+        label: Echo (apply — confirm required)
+        adapter_type: command
+        input_types: ["text", "csv", "json"]
+        dry_run_default: false
+        require_confirm: true
+        timeout_seconds: 30
+        command_template: ["python", "echo_job.py"]
+
+  - id: sample-api
+    name: Sample API Repo
+    type: api
+    enabled: true
+    description: "Demo API repo for job/API capability tests."
+    base_url: "http://127.0.0.1:9099"
+    tags: ["demo", "api"]
+    health_check:
+      type: http
+      method: GET
+      path: "/health"
+      timeout_seconds: 1.5
+    capabilities:
+      - id: health
+        label: Health check (GET)
+        adapter_type: api
+        input_types: []
+        dry_run_default: true
+        http_method: GET
+        http_path: "/health"
+      - id: status
+        label: Status (GET)
+        adapter_type: api
+        input_types: []
+        dry_run_default: true
+        http_method: GET
+        http_path: "/api/status"
+
+defaults:
+  job_timeout_seconds: 3600
+  max_concurrent_jobs: 2
+  require_explicit_apply: true

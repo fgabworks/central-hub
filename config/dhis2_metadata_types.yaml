@@ -1,0 +1,81 @@
+# DHIS2 Metadata Builder — configuration-driven type registry
+# Add new types here; implement a matching builder module under hub/dhis2/builders/.
+
+instances:
+  - id: default
+    label: Configured DHIS2 (.env)
+    source: env
+
+operations:
+  - id: create
+    label: Create
+    enabled: true
+    apply_enabled: false
+  - id: update
+    label: Update
+    enabled: true
+    apply_enabled: false
+  # Delete intentionally omitted / not registered.
+
+metadata_types:
+  - id: dataElement
+    label: Data Element
+    plural: dataElements
+    schema_klass: dataElement
+    builder: data_element
+    dependency_resources:
+      - categoryCombos
+      - optionSets
+    fields:
+      - { id: id, label: UID, input: text, required: false, help: "Optional for create; required for update preview" }
+      - { id: name, label: Name, input: text, required: true }
+      - { id: shortName, label: Short name, input: text, required: true }
+      - { id: code, label: Code, input: text, required: false }
+      - { id: description, label: Description, input: textarea, required: false }
+      - { id: formName, label: Form name, input: text, required: false }
+      - { id: domainType, label: Domain type, input: select, required: true, options: [AGGREGATE, TRACKER] }
+      - { id: valueType, label: Value type, input: select, required: true, options: [TEXT, LONG_TEXT, NUMBER, INTEGER, INTEGER_POSITIVE, INTEGER_ZERO_OR_POSITIVE, PERCENTAGE, UNIT_INTERVAL, BOOLEAN, TRUE_ONLY, DATE, DATETIME, TIME, COORDINATE, ORGANISATION_UNIT, PHONE_NUMBER, EMAIL, FILE_RESOURCE, IMAGE] }
+      - { id: aggregationType, label: Aggregation type, input: select, required: true, options: [SUM, AVERAGE, AVERAGE_SUM_ORG_UNIT, COUNT, STDDEV, VARIANCE, MIN, MAX, NONE, DEFAULT] }
+      - { id: categoryCombo, label: Category combination, input: dependency, required: false, resource: categoryCombos }
+      - { id: optionSet, label: Option set, input: dependency, required: false, resource: optionSets }
+      - { id: zeroIsSignificant, label: Zero is significant, input: checkbox, required: false }
+
+  - id: programIndicator
+    label: Program Indicator
+    plural: programIndicators
+    schema_klass: programIndicator
+    builder: program_indicator
+    dependency_resources:
+      - programs
+      - programStages
+      - dataElements
+      - optionSets
+      - categoryCombos
+      - constants
+      - attributes
+    fields:
+      - { id: id, label: UID, input: text, required: false }
+      - { id: name, label: Name, input: text, required: true }
+      - { id: shortName, label: Short name, input: text, required: true }
+      - { id: code, label: Code, input: text, required: false }
+      - { id: description, label: Description, input: textarea, required: false }
+      - { id: program, label: Program, input: dependency, required: true, resource: programs }
+      - { id: expression, label: Expression, input: textarea, required: true }
+      - { id: filter, label: Filter, input: textarea, required: false }
+      - { id: analyticsType, label: Analytics type, input: select, required: true, options: [EVENT, ENROLLMENT] }
+      - { id: aggregationType, label: Aggregation type, input: select, required: true, options: [SUM, AVERAGE, COUNT, STDDEV, VARIANCE, MIN, MAX, NONE, DEFAULT] }
+      - { id: decimals, label: Decimals, input: number, required: false }
+
+  - id: optionSet
+    label: Option Set
+    plural: optionSets
+    schema_klass: optionSet
+    builder: option_set
+    dependency_resources: []
+    fields:
+      - { id: id, label: UID, input: text, required: false }
+      - { id: name, label: Name, input: text, required: true }
+      - { id: code, label: Code, input: text, required: false }
+      - { id: description, label: Description, input: textarea, required: false }
+      - { id: valueType, label: Value type, input: select, required: true, options: [TEXT, INTEGER, NUMBER, BOOLEAN, DATE] }
+      - { id: options_json, label: Ordered options, input: option_list, required: false }

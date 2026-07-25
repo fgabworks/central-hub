@@ -1,0 +1,522 @@
+{% extends "base.html" %}
+{% block title %}{{ uid }} · UID Mapping · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <p class="muted-2" style="margin:0 0 0.35rem">
+      <a href="{{ url_for('dhis2') }}">DHIS2</a> /
+      <a href="{{ url_for('dhis2_uid_explorer') }}">UID Explorer</a> /
+      {{ uid }}
+    </p>
+    <h1>{{ primary.name or uid }}</h1>
+    <p class="muted">
+      {{ primary.object_type or 'unknown type' }}
+      · {{ audit_profile.answer.label if audit_profile and audit_profile.answer else (primary.value_type or 'unknown answer') }}
+      · {{ primary.source_repository or 'unknown source' }}
+    </p>
+  </div>
+  <div class="page-meta">
+    <button class="btn btn-sm btn-primary" type="button" id="copy-uid" data-uid="{{ uid }}">Copy UID</button>
+    <a class="btn btn-sm" href="{{ url_for('dhis2_enrichment') }}">Enrichment</a>
+    <a class="btn btn-sm" href="{{ url_for('dhis2_uid_explorer') }}">Back</a>
+  </div>
+</section>
+
+<nav class="btn-row" style="margin-bottom:1rem;flex-wrap:wrap">
+  {% for t, label in [
+    ('overview','Overview'),
+    ('configuration','Configuration'),
+    ('relationships','Relationships'),
+    ('optionset','Option Set'),
+    ('pi','Program Indicator References'),
+    ('repository','Repository Sources'),
+    ('history','Change History'),
+    ('raw','Raw Metadata'),
+  ] %}
+    <a class="btn btn-sm {% if tab == t %}btn-primary{% endif %}" href="{{ url_for('dhis2_uid_detail', uid=uid, tab=t) }}{% if t == 'raw' %}&raw=1{% endif %}">{{ label }}</a>
+  {% endfor %}
+</nav>
+
+{% if enrich_obj and tab in ['overview','configuration',''] %}
+<section class="panel" style="margin-bottom:1rem">
+  <div class="panel-header"><h2>Enriched configuration (DHIS2 authoritative)</h2></div>
+  <div class="panel-body">
+    <div class="summary-grid" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:0.75rem">
+      <article class="stat-card card"><div class="stat-label">Answer type</div><div class="stat-value" style="font-size:1.1rem">{{ enrich_obj.answer_type or '—' }}</div><div class="stat-sub">{{ enrich_obj.value_type or '' }}</div></article>
+      <article class="stat-card card"><div class="stat-label">Domain</div><div class="stat-value" style="font-size:1.1rem">{{ enrich_obj.domain_type or '—' }}</div><div class="stat-sub">{{ enrich_obj.aggregation_type or '' }}</div></article>
+      <article class="stat-card card"><div class="stat-label">Option set</div><div class="stat-value" style="font-size:1rem">{{ enrich_obj.option_set_name or enrich_obj.option_set_uid or 'None' }}</div></article>
+      <article class="stat-card card"><div class="stat-label">Audit</div><div class="stat-value" style="font-size:0.95rem">{{ (enrich_obj.audit_status_list or [])|join(', ') or '—' }}</div></article>
+    </div>
+    <dl class="detail-list">
+      <div><dt>Name</dt><dd>{{ enrich_obj.name or '—' }}</dd></div>
+      <div><dt>Short name</dt><dd>{{ enrich_obj.short_name or '—' }}</dd></div>
+      <div><dt>Form name</dt><dd>{{ enrich_obj.form_name or '—' }}</dd></div>
+      <div><dt>Code</dt><dd>{{ enrich_obj.code or '—' }}</dd></div>
+      <div><dt>Description</dt><dd>{{ enrich_obj.description or '—' }}</dd></div>
+      <div><dt>Category combo</dt><dd>{{ enrich_obj.category_combo_name or enrich_obj.category_combo_uid or '—' }}</dd></div>
+      <div><dt>Fetched</dt><dd class="muted">{{ enrich_obj.fetched_at or '—' }}</dd></div>
+      <div><dt>Checksum</dt><dd><code>{{ enrich_obj.checksum or '—' }}</code></dd></div>
+    </dl>
+  </div>
+</section>
+{% endif %}
+
+{% if enrich_obj and tab == 'relationships' %}
+<section class="panel" style="margin-bottom:1rem">
+  <div class="panel-header"><h2>Normalized relationships</h2></div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Type</th><th>From</th><th>To</th><th>Name</th></tr></thead>
+      <tbody>
+        {% for rel in enrich_obj.relationships or [] %}
+        <tr>
+          <td><code>{{ rel.rel_type }}</code></td>
+          <td><code>{{ rel.from_uid }}</code></td>
+          <td><a href="{{ url_for('dhis2_uid_detail', uid=rel.to_uid) }}"><code>{{ rel.to_uid }}</code></a></td>
+          <td>{{ rel.to_name or '—' }} <span class="muted">({{ rel.to_type }})</span></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="muted">No relationships in enrichment snapshot.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% if enrich_obj and tab == 'optionset' %}
+<section class="panel" style="margin-bottom:1rem">
+  <div class="panel-header"><h2>Option set</h2></div>
+  <div class="panel-body">
+    {% if enrich_obj.option_set_uid %}
+      <p><strong>{{ enrich_obj.option_set_name or enrich_obj.option_set_uid }}</strong> · <code>{{ enrich_obj.option_set_uid }}</code></p>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Order</th><th>Code</th><th>Name</th><th>UID</th><th>Color</th><th>Icon</th></tr></thead>
+          <tbody>
+            {% for opt in enrich_obj.options or [] %}
+            <tr>
+              <td>{{ opt.sort_order }}</td>
+              <td><code>{{ opt.code or '—' }}</code></td>
+              <td>{{ opt.name or '—' }}</td>
+              <td class="muted"><code>{{ opt.option_uid }}</code></td>
+              <td>{{ opt.color or '—' }}</td>
+              <td>{{ opt.icon or '—' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="muted">No options stored (re-run enrichment).</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="muted">No option set on this object.</p>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
+{% if enrich_obj and tab == 'pi' %}
+<section class="panel" style="margin-bottom:1rem">
+  <div class="panel-header"><h2>Program indicator references</h2></div>
+  <div class="panel-body">
+    {% set refs = (enrich_obj.summary or {}).get('pi_references') if enrich_obj.summary else none %}
+    {% if refs %}
+      <dl class="detail-list">
+        <div><dt>Program</dt><dd>{{ enrich_obj.program_name or enrich_obj.program_uid or '—' }}</dd></div>
+        <div><dt>Analytics type</dt><dd>{{ enrich_obj.analytics_type or '—' }}</dd></div>
+        <div><dt>Data elements</dt><dd>{{ (refs.data_elements or [])|join(', ') or '—' }}</dd></div>
+        <div><dt>Attributes</dt><dd>{{ (refs.attributes or [])|join(', ') or '—' }}</dd></div>
+        <div><dt>Constants</dt><dd>{{ (refs.constants or [])|join(', ') or '—' }}</dd></div>
+        <div><dt>Stages</dt><dd>{{ (refs.program_stages or [])|join(', ') or '—' }}</dd></div>
+        <div><dt>Unresolved</dt><dd class="muted">{{ (refs.unresolved or [])|join(', ') or '—' }}</dd></div>
+      </dl>
+      {% if enrich_obj.expression %}<pre class="code-block">{{ enrich_obj.expression }}</pre>{% endif %}
+      {% if enrich_obj.filter %}<pre class="code-block">{{ enrich_obj.filter }}</pre>{% endif %}
+    {% else %}
+      <p class="muted">Not a program indicator, or enrichment has no PI reference summary.</p>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
+{% if tab == 'repository' %}
+<section class="panel" style="margin-bottom:1rem">
+  <div class="panel-header"><h2>Repository sources</h2></div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Repo</th><th>Env</th><th>Name</th><th>Type</th><th>File</th></tr></thead>
+      <tbody>
+        {% for row in matches %}
+        <tr>
+          <td>{{ row.source_repository }}</td>
+          <td>{{ row.source_environment }}</td>
+          <td>{{ row.name }}</td>
+          <td>{{ row.object_type }}</td>
+          <td class="muted">{{ row.source_file }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% if tab == 'history' %}
+<section class="panel" style="margin-bottom:1rem">
+  <div class="panel-header"><h2>Change history</h2></div>
+  <div class="panel-body">
+    <p class="muted">Enrichment snapshots track checksum / “Changed Since Last Scan” on apply. Open <a href="{{ url_for('dhis2_enrichment') }}">Metadata Enrichment</a> for snapshot list. Repository index versions remain under UID Index Management.</p>
+    {% if enrich_obj %}
+      <p>Current enrichment checksum: <code>{{ enrich_obj.checksum or '—' }}</code> · fetched {{ enrich_obj.fetched_at or '—' }}</p>
+      <p>Audit: {{ (enrich_obj.audit_status_list or [])|join(', ') }}</p>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
+{% if tab == 'raw' %}
+<section class="panel" style="margin-bottom:1rem">
+  <div class="panel-header"><h2>Raw metadata</h2></div>
+  <div class="panel-body">
+    <p class="muted">Loaded on demand only (not for every explorer row).</p>
+    {% if raw_dhis2_json %}
+      <pre class="code-block" style="max-height:420px;overflow:auto">{{ raw_dhis2_json }}</pre>
+    {% else %}
+      <p class="muted">No live raw payload. Configure DHIS2 or open with <code>?tab=raw&amp;raw=1</code>.</p>
+    {% endif %}
+    <h3 style="font-size:0.95rem;margin-top:1rem">Repository index JSON</h3>
+    <pre class="code-block" style="max-height:240px;overflow:auto">{{ raw_index_json }}</pre>
+  </div>
+</section>
+{% endif %}
+
+{% if tab in ['overview','configuration',''] and audit_profile %}
+<section class="panel" style="margin-bottom:1rem">
+  <div class="panel-header"><h2>Audit mapping profile</h2></div>
+  <div class="panel-body">
+    <div class="summary-grid" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:1rem">
+      <article class="stat-card card">
+        <div class="stat-label">Answer kind</div>
+        <div class="stat-value" style="font-size:1.25rem">{{ audit_profile.answer.label }}</div>
+        <div class="stat-sub">{{ audit_profile.value_type or 'no valueType' }}</div>
+      </article>
+      <article class="stat-card card">
+        <div class="stat-label">Domain</div>
+        <div class="stat-value" style="font-size:1.25rem">{{ audit_profile.domain_type or '—' }}</div>
+        <div class="stat-sub">{{ audit_profile.aggregation_type or 'aggregation n/a' }}</div>
+      </article>
+      <article class="stat-card card">
+        <div class="stat-label">Program</div>
+        <div class="stat-value" style="font-size:1rem;word-break:break-word">{{ audit_profile.program_name or audit_profile.program_uid or '—' }}</div>
+        <div class="stat-sub">{% if audit_profile.program_uid %}<code>{{ audit_profile.program_uid }}</code>{% else %}not linked in index{% endif %}</div>
+      </article>
+      <article class="stat-card card">
+        <div class="stat-label">Option set</div>
+        <div class="stat-value" style="font-size:1rem;word-break:break-word">
+          {% if audit_profile.option_set %}
+            {{ audit_profile.option_set.name or audit_profile.option_set_uid }}
+          {% else %}
+            {{ audit_profile.option_set_uid or 'None' }}
+          {% endif %}
+        </div>
+        <div class="stat-sub">
+          {% if audit_profile.option_set and audit_profile.option_set.yes_no_like %}
+            Yes / No style choices
+          {% elif audit_profile.option_set %}
+            {{ audit_profile.option_set.option_count }} option(s)
+          {% else %}
+            Set DHIS2_* env for live option lists
+          {% endif %}
+        </div>
+      </article>
+    </div>
+
+    <p class="muted" style="margin-top:0">{{ audit_profile.answer.summary }}</p>
+
+    {% if audit_profile.form_name or audit_profile.short_name %}
+    <dl class="detail-list" style="margin-top:0.75rem">
+      {% if audit_profile.form_name %}<div><dt>Form name</dt><dd>{{ audit_profile.form_name }}</dd></div>{% endif %}
+      {% if audit_profile.short_name %}<div><dt>Short name</dt><dd>{{ audit_profile.short_name }}</dd></div>{% endif %}
+      {% if audit_profile.dhis2_environment %}<div><dt>Source env</dt><dd>{{ audit_profile.dhis2_environment }}</dd></div>{% endif %}
+      {% if audit_profile.source_endpoint %}<div><dt>Source endpoint</dt><dd><code>{{ audit_profile.source_endpoint }}</code></dd></div>{% endif %}
+    </dl>
+    {% endif %}
+
+    <h3 style="margin:1rem 0 0.5rem;font-size:0.95rem">Where it is connected</h3>
+    {% if audit_profile.connections %}
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Role</th><th>UID</th><th>Name</th><th>Detail</th></tr></thead>
+        <tbody>
+          {% for conn in audit_profile.connections %}
+          <tr>
+            <td>{{ conn.role }}</td>
+            <td>
+              {% if conn.uid %}
+                <a href="{{ url_for('dhis2_uid_detail', uid=conn.uid) }}"><code>{{ conn.uid }}</code></a>
+              {% else %}—{% endif %}
+            </td>
+            <td>{{ conn.name or '—' }}</td>
+            <td class="muted">{{ conn.detail or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="muted">No program / stage / option-set links found in the index for this UID.</p>
+    {% endif %}
+
+    {% if audit_profile.option_set and audit_profile.option_set.options %}
+    <h3 style="margin:1rem 0 0.5rem;font-size:0.95rem">Option set choices</h3>
+    <p class="muted" style="margin:0 0 0.5rem">{{ audit_profile.option_set.choice_summary }}</p>
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Code</th><th>Name</th><th>UID</th></tr></thead>
+        <tbody>
+          {% for opt in audit_profile.option_set.options %}
+          <tr>
+            <td><code>{{ opt.code or '—' }}</code></td>
+            <td>{{ opt.name or '—' }}</td>
+            <td class="muted"><code>{{ opt.uid or '—' }}</code></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {% if audit_profile.stage_data_element_refs %}
+    <h3 style="margin:1rem 0 0.5rem;font-size:0.95rem">Stage → data element refs (from expression/filter)</h3>
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Program stage</th><th>Data element</th></tr></thead>
+        <tbody>
+          {% for ref in audit_profile.stage_data_element_refs[:25] %}
+          <tr>
+            <td><a href="{{ url_for('dhis2_uid_detail', uid=ref.program_stage_uid) }}"><code>{{ ref.program_stage_uid }}</code></a></td>
+            <td><a href="{{ url_for('dhis2_uid_detail', uid=ref.data_element_uid) }}"><code>{{ ref.data_element_uid }}</code></a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {% if audit_profile.expression or audit_profile.filter %}
+    <h3 style="margin:1rem 0 0.5rem;font-size:0.95rem">Expression / filter</h3>
+    {% if audit_profile.expression %}<pre class="code-block" style="max-height:120px;overflow:auto">{{ audit_profile.expression }}</pre>{% endif %}
+    {% if audit_profile.filter %}<pre class="code-block" style="max-height:120px;overflow:auto">{{ audit_profile.filter }}</pre>{% endif %}
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
+{% if reverse_trace %}
+<section class="panel" style="margin-bottom:1rem">
+  <div class="panel-header"><h2>Live DHIS2 reverse links</h2></div>
+  <div class="panel-body">
+    <p class="muted" style="margin-top:0">
+      Traced with metadata GET filters (program stages / programs / data sets / option-set consumers).
+      Physical Postgres or analytics table names are <strong>not</strong> returned by the DHIS2 metadata API.
+    </p>
+
+    {% if reverse_trace.storage %}
+    <div class="warning-banner" style="margin:0.75rem 0">
+      <span class="shield">◎</span>
+      <div>
+        <strong>Logical store: {{ reverse_trace.storage.layer }}</strong>
+        <div>{{ reverse_trace.storage.summary }}</div>
+        <div class="muted" style="margin-top:0.35rem">Typical instance location: <code>{{ reverse_trace.storage.typical_store }}</code></div>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if reverse_trace.edges %}
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Relation</th><th>UID</th><th>Name</th><th>Via filter / path</th></tr></thead>
+        <tbody>
+          {% for edge in reverse_trace.edges %}
+          <tr>
+            <td>{{ edge.relation }}</td>
+            <td><a href="{{ url_for('dhis2_uid_detail', uid=edge.related_uid) }}"><code>{{ edge.related_uid }}</code></a></td>
+            <td>{{ edge.related_name or '—' }}</td>
+            <td class="muted" style="max-width:18rem;word-break:break-word"><code>{{ edge.via or edge.source }}</code></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="muted">
+      {% if topbar_dhis2 and 'Not configured' in topbar_dhis2.label %}
+        Configure Hub <code>DHIS2_*</code> credentials to reverse-trace program / stage / option-set links for data elements and TEAs.
+      {% else %}
+        No reverse links returned (object may be unused on stages/programs, or the filter returned empty).
+      {% endif %}
+    </p>
+    {% endif %}
+
+    {% if reverse_trace.queries %}
+    <details style="margin-top:0.75rem">
+      <summary class="muted">GET queries used ({{ reverse_trace.queries|length }})</summary>
+      <ul class="muted">
+        {% for q in reverse_trace.queries %}
+          <li><code>{{ q }}</code></li>
+        {% endfor %}
+      </ul>
+    </details>
+    {% endif %}
+    {% if reverse_trace.errors %}
+    <div class="banner banner-error" style="margin-top:0.75rem">
+      {% for err in reverse_trace.errors %}<div>{{ err }}</div>{% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
+{% if comparison %}
+<section class="panel" style="margin-bottom:1rem">
+  <div class="panel-header"><h2>Live DHIS2 comparison</h2></div>
+  <div class="panel-body">
+    <p>
+      Status:
+      <strong>{{ comparison.status }}</strong>
+      <span class="muted">— {{ comparison.detail }}</span>
+    </p>
+    {% if comparison.diffs %}
+      <p class="muted">Differing fields: {{ comparison.diffs|join(', ') }}</p>
+    {% endif %}
+    <div class="warning-banner" style="margin-top:0.75rem">
+      <span class="shield">🛡</span>
+      <div><strong>Read-only.</strong> Comparison uses GET only. No metadata is written to DHIS2.</div>
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<section class="dash-grid">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-header"><h2>Metadata details</h2></div>
+      <div class="table-wrap">
+        <table class="data">
+          <tbody>
+            <tr><th>UID</th><td><code id="uid-value">{{ primary.uid }}</code></td></tr>
+            <tr><th>Name</th><td>{{ primary.name or '—' }}</td></tr>
+            <tr><th>Code</th><td>{{ primary.code or '—' }}</td></tr>
+            <tr><th>Object type</th><td>{{ primary.object_type or '—' }}</td></tr>
+            <tr><th>Value type</th><td>{{ primary.value_type or '—' }}</td></tr>
+            <tr><th>Domain type</th><td>{{ primary.domain_type or '—' }}</td></tr>
+            <tr><th>Source repository</th><td>{{ primary.source_repository or '—' }}</td></tr>
+            <tr><th>Source file</th><td class="muted" style="word-break:break-all">{{ primary.source_file or '—' }}</td></tr>
+            <tr><th>Environment</th><td>{{ primary.source_environment or '—' }}</td></tr>
+            <tr><th>Program UID</th><td><code>{{ (audit_profile.program_uid if audit_profile else primary.program_uid) or '—' }}</code></td></tr>
+            <tr><th>Program stage UID</th><td><code>{{ primary.program_stage_uid or (audit_profile.program_stage_uids[0] if audit_profile and audit_profile.program_stage_uids else '—') }}</code></td></tr>
+            <tr><th>Option set UID</th><td><code>{{ (audit_profile.option_set_uid if audit_profile else primary.option_set_uid) or '—' }}</code></td></tr>
+            <tr><th>Category combo UID</th><td><code>{{ primary.category_combo_uid or '—' }}</code></td></tr>
+            <tr><th>Last synced</th><td class="muted">{{ primary.last_synced or '—' }}</td></tr>
+            <tr><th>Checksum</th><td><code>{{ primary.checksum or '—' }}</code></td></tr>
+            {% if plural %}<tr><th>DHIS2 collection</th><td><code>{{ plural }}</code></td></tr>{% endif %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    {% if matches|length > 1 %}
+    <section class="panel">
+      <div class="panel-header"><h2>All index rows for this UID</h2></div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Repo</th><th>Env</th><th>Name</th><th>Type</th><th>File</th></tr></thead>
+          <tbody>
+            {% for row in matches %}
+            <tr>
+              <td>{{ row.source_repository }}</td>
+              <td>{{ row.source_environment }}</td>
+              <td>{{ row.name }}</td>
+              <td>{{ row.object_type }}</td>
+              <td class="muted" style="word-break:break-all">{{ row.source_file }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-header"><h2>Relationships &amp; dependencies</h2></div>
+      <div class="panel-body">
+        {% if relationships %}
+        <div class="table-wrap">
+          <table class="data">
+            <thead><tr><th>Relation</th><th>Related UID</th><th>Name</th><th>Type</th></tr></thead>
+            <tbody>
+              {% for rel in relationships %}
+              <tr>
+                <td>{{ rel.relation }}</td>
+                <td>
+                  <a href="{{ url_for('dhis2_uid_detail', uid=rel.related_uid) }}"><code>{{ rel.related_uid }}</code></a>
+                </td>
+                <td>{{ rel.related_name or '—' }}</td>
+                <td class="muted">{{ rel.related_type or '—' }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <p class="muted">No relationships extracted yet. Program Indicators often expose stages via expression/filter; option sets need DHIS2 GET.</p>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header"><h2>Raw JSON — index</h2></div>
+      <div class="panel-body">
+        <pre class="code-block" style="max-height:280px;overflow:auto">{{ raw_index_json }}</pre>
+      </div>
+    </section>
+
+    {% if raw_dhis2_json %}
+    <section class="panel">
+      <div class="panel-header"><h2>Raw JSON — live DHIS2</h2></div>
+      <div class="panel-body">
+        <pre class="code-block" style="max-height:280px;overflow:auto">{{ raw_dhis2_json }}</pre>
+      </div>
+    </section>
+    {% endif %}
+  </div>
+</section>
+
+<script>
+(function () {
+  var btn = document.getElementById('copy-uid');
+  if (!btn) return;
+  btn.addEventListener('click', function () {
+    var uid = btn.getAttribute('data-uid') || '';
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(uid).then(function () {
+        btn.textContent = 'Copied';
+        setTimeout(function () { btn.textContent = 'Copy UID'; }, 1500);
+      });
+    } else {
+      var range = document.createRange();
+      var el = document.getElementById('uid-value');
+      range.selectNodeContents(el);
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      try { document.execCommand('copy'); btn.textContent = 'Copied'; } catch (e) {}
+      setTimeout(function () { btn.textContent = 'Copy UID'; }, 1500);
+    }
+  });
+})();
+</script>
+{% endblock %}

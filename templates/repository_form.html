@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <h1>{{ title }}</h1>
+    <p>{{ subtitle }}</p>
+  </div>
+  <div class="page-meta">
+    <a class="btn btn-sm" href="{{ url_for('repositories') }}">← Registry</a>
+  </div>
+</section>
+
+{% if error %}<div class="banner banner-error">{{ error }}</div>{% endif %}
+{% if notice %}<div class="banner" style="background:var(--info-soft);border-color:rgba(59,130,246,.35)">{{ notice }}</div>{% endif %}
+
+<section class="panel">
+  <div class="panel-header">
+    <h2>Repository details</h2>
+    <span class="quiet">Validation runs before save · health check after save</span>
+  </div>
+  <form method="post" class="panel-body repo-form">
+    {% if mode == 'edit' %}
+      <input type="hidden" name="repo_id" value="{{ form.id }}">
+    {% endif %}
+
+    <div class="nb-meta-grid">
+      <label class="nb-field">
+        <span>Name</span>
+        <input type="text" name="name" value="{{ form.name }}" required maxlength="120">
+      </label>
+      <label class="nb-field">
+        <span>ID {% if mode == 'edit' %}(fixed){% else %}(optional slug){% endif %}</span>
+        {% if mode == 'edit' %}
+          <input type="text" name="id" value="{{ form.id }}" readonly>
+        {% else %}
+          <input type="text" name="id" value="{{ form.id }}"
+                 pattern="[a-z0-9][a-z0-9_-]{0,63}" placeholder="auto-from-name">
+        {% endif %}
+      </label>
+      <label class="nb-field">
+        <span>Adapter / type</span>
+        <select name="type" required>
+          <option value="command" {% if form.type == 'command' %}selected{% endif %}>command (local / git)</option>
+          <option value="api" {% if form.type == 'api' %}selected{% endif %}>api (HTTP)</option>
+        </select>
+      </label>
+      <label class="nb-field nb-field-check">
+        <span>Enabled</span>
+        <label class="nb-check-inline">
+          <input type="checkbox" name="enabled" value="1" {% if form.enabled %}checked{% endif %}>
+          Include in health probes and jobs
+        </label>
+      </label>
+    </div>
+
+    <label class="nb-field">
+      <span>Git URL</span>
+      <input type="url" name="git_url" value="{{ form.git_url }}" placeholder="https://github.com/org/repo.git">
+    </label>
+
+    <label class="nb-field">
+      <span>Local path (optional)</span>
+      <input type="text" name="local_path" value="{{ form.local_path }}"
+             placeholder="C:/PMNP/repo — leave empty if not cloned">
+    </label>
+
+    <label class="nb-field">
+      <span>API base URL (api type)</span>
+      <input type="url" name="base_url" value="{{ form.base_url }}" placeholder="http://127.0.0.1:5050">
+    </label>
+
+    <label class="nb-field">
+      <span>Description</span>
+      <textarea name="description" rows="3">{{ form.description }}</textarea>
+    </label>
+
+    <div class="warning-banner" style="margin:0.75rem 0">
+      <span class="shield" aria-hidden="true">🛡</span>
+      <div>
+        <strong>No automatic clone or pull.</strong>
+        If a matching local checkout is found for the Git URL, its path is reused. Otherwise status is Not Cloned until you set a path.
+      </div>
+    </div>
+
+    <div class="page-actions" style="padding:0;margin-top:1rem">
+      <button class="btn btn-primary" type="submit">{{ submit_label }}</button>
+      <a class="btn" href="{{ url_for('repositories') }}">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

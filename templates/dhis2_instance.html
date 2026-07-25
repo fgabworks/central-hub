@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_badge %}
+{% block title %}Instance Details · DHIS2 · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <p class="muted-2" style="margin:0 0 0.35rem"><a href="{{ url_for('dhis2') }}">DHIS2</a> / Instance</p>
+    <h1>Instance Details</h1>
+    <p>Server identity and authenticated user from the last discovery / status check.</p>
+  </div>
+  <div class="page-meta">
+    <a class="btn btn-sm" href="{{ url_for('dhis2_discover') }}">Refresh discovery</a>
+  </div>
+</section>
+
+{% if not catalog %}
+  <section class="panel panel-body">
+    <p class="muted">No local catalog yet. <a href="{{ url_for('dhis2_discover') }}">Run discovery</a> against the configured Stage instance.</p>
+  </section>
+{% else %}
+<section class="dash-grid">
+  <section class="panel panel-body">
+    <h2 style="margin:0 0 0.75rem;font-size:14px">System</h2>
+    <dl class="detail-list">
+      <div><dt>Version</dt><dd>{{ catalog.dhis2_version or '—' }}</dd></div>
+      <div><dt>System name</dt><dd>{{ (catalog.system.systemName if catalog.system else None) or '—' }}</dd></div>
+      <div><dt>Server date</dt><dd>{{ (catalog.system.serverDate if catalog.system else None) or '—' }}</dd></div>
+      <div><dt>Context path</dt><dd><code>{{ (catalog.system.contextPath if catalog.system else None) or '—' }}</code></dd></div>
+      <div><dt>Base URL</dt><dd><code>{{ catalog.base_url or '—' }}</code></dd></div>
+      <div><dt>Discovered at</dt><dd>{{ catalog.discovered_at }}</dd></div>
+    </dl>
+  </section>
+  <section class="panel panel-body">
+    <h2 style="margin:0 0 0.75rem;font-size:14px">Authenticated user</h2>
+    <dl class="detail-list">
+      <div><dt>Username</dt><dd><code>{{ catalog.user.username if catalog.user else '—' }}</code></dd></div>
+      <div><dt>Display name</dt><dd>{{ (catalog.user.displayName if catalog.user else None) or '—' }}</dd></div>
+      <div><dt>User id</dt><dd><code>{{ (catalog.user.id if catalog.user else None) or '—' }}</code></dd></div>
+      <div><dt>Email</dt><dd>{{ (catalog.user.email if catalog.user else None) or '—' }}</dd></div>
+    </dl>
+    <h3 style="margin:1rem 0 0.4rem;font-size:12px;color:var(--muted-2)">Roles</h3>
+    <ul class="plain-checks">
+      {% for role in (catalog.user.userRoles if catalog.user else []) %}
+        <li>{{ role.name }} <code>{{ role.id }}</code></li>
+      {% else %}
+        <li class="muted">None listed</li>
+      {% endfor %}
+    </ul>
+  </section>
+</section>
+
+<section class="panel" style="margin-top:0.85rem">
+  <div class="panel-header"><h2>API / OpenAPI summary</h2></div>
+  <div class="panel-body">
+    <dl class="detail-list">
+      <div><dt>API resources</dt><dd>{{ catalog.api_entry.resource_count if catalog.api_entry else 0 }}</dd></div>
+      <div><dt>OpenAPI</dt><dd>{% if catalog.openapi and catalog.openapi.available %}{{ status_badge('healthy') }} {{ catalog.openapi.path_count }} paths{% else %}{{ status_badge('offline') }} {{ catalog.openapi.detail if catalog.openapi else 'n/a' }}{% endif %}</dd></div>
+    </dl>
+    {% if catalog.errors %}
+      <div class="warning-banner" style="margin-top:1rem">
+        <span class="shield">⚠</span>
+        <div>
+          <strong>Partial discovery</strong>
+          <ul style="margin:0.35rem 0 0;padding-left:1.1rem">
+            {% for err in catalog.errors %}<li>{{ err }}</li>{% endfor %}
+          </ul>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}

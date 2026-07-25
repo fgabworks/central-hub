@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Metadata Type Catalog · DHIS2 · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <p class="muted-2" style="margin:0 0 0.35rem"><a href="{{ url_for('dhis2') }}">DHIS2</a> / Catalog</p>
+    <h1>Metadata Type Catalog</h1>
+    <p>Discovered schemas from the connected DHIS2 instance (not a hardcoded shortlist).</p>
+  </div>
+  <div class="page-meta">
+    <span>{{ types|length }} shown</span>
+    <a class="btn btn-sm" href="{{ url_for('dhis2_discover') }}">Re-discover</a>
+  </div>
+</section>
+
+{% if not catalog %}
+  <section class="panel panel-body">
+    <p class="muted">No catalog yet. <a href="{{ url_for('dhis2_discover') }}">Run discovery</a> first.</p>
+  </section>
+{% else %}
+<form method="get" class="builder-controls" style="margin-bottom:1rem">
+  <label>
+    <span>Search</span>
+    <input type="search" name="q" value="{{ filters.q }}" placeholder="name, singular, plural, endpoint">
+  </label>
+  <label>
+    <span>Category</span>
+    <select name="category" onchange="this.form.submit()">
+      <option value="all">All</option>
+      {% for name in categories %}
+        <option value="{{ name }}" {% if filters.category == name %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>
+    <span>Builder mode</span>
+    <select name="builder_mode" onchange="this.form.submit()">
+      <option value="all">All</option>
+      {% for name in builder_modes %}
+        <option value="{{ name }}" {% if filters.builder_mode == name %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <div style="display:flex;align-items:end">
+    <button class="btn btn-primary" type="submit">Filter</button>
+  </div>
+</form>
+
+<section class="panel">
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Collection</th>
+          <th>Category</th>
+          <th>Endpoint</th>
+          <th>Builder mode</th>
+          <th>Required</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in types %}
+          <tr>
+            <td>
+              <div class="cell-title">{{ item.schema_name or item.singular }}</div>
+              <div class="cell-sub"><code>{{ item.singular }}</code></div>
+            </td>
+            <td><code>{{ item.plural }}</code></td>
+            <td><span class="badge badge-phase">{{ item.category }}</span></td>
+            <td class="mono muted">{{ item.api_endpoint or '—' }}</td>
+            <td class="muted">{{ item.builder_mode }}</td>
+            <td>{{ item.required_properties|length }}</td>
+            <td><a class="btn btn-sm" href="{{ url_for('dhis2_catalog_type', type_id=item.id) }}">View</a></td>
+          </tr>
+        {% else %}
+          <tr class="empty-row"><td colspan="7">No types match these filters.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

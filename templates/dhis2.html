@@ -1,56 +1,191 @@
 {% extends "base.html" %}
 {% from "macros.html" import status_badge %}
-{% block title %}DHIS2 · {{ app_name }}{% endblock %}
+{% block title %}Metadata Lookup · DHIS2 · {{ app_name }}{% endblock %}
 {% block content %}
 <section class="page-header">
   <div>
-    <h1>DHIS2</h1>
-    <p>Maintenance chrome for a connected DHIS2 instance. UI scaffold only — no live writes.</p>
+    <p class="muted-2" style="margin:0 0 0.35rem"><a href="{{ url_for('dhis2') }}">DHIS2</a> / Lookup</p>
+    <h1>Metadata Lookup</h1>
+    <p>Read-only search by UID or name. Writes are disabled.</p>
   </div>
   <div class="page-meta">
-    <span class="badge badge-phase">Coming in next phase</span>
+    {% if status and status.ok %}
+      {{ status_badge('online') }}
+    {% elif not config.configured %}
+      {{ status_badge('disabled') }}
+    {% else %}
+      {{ status_badge('offline') }}
+    {% endif %}
+    <a class="btn btn-sm" href="{{ url_for('dhis2_lookup', check=1) }}">Check status</a>
   </div>
 </section>
 
-<section class="panel">
-  <div class="panel-body">
-    <div class="dhis2-status">
-      <div class="dhis2-chip">
-        <span class="label">DHIS2 Connection</span>
-        {{ status_badge('connected') }}
-      </div>
-      <div class="dhis2-chip">
-        <span class="label">Environment</span>
-        <span class="badge badge-env">{{ env_profile }}</span>
-      </div>
-      <div class="dhis2-chip">
-        <span class="label">Write Mode</span>
-        {{ status_badge('disabled') }}
-      </div>
-    </div>
-
-    <div class="tools-grid">
-      {% for tool in dhis2_tools %}
-        <span class="tool-btn" title="Placeholder — no action yet">
-          <span class="ico">{{ tool.icon }}</span>
-          <span>{{ tool.label }}</span>
-        </span>
-      {% endfor %}
-    </div>
-
-    <div class="warning-banner">
-      <span class="shield">🛡</span>
-      <div>
-        <strong>Write operations are disabled.</strong>
-        Enable <code>ALLOW_DHIS2_WRITES=true</code> to create or update metadata.
-        Central Hub does not perform DHIS2 writes in this phase.
-      </div>
-    </div>
-
-    <p class="muted" style="margin:1rem 0 0">
-      Coming in next phase: read-only status probes against a configured DHIS2/API adapter.
-      No PMNP domain logic is implemented here.
-    </p>
+{% if error %}
+  <div class="banner banner-error">{{ error }}</div>
+{% endif %}
+{% if notice %}
+  <div class="banner" style="background:rgba(59,130,246,0.12);border-color:rgba(59,130,246,0.35);color:#93c5fd">
+    {{ notice }}
   </div>
+{% endif %}
+
+<section class="dash-grid">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Connection</h2>
+        <span class="quiet">GET-only · credentials redacted</span>
+      </div>
+      <div class="panel-body">
+        <div class="dhis2-status">
+          <div class="dhis2-chip">
+            <span class="label">DHIS2 Connection</span>
+            {% if not config.configured %}
+              {{ status_badge('disabled') }}
+            {% elif status and status.ok %}
+              {{ status_badge('connected') }}
+            {% else %}
+              {{ status_badge('offline') }}
+            {% endif %}
+          </div>
+          <div class="dhis2-chip">
+            <span class="label">Environment</span>
+            <span class="badge badge-env">{{ env_profile }}</span>
+          </div>
+          <div class="dhis2-chip">
+            <span class="label">Write Mode</span>
+            {{ status_badge('disabled') }}
+          </div>
+        </div>
+
+        <dl class="detail-list">
+          <div><dt>Base URL</dt><dd><code>{{ config.base_url or '— not set —' }}</code></dd></div>
+          <div><dt>Username</dt><dd><code>{{ config.username or '— not set —' }}</code></dd></div>
+          <div><dt>Password</dt><dd><code>{% if config.password_set %}••••••••{% else %}— not set —{% endif %}</code></dd></div>
+          <div><dt>Timeout</dt><dd>{{ config.timeout_seconds }}s</dd></div>
+          {% if status %}
+            <div><dt>Last check</dt><dd>{{ status.detail }}{% if status.latency_ms is not none %} · {{ status.latency_ms }} ms{% endif %}</dd></div>
+            {% if status.system %}
+              <div><dt>Server version</dt><dd>{{ status.system.version or '—' }}{% if status.system.systemName %} · {{ status.system.systemName }}{% endif %}</dd></div>
+            {% endif %}
+            {% if status.user %}
+              <div><dt>Authenticated as</dt><dd>{{ status.user.displayName or status.user.username or '—' }}</dd></div>
+            {% endif %}
+          {% endif %}
+        </dl>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Metadata Lookup</h2>
+        <span class="quiet">Search by UID or name</span>
+      </div>
+      <div class="panel-body">
+        <form method="get" action="{{ url_for('dhis2_lookup') }}" class="btn-row" style="margin-bottom:1rem">
+          <input
+            type="search"
+            name="q"
+            value="{{ query }}"
+            placeholder="UID (e.g. fbfJHSFfueG) or name"
+            style="flex:1;min-width:220px;padding:0.55rem 0.75rem;border-radius:8px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);font:inherit"
+          >
+          <button class="btn btn-primary" type="submit">Search</button>
+        </form>
+
+        {% if search %}
+          <p class="muted" style="margin:0 0 0.75rem">{{ search.detail }} · mode: {{ search.mode }}</p>
+          <div class="table-wrap">
+            <table class="data">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>UID</th>
+                  <th>Type</th>
+                  <th>Code</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for item in search.results %}
+                  <tr>
+                    <td class="cell-title">{{ item.name or '—' }}</td>
+                    <td><code>{{ item.id or '—' }}</code></td>
+                    <td class="muted">{{ item.resource_label or item.resource_type or '—' }}</td>
+                    <td class="muted">{{ item.code or '—' }}</td>
+                    <td>
+                      {% if item.id and item.resource_type %}
+                        <a class="btn btn-sm" href="{{ url_for('dhis2_detail', resource_type=item.resource_type, uid=item.id) }}">View</a>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% else %}
+                  <tr class="empty-row"><td colspan="5">No metadata matches.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="muted" style="margin:0">Run a search to inspect metadata. No create/update/delete actions are available.</p>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+
+  <aside class="stack">
+    <section class="panel">
+      <div class="panel-header"><h2>Available Tools</h2></div>
+      <div class="panel-body">
+        <div class="tools-grid">
+          {% for tool in dhis2_tools %}
+            {% if tool.endpoint %}
+              <a class="tool-btn" href="{{ url_for(tool.endpoint) }}">
+                <span class="ico">{{ tool.icon }}</span>
+                <span>{{ tool.label }}</span>
+              </a>
+            {% else %}
+              <span class="tool-btn" title="Not available in preview-only mode" style="opacity:0.45">
+                <span class="ico">{{ tool.icon }}</span>
+                <span>{{ tool.label }}</span>
+              </span>
+            {% endif %}
+          {% endfor %}
+        </div>
+
+        <div class="warning-banner">
+          <span class="shield">🛡</span>
+          <div>
+            <strong>Write operations are disabled.</strong>
+            <code>ALLOW_DHIS2_WRITES=false</code>. Central Hub will not create, update, delete, or import DHIS2 metadata.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Recent DHIS2 Audit</h2>
+        <a class="quiet" href="{{ url_for('audit') }}">View all</a>
+      </div>
+      <ul class="activity-list">
+        {% for item in recent_audit %}
+          <li>
+            <span class="activity-time">{{ item.when }}</span>
+            <div class="activity-main">
+              <span class="badge badge-activity dhis2">{{ item.action }}</span>
+              <div class="desc">{{ item.detail }}</div>
+            </div>
+            <span class="activity-user">{{ item.actor }}</span>
+          </li>
+        {% else %}
+          <li>
+            <div class="activity-main">
+              <div class="desc muted">No DHIS2 audit events yet.</div>
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    </section>
+  </aside>
 </section>
 {% endblock %}

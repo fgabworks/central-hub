@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+{% block title %}UID Index Management · DHIS2 · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <p class="muted-2" style="margin:0 0 0.35rem"><a href="{{ url_for('dhis2') }}">DHIS2</a> / UID Index</p>
+    <h1>UID Index Management</h1>
+    <p>Controlled update of the hub’s local UID index (same lifecycle as Live Processing: dry-run → review → typed confirm → versioned backup). Does not write DHIS2 or LP’s CSV.</p>
+  </div>
+  <div class="page-meta">
+    <span class="badge badge-env">ADMIN · CONTROLLED UPDATE</span>
+    <a class="btn btn-sm" href="{{ url_for('dhis2_uid_explorer') }}">Open explorer</a>
+    {% if index_meta %}
+      <a class="btn btn-sm" href="{{ url_for('dhis2_uid_index_export') }}">Export JSON</a>
+    {% endif %}
+  </div>
+</section>
+
+{% if flash_error %}<div class="banner banner-error">{{ flash_error }}</div>{% endif %}
+{% if flash_notice %}<div class="banner" style="background:rgba(59,130,246,0.12);border-color:rgba(59,130,246,0.35);color:#93c5fd">{{ flash_notice }}</div>{% endif %}
+
+<section class="uid-admin-grid">
+  <!-- LEFT: Update workflow -->
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Update UID Index</h2>
+      </div>
+      <div class="panel-body">
+        <div class="warning-banner">
+          <span class="shield">🛡</span>
+          <div>
+            <strong>Controlled update.</strong>
+            This replaces the active hub index after a dry-run review.
+            A versioned backup is created before applying. Local index only — no DHIS2 writes.
+          </div>
+        </div>
+
+        <ol class="uid-steps">
+          <li class="uid-step">
+            <span class="uid-step__num">1</span>
+            <div>
+              <strong>Select source</strong>
+              <p class="muted" style="margin:0.25rem 0 0.5rem">Configured repository mapping files (e.g. Live Processing <code>AI_UID_INDEX.csv</code>) or upload JSON/CSV.</p>
+              <div class="table-wrap" style="margin-bottom:0.75rem">
+                <table class="data">
+                  <thead><tr><th>ID</th><th>Repo</th><th>Env</th><th>Enabled</th></tr></thead>
+                  <tbody>
+                    {% for src in sources %}
+                    <tr>
+                      <td><code>{{ src.id }}</code></td>
+                      <td>{{ src.repository_id or '—' }}</td>
+                      <td>{{ src.environment or '—' }}</td>
+                      <td>{{ 'yes' if src.enabled is not defined or src.enabled else 'no' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" class="muted">No sources in config/uid_mapping_sources.yaml</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </li>
+
+          <li class="uid-step">
+            <span class="uid-step__num">2</span>
+            <div>
+              <strong>Run dry-run preview</strong>
+              <p class="muted" style="margin:0.25rem 0 0.5rem">Never writes the index. Shows exact new / changed / missing / conflict counts.</p>
+              <form method="post" style="margin-bottom:0.75rem">
+                <input type="hidden" name="action" value="scan">
+                <button class="btn btn-primary" type="submit">Scan configured sources (dry-run)</button>
+              </form>
+              <form method="post" enctype="multipart/form-data" class="builder-controls">
+                <input type="hidden" name="action" value="import_upload">
+                <label>
+                  <span>Or import file</span>
+                  <input type="file" name="import_file" accept=".csv,.json,text/csv,application/json" required>
+                </label>
+                <label>
+                  <span>Repo id</span>
+                  <input type="text" name="repository_id" value="upload">
+                </label>
+                <label>
+                  <span>Environment</span>
+                  <input type="text" name="environment" value="unknown">
+                </label>
+                <div style="display:flex;align-items:end">
+                  <button class="btn" type="submit">Preview import</button>
+                </div>
+              </form>
+              {% if scan_summary %}
+                <p class="muted" style="margin-top:0.75rem">
+                  Scanned {{ scan_summary.count }} rows from {{ scan_summary.sources|length }} source(s).
+                </p>
+              {% endif %}
+            </div>
+          </li>
+
+          <li class="uid-step">
+            <span class="uid-step__num">3</span>
+            <div>
+              <strong>Review changes</strong>
+              {% if preview and preview.change_counts %}
+                <div class="summary-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));margin:0.75rem 0">
+                  <article class="stat-card card"><div class="stat-label">New</div><div class="stat-value">{{ preview.change_counts.NEW_UID }}</div></article>
+                  <article class="stat-card card"><div class="stat-label">Name changed</div><div class="stat-value">{{ preview.change_counts.CHANGED_NAME }}</div></article>
+                  <article class="stat-card card"><div class="stat-label">Type changed</div><div class="stat-value">{{ preview.change_counts.CHANGED_TYPE }}</div></article>
+                  <article class="stat-card card"><div class="stat-label">Missing from source</div><div class="stat-value">{{ preview.change_counts.MISSING_FROM_SOURCE }}</div></article>
+                  <article class="stat-card card"><div class="stat-label">Unchanged</div><div class="stat-value">{{ preview.change_counts.UNCHANGED }}</div></article>
+                  <article class="stat-card card"><div class="stat-label">Conflicts</div><div class="stat-value">{{ preview.change_counts.CONFLICTING }}</div></article>
+                </div>
+
+                {% if preview.blocking and preview.blocking.reasons %}
+                <div class="banner {% if preview.blocking.blocked %}banner-error{% endif %}" style="margin-bottom:0.75rem">
+                  {% for reason in preview.blocking.reasons %}
+                    <div><strong>{{ reason.type }}</strong> ({{ reason.count }}): {{ reason.detail }}</div>
+                  {% endfor %}
+                </div>
+                {% endif %}
+
+                {% if preview.files_to_change %}
+                <dl class="detail-list" style="margin-bottom:0.75rem">
+                  <div><dt>Active index</dt><dd><code>{{ preview.files_to_change.active_index }}</code></dd></div>
+                  <div><dt>Backup (on apply)</dt><dd><code>{{ preview.files_to_change.backup_to_create }}</code></dd></div>
+                </dl>
+                {% endif %}
+
+                {% if preview.samples and preview.samples.new %}
+                <h3 style="margin:0 0 0.4rem;font-size:0.95rem">Sample new UIDs</h3>
+                <div class="table-wrap" style="margin-bottom:0.75rem">
+                  <table class="data">
+                    <thead><tr><th>UID</th><th>Name</th><th>Type</th></tr></thead>
+                    <tbody>
+                      {% for row in preview.samples.new[:12] %}
+                      <tr><td><code>{{ row.uid }}</code></td><td>{{ row.name }}</td><td>{{ row.object_type }}</td></tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+                {% endif %}
+
+                {% if preview.samples and preview.samples.changed_type %}
+                <h3 style="margin:0 0 0.4rem;font-size:0.95rem">Sample type changes</h3>
+                <div class="table-wrap" style="margin-bottom:0.75rem">
+                  <table class="data">
+                    <thead><tr><th>UID</th><th>Old type</th><th>New type</th></tr></thead>
+                    <tbody>
+                      {% for row in preview.samples.changed_type[:12] %}
+                      <tr>
+                        <td><code>{{ row.uid }}</code></td>
+                        <td>{{ row.object_type_old }}</td>
+                        <td>{{ row.object_type_new }}</td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+                {% endif %}
+
+                {% if preview.samples and preview.samples.conflicting %}
+                <h3 style="margin:0 0 0.4rem;font-size:0.95rem">Conflicts (skipped by default)</h3>
+                <div class="table-wrap" style="margin-bottom:0.75rem">
+                  <table class="data">
+                    <thead><tr><th>UID</th><th>Reason</th></tr></thead>
+                    <tbody>
+                      {% for row in preview.samples.conflicting[:12] %}
+                      <tr><td><code>{{ row.uid }}</code></td><td>{{ row.reason }}</td></tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+                {% endif %}
+              {% else %}
+                <p class="muted" style="margin:0.5rem 0 0">No pending dry-run. Run step 2 first.</p>
+              {% endif %}
+            </div>
+          </li>
+
+          <li class="uid-step">
+            <span class="uid-step__num">4</span>
+            <div>
+              <strong>Confirm and apply</strong>
+              <p class="muted" style="margin:0.25rem 0 0.5rem">
+                Type exactly <code>{{ confirm_apply }}</code> to write the hub index.
+              </p>
+              {% if preview %}
+              <form method="post" class="stack" style="gap:0.65rem">
+                <input type="hidden" name="action" value="apply_preview">
+                <label>
+                  <span>Confirmation phrase</span>
+                  <input type="text" name="confirmation" autocomplete="off" placeholder="{{ confirm_apply }}" required>
+                </label>
+                <label style="display:flex;gap:0.4rem;align-items:center">
+                  <input type="checkbox" name="include_conflicts" value="1">
+                  <span class="muted">Include conflicts (still skips unresolved peers)</span>
+                </label>
+                <div class="btn-row">
+                  <button class="btn btn-primary" type="submit" {% if preview.blocking and preview.blocking.blocked %}disabled{% endif %}>Apply UID Index</button>
+                </div>
+              </form>
+              <form method="post" style="margin-top:0.5rem">
+                <input type="hidden" name="action" value="discard_preview">
+                <button class="btn btn-sm" type="submit">Discard dry-run</button>
+              </form>
+              {% else %}
+              <p class="muted">Apply is locked until a dry-run preview exists.</p>
+              {% endif %}
+            </div>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header"><h2>Current index</h2></div>
+      <div class="panel-body">
+        {% if index_meta %}
+          <p><strong>{{ index_meta.record_count or (index_meta.records|length if index_meta.records else 0) }}</strong> records</p>
+          <p class="muted">Updated {{ index_meta.updated_at.replace('T',' ')[:19] if index_meta.updated_at else '—' }}</p>
+          <p class="muted mono" style="word-break:break-all">{{ versions.current.index_path if versions else '' }}</p>
+        {% else %}
+          <p class="muted">No index saved yet.</p>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+
+  <!-- RIGHT: Version history -->
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-header"><h2>Version History</h2></div>
+      <div class="panel-body">
+        <p class="muted" style="margin-top:0">
+          Archived backups under <code>data/dhis2/uid_index/archive/</code>.
+          Current SHA: <code>{{ (versions.current.sha256 if versions else '')[:12] }}{% if versions and versions.current.sha256 %}…{% endif %}</code>
+          · {{ versions.current.rows if versions else 0 }} rows
+        </p>
+
+        <div class="table-wrap" style="margin:0.75rem 0">
+          <table class="data">
+            <thead><tr><th>Version</th><th>When</th><th>Rows</th><th></th></tr></thead>
+            <tbody>
+              <tr>
+                <td><span class="badge badge-healthy">current</span></td>
+                <td class="muted">{{ index_meta.updated_at.replace('T',' ')[:19] if index_meta and index_meta.updated_at else '—' }}</td>
+                <td>{{ versions.current.rows if versions else 0 }}</td>
+                <td class="muted">active</td>
+              </tr>
+              {% for v in (versions.versions if versions else [])[:30] %}
+              <tr>
+                <td><code>{{ v.version }}</code></td>
+                <td class="muted">{{ v.created_display }}</td>
+                <td>{{ v.rows }}</td>
+                <td>
+                  <form method="post" class="btn-row" style="gap:0.35rem;align-items:center">
+                    <input type="hidden" name="action" value="restore_version">
+                    <input type="hidden" name="version" value="{{ v.version }}">
+                    <input type="text" name="confirmation" placeholder="{{ confirm_restore }}" style="min-width:12rem" required>
+                    <button class="btn btn-sm" type="submit">Restore</button>
+                  </form>
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="4" class="muted">No archived versions yet — apply once to create backups.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <h3 style="margin:1rem 0 0.5rem;font-size:0.95rem">Compare versions</h3>
+        <form method="post" class="builder-controls">
+          <input type="hidden" name="action" value="compare_versions">
+          <label>
+            <span>Version A</span>
+            <select name="version_a">
+              <option value="current">current</option>
+              {% for v in (versions.versions if versions else []) %}
+                <option value="{{ v.version }}">{{ v.version }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>
+            <span>Version B</span>
+            <select name="version_b" required>
+              <option value="">Select…</option>
+              <option value="current">current</option>
+              {% for v in (versions.versions if versions else []) %}
+                <option value="{{ v.version }}">{{ v.version }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <div style="display:flex;align-items:end">
+            <button class="btn" type="submit">Compare</button>
+          </div>
+        </form>
+
+        {% if version_compare and version_compare.ok %}
+        <div class="summary-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-top:0.85rem">
+          <article class="stat-card card"><div class="stat-label">Added in B</div><div class="stat-value">{{ version_compare.counts.added }}</div></article>
+          <article class="stat-card card"><div class="stat-label">Removed in B</div><div class="stat-value">{{ version_compare.counts.removed }}</div></article>
+          <article class="stat-card card"><div class="stat-label">Changed</div><div class="stat-value">{{ version_compare.counts.changed }}</div></article>
+        </div>
+        <p class="muted" style="margin-top:0.5rem">
+          {{ version_compare.version_a }} ({{ version_compare.rows_a }} rows) →
+          {{ version_compare.version_b }} ({{ version_compare.rows_b }} rows)
+        </p>
+        {% endif %}
+
+        <div class="warning-banner" style="margin-top:1rem">
+          <span class="shield">🛡</span>
+          <div>
+            Restore requires typing <code>{{ confirm_restore }}</code>.
+            Missing-from-source counts are informational; apply does not delete stale UIDs.
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</section>
+{% endblock %}

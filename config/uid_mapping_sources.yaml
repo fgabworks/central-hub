@@ -1,0 +1,27 @@
+# Config-driven UID / data-mapping sources for Central Hub.
+# Paths may be absolute or relative to the hub root.
+# Do not put secrets here. Do not hardcode PMNP domain rules.
+
+sources:
+  - id: live-processing-ai-uid-index
+    label: Live Processing AI UID Index
+    repository_id: live-processing
+    environment: live
+    enabled: true
+    format: csv
+    path: "C:/PMNP/pmnp-live-processing/AI_REFERENCE/AI_UID_INDEX.csv"
+    # Map source columns → normalized index fields
+    column_map:
+      uid: id
+      name: name
+      code: code
+      object_type: kind
+      value_type: valueType
+      domain_type: domainType
+      program_uid: program
+      # optional extras ignored if absent
+      description: description
+
+defaults:
+  index_path: data/dhis2/uid_index/latest.json
+  preview_limit: 200

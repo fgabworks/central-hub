@@ -50,7 +50,8 @@ becomes a second implementation of any connected system.
   DDS, tetanus, or scorecard logic. If a feature needs those rules, expose them as
   a capability that *calls the connected repository*.
 - Importing connected repositories' Python packages for business logic.
-- Real DHIS2 writes or live PMNP/DHIS2 connections (all current entries are demo).
+- Real DHIS2 **writes**, or copying live credentials into the repo. Read-only DHIS2
+  access is allowed only via `.env` configuration (see [docs/DHIS2_SAFETY.md](docs/DHIS2_SAFETY.md)).
 - Free-form shell execution from UI or config; `shell=True` anywhere.
 - Hardcoding or committing secrets, tokens, or real hostnames/credentials.
 - Adding heavy frontend frameworks or dependencies beyond `requirements.txt` needs.

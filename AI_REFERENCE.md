@@ -1,63 +1,76 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-07-24 (Phase 1, hub version 0.1.0, branch `main`, no commits yet).
-Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff details: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
+Last verified: 2026-07-25 (Repository registry management + connected GitHub repos).
+Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
-## Status: Phase 1 — skeleton + registry + health
+## Status
 
-Implemented and verified against code:
+**Phases 1–6 MVP + connected Live Processing + DHIS2 enrichment + Repository Notebook
++ registry Add/Edit/Disable.**
+Hub coordinates repos via registry/adapters; DHIS2 stays GET-only; jobs run
+allowlisted capabilities only.
 
 | Area | State |
 |---|---|
-| App entry | `app.py` — Flask `create_app()`, runs on `127.0.0.1:8080` by default |
-| Settings | `hub/settings.py` — `CENTRAL_HUB_*` env vars via `.env` / `python-dotenv` |
-| Registry | `hub/registry/` — loads and validates `config/repositories.yaml` (4 demo repos) |
-| Adapters | `hub/adapters/` — health checks only; API (HTTP) + command (path/allowlisted probe) |
-| UI | Dark sidebar dashboard; Jinja templates + `static/css/style.css`; no JS frameworks |
-| Database | None. `db/` is an empty placeholder for Phase 2 SQLite |
-| Tests | None yet (manual checklist in `README.md`) |
+| Registry + health | `config/repositories.yaml`, `${VAR:-default}` expansion, `hub/adapters/` |
+| Registry management | Add / Edit / Enable / Disable via UI → YAML (`hub/registry/store.py`); no auto-clone |
+| Health probes | Parallel checks; states: Healthy / Unreachable / Not Cloned / Disabled |
+| Live Processing | `live-processing` (API GET-only) + `live-processing-local` (path + git_url) |
+| Data-Script / Report Template | Registered with GitHub URLs; local path optional (`DATA_SCRIPT_PATH`, `REPORT_TEMPLATE_PATH`) |
+| Dashboard | Live health cards; Open Tasks from Notebook; Notebook Work Queue + Recent Activity |
+| Repository Notebook | Local SQLite notes; pin + work queue; no agent scan |
+| DHIS2 | GET client, discovery, UID mapping, preview builder |
+| UID index admin | LP-style controlled update: dry-run → preview → typed confirm → archive/versions/restore |
+| Metadata enrichment | Read-only DHIS2 enrich → local SQLite relationships + audit statuses |
+| Explorer | Prefer enrichment snapshot when present; tabs + filters; lazy raw metadata |
+| Jobs (Phase 2) | SQLite `data/hub.db`, submit/list/get, worker, logs |
+| Command exec (Phase 3) | YAML `command_template`, `shell=False`, cwd jail |
+| API exec (Phase 4) | GET/HEAD only from YAML `http_path` |
+| Files (Phase 5) | Uploads/results under `data/{uploads,results}/{job_id}/` |
+| Safeguards (Phase 6) | Dry-run default, confirm for apply, max concurrent, owner token |
+| Tests | `tests/` — registry store + fixtures for demo samples; active YAML has no samples |
+| DHIS2 writes | **Disabled** |
 
-## Real vs demo data — important
+## Connected repositories (active registry)
 
-- **Real:** `/repositories`, `/repositories/<id>`, `/health` and all `/api/*` routes
-  read the live registry and run real health probes.
-- **Demo/UI-only:** the Dashboard (`/`) renders hard-coded fixtures in `app.py`
-  (`_demo_summary_cards`, `_demo_repositories`, `_demo_jobs`, `_demo_activity`,
-  `_DHIS2_TOOLS`). The repositories, jobs, activity rows, and DHIS2 panel shown
-  there are **not** live data.
-- **Placeholders:** `/jobs`, `/dhis2`, `/audit` are static pages; `/settings` is a
-  read-only view of runtime settings.
-- `ALLOW_DHIS2_WRITES` appears in `.env.example` and UI banners only —
-  **no Python code reads it**, because no DHIS2 client exists.
-
-## Routes
-
-| Route | Behavior |
+| id | Role |
 |---|---|
-| `/` | Dashboard (demo fixtures) |
-| `/repositories`, `/repositories/<id>` | Live registry list/detail |
-| `/health` | Live health checks for all registered repos |
-| `/jobs`, `/dhis2`, `/audit` | Placeholders ("coming in next phase") |
-| `/settings` | Read-only runtime settings |
-| `/api/healthz` | Hub process health JSON |
-| `/api/repositories` | Registry JSON |
-| `/api/repositories/<id>/health` | Single-repo health JSON |
-| `/api/health` | All-repo health JSON |
+| `live-processing` | API — GET health/history/preview |
+| `live-processing-local` | Local checkout of same GitHub repo (`LIVE_PROCESSING_PATH`) |
+| `data-script` | Git URL `PMNP-IS/Data-Script` — Not Cloned until path set |
+| `report-template` | Git URL `PMNP-IS/REPORT_TEMPLATE` — Not Cloned until path set |
 
-## Environment variables (read by code)
+Demo `sample-*` entries removed from the active registry; job tests use
+`tests/fixtures/repositories.yaml`.
 
-`CENTRAL_HUB_APP_NAME`, `CENTRAL_HUB_ENV`, `CENTRAL_HUB_HOST`, `CENTRAL_HUB_PORT`,
-`CENTRAL_HUB_DEBUG`, `CENTRAL_HUB_REPOSITORIES_CONFIG`, `CENTRAL_HUB_REQUEST_TIMEOUT`.
-See `.env.example`.
+## Repository Notebook
 
-## Next milestone — Phase 2
+| Route | Purpose |
+|---|---|
+| `/notebook` | Status rail + filters + list + editor (New / Save / Archive / Restore; pin) |
+| `/notebook/<id>/export` | Download note JSON |
+| `/api/notebook/preview` | Markdown → HTML preview |
+| `/` (dashboard) | Open Tasks card + Notebook Work Queue (Open / Pinned / Overdue / Due Today / Upcoming / Blocked); excludes Done & Archived |
 
-Jobs + dashboard + audit (from `CENTRAL_HUB_REFERENCE.md` §12):
+Store: `data/notebook.db` (`hub/notebook/`) with schema migrations (`pinned` column).
+Notes keep denormalized repository labels when a registry repo becomes unavailable.
+Dashboard reuses `NotebookStore` / `hub/notebook/dashboard.py` — no duplicated note data.
+No browser-only storage; no agent integration yet.
 
-1. SQLite tables for jobs and audit events (under `db/` / `data/`)
-2. Submit / list / get job APIs (queued only; no real execution yet)
-3. Job dashboard replacing demo fixtures with real data
-4. Per-job log file scaffolding
-5. Audit events: `SUBMIT_JOB`, `VIEW_LOGS`, `HEALTH_CHECK`
+## Connected Live Processing
 
-Capability status matrix: [SKILLS.md](SKILLS.md).
+Env (see `.env.example`): `LIVE_PROCESSING_BASE_URL`, `LIVE_PROCESSING_PATH`.
+
+| Repo id | Type | Hub may do |
+|---|---|---|
+| `live-processing` | API | Health + GET `healthz`, `bulk_apply_history`, `bulk_preview` jobs |
+| `live-processing-local` | command | Path presence health only (no domain commands) |
+
+No LP apply/write proxies. No import of LP Python packages for business logic.
+
+## Next
+
+Optional: more GET-only LP capabilities via YAML; enrichment Phase A completeness.
+Do **not** enable DHIS2 writes without [docs/DHIS2_SAFETY.md](docs/DHIS2_SAFETY.md).
+
+Capability matrix: [SKILLS.md](SKILLS.md).

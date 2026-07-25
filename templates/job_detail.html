@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_badge %}
+{% block title %}{{ job.id }} · Jobs · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <p class="muted-2" style="margin:0 0 0.35rem"><a href="{{ url_for('jobs') }}">Jobs</a> / {{ job.id }}</p>
+    <h1>{{ job.capability_id }}</h1>
+    <p class="muted">{{ job.repository_id }} · {% if job.dry_run %}dry-run{% else %}apply{% endif %}</p>
+  </div>
+  <div class="page-meta">
+    {{ status_badge(job.status) }}
+    <a class="btn btn-sm" href="{{ url_for('jobs') }}">Back</a>
+  </div>
+</section>
+
+{% if flash_error %}<div class="banner banner-error">{{ flash_error }}</div>{% endif %}
+{% if flash_notice %}<div class="banner" style="background:rgba(59,130,246,0.12);border-color:rgba(59,130,246,0.35);color:#93c5fd">{{ flash_notice }}</div>{% endif %}
+
+<section class="summary-grid" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:1rem">
+  <article class="stat-card card"><div class="stat-label">Phase</div><div class="stat-value" style="font-size:1rem">{{ job.phase or job.status }}</div></article>
+  <article class="stat-card card"><div class="stat-label">Progress</div><div class="stat-value">{{ '%.0f'|format(job.percent or 0) }}%</div></article>
+  <article class="stat-card card"><div class="stat-label">Actor</div><div class="stat-value" style="font-size:1rem">{{ job.actor }}</div></article>
+  <article class="stat-card card"><div class="stat-label">Resumable</div><div class="stat-value" style="font-size:1rem">{{ 'yes' if job.resumable else 'no' }}</div></article>
+</section>
+
+<section class="dash-grid">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-header"><h2>Status</h2></div>
+      <div class="panel-body">
+        <p>{{ job.message or '—' }}</p>
+        {% if job.error %}<p class="banner banner-error">{{ job.error }}</p>{% endif %}
+        <p class="muted">Created {{ job.created_at }} · Updated {{ job.updated_at }}</p>
+        {% if actor == 'owner' %}
+        <div class="btn-row" style="margin-top:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap">
+          {% if job.status in ['queued', 'running', 'paused'] %}
+          <form method="post"><input type="hidden" name="action" value="cancel"><button class="btn btn-sm" type="submit">Cancel</button></form>
+          {% endif %}
+          {% if job.status == 'running' %}
+          <form method="post"><input type="hidden" name="action" value="pause"><button class="btn btn-sm" type="submit">Pause</button></form>
+          {% endif %}
+          {% if job.status == 'paused' or (job.resumable and job.status == 'failed') %}
+          <form method="post"><input type="hidden" name="action" value="resume"><button class="btn btn-sm btn-primary" type="submit">Resume / re-queue</button></form>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header"><h2>Upload input</h2></div>
+      <div class="panel-body">
+        <form method="post" enctype="multipart/form-data">
+          <input type="hidden" name="action" value="upload">
+          <input type="file" name="input_file" accept=".txt,.csv,.json,.log,.md" {% if actor != 'owner' or job.status not in ['queued','paused'] %}disabled{% endif %}>
+          <button class="btn btn-sm btn-primary" type="submit" style="margin-top:0.5rem" {% if actor != 'owner' or job.status not in ['queued','paused'] %}disabled{% endif %}>Upload</button>
+        </form>
+        <p class="muted" style="margin-top:0.5rem">Input dir: <code>{{ job.input_path }}</code></p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header"><h2>Artifacts</h2></div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Name</th><th>Size</th><th></th></tr></thead>
+          <tbody>
+            {% for item in artifacts %}
+            <tr>
+              <td><code>{{ item.name }}</code></td>
+              <td class="muted">{{ item.size }} B</td>
+              <td><a href="{{ url_for('job_download', job_id=job.id, name=item.name) }}">Download</a></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3" class="muted">No artifacts yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-header"><h2>Log</h2></div>
+      <div class="panel-body">
+        <pre class="code-block" style="max-height:480px;overflow:auto">{{ log_text or '(empty)' }}</pre>
+      </div>
+    </section>
+  </div>
+</section>
+
+{% if job.status in ['queued', 'running', 'paused'] %}
+<script>
+setTimeout(function () { window.location.reload(); }, 2500);
+</script>
+{% endif %}
+{% endblock %}

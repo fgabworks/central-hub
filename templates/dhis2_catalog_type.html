@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_badge %}
+{% block title %}{{ item.schema_name }} · Catalog · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <p class="muted-2" style="margin:0 0 0.35rem">
+      <a href="{{ url_for('dhis2') }}">DHIS2</a> /
+      <a href="{{ url_for('dhis2_catalog') }}">Catalog</a> /
+      {{ item.id }}
+    </p>
+    <h1>{{ item.schema_name or item.singular }}</h1>
+    <p>Schema-driven capability details from discovery (read-only).</p>
+  </div>
+  <div class="page-meta">
+    <span class="badge badge-phase">{{ item.category }}</span>
+    <span class="badge badge-api">{{ item.builder_mode }}</span>
+    {% if enrich_error %}<span class="muted">{{ enrich_error }}</span>{% endif %}
+    <a class="btn btn-sm" href="{{ url_for('dhis2_catalog_type', type_id=item.id, enrich=1) }}">Fetch count/sample</a>
+  </div>
+</section>
+
+<section class="dash-grid">
+  <div class="stack">
+    <section class="panel panel-body">
+      <h2 style="margin:0 0 0.75rem;font-size:14px">Identity</h2>
+      <dl class="detail-list">
+        <div><dt>Singular</dt><dd><code>{{ item.singular }}</code></dd></div>
+        <div><dt>Collection</dt><dd><code>{{ item.plural }}</code></dd></div>
+        <div><dt>API endpoint</dt><dd><code>{{ item.api_endpoint or '—' }}</code></dd></div>
+        <div><dt>Klass</dt><dd><code>{{ item.klass }}</code></dd></div>
+        <div><dt>Count</dt><dd>{{ item.count if item.count is not none else '— (not fetched)' }}</dd></div>
+        <div><dt>Hub apply</dt><dd>{{ status_badge('disabled') }}</dd></div>
+      </dl>
+    </section>
+
+    <section class="panel panel-body">
+      <h2 style="margin:0 0 0.75rem;font-size:14px">Required properties</h2>
+      <ul class="plain-checks">
+        {% for prop in item.required_properties %}
+          <li><code>{{ prop.name }}</code> <span class="muted">{{ prop.propertyType }}</span></li>
+        {% else %}
+          <li class="muted">None listed</li>
+        {% endfor %}
+      </ul>
+      <h2 style="margin:1rem 0 0.75rem;font-size:14px">Optional properties (sample)</h2>
+      <ul class="plain-checks">
+        {% for prop in item.optional_properties[:30] %}
+          <li><code>{{ prop.name }}</code> <span class="muted">{{ prop.propertyType }}</span></li>
+        {% else %}
+          <li class="muted">None listed</li>
+        {% endfor %}
+      </ul>
+      <p class="muted">Total optional properties: {{ item.optional_property_count }}</p>
+    </section>
+  </div>
+
+  <aside class="stack">
+    <section class="panel panel-body">
+      <h2 style="margin:0 0 0.75rem;font-size:14px">References</h2>
+      <ul class="plain-checks">
+        {% for prop in item.reference_properties[:25] %}
+          <li><code>{{ prop.name }}</code> → {{ prop.referencedType or 'ref' }}</li>
+        {% else %}
+          <li class="muted">None</li>
+        {% endfor %}
+      </ul>
+    </section>
+    <section class="panel panel-body">
+      <h2 style="margin:0 0 0.75rem;font-size:14px">Collections</h2>
+      <ul class="plain-checks">
+        {% for prop in item.collection_properties[:25] %}
+          <li><code>{{ prop.name }}</code></li>
+        {% else %}
+          <li class="muted">None</li>
+        {% endfor %}
+      </ul>
+    </section>
+    <section class="panel panel-body">
+      <h2 style="margin:0 0 0.75rem;font-size:14px">Enums</h2>
+      {% if item.enums %}
+        {% for name, values in item.enums.items() %}
+          <p style="margin:0 0 0.35rem"><code>{{ name }}</code></p>
+          <p class="muted" style="margin:0 0 0.75rem">{{ values|join(', ') }}</p>
+        {% endfor %}
+      {% else %}
+        <p class="muted" style="margin:0">No enum constants listed on schema properties.</p>
+      {% endif %}
+    </section>
+    <section class="panel panel-body">
+      <h2 style="margin:0 0 0.75rem;font-size:14px">Sample objects</h2>
+      {% if item.sample %}
+        <ul class="plain-checks">
+          {% for row in item.sample %}
+            <li>{{ row.name or '—' }} <code>{{ row.id }}</code></li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="muted" style="margin:0">No sample loaded. Use “Fetch count/sample” (GET only, max 3 rows).</p>
+      {% endif %}
+    </section>
+  </aside>
+</section>
+{% endblock %}

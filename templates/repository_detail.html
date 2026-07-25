@@ -12,7 +12,8 @@
   </div>
   <div class="page-meta">
     {{ type_badge(repository.type) }}
-    {% if repository.enabled %}{{ status_badge('healthy') }}{% else %}{{ status_badge('disabled') }}{% endif %}
+    {{ status_badge(status) }}
+    <a class="btn btn-sm" href="{{ url_for('repository_edit', repo_id=repository.id) }}">Edit</a>
   </div>
 </section>
 
@@ -22,13 +23,28 @@
     <dl class="detail-list">
       <div><dt>ID</dt><dd><code>{{ repository.id }}</code></dd></div>
       <div><dt>Type</dt><dd>{{ type_badge(repository.type) }}</dd></div>
+      {% if repository.git_url %}<div><dt>Git URL</dt><dd><code>{{ repository.git_url }}</code></dd></div>{% endif %}
       {% if repository.base_url %}<div><dt>Base URL</dt><dd><code>{{ repository.base_url }}</code></dd></div>{% endif %}
       {% if repository.local_path %}<div><dt>Local path</dt><dd><code>{{ repository.local_path }}</code></dd></div>{% endif %}
+      {% if not repository.local_path and repository.git_url and repository.type == 'command' %}
+        <div><dt>Local path</dt><dd class="muted">Not cloned (set a path manually — hub will not auto-clone)</dd></div>
+      {% endif %}
       {% if repository.working_directory %}<div><dt>Working directory</dt><dd><code>{{ repository.working_directory }}</code></dd></div>{% endif %}
+      {% if health %}<div><dt>Last probe</dt><dd class="muted">{{ health.detail or '—' }}</dd></div>{% endif %}
     </dl>
     <div class="btn-row" style="margin-top:1rem">
       <a class="btn btn-primary" href="{{ url_for('health') }}">Open Health</a>
       <a class="btn" href="{{ url_for('api_repository_health', repo_id=repository.id) }}">JSON health</a>
+      {% if repository.capabilities %}<a class="btn" href="{{ url_for('jobs') }}">Submit job</a>{% endif %}
+      {% if repository.enabled %}
+        <form method="post" action="{{ url_for('repository_disable', repo_id=repository.id) }}" class="inline-form">
+          <button class="btn" type="submit">Disable</button>
+        </form>
+      {% else %}
+        <form method="post" action="{{ url_for('repository_enable', repo_id=repository.id) }}" class="inline-form">
+          <button class="btn btn-primary" type="submit">Enable</button>
+        </form>
+      {% endif %}
     </div>
   </section>
 
@@ -45,5 +61,26 @@
       <p class="muted">No health check configured.</p>
     {% endif %}
   </section>
+</section>
+
+<section class="panel" style="margin-top:0.85rem">
+  <div class="panel-header"><h2>Capabilities</h2></div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>ID</th><th>Label</th><th>Adapter</th><th>Dry-run default</th></tr></thead>
+      <tbody>
+        {% for cap in repository.capabilities %}
+        <tr>
+          <td><code>{{ cap.id }}</code></td>
+          <td>{{ cap.label }}</td>
+          <td>{{ cap.adapter_type }}</td>
+          <td>{{ 'yes' if cap.dry_run_default else 'no (confirm required)' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="muted">No job capabilities declared (health only).</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
 {% endblock %}

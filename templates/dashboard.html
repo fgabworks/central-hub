@@ -5,25 +5,58 @@
 <section class="page-header">
   <div>
     <h1>Dashboard</h1>
-    <p>Overview of your repositories, jobs, DHIS2 and system status.</p>
+    <p>Overview of your repositories, notebook tasks, DHIS2 and system status.</p>
   </div>
   <div class="page-meta">
     <span>Last updated: {{ last_updated }}</span>
-    <a class="icon-btn" href="{{ url_for('dashboard') }}" title="Refresh" aria-label="Refresh">↻</a>
+    <a class="icon-btn" href="{{ url_for('dashboard', queue=work_queue.tab) }}" title="Refresh" aria-label="Refresh">↻</a>
   </div>
 </section>
 
 <section class="summary-grid">
   {% for card in summary_cards %}
-    <article class="stat-card">
-      <div class="stat-top">
-        <span class="stat-label">{{ card.label }}</span>
-        <span class="stat-ico" aria-hidden="true">{{ card.icon }}</span>
-      </div>
-      <div class="stat-value">{{ card.value }}</div>
-      <div class="stat-sub">{{ card.sub }}</div>
-      <a class="stat-link" href="{{ url_for(card.link_endpoint) }}">View all →</a>
-    </article>
+    {% if card.kind == 'open_tasks' %}
+      <a class="stat-card stat-card-tasks severity-{{ card.severity }}"
+         href="{{ card.href }}"
+         aria-label="Open Tasks: {{ card.metrics.open }} open, {{ card.metrics.overdue }} overdue, {{ card.metrics.due_this_week }} due this week, {{ card.metrics.blocked }} blocked. Open Notebook active tasks.">
+        <div class="stat-top">
+          <span class="stat-label">{{ card.label }}</span>
+          <span class="stat-top-end">
+            {% if card.badge %}
+              <span class="stat-badge" aria-hidden="true">{{ card.badge }}</span>
+            {% endif %}
+            <span class="stat-ico stat-ico-tasks" aria-hidden="true">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect x="3.5" y="2.5" width="9" height="11" rx="1.5" stroke="currentColor" stroke-width="1.4"/>
+                <path d="M6 1.75h4v1.5H6z" fill="currentColor"/>
+                <path d="M6 6.5h4M6 9h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              </svg>
+            </span>
+          </span>
+        </div>
+        <div class="stat-value">{{ card.value }}</div>
+        <div class="stat-sub stat-metrics">
+          <span class="metric">{{ card.metrics.open }} open</span>
+          <span class="metric-sep" aria-hidden="true">·</span>
+          <span class="metric{% if card.metrics.overdue %} is-warn{% endif %}">{{ card.metrics.overdue }} overdue</span>
+          <span class="metric-sep" aria-hidden="true">·</span>
+          <span class="metric">{{ card.metrics.due_this_week }} due this week</span>
+          <span class="metric-sep" aria-hidden="true">·</span>
+          <span class="metric{% if card.metrics.blocked %} is-warn{% endif %}">{{ card.metrics.blocked }} blocked</span>
+        </div>
+        <span class="stat-link">{{ card.link_label }}</span>
+      </a>
+    {% else %}
+      <article class="stat-card">
+        <div class="stat-top">
+          <span class="stat-label">{{ card.label }}</span>
+          <span class="stat-ico" aria-hidden="true">{{ card.icon }}</span>
+        </div>
+        <div class="stat-value">{{ card.value }}</div>
+        <div class="stat-sub">{{ card.sub }}</div>
+        <a class="stat-link" href="{{ card.href }}">{{ card.link_label }}</a>
+      </article>
+    {% endif %}
   {% endfor %}
 </section>
 
@@ -47,7 +80,7 @@
             </tr>
           </thead>
           <tbody>
-            {% for row in demo_repos %}
+            {% for row in live_repos %}
               <tr>
                 <td>
                   <div class="cell-title">
@@ -60,46 +93,121 @@
                 <td>{{ status_badge(row.status) }}</td>
                 <td class="mono muted">{{ row.branch_path }}</td>
                 <td class="muted-2">{{ row.last_check }}</td>
-                <td><a class="btn btn-sm" href="{{ url_for('repositories') }}">View</a></td>
+                <td>
+                  {% if row.repo_id %}
+                    <a class="btn btn-sm" href="{{ url_for('repository_detail', repo_id=row.repo_id) }}">View</a>
+                  {% else %}
+                    <a class="btn btn-sm" href="{{ url_for('repositories') }}">View</a>
+                  {% endif %}
+                </td>
               </tr>
+            {% else %}
+              <tr><td colspan="6" class="muted">No repositories in registry.</td></tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
     </section>
 
-    <section class="panel">
-      <div class="panel-header">
-        <h2>Recent Jobs</h2>
-        <a class="quiet" href="{{ url_for('jobs') }}">View all</a>
+    <section class="panel panel-queue">
+      <div class="panel-header panel-header-queue">
+        <h2>Notebook Work Queue</h2>
+        <div class="panel-actions">
+          <a class="quiet" href="{{ url_for('notebook') }}">View all</a>
+          <form method="post" action="{{ url_for('notebook') }}" class="inline-form">
+            <input type="hidden" name="action" value="new">
+            <button class="btn btn-sm btn-primary" type="submit">+ New Note</button>
+          </form>
+        </div>
+      </div>
+      <div class="queue-tabs" role="tablist" aria-label="Notebook work queue filters">
+        <a class="queue-tab{% if work_queue.tab == 'open' %} is-active{% endif %}"
+           href="{{ url_for('dashboard', queue='open') }}">Open ({{ work_queue.tabs.open }})</a>
+        <a class="queue-tab{% if work_queue.tab == 'pinned' %} is-active{% endif %}"
+           href="{{ url_for('dashboard', queue='pinned') }}">Pinned ({{ work_queue.tabs.pinned }})</a>
+        <a class="queue-tab{% if work_queue.tab == 'overdue' %} is-active{% endif %}"
+           href="{{ url_for('dashboard', queue='overdue') }}">Overdue ({{ work_queue.tabs.overdue }})</a>
+        <a class="queue-tab{% if work_queue.tab == 'due_today' %} is-active{% endif %}"
+           href="{{ url_for('dashboard', queue='due_today') }}">Due Today ({{ work_queue.tabs.due_today }})</a>
+        <a class="queue-tab{% if work_queue.tab == 'upcoming' %} is-active{% endif %}"
+           href="{{ url_for('dashboard', queue='upcoming') }}">Upcoming ({{ work_queue.tabs.upcoming }})</a>
+        <a class="queue-tab{% if work_queue.tab == 'blocked' %} is-active{% endif %}"
+           href="{{ url_for('dashboard', queue='blocked') }}">Blocked ({{ work_queue.tabs.blocked }})</a>
       </div>
       <div class="table-wrap">
-        <table class="data">
+        <table class="data queue-table">
           <thead>
             <tr>
-              <th>Job</th>
-              <th>Repository</th>
+              <th class="col-pin" aria-label="Pinned"></th>
+              <th>Title</th>
+              <th class="col-repo">Repository</th>
+              <th>Type</th>
               <th>Status</th>
-              <th>Started At</th>
-              <th>Duration</th>
-              <th>Result</th>
+              <th>Priority</th>
+              <th>Due</th>
+              <th>Progress</th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody>
-            {% for job in demo_jobs %}
-              <tr>
-                <td class="cell-title">{{ job.name }}</td>
-                <td class="muted">{{ job.repository }}</td>
-                <td>{{ status_badge(job.status) }}</td>
-                <td class="muted-2">{{ job.started_at }}</td>
-                <td class="muted-2">{{ job.duration }}</td>
+            {% for note in work_queue.notes %}
+              <tr class="status-{{ note.status }}">
+                <td class="col-pin">
+                  {% if note.flags.pinned %}
+                    <span class="pin-star" title="Pinned" aria-label="Pinned">★</span>
+                  {% else %}
+                    <span class="pin-star is-empty" aria-hidden="true">☆</span>
+                  {% endif %}
+                </td>
                 <td>
-                  <a class="btn btn-sm" href="{{ url_for('jobs') }}">{{ job.action }}</a>
+                  <div class="cell-title">{{ note.title }}</div>
+                  <div class="cell-sub">{{ note.type_label }}</div>
+                </td>
+                <td class="col-repo">
+                  <span class="repo-cell{% if note.repo_primary_unavailable %} is-unavailable{% endif %}"
+                        title="{{ note.repo_tooltip }}">
+                    {% if note.repo_extra_count %}
+                      <span class="repo-primary">{{ note.repo_primary_name }}</span>
+                      <span class="repo-extra">+{{ note.repo_extra_count }}</span>
+                    {% else %}
+                      {{ note.repo_cell }}
+                    {% endif %}
+                  </span>
+                </td>
+                <td class="muted">{{ note.type_label }}</td>
+                <td><span class="badge badge-status-{{ note.status }}">{{ note.status_label }}</span></td>
+                <td><span class="badge badge-priority-{{ note.priority }}">{{ note.priority_label }}</span></td>
+                <td>
+                  <span class="due-chip due-{{ note.due_meta.kind }}">{{ note.due_meta.label }}</span>
+                </td>
+                <td>
+                  {% if note.checklist_total %}
+                    <div class="check-progress" title="{{ note.checklist_done }}/{{ note.checklist_total }}">
+                      <div class="check-progress-bar" style="width: {{ (note.checklist_done / note.checklist_total * 100)|round|int }}%"></div>
+                    </div>
+                    <div class="check-progress-label">{{ note.checklist_done }}/{{ note.checklist_total }}</div>
+                  {% else %}
+                    <div class="check-progress-label is-empty">—</div>
+                  {% endif %}
+                </td>
+                <td>
+                  <a class="btn btn-sm" href="{{ url_for('notebook', note=note.id) }}">Open</a>
+                </td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="9" class="muted">
+                  No open notebook items in this tab.
+                  <a href="{{ url_for('notebook') }}">Create a note</a>
+                  or switch tabs. Done and archived notes are excluded.
                 </td>
               </tr>
             {% endfor %}
           </tbody>
         </table>
+      </div>
+      <div class="panel-footer muted-2">
+        Showing {{ work_queue.shown }} of {{ work_queue.total_open }} open tasks
       </div>
     </section>
   </div>
@@ -114,7 +222,7 @@
         <div class="dhis2-status">
           <div class="dhis2-chip">
             <span class="label">DHIS2 Connection</span>
-            {{ status_badge('connected') }}
+            <span class="badge badge-env">{{ topbar_dhis2.label }}</span>
           </div>
           <div class="dhis2-chip">
             <span class="label">Environment</span>
@@ -129,7 +237,7 @@
         <div class="nav-label" style="padding-left:0">Available Tools</div>
         <div class="tools-grid">
           {% for tool in dhis2_tools %}
-            <a class="tool-btn" href="{{ url_for('dhis2') }}">
+            <a class="tool-btn" href="{{ url_for(tool.endpoint) }}">
               <span class="ico" aria-hidden="true">{{ tool.icon }}</span>
               <span>{{ tool.label }}</span>
             </a>
@@ -139,30 +247,34 @@
         <div class="warning-banner">
           <span class="shield" aria-hidden="true">🛡</span>
           <div>
-            <strong>Write operations are disabled.</strong>
-            Enable <code>ALLOW_DHIS2_WRITES=true</code> to create or update metadata.
+            <strong>DHIS2 writes are not implemented.</strong>
+            <code>ALLOW_DHIS2_WRITES</code> must stay false. Use preview builders and connected-repo jobs only.
           </div>
         </div>
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel panel-activity">
       <div class="panel-header">
         <h2>Recent Activity</h2>
         <a class="quiet" href="{{ url_for('audit') }}">View all</a>
       </div>
-      <ul class="activity-list">
-        {% for item in demo_activity %}
-          <li>
-            <span class="activity-time">{{ item.time }}</span>
-            <div class="activity-main">
-              <span class="badge badge-activity {{ item.tone }}">{{ item.action }}</span>
-              <div class="desc">{{ item.detail }}</div>
-            </div>
-            <span class="activity-user">{{ item.actor }}</span>
-          </li>
-        {% endfor %}
-      </ul>
+      <div class="activity-scroll" tabindex="0" aria-label="Recent activity">
+        <ul class="activity-list">
+          {% for item in activity_rows %}
+            <li>
+              <span class="activity-time">{{ item.time }}</span>
+              <div class="activity-main">
+                <span class="badge badge-activity {{ item.tone }}">{{ item.action }}</span>
+                <div class="desc">{{ item.detail }}</div>
+              </div>
+              <span class="activity-user">{{ item.actor }}</span>
+            </li>
+          {% else %}
+            <li class="activity-empty muted">No recent activity yet.</li>
+          {% endfor %}
+        </ul>
+      </div>
     </section>
   </aside>
 </section>

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -15,9 +17,26 @@ from hub.registry.models import (
     Repository,
 )
 
+# ${VAR} or ${VAR:-default} — keeps secrets/hostnames out of committed YAML when desired.
+_ENV_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
+
 
 class RegistryError(ValueError):
     """Raised when the registry config is missing or invalid."""
+
+
+def expand_env(value: str) -> str:
+    """Expand ${VAR} / ${VAR:-default} placeholders from process environment."""
+
+    def _replace(match: re.Match[str]) -> str:
+        key = match.group(1)
+        default = match.group(2)
+        env_val = os.getenv(key)
+        if env_val is not None and env_val != "":
+            return env_val
+        return default if default is not None else ""
+
+    return _ENV_PATTERN.sub(_replace, value)
 
 
 def load_registry(config_path: Path | str) -> Registry:
@@ -68,9 +87,10 @@ def _parse_repository(item: Any, index: int) -> Repository:
         type=repo_type,  # type: ignore[arg-type]
         enabled=bool(item.get("enabled", True)),
         description=str(item.get("description") or ""),
-        local_path=_optional_str(item.get("local_path")),
-        working_directory=_optional_str(item.get("working_directory")),
-        base_url=_optional_str(item.get("base_url")),
+        local_path=_optional_str(_expand_optional(item.get("local_path"))),
+        working_directory=_optional_str(_expand_optional(item.get("working_directory"))),
+        base_url=_optional_str(_expand_optional(item.get("base_url"))),
+        git_url=_optional_str(_expand_optional(item.get("git_url"))),
         health_check=_parse_health_check(item.get("health_check"), f"repositories[{index}]"),
         capabilities=capabilities,
         tags=[str(tag) for tag in (item.get("tags") or [])],
@@ -96,11 +116,11 @@ def _parse_health_check(raw: Any, context: str) -> HealthCheckConfig | None:
     return HealthCheckConfig(
         type=check_type,  # type: ignore[arg-type]
         method=str(raw.get("method") or "GET").upper(),
-        path=str(raw.get("path") or "/health"),
+        path=expand_env(str(raw.get("path") or "/health")),
         timeout_seconds=float(raw.get("timeout_seconds") or 5),
-        local_path=_optional_str(raw.get("local_path")),
-        executable=_optional_str(raw.get("executable")),
-        command=[str(part) for part in command],
+        local_path=_optional_str(_expand_optional(raw.get("local_path"))),
+        executable=_optional_str(_expand_optional(raw.get("executable"))),
+        command=[expand_env(str(part)) for part in command],
     )
 
 
@@ -152,3 +172,9 @@ def _optional_str(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _expand_optional(value: Any) -> str | None:
+    if value is None:
+        return None
+    return expand_env(str(value))

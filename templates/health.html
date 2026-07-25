@@ -68,8 +68,10 @@
                 {{ status_badge('disabled') }}
               {% elif item.ok %}
                 {{ status_badge('healthy') }}
+              {% elif item.status == 'not_cloned' %}
+                {{ status_badge('not_cloned') }}
               {% else %}
-                {{ status_badge('offline') }}
+                {{ status_badge('unreachable') }}
               {% endif %}
             </td>
             <td class="muted-2">{{ item.latency_ms }} ms</td>

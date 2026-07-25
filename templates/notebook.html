@@ -1,0 +1,368 @@
+{% extends "base.html" %}
+{% block title %}Repository Notebook · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Repository Notebook</h1>
+    <p class="page-sub">Local notes linked to registry repositories. Survives missing repos. No agent scan yet.</p>
+  </div>
+  <div class="page-actions">
+    <form method="post" action="{{ url_for('notebook') }}">
+      <input type="hidden" name="action" value="new">
+      <button class="btn btn-primary" type="submit">+ New Note</button>
+    </form>
+  </div>
+</div>
+
+{% if flash %}<div class="banner" style="background:var(--success-soft);border-color:rgba(34,197,94,.35)">{{ flash }}</div>{% endif %}
+{% if error %}<div class="banner banner-error">{{ error }}</div>{% endif %}
+
+<div class="nb-shell">
+  <aside class="nb-rail card" aria-label="Note statuses">
+    <div class="nav-label">Statuses</div>
+    <a class="nb-status{% if status == 'all' %} is-active{% endif %}" href="{{ url_for('notebook', status='all', repo=filters.repo, type=filters.type, priority=filters.priority, tag=filters.tag, q=filters.q) }}">
+      <span>All Notes</span><span class="nb-count">{{ counts.all }}</span>
+    </a>
+    <a class="nb-status{% if status == 'open' %} is-active{% endif %}" href="{{ url_for('notebook', status='open', repo=filters.repo, type=filters.type, priority=filters.priority, tag=filters.tag, q=filters.q) }}">
+      <span>Open</span><span class="nb-count">{{ counts.open }}</span>
+    </a>
+    {% for key in statuses %}
+    <a class="nb-status{% if status == key %} is-active{% endif %}" href="{{ url_for('notebook', status=key, repo=filters.repo, type=filters.type, priority=filters.priority, tag=filters.tag, q=filters.q) }}">
+      <span>{{ status_labels[key] }}</span><span class="nb-count">{{ counts[key] }}</span>
+    </a>
+    {% endfor %}
+  </aside>
+
+  <section class="nb-list card">
+    <form class="nb-filters" method="get" action="{{ url_for('notebook') }}">
+      <input type="hidden" name="status" value="{{ status }}">
+      {% if selected_id %}<input type="hidden" name="note" value="{{ selected_id }}">{% endif %}
+      <input type="search" name="q" value="{{ filters.q }}" placeholder="Search notes…" aria-label="Search notes">
+      <select name="repo" aria-label="Repository">
+        <option value="">All repositories</option>
+        {% for repo in registry_repos %}
+          <option value="{{ repo.id }}" {% if filters.repo == repo.id %}selected{% endif %}>{{ repo.name }}{% if not repo.enabled %} (unavailable){% endif %}</option>
+        {% endfor %}
+      </select>
+      <select name="type" aria-label="Type">
+        <option value="">All types</option>
+        {% for t in note_types %}
+          <option value="{{ t }}" {% if filters.type == t %}selected{% endif %}>{{ note_type_labels[t] }}</option>
+        {% endfor %}
+      </select>
+      <select name="priority" aria-label="Priority">
+        <option value="">All priorities</option>
+        {% for p in priorities %}
+          <option value="{{ p }}" {% if filters.priority == p %}selected{% endif %}>{{ priority_labels[p] }}</option>
+        {% endfor %}
+      </select>
+      <select name="tag" aria-label="Tags">
+        <option value="">All tags</option>
+        {% for t in all_tags %}
+          <option value="{{ t }}" {% if filters.tag == t %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn btn-sm" type="submit">Filter</button>
+    </form>
+
+    <div class="nb-note-list" role="list">
+      {% for note in notes %}
+      <a class="nb-note-row status-{{ note.status }}{% if selected_id == note.id %} is-active{% endif %}" role="listitem"
+         href="{{ url_for('notebook', note=note.id, status=status, repo=filters.repo, type=filters.type, priority=filters.priority, tag=filters.tag, q=filters.q) }}">
+        <div class="nb-note-row-main">
+          <div class="nb-note-title">{{ note.title or 'Untitled note' }}</div>
+          <div class="nb-note-meta">
+            <span class="badge badge-status-{{ note.status }}">{{ status_labels.get(note.status, note.status) }}</span>
+            <span class="badge badge-priority-{{ note.priority }}">{{ priority_labels.get(note.priority, note.priority) }}</span>
+            <span class="muted">{{ note.primary_repository }}</span>
+            <span class="muted">{{ note_type_labels.get(note.note_type, note.note_type) }}</span>
+            <span class="muted mono">{{ (note.updated_at or '')[:16].replace('T',' ') }}</span>
+          </div>
+        </div>
+        <span class="nb-note-chevron" aria-hidden="true">›</span>
+      </a>
+      {% else %}
+      <div class="nb-empty muted">No notes match these filters. Create one with <strong>New Note</strong>.</div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="nb-editor card">
+    {% if selected %}
+    <form method="post" action="{{ url_for('notebook') }}" class="nb-editor-form" id="nb-editor-form">
+      <input type="hidden" name="note_id" value="{{ selected.id }}">
+
+      <div class="nb-editor-toolbar">
+        <button class="btn btn-primary btn-sm" type="submit" name="action" value="save">Save</button>
+        {% if selected.status == 'archived' %}
+          <button class="btn btn-sm" type="submit" name="action" value="restore">Restore</button>
+        {% else %}
+          <button class="btn btn-sm" type="submit" name="action" value="archive">Archive</button>
+        {% endif %}
+        <button class="btn btn-sm btn-danger" type="submit" name="action" value="delete"
+                onclick="return confirm('Delete this note permanently? This cannot be undone.');">Delete</button>
+        <a class="btn btn-sm" href="{{ url_for('notebook_export', note_id=selected.id) }}">Export</a>
+      </div>
+
+      <label class="nb-field">
+        <span>Title</span>
+        <input type="text" name="title" value="{{ selected.title }}" required>
+      </label>
+
+      <div class="nb-meta-grid">
+        <label class="nb-field">
+          <span>Type</span>
+          <select name="note_type">
+            {% for t in note_types %}
+              <option value="{{ t }}" {% if selected.note_type == t %}selected{% endif %}>{{ note_type_labels[t] }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="nb-field">
+          <span>Status</span>
+          <select name="status">
+            {% for s in statuses %}
+              <option value="{{ s }}" {% if selected.status == s %}selected{% endif %}>{{ status_labels[s] }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="nb-field">
+          <span>Priority</span>
+          <select name="priority">
+            {% for p in priorities %}
+              <option value="{{ p }}" {% if selected.priority == p %}selected{% endif %}>{{ priority_labels[p] }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="nb-field">
+          <span>Due date</span>
+          <input type="date" name="due_date" value="{{ selected.due_date or '' }}">
+        </label>
+        <label class="nb-field nb-field-check">
+          <span>Pinned</span>
+          <label class="nb-check-inline">
+            <input type="checkbox" name="pinned" value="1" {% if selected.pinned %}checked{% endif %}>
+            Show in dashboard Pinned tab
+          </label>
+        </label>
+      </div>
+
+      <div class="nb-field">
+        <div class="nb-field-head">
+          <span>Repositories</span>
+          <button class="btn btn-sm" type="button" id="nb-add-repo">Add repository</button>
+        </div>
+        <div id="nb-repo-rows" class="nb-repeat">
+          {% set repos = selected.repositories or [] %}
+          {% if not repos %}
+            <div class="nb-repeat-row">
+              <select name="repo_id">
+                <option value="">—</option>
+                {% for repo in registry_repos %}
+                  <option value="{{ repo.id }}">{{ repo.name }}{% if not repo.enabled %} (unavailable){% endif %}</option>
+                {% endfor %}
+              </select>
+              <input type="hidden" name="repo_label" value="">
+              <select name="repo_role">
+                {% for role in repo_roles %}
+                  <option value="{{ role }}">{{ repo_role_labels[role] }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          {% endif %}
+          {% for repo in repos %}
+          {% set ns = namespace(found=false) %}
+          <div class="nb-repeat-row">
+            <select name="repo_id">
+              <option value="">—</option>
+              {% for r in registry_repos %}
+                {% if r.id == repo.repository_id %}{% set ns.found = true %}{% endif %}
+                <option value="{{ r.id }}" {% if r.id == repo.repository_id %}selected{% endif %}>{{ r.name }}{% if not r.enabled %} (unavailable){% endif %}</option>
+              {% endfor %}
+              {% if not ns.found %}
+                <option value="{{ repo.repository_id }}" selected>{{ repo.repository_label or repo.repository_id }} (unavailable)</option>
+              {% endif %}
+            </select>
+            <input type="hidden" name="repo_label" value="{{ repo.repository_label }}">
+            <select name="repo_role">
+              {% for role in repo_roles %}
+                <option value="{{ role }}" {% if repo.role == role %}selected{% endif %}>{{ repo_role_labels[role] }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <label class="nb-field">
+        <span>Tags <span class="muted">(comma-separated)</span></span>
+        <input type="text" name="tags" value="{{ (selected.tags or [])|join(', ') }}" placeholder="dhis2, follow-up">
+      </label>
+
+      <div class="nb-md">
+        <div class="nb-field">
+          <span>Markdown</span>
+          <textarea name="body_md" id="nb-body" rows="12" placeholder="Write notes in Markdown…">{{ selected.body_md }}</textarea>
+        </div>
+        <div class="nb-field">
+          <span>Live preview</span>
+          <div class="nb-preview" id="nb-preview">{{ preview_html|safe }}</div>
+        </div>
+      </div>
+
+      <div class="nb-field">
+        <div class="nb-field-head">
+          <span>Checklist</span>
+          <button class="btn btn-sm" type="button" id="nb-add-check">Add item</button>
+        </div>
+        <div id="nb-check-rows" class="nb-repeat">
+          {% for item in selected.checklist or [] %}
+          <div class="nb-repeat-row nb-check-row">
+            <label class="nb-check">
+              <input type="hidden" name="check_done_flag" value="0" class="nb-check-flag">
+              <input type="checkbox" class="nb-check-box" {% if item.done %}checked{% endif %}>
+            </label>
+            <input type="text" name="check_text" value="{{ item.text }}">
+          </div>
+          {% else %}
+          <div class="nb-repeat-row nb-check-row">
+            <label class="nb-check">
+              <input type="hidden" name="check_done_flag" value="0" class="nb-check-flag">
+              <input type="checkbox" class="nb-check-box">
+            </label>
+            <input type="text" name="check_text" value="" placeholder="Checklist item">
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="nb-field">
+        <div class="nb-field-head">
+          <span>Related links</span>
+          <button class="btn btn-sm" type="button" id="nb-add-link">Add link</button>
+        </div>
+        <div id="nb-link-rows" class="nb-repeat">
+          {% for link in selected.links or [] %}
+          <div class="nb-repeat-row">
+            <input type="text" name="link_label" value="{{ link.label }}" placeholder="Label">
+            <input type="url" name="link_url" value="{{ link.url }}" placeholder="https://…">
+          </div>
+          {% else %}
+          <div class="nb-repeat-row">
+            <input type="text" name="link_label" value="" placeholder="Label">
+            <input type="url" name="link_url" value="" placeholder="https://…">
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="nb-field">
+        <span>Activity history</span>
+        <ul class="nb-activity">
+          {% for ev in selected.activity or [] %}
+          <li>
+            <span class="mono muted">{{ (ev.created_at or '')[:19].replace('T',' ') }}</span>
+            <strong>{{ ev.action }}</strong>
+            <span class="muted">{{ ev.detail }}</span>
+            <span class="muted">· {{ ev.actor }}</span>
+          </li>
+          {% else %}
+          <li class="muted">No activity yet.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </form>
+    {% else %}
+    <div class="nb-empty muted">
+      <p>Select a note or create a new one.</p>
+    </div>
+    {% endif %}
+  </section>
+</div>
+
+<template id="nb-repo-template">
+  <div class="nb-repeat-row">
+    <select name="repo_id">
+      <option value="">—</option>
+      {% for repo in registry_repos %}
+        <option value="{{ repo.id }}">{{ repo.name }}{% if not repo.enabled %} (unavailable){% endif %}</option>
+      {% endfor %}
+    </select>
+    <input type="hidden" name="repo_label" value="">
+    <select name="repo_role">
+      {% for role in repo_roles %}
+        <option value="{{ role }}">{{ repo_role_labels[role] }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</template>
+<template id="nb-check-template">
+  <div class="nb-repeat-row nb-check-row">
+    <label class="nb-check">
+      <input type="hidden" name="check_done_flag" value="0" class="nb-check-flag">
+      <input type="checkbox" class="nb-check-box">
+    </label>
+    <input type="text" name="check_text" value="" placeholder="Checklist item">
+  </div>
+</template>
+<template id="nb-link-template">
+  <div class="nb-repeat-row">
+    <input type="text" name="link_label" value="" placeholder="Label">
+    <input type="url" name="link_url" value="" placeholder="https://…">
+  </div>
+</template>
+
+<script>
+(function () {
+  function bindCheckFlags(root) {
+    (root || document).querySelectorAll('.nb-check-row').forEach(function (row) {
+      var box = row.querySelector('.nb-check-box');
+      var flag = row.querySelector('.nb-check-flag');
+      if (!box || !flag) return;
+      var sync = function () { flag.value = box.checked ? '1' : '0'; };
+      box.addEventListener('change', sync);
+      sync();
+    });
+  }
+  bindCheckFlags(document);
+
+  function addFromTemplate(btnId, containerId, templateId) {
+    var btn = document.getElementById(btnId);
+    var container = document.getElementById(containerId);
+    var tpl = document.getElementById(templateId);
+    if (!btn || !container || !tpl) return;
+    btn.addEventListener('click', function () {
+      var node = tpl.content.cloneNode(true);
+      container.appendChild(node);
+      bindCheckFlags(container);
+    });
+  }
+  addFromTemplate('nb-add-repo', 'nb-repo-rows', 'nb-repo-template');
+  addFromTemplate('nb-add-check', 'nb-check-rows', 'nb-check-template');
+  addFromTemplate('nb-add-link', 'nb-link-rows', 'nb-link-template');
+
+  var body = document.getElementById('nb-body');
+  var preview = document.getElementById('nb-preview');
+  var timer = null;
+  if (body && preview) {
+    body.addEventListener('input', function () {
+      clearTimeout(timer);
+      timer = setTimeout(function () {
+        fetch({{ url_for('api_notebook_preview')|tojson }}, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ markdown: body.value })
+        }).then(function (r) { return r.json(); }).then(function (data) {
+          if (data && data.html) preview.innerHTML = data.html;
+        }).catch(function () {});
+      }, 250);
+    });
+  }
+
+  var form = document.getElementById('nb-editor-form');
+  if (form) {
+    form.addEventListener('submit', function () { bindCheckFlags(form); });
+  }
+})();
+</script>
+{% endblock %}

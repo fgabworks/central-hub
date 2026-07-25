@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}Metadata Enrichment · DHIS2 · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <p class="muted-2" style="margin:0 0 0.35rem"><a href="{{ url_for('dhis2') }}">DHIS2</a> / Enrichment</p>
+    <h1>DHIS2 Metadata Enrichment</h1>
+    <p>Fetch read-only configuration + relationships for repository UIDs. Saves a local versioned snapshot only — never writes to DHIS2 or Live Processing.</p>
+  </div>
+  <div class="page-meta">
+    <span class="badge badge-env">READ-ONLY GET</span>
+    <a class="btn btn-sm" href="{{ url_for('dhis2_uid_explorer') }}">Open explorer</a>
+    <a class="btn btn-sm" href="{{ url_for('dhis2_uid_index_manage') }}">UID Index Management</a>
+  </div>
+</section>
+
+{% if flash_error %}<div class="banner banner-error">{{ flash_error }}</div>{% endif %}
+{% if flash_notice %}<div class="banner" style="background:rgba(59,130,246,0.12);border-color:rgba(59,130,246,0.35);color:#93c5fd">{{ flash_notice }}</div>{% endif %}
+
+<section class="uid-admin-grid">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-header"><h2>1–4 · Enrichment workflow</h2></div>
+      <div class="panel-body">
+        <ol class="uid-steps">
+          <li class="uid-step">
+            <span class="uid-step__num">1</span>
+            <div>
+              <strong>Select environment label</strong>
+              <p class="muted" style="margin:0.25rem 0 0.5rem">Label stored on the snapshot (uses Hub <code>DHIS2_*</code> connection).</p>
+              {% if not config.configured %}
+                <div class="banner banner-error">DHIS2 is not configured. Set <code>DHIS2_BASE_URL</code> / <code>DHIS2_USERNAME</code> / <code>DHIS2_PASSWORD</code>.</div>
+              {% endif %}
+            </div>
+          </li>
+          <li class="uid-step">
+            <span class="uid-step__num">2</span>
+            <div>
+              <strong>Fetch metadata</strong>
+              <form method="post" class="builder-controls" style="margin-top:0.5rem">
+                <input type="hidden" name="action" value="fetch">
+                <label>
+                  <span>Environment</span>
+                  <input type="text" name="environment" value="default" {% if not config.configured %}disabled{% endif %}>
+                </label>
+                <div style="display:flex;align-items:end">
+                  <button class="btn btn-primary" type="submit" {% if not config.configured %}disabled{% endif %}>Fetch metadata (dry preview)</button>
+                </div>
+              </form>
+              {% if run %}
+              <div class="panel panel-body" style="margin-top:0.75rem" id="enrich-run" data-run="{{ run.id }}">
+                <p><strong>Run</strong> <code>{{ run.id[:8] }}…</code> · {{ run.status }} · {{ run.phase }}</p>
+                <p class="muted">{{ run.message }} · {{ '%.0f'|format(run.percent or 0) }}%</p>
+                {% if run.status == 'running' %}
+                <form method="post">
+                  <input type="hidden" name="action" value="cancel">
+                  <input type="hidden" name="run_id" value="{{ run.id }}">
+                  <button class="btn btn-sm" type="submit">Cancel</button>
+                </form>
+                <script>
+                (function(){
+                  var el=document.getElementById('enrich-run'); if(!el) return;
+                  var id=el.getAttribute('data-run');
+                  var t=setInterval(function(){
+                    fetch('/api/dhis2/enrichment/runs/'+id).then(function(r){return r.json()}).then(function(d){
+                      if(!d.ok) return;
+                      if(d.run.status!=='running'){ clearInterval(t); location.search='?run='+id; }
+                    }).catch(function(){});
+                  }, 1500);
+                })();
+                </script>
+                {% endif %}
+              </div>
+              {% endif %}
+            </div>
+          </li>
+          <li class="uid-step">
+            <span class="uid-step__num">3</span>
+            <div>
+              <strong>Preview enrichment</strong>
+              {% if preview %}
+                <div class="summary-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));margin:0.75rem 0">
+                  <article class="stat-card card"><div class="stat-label">Total objects</div><div class="stat-value">{{ preview.counts.total_objects }}</div></article>
+                  <article class="stat-card card"><div class="stat-label">Added vs last</div><div class="stat-value">{{ preview.counts.added_objects }}</div></article>
+                  <article class="stat-card card"><div class="stat-label">Changed</div><div class="stat-value">{{ preview.counts.changed_objects }}</div></article>
+                  <article class="stat-card card"><div class="stat-label">Conflicting</div><div class="stat-value">{{ preview.counts.conflicting_objects }}</div></article>
+                  <article class="stat-card card"><div class="stat-label">Missing in DHIS2</div><div class="stat-value">{{ preview.counts.missing_in_dhis2 }}</div></article>
+                  <article class="stat-card card"><div class="stat-label">Unresolved refs</div><div class="stat-value">{{ preview.counts.unresolved_references }}</div></article>
+                  <article class="stat-card card"><div class="stat-label">Relationships</div><div class="stat-value">{{ preview.counts.relationships }}</div></article>
+                  <article class="stat-card card"><div class="stat-label">Option rows</div><div class="stat-value">{{ preview.counts.options }}</div></article>
+                </div>
+                <h3 style="font-size:0.95rem;margin:0.75rem 0 0.4rem">Sample objects</h3>
+                <div class="table-wrap">
+                  <table class="data">
+                    <thead><tr><th>UID</th><th>Name</th><th>Type</th><th>Answer</th><th>Audit</th></tr></thead>
+                    <tbody>
+                      {% for row in preview.sample_objects %}
+                      <tr>
+                        <td><code>{{ row.uid }}</code></td>
+                        <td>{{ row.name }}</td>
+                        <td>{{ row.object_type }}</td>
+                        <td>{{ row.answer_type }}</td>
+                        <td class="muted">{{ (row.audit_statuses or [])|join(', ') }}</td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              {% else %}
+                <p class="muted" style="margin:0.5rem 0 0">No preview yet. Run fetch (step 2).</p>
+              {% endif %}
+            </div>
+          </li>
+          <li class="uid-step">
+            <span class="uid-step__num">4</span>
+            <div>
+              <strong>Confirm local index update</strong>
+              <p class="muted">Type <code>{{ confirm_apply }}</code> to save a versioned local snapshot.</p>
+              {% if preview %}
+              <form method="post" class="stack" style="gap:0.65rem;margin-top:0.5rem">
+                <input type="hidden" name="action" value="apply">
+                <label>
+                  <span>Confirmation phrase</span>
+                  <input type="text" name="confirmation" autocomplete="off" required placeholder="{{ confirm_apply }}">
+                </label>
+                <div class="btn-row">
+                  <button class="btn btn-primary" type="submit">Save enrichment snapshot</button>
+                </div>
+              </form>
+              <form method="post" style="margin-top:0.5rem">
+                <input type="hidden" name="action" value="discard">
+                <button class="btn btn-sm" type="submit">Discard preview</button>
+              </form>
+              {% endif %}
+            </div>
+          </li>
+        </ol>
+      </div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-header"><h2>Snapshots</h2></div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>ID</th><th>When</th><th>Env</th><th>Objects</th><th>Rels</th><th></th></tr></thead>
+          <tbody>
+            {% for s in snapshots %}
+            <tr>
+              <td><code>{{ s.id[:18] }}…</code></td>
+              <td class="muted">{{ (s.created_at or '')[:19].replace('T',' ') }}</td>
+              <td>{{ s.environment }}</td>
+              <td>{{ s.object_count }}</td>
+              <td>{{ s.relationship_count }}</td>
+              <td>{% if s.is_current %}<span class="badge badge-healthy">current</span>{% endif %}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="muted">No enrichment snapshots yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="panel-body">
+        <div class="warning-banner">
+          <span class="shield">🛡</span>
+          <div>Repository UID Index Management is unchanged. Enrichment uses that index as the UID list and DHIS2 GET as the configuration source.</div>
+        </div>
+      </div>
+    </section>
+  </div>
+</section>
+{% endblock %}

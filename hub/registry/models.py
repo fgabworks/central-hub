@@ -44,6 +44,7 @@ class Repository:
     local_path: str | None = None
     working_directory: str | None = None
     base_url: str | None = None
+    git_url: str | None = None
     health_check: HealthCheckConfig | None = None
     capabilities: list[Capability] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
