@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_badge, type_badge %}
+{% block title %}Logs · {{ repository.name }} · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header page-header-compact">
+  <div>
+    <p class="muted-2" style="margin:0 0 0.35rem">
+      <a href="{{ url_for('repositories') }}">Repositories</a> / {{ repository.id }}
+    </p>
+    <h1>{{ repository.name }}</h1>
+  </div>
+  <div class="page-meta">
+    {{ type_badge(repository.type) }}
+    {{ status_badge(status) }}
+  </div>
+</section>
+{% include "partials/repository_tabs.html" %}
+
+{% if not workspace.available %}
+  {# Connect CTA is shown in the tab bar partial #}
+{% else %}
+<section class="panel rw-logs" style="margin-top:0.85rem"
+         id="rw-logs"
+         data-selected="{{ selected_run_id or '' }}"
+         data-runs-url="{{ url_for('api_repo_ws_runs', repo_id=repository.id) }}"
+         data-logs-base="{{ url_for('api_repo_ws_run_logs', repo_id=repository.id, run_id='__ID__') }}">
+  <div class="panel-header">
+    <h2>Run logs</h2>
+    <div class="panel-actions">
+      <label class="muted">Run
+        <select id="rw-log-run" aria-label="Select run">
+          {% for run in runs %}
+            <option value="{{ run.run_id }}" {% if selected_run_id == run.run_id %}selected{% endif %}>
+              {{ run.profile_id }} · {{ run.port }} · {{ run.status }}
+            </option>
+          {% else %}
+            <option value="">No runs</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="muted"><input type="checkbox" id="rw-log-follow" checked> Follow</label>
+      <a class="btn btn-sm" href="{{ url_for('repository_run', repo_id=repository.id) }}">Back to Run</a>
+    </div>
+  </div>
+  <pre class="rw-log-view mono" id="rw-log-view" aria-live="polite">Select a run to view logs.</pre>
+  <div class="muted" style="padding:0.5rem 1rem" id="rw-log-meta"></div>
+</section>
+<script src="{{ url_for('static', filename='js/repository_logs.js') }}"></script>
+{% endif %}
+{% endblock %}

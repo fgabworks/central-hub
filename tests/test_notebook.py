@@ -20,6 +20,12 @@ class MarkdownTests(unittest.TestCase):
         self.assertIn("&lt;script&gt;", html)
         self.assertNotIn("<script>", html)
 
+    def test_strikethrough_and_script_sanitization(self) -> None:
+        html = render_markdown("Gone ~~old~~ keep <script>alert(1)</script>")
+        self.assertIn("<del>old</del>", html)
+        self.assertIn("&lt;script&gt;", html)
+        self.assertNotIn("<script>", html)
+
 
 class NotebookStoreTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -262,6 +268,66 @@ class NotebookRouteTests(unittest.TestCase):
         )
         self.assertEqual(r_rest.status_code, 200)
         self.assertIn(b"restored", r_rest.data.lower())
+
+    def test_work_notebook_filters(self) -> None:
+        store: NotebookStore = self.app.config["NOTEBOOK"]
+        task = store.create(title="Filter Task", scope="work", note_type="task")
+        store.save(
+            task["id"],
+            title="Filter Task",
+            body_md="needle-token",
+            note_type="task",
+            status="ongoing",
+            priority="high",
+            due_date=None,
+            tags="filter-tag",
+            repositories=[
+                {
+                    "repository_id": "sample-cli",
+                    "repository_label": "Sample CLI",
+                    "role": "primary",
+                }
+            ],
+            checklist=[],
+            links=[],
+            scope="work",
+        )
+        note = store.create(title="Other Note", scope="work", note_type="note")
+        store.save(
+            note["id"],
+            title="Other Note",
+            body_md="zzz",
+            note_type="note",
+            status="inbox",
+            priority="low",
+            due_date=None,
+            tags="",
+            repositories=[],
+            checklist=[],
+            links=[],
+            scope="work",
+        )
+
+        r_type = self.client.get("/work/notebook?status=all&type=task")
+        self.assertEqual(r_type.status_code, 200)
+        body = r_type.get_data(as_text=True)
+        self.assertIn("Filter Task", body)
+        self.assertNotIn("Other Note", body)
+        self.assertIn('value="task" selected', body)
+        self.assertIn(">Clear<", body)
+
+        r_miss = self.client.get("/work/notebook?status=all&type=bug")
+        miss = r_miss.get_data(as_text=True)
+        self.assertNotIn("Filter Task", miss)
+        self.assertIn("No notes match these filters", miss)
+
+        # Open note that does not match filters should be dropped from selection.
+        r_pin = self.client.get(
+            f"/work/notebook?status=all&type=task&note={note['id']}"
+        )
+        pinned = r_pin.get_data(as_text=True)
+        self.assertIn("Filter Task", pinned)
+        self.assertNotIn('value="' + note["id"] + '"', pinned.split("nb-editor-form")[1][:400])
 
 
 if __name__ == "__main__":

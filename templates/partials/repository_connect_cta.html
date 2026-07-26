@@ -1,0 +1,13 @@
+{# Shared CTA when local workspace is unavailable #}
+{% if workspace and not workspace.available %}
+<div class="rw-connect-cta banner" style="margin:0.75rem 0">
+  <div>
+    <p style="margin:0 0 0.45rem">{{ workspace.message }}</p>
+    <div class="btn-row">
+      <a class="btn btn-primary btn-sm" href="{{ url_for('repository_connect', repo_id=repository.id) }}">Configure Local Path</a>
+      <a class="btn btn-sm" href="{{ url_for('repository_connect', repo_id=repository.id) }}">Scan Workspace</a>
+      <a class="btn btn-sm" href="{{ url_for('repository_edit', repo_id=repository.id) }}">Manual edit</a>
+    </div>
+  </div>
+</div>
+{% endif %}

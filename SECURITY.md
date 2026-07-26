@@ -47,6 +47,39 @@ Scope: personal, local-first tool. Canonical agent rules: [AGENTS.md](AGENTS.md)
   - Agent stdout/stderr and answers are redacted before audit/history persistence.
   - Treat agent output as untrusted; Edit/Test modes are disabled.
   - Does not read Email or Calendar stores.
+- **Repository Workspace (Phases 1–2):** local checkout files + approved run profiles.
+  - Requires configured `local_path` / `working_directory` that exists on disk.
+  - All paths resolved under the repo root; absolute paths, `..`, symlink/junction
+    escapes rejected (`hub/repository_workspace/security.py`).
+  - Blocks `.env`, credentials, tokens, private keys, and related secret patterns;
+    secret-looking lines redacted from diffs, search snippets, logs, and Audit details.
+  - Text formats only; binaries and oversized files blocked (limits via
+    `REPO_WS_MAX_*` in `.env`).
+  - Writes use Validate → Diff preview → Confirm → Execute → Audit
+    (`REPO_WS_SAVE` / `CREATE` / `RENAME` / `DELETE` / …).
+  - Git inspect is read-only (`status` / `diff`); no commit, push, pull, merge,
+    reset, checkout, or discard-all.
+  - External open allowlists `code` / `cursor` / `explorer` (`shell=False`).
+  - **Runs (Phase 2):** profiles from `REPO_WS_RUN_PROFILES` / `config/run_profiles.yaml`
+    use executable + argument arrays only (placeholders `{port}`, `{repository_path}`,
+    `{environment}`). `shell=False`; new process group/session; stop/restart only
+    hub-tracked fingerprints (stale PID / PID-reuse refused). No auto-restart on
+    file edits; no unrestricted terminal. Env values stay server-side (UI shows names).
+    Live / `live_profile` requires `REPO_WS_ALLOW_LIVE_RUNS` plus explicit confirmation.
+    Port occupancy checked; alternate ports suggested; duplicate repo/profile/port
+    runs blocked. Logs under `REPO_WS_RUN_LOG_DIR` with size/retention caps + redaction.
+  - **Connect Local Workspace:** user-selected folder only; scan is read-only (no
+    subprocess, no installs, no secret-file reads). Git remote mismatch and path
+    replacement require explicit confirm. Suggested run profiles are untrusted until
+    reviewed; saved as argv arrays only (`REPO_WS_CONNECT_SCAN` / `PREVIEW` / `SAVE`).
+- **DHIS2 Reports / Standard Report Manager:** Stage/Live connections from `.env` only.
+  - Sync caches metadata (+ optional `designContent`) in SQLite; never credentials/tokens.
+  - View embeds allowlisted DHIS2 `/api/reports/{uid}/data.html` URLs (no secrets in URL);
+    fallback is Open in DHIS2 (browser session). Live sync/view/download requires confirm.
+  - Catalog YAML shortcuts remain for repository/static HTML; DHIS2-owned reports are
+    discovered from the API, not hand-maintained as the source of truth.
+  - No DHIS2 writes, no direct database access, no report replacement in Phase 1.
+  - Audit: `DHIS2_REPORT_*` including `DHIS2_REPORT_SYNC` / `REFRESH` / `OPEN`.
 
 ## Job / command controls (Phases 3–6)
 
@@ -75,6 +108,14 @@ Scope: personal, local-first tool. Canonical agent rules: [AGENTS.md](AGENTS.md)
 - Calendar / Google Connections: `CALENDAR_*`, `GOOGLE_CONNECTIONS_VIEW` (no token values).
 - Agent Center: `AGENT_CENTER_VIEW`, `AGENT_RUN_*`, `AGENT_PROMPT_*` (no packed secrets;
   prompt length / ids only on submit).
+- Repository Workspace: `REPO_WS_VIEW`, `REPO_WS_READ`, `REPO_WS_SEARCH`,
+  `REPO_WS_DIFF_PREVIEW`, `REPO_WS_SAVE`, `REPO_WS_REVERT`, `REPO_WS_CREATE`,
+  `REPO_WS_RENAME`, `REPO_WS_DELETE`, `REPO_WS_OPEN_EXTERNAL`,
+  `REPO_WS_RUN_START` / `STOP` / `RESTART` / `FAIL` / `HEALTH` / `PORT`,
+  `REPO_WS_CONNECT_SCAN` / `PREVIEW` / `SAVE`,
+  `DHIS2_REPORT_VIEW` / `VIEW_HTML` / `PREVIEW` / `GENERATE` / `FAIL` / `FAVORITE` /
+  `PRESET_SAVE` / `PRESET_DELETE` / `DOWNLOAD`
+  (paths and commands redacted; no secret values / unredacted argv).
 
 ## Known gaps
 

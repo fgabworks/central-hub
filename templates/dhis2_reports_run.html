@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Run Report · {{ page_title }} · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header page-header-compact">
+  <div>
+    <h1>{{ page_title }}</h1>
+    <p class="muted">Preview resolved parameters, then generate or open. Live requires confirmation.</p>
+  </div>
+</section>
+{% include "partials/dhis2_reports_tabs.html" %}
+
+<section class="panel" style="margin-top:0.85rem" id="dr-run"
+         data-preview-url="{{ url_for('api_dhis2_report_preview') }}"
+         data-generate-url="{{ url_for('api_dhis2_report_generate') }}"
+         data-preset-url="{{ url_for('api_dhis2_report_preset_save') }}"
+         data-preferred-env="{{ dhis2_instance or '' }}">
+  <div class="panel-body rw-connect-edit-grid">
+    <label>Report
+      <select id="dr-report">
+        <option value="">Select…</option>
+        {% for r in reports %}
+          <option value="{{ r.id }}" {% if selected and selected.id==r.id %}selected{% endif %}>{{ r.name }} ({{ r.type }})</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Environment
+      <select id="dr-env">
+        <option value="stage" {% if (preset and preset.environment=='stage') or (not preset and dhis2_instance!='live') %}selected{% endif %}>Stage</option>
+        <option value="live" {% if (preset and preset.environment=='live') or (not preset and dhis2_instance=='live') %}selected{% endif %}>Live</option>
+      </select>
+    </label>
+    <label>Period
+      <input type="text" id="dr-period" placeholder="202601 or 2026Q1" value="{{ preset.period if preset else '' }}">
+    </label>
+    <label>Organisation unit UID
+      <input type="text" id="dr-ou" placeholder="11-char UID" value="{{ preset.org_unit if preset else '' }}">
+    </label>
+    <label>Output format
+      <select id="dr-format">
+        <option value="html">html</option>
+      </select>
+    </label>
+  </div>
+  <div class="panel-body">
+    <label class="rw-connect-confirm" id="dr-live-box" hidden>
+      <input type="checkbox" id="dr-confirm-live"> I confirm running this report against Live
+    </label>
+    <div class="rw-preview-box" style="margin-top:0.75rem">
+      <div class="nav-label">Resolved preview</div>
+      <pre class="mono" id="dr-preview">Select a report and click Preview.</pre>
+    </div>
+    <div class="btn-row" style="margin-top:0.85rem">
+      <button type="button" class="btn" id="dr-preview-btn">Preview</button>
+      <button type="button" class="btn btn-primary" id="dr-generate">Generate</button>
+      <a class="btn" id="dr-open" href="#" target="_blank" rel="noopener" hidden>Open Report</a>
+      <a class="btn" id="dr-open-dhis2" href="#" target="_blank" rel="noopener" hidden>Open in DHIS2</a>
+      <a class="btn" id="dr-download" href="#" hidden>Download</a>
+      <button type="button" class="btn" id="dr-save-preset">Save Preset</button>
+    </div>
+    <p class="muted" id="dr-status"></p>
+  </div>
+</section>
+<script src="{{ url_for('static', filename='js/dhis2_reports_run.js') }}"></script>
+{% endblock %}

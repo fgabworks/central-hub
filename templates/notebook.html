@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% set skip_global_notepad = true %}
 {% block title %}{{ page_title }} · {{ app_name }}{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -45,9 +46,9 @@
   </aside>
 
   <section class="nb-list card">
-    <form class="nb-filters" method="get" action="{{ url_for(notebook_endpoint) }}">
+    <form class="nb-filters" method="get" action="{{ url_for(notebook_endpoint) }}" id="nb-filters-form">
       <input type="hidden" name="status" value="{{ status }}">
-      {% if selected_id %}<input type="hidden" name="note" value="{{ selected_id }}">{% endif %}
+      {# Do not keep note= here — filtering should refresh the matching list, not pin the open note. #}
       <input type="search" name="q" value="{{ filters.q }}" placeholder="Search notes…" aria-label="Search notes">
       {% if allow_repositories %}
       <select name="repo" aria-label="Repository">
@@ -76,6 +77,9 @@
         {% endfor %}
       </select>
       <button class="btn btn-sm" type="submit">Filter</button>
+      {% if filters.q or filters.repo or filters.type or filters.priority or filters.tag %}
+      <a class="btn btn-sm" href="{{ url_for(notebook_endpoint, status=status) }}">Clear</a>
+      {% endif %}
     </form>
 
     <div class="nb-note-list" role="list">
@@ -389,7 +393,14 @@
   if (form) {
     form.addEventListener('submit', function () { bindCheckFlags(form); });
   }
+
+  var filterForm = document.getElementById('nb-filters-form');
+  if (filterForm) {
+    filterForm.querySelectorAll('select').forEach(function (el) {
+      el.addEventListener('change', function () { filterForm.requestSubmit(); });
+    });
+  }
 })();
 </script>
-{% if show_np %}<script src="{{ url_for('static', filename='js/quick_notepad.js') }}"></script>{% endif %}
+{% if show_np %}<script src="{{ url_for('static', filename='js/quick_notepad.js') }}?v=qn-md-8"></script>{% endif %}
 {% endblock %}

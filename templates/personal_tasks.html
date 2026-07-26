@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% set skip_global_notepad = true %}
 {% block title %}Personal Tasks · {{ app_name }}{% endblock %}
 {% block content %}
 {% set show_np = notepad and notepad.panel_open is defined %}
@@ -93,5 +94,5 @@
 
 {% include "partials/quick_notepad_panel.html" %}
 </div>
-<script src="{{ url_for('static', filename='js/quick_notepad.js') }}"></script>
+<script src="{{ url_for('static', filename='js/quick_notepad.js') }}?v=qn-md-8"></script>
 {% endblock %}

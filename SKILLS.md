@@ -8,6 +8,8 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 |---|---|
 | Repository registry + health | `hub/registry/`, `hub/adapters/` |
 | Registry Add / Edit / Disable | `/repositories/new`, store writes YAML; no auto-clone |
+| Repository Workspace Phases 1–2 + Connect | `/repositories/<id>` tabs + `/connect` scan→confirm; `hub/repository_workspace/`; `config/run_profiles.yaml` |
+| DHIS2 Reports (Standard Report Manager Phase 1) | `/dhis2/reports` sync/view Stage+Live standard reports; `hub/dhis2_reports/`; catalog shortcuts `config/dhis2_reports.yaml` |
 | `${VAR:-default}` in registry YAML | `hub/registry/loader.py` |
 | Live Processing (GET-only API + path health) | `config/repositories.yaml` |
 | Data-Script / Report Template (git + optional path) | `config/repositories.yaml` |
@@ -51,7 +53,7 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 | Email Center | Implemented — `gmail.readonly` only; unread/read list styling from `UNREAD`; encrypted tokens; no send/modify/mark-read; no agent mail access; limited cache |
 | Calendar Center | Implemented — FullCalendar grid (month/week/day) + agenda/upcoming; readonly; sanitized descriptions; no create/RSVP/drag; no agent access; limited cache |
 | Repository Notebook | Manual notes with `personal`\|`work` scope + separate Quick Notepads per workspace — no agent assist |
-| Quick Notepad | Personal and Work pads are independent; legacy content → personal |
+| Quick Notepad | Floating edge tab on main Personal/Work pages (not a sidebar item); pads independent; legacy → personal |
 | API writes | Blocked even if YAML `allow_write` (Phase 4 GET-only) |
 | Pause | Cooperative between capability steps (short demos finish quickly) |
 | Owner auth | Single shared token; not multi-user RBAC |
@@ -59,6 +61,7 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 
 ## Placeholder / Planned
 
+- DHIS2 Standard Report Manager Phase 2+ (report replacement / design write-back) — not started
 - More GET-only connected-repo capability packs (via YAML only)
 - Agent Center Edit/Test modes and write-capable confirm gates
 - Notebook automatic repository scanning (manual notes remain)

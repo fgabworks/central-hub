@@ -1,0 +1,7 @@
+{# DHIS2 Report Workspace tabs #}
+<nav class="rw-tabs" aria-label="DHIS2 Report Workspace">
+  {% for tab in tabs %}
+    <a class="rw-tab{% if active_tab == tab.id %} is-active{% endif %}"
+       href="{{ url_for(tab.endpoint) }}">{{ tab.label }}</a>
+  {% endfor %}
+</nav>

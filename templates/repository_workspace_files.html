@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_badge, type_badge %}
+{% block title %}Files · {{ repository.name }} · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header page-header-compact">
+  <div>
+    <p class="muted-2" style="margin:0 0 0.35rem">
+      <a href="{{ url_for('repositories') }}">Repositories</a> / {{ repository.id }}
+    </p>
+    <h1>{{ repository.name }}</h1>
+  </div>
+  <div class="page-meta">
+    {{ type_badge(repository.type) }}
+    {{ status_badge(status) }}
+  </div>
+</section>
+{% include "partials/repository_tabs.html" %}
+
+{% if not workspace.available %}
+  {# Connect CTA is shown in the tab bar partial #}
+{% else %}
+<div class="rw-shell card"
+     id="rw-shell"
+     data-repo-id="{{ repository.id }}"
+     data-initial-path="{{ initial_path or '' }}"
+     data-tree-url="{{ url_for('api_repo_ws_tree', repo_id=repository.id) }}"
+     data-file-url="{{ url_for('api_repo_ws_file', repo_id=repository.id) }}"
+     data-search-url="{{ url_for('api_repo_ws_search', repo_id=repository.id) }}"
+     data-preview-save-url="{{ url_for('api_repo_ws_preview_save', repo_id=repository.id) }}"
+     data-save-url="{{ url_for('api_repo_ws_save', repo_id=repository.id) }}"
+     data-revert-url="{{ url_for('api_repo_ws_revert', repo_id=repository.id) }}"
+     data-create-url="{{ url_for('api_repo_ws_create', repo_id=repository.id) }}"
+     data-rename-url="{{ url_for('api_repo_ws_rename', repo_id=repository.id) }}"
+     data-delete-url="{{ url_for('api_repo_ws_delete', repo_id=repository.id) }}"
+     data-open-url="{{ url_for('api_repo_ws_open', repo_id=repository.id) }}">
+  <div class="rw-toolbar">
+    <div class="rw-search">
+      <input type="search" id="rw-filename-q" placeholder="Find filename…" aria-label="Filename search">
+      <input type="search" id="rw-content-q" placeholder="Search file contents…" aria-label="Content search">
+      <button type="button" class="btn btn-sm" id="rw-search-btn">Search</button>
+    </div>
+    <div class="rw-actions">
+      <button type="button" class="btn btn-sm" id="rw-new-file">New file</button>
+      <button type="button" class="btn btn-sm" id="rw-open-code">Open in VS Code</button>
+      <button type="button" class="btn btn-sm" id="rw-open-cursor">Open in Cursor</button>
+      <button type="button" class="btn btn-sm" id="rw-open-explorer">Open in File Explorer</button>
+    </div>
+  </div>
+  <div class="rw-body">
+    <aside class="rw-tree-pane" id="rw-tree-pane">
+      <div class="rw-pane-head">Files</div>
+      <div class="rw-tree-scroll" id="rw-tree" role="tree" aria-label="Repository file tree"></div>
+      <div class="rw-search-results" id="rw-search-results" hidden></div>
+    </aside>
+    <div class="rw-resize" id="rw-resize" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize panes"></div>
+    <section class="rw-editor-pane">
+      <div class="rw-pane-head rw-editor-head">
+        <div class="rw-file-meta">
+          <strong id="rw-path-label">Select a file</strong>
+          <span class="muted" id="rw-file-info"></span>
+        </div>
+        <div class="rw-editor-actions">
+          <label class="rw-find muted">Find <input type="search" id="rw-find" aria-label="Find in editor"></label>
+          <label class="rw-find muted">Replace <input type="text" id="rw-replace" aria-label="Replace in editor"></label>
+          <button type="button" class="btn btn-sm" id="rw-replace-one">Replace</button>
+          <button type="button" class="btn btn-sm" id="rw-replace-all">Replace all</button>
+          <button type="button" class="btn btn-sm" id="rw-revert" disabled>Revert</button>
+          <button type="button" class="btn btn-sm" id="rw-rename" disabled>Rename</button>
+          <button type="button" class="btn btn-sm btn-danger" id="rw-delete" disabled>Delete</button>
+          <button type="button" class="btn btn-sm btn-primary" id="rw-save" disabled>Save</button>
+        </div>
+      </div>
+      <div class="rw-editor-scroll">
+        <div class="rw-linenums" id="rw-linenums" aria-hidden="true"></div>
+        <textarea id="rw-editor" class="rw-editor" spellcheck="false" readonly aria-label="File editor"></textarea>
+      </div>
+      <pre class="rw-preview mono" id="rw-preview" hidden></pre>
+      <div class="rw-status muted" id="rw-status">Ready</div>
+    </section>
+  </div>
+</div>
+
+<dialog class="rw-dialog" id="rw-diff-dialog">
+  <form method="dialog" class="rw-dialog-body">
+    <h2>Review changes before save</h2>
+    <p class="muted">Confirm the unified diff, then save. Cancel keeps your buffer unsaved.</p>
+    <pre class="rw-diff mono" id="rw-diff-body"></pre>
+    <div class="btn-row">
+      <button value="cancel" class="btn">Cancel</button>
+      <button value="confirm" class="btn btn-primary" id="rw-diff-confirm">Confirm save</button>
+    </div>
+  </form>
+</dialog>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if workspace.available %}
+<script src="{{ url_for('static', filename='js/repository_workspace.js') }}"></script>
+{% endif %}
+{% endblock %}

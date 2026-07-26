@@ -122,16 +122,19 @@ class WorkspaceNavRouteTests(unittest.TestCase):
         self.assertIn(">System<", work_html)
         self.assertIn("Audit", work_html)
         self.assertNotIn("Personal Notebook", work_html)
+        # Floating drawer remains; sidebar submenu for Quick Notepad is gone.
         self.assertIn("id=\"qn-panel\"", work_html)
-        self.assertIn("Quick Notepad", work_html)
+        self.assertIn("id=\"qn-open-btn\"", work_html)
+        self.assertNotIn('href="/work#quick-notepad"', work_html)
 
         personal_html = self.client.get("/personal").get_data(as_text=True)
         self.assertIn('class="theme-personal"', personal_html)
         self.assertIn("Personal Dashboard", personal_html)
         self.assertIn("Personal Notebook", personal_html)
-        self.assertIn("Quick Notepad", personal_html)
         self.assertIn("Personal Tasks", personal_html)
         self.assertIn("id=\"qn-panel\"", personal_html)
+        self.assertIn("id=\"qn-open-btn\"", personal_html)
+        self.assertNotIn('href="/personal#quick-notepad"', personal_html)
         self.assertNotIn("Connected Repositories", personal_html)
         css = (Path(__file__).resolve().parents[1] / "static" / "css" / "style.css").read_text(
             encoding="utf-8",
@@ -140,6 +143,27 @@ class WorkspaceNavRouteTests(unittest.TestCase):
         self.assertIn("body.theme-personal", css)
         self.assertIn("#0D5561", css)
         self.assertIn("--accent-metallic", css)
+
+    def test_floating_notepad_on_main_pages_without_sidebar_entry(self) -> None:
+        """Main pages expose the floating tab; sidebar no longer lists Quick Notepad."""
+        for path in (
+            "/personal",
+            "/personal/notebook",
+            "/personal/tasks",
+            "/personal/email",
+            "/personal/calendar",
+            "/work",
+            "/work/notebook",
+            "/repositories",
+            "/sql",
+            "/agents",
+            "/work/email",
+            "/work/calendar",
+        ):
+            html = self.client.get(path).get_data(as_text=True)
+            self.assertIn('id="qn-open-btn"', html, msg=path)
+            self.assertIn('id="qn-panel"', html, msg=path)
+            self.assertNotIn("#quick-notepad", html.split("sidebar-nav")[1].split("sidebar-actions")[0], msg=path)
 
     def test_legacy_notebook_redirects_by_note_scope(self) -> None:
         store: NotebookStore = self.app.config["NOTEBOOK"]

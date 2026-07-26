@@ -69,17 +69,36 @@ Browser ──HTTP──> Flask app (app.py, create_app)
   denormalized labels when a repo disappears. No agent integration or automatic
   scanning yet.
 
-- **`hub/registry/`** — Load/validate `config/repositories.yaml`, optional `git_url`,
-  raw YAML writer for Add/Edit/Enable/Disable, Git remote matching for existing
-  checkouts (never clones). Demo samples live only under `tests/fixtures/`.
+- **`hub/repository_workspace/`** — Repository Workspace Phases 1–2 for configured
+  **local** checkouts only. Phase 1: browse / preview / search / safe text edit /
+  Git inspect (path jail; no auto-clone; no commit / push / pull / merge / reset /
+  checkout). Phase 2: approved **run profiles** (`config/run_profiles.yaml`) launch
+  apps with `shell=False` argv arrays, dedicated ports, process-group isolation,
+  hub-tracked PIDs only, redacted logs, and optional health probes. Tabs: Overview /
+  Files / Changes / Run / Logs / Settings. Connect Local Workspace
+  (`connect_scan.py` / `connect.py`) scans a user-selected folder read-only, then
+  saves path (+ optional reviewed run profiles) only after confirm. No unrestricted
+  terminal. Agents reuse workspace file search/read; agent file edits and command
+  execution stay disabled.
 
 - **`hub/jobs/`** — SQLite job store, daemon worker, allowlisted command/API executors,
   upload/result helpers, optional owner token. Capabilities declared in
   `config/repositories.yaml` only.
 
+- **`hub/dhis2_reports/`** — DHIS2 Reports (`/dhis2/reports`):
+  - **Phase 1 Standard Report Manager:** sync accessible DHIS2 standard reports via
+    GET `/api/reports` into a Stage/Live-separated metadata cache (SQLite). View via
+    DHIS2 `/data.html` embed (prefer DHIS2 rendering) with Open-in-DHIS2 fallback;
+    HTML design source / download through the GET-only client. No report replacement;
+    no direct DB access. DHIS2 remains source of truth.
+  - Catalog shortcuts (YAML) for `repository_html` / `static_html` / optional
+    `dhis2_standard` URL helpers: `config/dhis2_reports.yaml`.
+  - Presets, history, and sandboxed local HTML viewer remain for catalog runs.
+
 - **`hub/dhis2/client.py`** — GET-only Session client: probe vs operation timeouts,
   bounded GET retries, HTTP pool, `iter_collection` with hard `max_pages` ceiling,
-  request stats. No write methods. Reliability knobs via `.env` (see `.env.example`).
+  `get_text` for HTML report bodies, request stats. No write methods. Reliability
+  knobs via `.env` (see `.env.example`).
   Pattern source: [docs/LIVE_PROCESSING_PATTERNS.md](docs/LIVE_PROCESSING_PATTERNS.md).
 - **`hub/dhis2/catalog.py`** — discovers system/me/authorities/schemas/openapi/api,
   persists a local capability catalog (schemas + endpoint definitions; not a full

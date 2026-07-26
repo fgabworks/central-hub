@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Saved Presets · {{ page_title }} · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header page-header-compact">
+  <div>
+    <h1>{{ page_title }}</h1>
+    <p class="muted">Reusable report + environment + period + organisation unit combinations (no secrets).</p>
+  </div>
+</section>
+{% include "partials/dhis2_reports_tabs.html" %}
+
+<section class="panel" style="margin-top:0.85rem">
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Name</th><th>Report</th><th>Env</th><th>Period</th><th>Org unit</th><th>Updated</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for p in presets %}
+        <tr>
+          <td>{{ p.name }}</td>
+          <td class="mono">{{ p.report_id }}</td>
+          <td>{{ p.environment }}</td>
+          <td class="mono">{{ p.period or '—' }}</td>
+          <td class="mono">{{ p.org_unit or '—' }}</td>
+          <td class="muted">{{ (p.updated_at or '')[:19].replace('T',' ') }}</td>
+          <td class="btn-row">
+            <a class="btn btn-sm btn-primary" href="{{ url_for('dhis2_reports_run', preset=p.id, report=p.report_id) }}">Run</a>
+            <button type="button" class="btn btn-sm dr-dup" data-id="{{ p.id }}">Duplicate</button>
+            <button type="button" class="btn btn-sm dr-del" data-id="{{ p.id }}">Delete</button>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="muted empty-compact">No presets yet. Save one from Run Report.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+<script>
+document.querySelectorAll(".dr-dup").forEach(function (btn) {
+  btn.onclick = function () {
+    fetch("/api/dhis2/reports/presets/" + encodeURIComponent(btn.getAttribute("data-id")) + "/duplicate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    }).then(function () { location.reload(); });
+  };
+});
+document.querySelectorAll(".dr-del").forEach(function (btn) {
+  btn.onclick = function () {
+    if (!window.confirm("Delete this preset?")) return;
+    fetch("/api/dhis2/reports/presets/" + encodeURIComponent(btn.getAttribute("data-id")) + "/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: true }),
+    }).then(function () { location.reload(); });
+  };
+});
+</script>
+{% endblock %}

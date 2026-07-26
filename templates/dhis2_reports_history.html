@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}History · {{ page_title }} · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header page-header-compact">
+  <div>
+    <h1>{{ page_title }}</h1>
+    <p class="muted">Report generation history with redacted diagnostics.</p>
+  </div>
+</section>
+{% include "partials/dhis2_reports_tabs.html" %}
+
+<form method="get" class="nb-filters" style="margin-top:0.85rem">
+  <label>Status
+    <select name="status">
+      <option value="">All</option>
+      {% for s in ['completed','failed','running','missing_output','queued'] %}
+        <option value="{{ s }}" {% if status_filter==s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button class="btn btn-sm" type="submit">Filter</button>
+</form>
+
+<section class="panel" style="margin-top:0.85rem">
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Status</th><th>Report</th><th>Type</th><th>Env</th><th>Period</th><th>Org unit</th>
+          <th>Started</th><th>Actor</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for run in runs %}
+        <tr>
+          <td><span class="badge">{{ run.status }}</span></td>
+          <td>{{ run.report_name or run.report_id }}</td>
+          <td class="muted">{{ run.report_type }}</td>
+          <td>{{ run.environment }}</td>
+          <td class="mono">{{ run.period or '—' }}</td>
+          <td class="mono">{{ run.org_unit or '—' }}</td>
+          <td class="muted">{{ (run.started_at or '')[:19].replace('T',' ') }}</td>
+          <td class="muted">{{ run.actor or '—' }}</td>
+          <td class="btn-row">
+            <a class="btn btn-sm" href="{{ url_for('dhis2_reports_run', report=run.report_id) }}">Rerun</a>
+            {% if run.output_path or run.output_url %}
+              <a class="btn btn-sm" href="{{ url_for('dhis2_reports_view', run=run.id) }}">Open</a>
+              <a class="btn btn-sm" href="{{ url_for('api_dhis2_report_download', run_id=run.id) }}">Download</a>
+            {% endif %}
+            {% if run.error or run.log_text %}
+              <details><summary class="btn btn-sm">Logs</summary>
+                <pre class="mono" style="max-width:28rem;white-space:pre-wrap">{{ run.error }}
+{{ run.log_text }}</pre>
+              </details>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="muted empty-compact">No runs yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

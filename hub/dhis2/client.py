@@ -763,6 +763,29 @@ class Dhis2Client:
             )
         return " ".join(parts)
 
+    def get_text(
+        self,
+        path: str,
+        params: dict[str, Any] | None = None,
+        *,
+        accept: str = "text/html, text/plain, */*",
+        timeout: float | None = None,
+        max_bytes: int = 5_000_000,
+    ) -> str:
+        """
+        GET a text/HTML body (read-only). Used for standard report data.html / design.
+
+        Never returns credentials. Response body is size-capped.
+        """
+        raw = self._get_bytes(
+            path,
+            params=params,
+            accept=accept,
+            timeout=timeout,
+            max_bytes=max_bytes,
+        )
+        return raw.decode("utf-8", errors="replace")
+
     def _get_json(
         self,
         path: str,
@@ -783,6 +806,49 @@ class Dhis2Client:
         timeout: float | None = None,
     ) -> Any:
         """Hard read-only: this client only issues GET (with bounded retries)."""
+        response = self._get_response(
+            path,
+            params=params,
+            timeout=timeout,
+            accept="application/json",
+        )
+        try:
+            return response.json()
+        except ValueError as exc:
+            self._stats["errors"] += 1
+            raise Dhis2Error("DHIS2 returned a non-JSON response.") from exc
+
+    def _get_bytes(
+        self,
+        path: str,
+        params: dict[str, Any] | None = None,
+        *,
+        accept: str = "*/*",
+        timeout: float | None = None,
+        max_bytes: int = 5_000_000,
+    ) -> bytes:
+        response = self._get_response(
+            path,
+            params=params,
+            timeout=timeout,
+            accept=accept,
+        )
+        content = response.content or b""
+        if len(content) > max_bytes:
+            raise Dhis2Error(
+                f"DHIS2 response exceeded size limit ({max_bytes} bytes)."
+            )
+        return content
+
+    def _get_response(
+        self,
+        path: str,
+        params: dict[str, Any] | None = None,
+        *,
+        timeout: float | None = None,
+        accept: str = "application/json",
+    ) -> requests.Response:
+        """Hard read-only GET with bounded retries. Never POST/PUT/PATCH/DELETE."""
         if not self.settings.base_url:
             raise Dhis2Error("DHIS2 base URL is not configured.")
         url = urljoin(self.settings.base_url.rstrip("/") + "/", path.lstrip("/"))
@@ -791,6 +857,7 @@ class Dhis2Client:
         )
         max_attempts = 1 + max(0, int(self.settings.retry_max))
         last_error: Dhis2Error | None = None
+        headers = {"Accept": accept} if accept and accept != "application/json" else None
 
         for attempt in range(max_attempts):
             if attempt > 0:
@@ -803,11 +870,13 @@ class Dhis2Client:
                     time.sleep(delay)
             try:
                 self._stats["get"] += 1
-                response = self._session.get(
-                    url,
-                    params=params,
-                    timeout=timeout_s,
-                )
+                get_kwargs: dict[str, Any] = {
+                    "params": params,
+                    "timeout": timeout_s,
+                }
+                if headers:
+                    get_kwargs["headers"] = headers
+                response = self._session.get(url, **get_kwargs)
             except requests.Timeout:
                 self._stats["timeouts"] += 1
                 self._stats["errors"] += 1
@@ -834,7 +903,6 @@ class Dhis2Client:
                     status_code=response.status_code,
                 )
             if response.status_code == 404:
-                # Not retryable — missing resource.
                 raise Dhis2Error("DHIS2 resource not found.", status_code=404)
             if response.status_code in _RETRY_STATUSES:
                 self._stats["errors"] += 1
@@ -851,12 +919,7 @@ class Dhis2Client:
                     f"DHIS2 returned HTTP {response.status_code}. {body}".strip(),
                     status_code=response.status_code,
                 )
-
-            try:
-                return response.json()
-            except ValueError as exc:
-                self._stats["errors"] += 1
-                raise Dhis2Error("DHIS2 returned a non-JSON response.") from exc
+            return response
 
         if last_error is not None:
             raise last_error

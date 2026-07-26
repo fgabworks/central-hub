@@ -10,9 +10,10 @@ from typing import Any, Callable
 from hub.agent_center.instructions import load_repo_instructions
 from hub.agent_center.models import MAX_CONTEXT_FILE_CHARS
 from hub.agent_center.redact import redact_text
-from hub.agent_center.secrets import is_secret_path
 from hub.registry.models import Registry, Repository
-from hub.settings import ROOT_DIR
+
+# Repository Workspace imports are deferred inside tool helpers to avoid
+# circular import: agent_center → openai_tools → repository_workspace → agent_center.
 
 ALLOWED_TOOLS = frozenset(
     {
@@ -23,38 +24,6 @@ ALLOWED_TOOLS = frozenset(
         "notebook_lookup",
     }
 )
-
-_BINARY_SUFFIXES = {
-    ".png",
-    ".jpg",
-    ".jpeg",
-    ".gif",
-    ".webp",
-    ".ico",
-    ".pdf",
-    ".zip",
-    ".gz",
-    ".7z",
-    ".exe",
-    ".dll",
-    ".so",
-    ".dylib",
-    ".pyc",
-    ".pyo",
-    ".class",
-    ".o",
-    ".a",
-    ".wasm",
-    ".mp3",
-    ".mp4",
-    ".mov",
-    ".woff",
-    ".woff2",
-    ".ttf",
-    ".eot",
-    ".db",
-    ".sqlite",
-}
 
 
 @dataclass
@@ -218,28 +187,27 @@ def load_instructions_for_scope(ctx: AgentToolsContext) -> list[dict[str, Any]]:
 
 
 def _tool_repo_search(args: dict[str, Any], ctx: AgentToolsContext) -> dict[str, Any]:
-    query = str(args.get("query") or "").strip().lower()
+    from hub.repository_workspace.files import RepositoryFiles
+    from hub.repository_workspace.settings import load_workspace_settings
+
+    query = str(args.get("query") or "").strip()
     if not query:
         return {"error": "query is required"}
     repo_filter = str(args.get("repo_id") or "").strip()
     limit = max(1, min(int(args.get("limit") or 20), 50))
+    settings = load_workspace_settings()
     hits: list[dict[str, str]] = []
     for repo, root in ctx.scoped_repos():
         if repo_filter and repo.id != repo_filter:
             continue
-        for path in root.rglob("*"):
-            if not path.is_file():
-                continue
-            if _reject_file(path, root):
-                continue
-            try:
-                rel = path.relative_to(root).as_posix()
-            except ValueError:
-                continue
-            if query in rel.lower():
-                hits.append({"repo_id": repo.id, "path": rel})
-                if len(hits) >= limit:
-                    return {"summary": f"{len(hits)} matches", "matches": hits}
+        remaining = limit - len(hits)
+        if remaining <= 0:
+            break
+        files = RepositoryFiles(root, settings)
+        for match in files.search_filenames(query, limit=remaining):
+            hits.append({"repo_id": repo.id, "path": match["path"]})
+            if len(hits) >= limit:
+                return {"summary": f"{len(hits)} matches", "matches": hits}
     return {"summary": f"{len(hits)} matches", "matches": hits}
 
 
@@ -251,6 +219,14 @@ def _normalize_rel(path: str) -> str:
 
 
 def _tool_read_file(args: dict[str, Any], ctx: AgentToolsContext) -> dict[str, Any]:
+    from hub.repository_workspace.security import (
+        WorkspaceSecurityError,
+        is_blocked_secret,
+        is_supported_text_path,
+        looks_binary,
+        safe_join,
+    )
+
     repo_id = str(args.get("repo_id") or "").strip()
     rel = _normalize_rel(str(args.get("path") or ""))
     if not repo_id or not rel:
@@ -260,14 +236,18 @@ def _tool_read_file(args: dict[str, Any], ctx: AgentToolsContext) -> dict[str, A
     if root is None:
         return {"error": f"Repository not in run scope: {repo_id}"}
     try:
-        path = (root / rel).resolve()
-        path.relative_to(root.resolve())
-    except Exception:  # noqa: BLE001
-        return {"error": "Path escapes repository root"}
-    if _reject_file(path, root):
+        path = safe_join(root, rel)
+    except WorkspaceSecurityError as exc:
+        code = getattr(exc, "code", "")
+        if code in {"secret_blocked", "path_escape", "path_traversal", "absolute_path"}:
+            return {"error": "File excluded (secret, binary, or disallowed)"}
+        return {"error": str(exc)}
+    if is_blocked_secret(rel):
         return {"error": "File excluded (secret, binary, or disallowed)"}
     if not path.is_file():
         return {"error": "File not found"}
+    if not is_supported_text_path(path):
+        return {"error": "File excluded (secret, binary, or disallowed)"}
     size = path.stat().st_size
     if size > MAX_CONTEXT_FILE_CHARS * 4:
         return {"error": f"File too large ({size} bytes)"}
@@ -275,7 +255,7 @@ def _tool_read_file(args: dict[str, Any], ctx: AgentToolsContext) -> dict[str, A
         raw = path.read_bytes()
     except OSError as exc:
         return {"error": str(exc)}
-    if b"\x00" in raw[:8192]:
+    if looks_binary(raw[:8192]):
         return {"error": "Binary file excluded"}
     text = raw.decode("utf-8", errors="replace")
     clipped = text[:MAX_CONTEXT_FILE_CHARS]
@@ -370,23 +350,21 @@ def _tool_notebook_lookup(args: dict[str, Any], ctx: AgentToolsContext) -> dict[
 
 
 def _reject_file(path: Path, root: Path) -> bool:
-    if is_secret_path(path, repo_root=root):
+    """Compatibility helper — prefer workspace safe_join / secret checks."""
+    from hub.repository_workspace.security import is_blocked_secret, is_supported_text_path
+
+    try:
+        rel = path.relative_to(root.resolve()).as_posix()
+    except ValueError:
         return True
-    if path.suffix.lower() in _BINARY_SUFFIXES:
+    if is_blocked_secret(rel):
         return True
-    name = path.name.lower()
-    if name.startswith(".env"):
+    if not is_supported_text_path(path):
         return True
     return False
 
 
 def _resolve_repo_path(repo: Repository) -> Path | None:
-    raw = (repo.working_directory or repo.local_path or "").strip()
-    if not raw:
-        return None
-    path = Path(raw).expanduser()
-    if not path.is_absolute():
-        path = (ROOT_DIR / path).resolve()
-    else:
-        path = path.resolve()
-    return path if path.is_dir() else None
+    from hub.repository_workspace.security import resolve_repo_root
+
+    return resolve_repo_root(repo.local_path or repo.working_directory)

@@ -9,6 +9,7 @@ import re
 _LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
 _CODE_RE = re.compile(r"`([^`]+)`")
 _BOLD_RE = re.compile(r"\*\*([^*]+)\*\*")
+_STRIKE_RE = re.compile(r"~~([^~]+)~~")
 _ITALIC_RE = re.compile(r"(?<!\*)\*([^*]+)\*(?!\*)")
 _HEADING_RE = re.compile(r"^(#{1,3})\s+(.+)$")
 
@@ -118,6 +119,11 @@ def _inline(text: str) -> str:
         return stash(f"<strong>{html.escape(match.group(1))}</strong>")
 
     raw = _BOLD_RE.sub(bold_raw, raw)
+
+    def strike_raw(match: re.Match[str]) -> str:
+        return stash(f"<del>{html.escape(match.group(1))}</del>")
+
+    raw = _STRIKE_RE.sub(strike_raw, raw)
 
     def italic_raw(match: re.Match[str]) -> str:
         return stash(f"<em>{html.escape(match.group(1))}</em>")

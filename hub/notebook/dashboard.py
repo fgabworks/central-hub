@@ -16,6 +16,11 @@ from hub.notebook.store import NotebookStore
 
 QUEUE_TABS = ("open", "pinned", "overdue", "due_today", "upcoming", "blocked")
 
+# Dashboard renders a 5-row viewport; fetch more so scrolling can reach the rest.
+DASHBOARD_QUEUE_VISIBLE_ROWS = 5
+DASHBOARD_QUEUE_FETCH_LIMIT = 100
+_FILTER_QUEUE_HARD_CAP = 200
+
 
 def _today() -> date:
     return date.today()
@@ -251,14 +256,14 @@ def filter_queue(
             _parse_due(item.get("due_date")) or date.max,
         )
     )
-    return matched[: max(0, min(int(limit), 20))]
+    return matched[: max(0, min(int(limit), _FILTER_QUEUE_HARD_CAP))]
 
 
 def dashboard_work_queue(
     store: NotebookStore,
     *,
     tab: str = "open",
-    limit: int = 5,
+    limit: int = DASHBOARD_QUEUE_FETCH_LIMIT,
     today: date | None = None,
     registered_ids: Iterable[str] | None = None,
     scope: str | None = "work",

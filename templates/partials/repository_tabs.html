@@ -1,0 +1,10 @@
+{# Shared repository workspace tab bar #}
+<nav class="rw-tabs" aria-label="Repository sections">
+  {% for tab in tabs %}
+    <a class="rw-tab{% if active_tab == tab.id %} is-active{% endif %}"
+       href="{{ url_for(tab.endpoint, repo_id=repository.id) }}">{{ tab.label }}</a>
+  {% endfor %}
+</nav>
+{% if workspace and not workspace.available and active_tab != 'overview' and active_tab != 'settings' and active_tab != 'connect' %}
+  {% include "partials/repository_connect_cta.html" %}
+{% endif %}

@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_badge, type_badge %}
+{% block title %}Run · {{ repository.name }} · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header page-header-compact">
+  <div>
+    <p class="muted-2" style="margin:0 0 0.35rem">
+      <a href="{{ url_for('repositories') }}">Repositories</a> / {{ repository.id }}
+    </p>
+    <h1>{{ repository.name }}</h1>
+  </div>
+  <div class="page-meta">
+    {{ type_badge(repository.type) }}
+    {{ status_badge(status) }}
+  </div>
+</section>
+{% include "partials/repository_tabs.html" %}
+
+{% if not workspace.available %}
+  {# Connect CTA is shown in the tab bar partial #}
+{% else %}
+<section class="panel rw-run" style="margin-top:0.85rem"
+         id="rw-run"
+         data-repo-id="{{ repository.id }}"
+         data-preview-url="{{ url_for('api_repo_ws_run_preview', repo_id=repository.id) }}"
+         data-start-url="{{ url_for('api_repo_ws_run_start', repo_id=repository.id) }}"
+         data-find-port-url="{{ url_for('api_repo_ws_find_port', repo_id=repository.id) }}"
+         data-runs-url="{{ url_for('api_repo_ws_runs', repo_id=repository.id) }}"
+         data-stop-base="{{ url_for('api_repo_ws_run_stop', repo_id=repository.id, run_id='__ID__') }}"
+         data-restart-base="{{ url_for('api_repo_ws_run_restart', repo_id=repository.id, run_id='__ID__') }}"
+         data-logs-page="{{ url_for('repository_logs', repo_id=repository.id) }}"
+         data-live-allowed="{{ '1' if live_runs_allowed else '0' }}">
+  <div class="panel-header">
+    <h2>Run application</h2>
+    <span class="muted">Approved profiles only — no unrestricted terminal.</span>
+  </div>
+  <div class="panel-body rw-run-form">
+    <label>Profile
+      <select id="rw-profile" aria-label="Run profile">
+        {% for p in profiles %}
+          <option value="{{ p.id }}"
+                  data-port="{{ p.default_port }}"
+                  data-envs="{{ p.environments|join(',') }}"
+                  data-live="{{ '1' if p.live_profile else '0' }}"
+                  data-env-names="{{ p.allowed_env_names|join(', ') }}">{{ p.name }}</option>
+        {% else %}
+          <option value="">No profiles configured</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Environment
+      <select id="rw-env" aria-label="Environment">
+        <option value="development">Development</option>
+        <option value="stage">Stage</option>
+        <option value="live">Live</option>
+      </select>
+    </label>
+    <label>Port
+      <input type="number" id="rw-port" min="1" max="65535" value="{{ profiles[0].default_port if profiles else 8000 }}">
+    </label>
+    <button type="button" class="btn btn-sm" id="rw-find-port">Find available port</button>
+    <div class="rw-env-names muted" id="rw-env-names">Env vars (names only): —</div>
+    <label class="rw-live-confirm" id="rw-live-confirm" hidden>
+      <input type="checkbox" id="rw-confirm-live"> I confirm starting this Live profile
+    </label>
+    {% if not live_runs_allowed %}
+      <p class="muted">Live profiles are blocked until <code>REPO_WS_ALLOW_LIVE_RUNS=true</code>.</p>
+    {% endif %}
+    <div class="rw-preview-box">
+      <div class="nav-label">Command preview (redacted)</div>
+      <pre class="mono" id="rw-cmd-preview">Select a profile and click Preview.</pre>
+    </div>
+    <div class="btn-row">
+      <button type="button" class="btn" id="rw-preview">Preview</button>
+      <button type="button" class="btn btn-primary" id="rw-start" {% if not profiles %}disabled{% endif %}>Start</button>
+      <button type="button" class="btn" id="rw-stop" disabled>Stop</button>
+      <button type="button" class="btn" id="rw-restart" disabled>Restart</button>
+      <a class="btn" id="rw-open-app" href="#" target="_blank" rel="noopener" hidden>Open App</a>
+      <a class="btn" id="rw-view-logs" href="{{ url_for('repository_logs', repo_id=repository.id) }}">View Logs</a>
+    </div>
+    <div class="rw-run-status muted" id="rw-run-status">No active selection.</div>
+  </div>
+
+  <div class="panel-header" style="border-top:1px solid var(--border)">
+    <h2>Tracked runs</h2>
+  </div>
+  <div class="table-wrap">
+    <table class="data" id="rw-runs-table">
+      <thead>
+        <tr>
+          <th>Status</th><th>Profile</th><th>Env</th><th>Port</th><th>PID</th><th>Started</th><th>Health</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for run in runs %}
+        <tr data-run-id="{{ run.run_id }}">
+          <td><span class="badge">{{ run.status }}</span></td>
+          <td>{{ run.profile_id }}</td>
+          <td>{{ run.environment }}</td>
+          <td class="mono">{{ run.port }}</td>
+          <td class="mono">{{ run.pid or '—' }}</td>
+          <td class="muted">{{ (run.started_at or '')[:19].replace('T',' ') }}</td>
+          <td class="muted">{{ run.last_health_detail or '—' }}</td>
+          <td>
+            <button type="button" class="btn btn-sm rw-select-run" data-run-id="{{ run.run_id }}">Select</button>
+            {% if run.local_url %}<a class="btn btn-sm" href="{{ run.local_url }}" target="_blank" rel="noopener">Open</a>{% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="muted empty-compact">No hub-managed runs yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+<script src="{{ url_for('static', filename='js/repository_run.js') }}"></script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_badge, type_badge %}
+{% block title %}Settings · {{ repository.name }} · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header page-header-compact">
+  <div>
+    <p class="muted-2" style="margin:0 0 0.35rem">
+      <a href="{{ url_for('repositories') }}">Repositories</a> / {{ repository.id }}
+    </p>
+    <h1>{{ repository.name }}</h1>
+  </div>
+  <div class="page-meta">
+    {{ type_badge(repository.type) }}
+    {{ status_badge(status) }}
+  </div>
+</section>
+{% include "partials/repository_tabs.html" %}
+
+<section class="panel panel-body" style="margin-top:0.85rem">
+  <h2 style="margin:0 0 0.75rem;font-size:14px">Repository settings</h2>
+  <p class="muted">Workspace browse/edit requires a configured local checkout path. The hub never clones automatically.</p>
+  <p class="muted">Run profiles are defined centrally in <code>config/run_profiles.yaml</code> (executable + argument arrays only — no unrestricted terminal). Live profiles also need <code>REPO_WS_ALLOW_LIVE_RUNS</code>.</p>
+  {% if not workspace.available %}
+    {% include "partials/repository_connect_cta.html" %}
+  {% endif %}
+  <dl class="detail-list">
+    <div><dt>Enabled</dt><dd>{{ 'yes' if repository.enabled else 'no' }}</dd></div>
+    <div><dt>Local path</dt><dd><code>{{ repository.local_path or '—' }}</code></dd></div>
+    <div><dt>Working directory</dt><dd><code>{{ repository.working_directory or '—' }}</code></dd></div>
+    <div><dt>Git URL</dt><dd><code>{{ repository.git_url or '—' }}</code></dd></div>
+    <div><dt>Workspace</dt><dd>{% if workspace.available %}<span class="badge badge-healthy">Available</span>{% else %}<span class="badge badge-warning">Unavailable</span> — {{ workspace.message }}{% endif %}</dd></div>
+  </dl>
+  <div class="btn-row" style="margin-top:1rem">
+    <a class="btn btn-primary" href="{{ url_for('repository_edit', repo_id=repository.id) }}">Edit connection</a>
+    {% if repository.enabled %}
+      <form method="post" action="{{ url_for('repository_disable', repo_id=repository.id) }}" class="inline-form">
+        <button class="btn" type="submit">Disable</button>
+      </form>
+    {% else %}
+      <form method="post" action="{{ url_for('repository_enable', repo_id=repository.id) }}" class="inline-form">
+        <button class="btn btn-primary" type="submit">Enable</button>
+      </form>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

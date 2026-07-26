@@ -8,6 +8,8 @@ from datetime import date
 from pathlib import Path
 
 from hub.notebook.dashboard import (
+    DASHBOARD_QUEUE_FETCH_LIMIT,
+    DASHBOARD_QUEUE_VISIBLE_ROWS,
     build_repo_summary,
     classify_open_note,
     dashboard_work_queue,
@@ -450,6 +452,114 @@ class DashboardRouteTests(unittest.TestCase):
         self.assertNotIn("Dash queue note", html2)
         self.assertIn("Undated open note", html2)
 
+    def test_dashboard_queue_five_row_viewport(self) -> None:
+        """Queue shows a 5-row viewport; all matching tasks remain in the scrollable body."""
+        self.assertEqual(DASHBOARD_QUEUE_VISIBLE_ROWS, 5)
+        self.assertGreater(DASHBOARD_QUEUE_FETCH_LIMIT, 5)
+
+        # Empty work queue stays compact.
+        empty_html = self.client.get("/work").get_data(as_text=True)
+        self.assertIn("panel-queue is-empty", empty_html)
+        self.assertIn("No open notebook items in this tab", empty_html)
+        self.assertIn("Showing 0 of 0 open tasks", empty_html)
+
+        def _make(title: str, *, scope: str = "work", status: str = "ongoing") -> None:
+            note = self.store.create(title=title, scope=scope)
+            self.store.save(
+                note["id"],
+                title=title,
+                body_md="",
+                note_type="task",
+                status=status,
+                priority="medium",
+                due_date=None,
+                tags="",
+                repositories=[],
+                checklist=[],
+                links=[],
+                pinned=False,
+                scope=scope,
+            )
+
+        _make("Queue row 1")
+        one_html = self.client.get("/work").get_data(as_text=True)
+        self.assertIn("Queue row 1", one_html)
+        self.assertIn("Showing 1 of 1 open tasks", one_html)
+        self.assertNotIn("panel-queue is-empty", one_html)
+
+        for i in range(2, 6):
+            _make(f"Queue row {i}")
+        five_html = self.client.get("/work").get_data(as_text=True)
+        for i in range(1, 6):
+            self.assertIn(f"Queue row {i}", five_html)
+        self.assertIn("Showing 5 of 5 open tasks", five_html)
+
+        for i in range(6, 9):
+            _make(f"Queue row {i}")
+        # Personal-scoped note must not leak into Work queue.
+        _make("Personal only row", scope="personal")
+
+        more_html = self.client.get("/work").get_data(as_text=True)
+        for i in range(1, 9):
+            self.assertIn(f"Queue row {i}", more_html)
+        self.assertNotIn("Personal only row", more_html)
+        self.assertIn("Showing 8 of 8 open tasks", more_html)
+        self.assertIn('class="queue-scroll"', more_html)
+        self.assertIn('class="queue-tabs"', more_html)
+        # Header + tabs stay above the scroll region; footer stays below.
+        header_idx = more_html.find("Notebook Work Queue")
+        tabs_idx = more_html.find('class="queue-tabs"', header_idx)
+        scroll_idx = more_html.find('class="queue-scroll"', header_idx)
+        footer_idx = more_html.find("Showing 8 of 8 open tasks", header_idx)
+        self.assertLess(header_idx, tabs_idx)
+        self.assertLess(tabs_idx, scroll_idx)
+        self.assertLess(scroll_idx, footer_idx)
+        self.assertIn('href="/work/notebook"', more_html)
+
+        # Filter tab still returns full matching set (not capped at 5).
+        blocked = self.store.create(title="Blocked queue item", scope="work")
+        self.store.save(
+            blocked["id"],
+            title="Blocked queue item",
+            body_md="",
+            note_type="task",
+            status="blocked",
+            priority="high",
+            due_date=None,
+            tags="",
+            repositories=[],
+            checklist=[],
+            links=[],
+            pinned=False,
+            scope="work",
+        )
+        blocked_html = self.client.get("/work?queue=blocked").get_data(as_text=True)
+        self.assertIn("Blocked queue item", blocked_html)
+        self.assertIn("Showing 1 of 9 open tasks", blocked_html)
+
+        personal_html = self.client.get("/personal").get_data(as_text=True)
+        self.assertIn("Personal Task Queue", personal_html)
+        self.assertIn("Personal only row", personal_html)
+        self.assertNotIn("Queue row 1", personal_html)
+        self.assertIn('class="queue-scroll"', personal_html)
+
+        css = (Path(__file__).resolve().parents[1] / "static" / "css" / "style.css").read_text(
+            encoding="utf-8",
+            errors="replace",
+        )
+        self.assertIn("--queue-visible-rows: 5", css)
+        self.assertIn(".panel-queue .queue-scroll", css)
+        self.assertIn("position: sticky", css)
+        self.assertRegex(
+            css,
+            r"\.panel-queue \.queue-scroll\s*\{[^}]*overflow-y:\s*auto",
+        )
+        self.assertRegex(
+            css,
+            r"\.panel-queue \.queue-scroll \.table-wrap\s*\{[^}]*overflow-x:\s*auto",
+        )
+        self.assertIn("flex: 0 0 auto", css)
+
     def test_recent_activity_scroll_region(self) -> None:
         """Recent Activity keeps header fixed and scrolls the list body on desktop."""
         r = self.client.get("/work")
@@ -483,17 +593,19 @@ class DashboardRouteTests(unittest.TestCase):
         )
 
     def test_personal_dashboard_layout_balance(self) -> None:
-        """Personal dashboard keeps 5 top cards balanced and compact empty upcoming."""
+        """Personal dashboard keeps 4 top cards balanced and compact empty upcoming."""
         r = self.client.get("/personal")
         self.assertEqual(r.status_code, 200)
         html = r.get_data(as_text=True)
         self.assertIn("Personal Dashboard", html)
-        self.assertIn("summary-cols-5", html)
+        self.assertIn("summary-cols-4", html)
         self.assertIn("Personal Tasks", html)
         self.assertIn("Personal Notes", html)
         self.assertIn("Upcoming Events", html)
-        self.assertIn("Quick Notepad", html)
         self.assertIn("Audit Events", html)
+        # Floating Quick Notepad tab remains; summary-card shortcut removed.
+        self.assertIn('id="qn-open-btn"', html)
+        self.assertNotIn('href="/personal#quick-notepad"', html)
         self.assertIn("Upcoming Personal Events", html)
         self.assertIn("Personal Task Queue", html)
         self.assertIn("Recent Activity", html)
@@ -507,8 +619,8 @@ class DashboardRouteTests(unittest.TestCase):
             encoding="utf-8",
             errors="replace",
         )
-        self.assertIn(".summary-grid.summary-cols-5", css)
-        self.assertIn("repeat(5, minmax(0, 1fr))", css)
+        self.assertIn(".summary-grid.summary-cols-4", css)
+        self.assertIn("repeat(4, minmax(0, 1fr))", css)
         self.assertIn(".panel-upcoming.is-empty", css)
         self.assertIn(".panel-empty", css)
         self.assertIn(".dash-grid-personal", css)

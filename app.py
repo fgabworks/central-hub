@@ -73,7 +73,11 @@ from hub.notebook import (
     normalize_workspace,
     render_markdown,
 )
-from hub.notebook.dashboard import dashboard_work_queue, open_tasks_severity
+from hub.notebook.dashboard import (
+    DASHBOARD_QUEUE_FETCH_LIMIT,
+    dashboard_work_queue,
+    open_tasks_severity,
+)
 from hub.notebook.workspace import (
     apply_workspace_cookie,
     dashboard_endpoint,
@@ -100,6 +104,12 @@ from hub.agent_center.openai_settings import load_openai_settings
 from hub.agent_center.routes import register_agent_center_routes
 from hub.agent_center.service import AgentCenterService
 from hub.agent_center.store import AgentCenterStore
+from hub.repository_workspace import load_workspace_settings
+from hub.repository_workspace.routes import register_repository_workspace_routes
+from hub.dhis2_reports.routes import register_dhis2_reports_routes
+from hub.dhis2_reports.service import Dhis2ReportsService
+from hub.dhis2_reports.store import ReportsStore
+from hub.repository_workspace.service import RepositoryWorkspaceService
 from hub.registry import load_registry
 from hub.registry.git_util import default_search_roots, find_local_checkout, slugify_repo_id
 from hub.registry.loader import RegistryError
@@ -113,6 +123,7 @@ settings = load_settings()
 # UI-only demo fixtures for the dashboard mockup (not live data).
 _DHIS2_TOOLS = [
     {"label": "Instance Details", "icon": "◎", "endpoint": "dhis2_instance"},
+    {"label": "Reports", "icon": "▤", "endpoint": "dhis2_reports_library"},
     {"label": "Metadata Catalog", "icon": "▦", "endpoint": "dhis2_catalog"},
     {"label": "Authorities", "icon": "☰", "endpoint": "dhis2_authorities"},
     {"label": "Metadata Lookup", "icon": "⌕", "endpoint": "dhis2_lookup"},
@@ -262,6 +273,48 @@ def create_app() -> Flask:
         uid_index=app.config["DHIS2_UID_INDEX"],
     )
     register_agent_center_routes(app)
+    def _repo_ws_audit(action: str, target: str, detail: str, ok: bool = True) -> None:
+        app.config["AUDIT"].append(
+            action=action,
+            actor=current_actor(),
+            target=target,
+            detail=detail,
+            ok=ok,
+        )
+
+    app.config["REPO_WORKSPACE"] = RepositoryWorkspaceService(
+        load_workspace_settings(),
+        audit=_repo_ws_audit,
+    )
+    register_repository_workspace_routes(app)
+
+    def _reports_audit(action: str, target: str, detail: str, ok: bool = True) -> None:
+        app.config["AUDIT"].append(
+            action=action,
+            actor=current_actor(),
+            target=target,
+            detail=detail,
+            ok=ok,
+        )
+
+    def _dhis2_base_for_env(env: str) -> str | None:
+        try:
+            cfg = build_dhis2_settings_for_instance(env)
+        except Exception:  # noqa: BLE001
+            return None
+        return getattr(cfg, "base_url", None)
+
+    def _dhis2_client_for_env(env: str) -> Dhis2Client:
+        return Dhis2Client(build_dhis2_settings_for_instance(env))
+
+    app.config["DHIS2_REPORTS"] = Dhis2ReportsService(
+        ReportsStore(),
+        audit=_reports_audit,
+        get_dhis2_base_url=_dhis2_base_for_env,
+        client_factory=_dhis2_client_for_env,
+        registry=app.config.get("REGISTRY"),
+    )
+    register_dhis2_reports_routes(app)
 
     @app.context_processor
     def inject_globals():
@@ -332,13 +385,6 @@ def create_app() -> Flask:
                 "active_prefix": "personal_notebook",
             },
             {
-                "endpoint": "personal_dashboard",
-                "label": "Quick Notepad",
-                "icon": "▦",
-                "active_prefix": None,
-                "anchor": "quick-notepad",
-            },
-            {
                 "endpoint": "personal_tasks",
                 "label": "Personal Tasks",
                 "icon": "☑",
@@ -377,13 +423,6 @@ def create_app() -> Flask:
                 "active_prefix": "work_notebook",
             },
             {
-                "endpoint": "work_dashboard",
-                "label": "Quick Notepad",
-                "icon": "▤",
-                "active_prefix": None,
-                "anchor": "quick-notepad",
-            },
-            {
                 "endpoint": "sql_workspace",
                 "label": "SQL Workspace",
                 "icon": "▦",
@@ -413,6 +452,12 @@ def create_app() -> Flask:
                 "icon": "⬡",
                 "badge": None,
                 "active_prefix": "dhis2",
+            },
+            {
+                "endpoint": "dhis2_reports_library",
+                "label": "DHIS2 Reports",
+                "icon": "▤",
+                "active_prefix": "dhis2_reports",
             },
             {
                 "endpoint": "jobs",
@@ -482,6 +527,10 @@ def create_app() -> Flask:
             {"label": "View Logs", "endpoint": "audit", "available": True},
         ]
 
+        # Floating Quick Notepad is available on all main pages via base.html
+        # (pages with an embedded panel set skip_global_notepad).
+        notepad = QuickNotepadStore(notebook.db, scope=workspace).get()
+
         return {
             "app_name": settings.app_name,
             "env_profile": settings.env_profile,
@@ -497,6 +546,8 @@ def create_app() -> Flask:
             "nav_sections": nav_sections,
             "nav_items": nav_items,
             "quick_actions": personal_actions if workspace == "personal" else work_actions,
+            "notepad": notepad,
+            "note_scope": workspace,
         }
 
     def _set_workspace_and_redirect(workspace: str, next_url: str | None = None):
@@ -527,7 +578,7 @@ def create_app() -> Flask:
         work_queue = dashboard_work_queue(
             notebook,
             tab=queue_tab,
-            limit=5,
+            limit=DASHBOARD_QUEUE_FETCH_LIMIT,
             registered_ids=registered_ids,
             scope=scope_n,
         )
@@ -576,15 +627,6 @@ def create_app() -> Flask:
                 },
                 {
                     "kind": "default",
-                    "label": "Quick Notepad",
-                    "value": "Ready",
-                    "sub": "Local scratchpad",
-                    "icon": "▦",
-                    "href": url_for("personal_dashboard") + "#quick-notepad",
-                    "link_label": "Open panel →",
-                },
-                {
-                    "kind": "default",
                     "label": "Audit Events",
                     "value": str(len(events)),
                     "sub": "Recent JSONL activity",
@@ -624,6 +666,13 @@ def create_app() -> Flask:
             dhis2_sub = "Read-only"
             if dhis2_instance:
                 dhis2_sub = f"{str(dhis2_instance).title()} · Read-only"
+            reports_svc = app.config.get("DHIS2_REPORTS")
+            try:
+                report_summary = (
+                    reports_svc.dashboard_summary() if reports_svc is not None else {}
+                )
+            except Exception:  # noqa: BLE001
+                report_summary = {}
             cards = [
                 {
                     "kind": "default",
@@ -661,6 +710,19 @@ def create_app() -> Flask:
                     "icon": "◎",
                     "href": url_for("dhis2"),
                     "link_label": "View details →",
+                },
+                {
+                    "kind": "default",
+                    "label": "DHIS2 Reports",
+                    "value": str(report_summary.get("report_count") or 0),
+                    "sub": (
+                        f"Stage: {report_summary.get('stage_synced') or 0}"
+                        f" · Live: {report_summary.get('live_synced') or 0}"
+                        f" · Failed runs: {report_summary.get('failed_count') or 0}"
+                    ),
+                    "icon": "▤",
+                    "href": url_for("dhis2_reports_library"),
+                    "link_label": "Open Reports →",
                 },
                 {
                     "kind": "default",
@@ -736,12 +798,22 @@ def create_app() -> Flask:
             )
             app.config["ADAPTERS"] = adapters
             adapters.invalidate_health_cache()
+            # Keep Agent Center registry pointer current after connect/edit.
+            agent = app.config.get("AGENT_CENTER")
+            if agent is not None and hasattr(agent, "registry"):
+                agent.registry = registry
+            reports = app.config.get("DHIS2_REPORTS")
+            if reports is not None and hasattr(reports, "registry"):
+                reports.registry = registry
         except RegistryError as exc:
             app.config["REGISTRY_ERROR"] = str(exc)
             raise
 
     def _registry_store() -> RegistryStore:
         return RegistryStore(app.config["REGISTRY_CONFIG_PATH"])
+
+    app.config["RELOAD_REGISTRY"] = _reload_registry
+    app.config["REGISTRY_STORE_FACTORY"] = _registry_store
 
     def _repo_form_from_request() -> dict:
         return {
@@ -981,24 +1053,6 @@ def create_app() -> Flask:
             return redirect(url_for("repositories", notice=f"Enabled {repo_id}."))
         except RegistryError as exc:
             return redirect(url_for("repositories", error=str(exc)))
-
-    @app.get("/repositories/<repo_id>")
-    def repository_detail(repo_id: str):
-        registry = app.config["REGISTRY"]
-        if registry is None:
-            abort(503)
-        repo = registry.get(repo_id)
-        if repo is None:
-            abort(404)
-        adapters: AdapterManager | None = app.config["ADAPTERS"]
-        health = adapters.check_repository(repo) if adapters else None
-        status = ui_repo_status(repo, health)
-        return render_template(
-            "repository_detail.html",
-            repository=repo,
-            health=health,
-            status=status,
-        )
 
     @app.get("/health")
     def health():
@@ -1455,8 +1509,14 @@ def create_app() -> Flask:
             q=q,
             scope=scope_n,
         )
+        matched_ids = {n["id"] for n in notes}
         selected = store.get(selected_id) if selected_id else None
         if selected and normalize_scope(selected.get("scope")) != scope_n:
+            selected = None
+            selected_id = ""
+        # If the open note is outside the current filter set, drop it so the
+        # list/editor stay aligned with what Filter returned.
+        if selected is not None and selected_id not in matched_ids:
             selected = None
             selected_id = ""
         if selected is None and notes:

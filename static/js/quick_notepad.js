@@ -1,6 +1,7 @@
 /**
  * Quick Notepad — scoped Personal / Work client.
  * Expects a host element #qn-host with data-qn-*-url and data-qn-scope.
+ * Markdown mode: Edit/Preview (safe HTML via /api/notebook/preview).
  */
 (function () {
   function initQuickNotepad() {
@@ -14,6 +15,10 @@
     var backdrop = document.getElementById("qn-backdrop");
     var resizeHandle = document.getElementById("qn-resize");
     var revList = document.getElementById("qn-rev-list");
+    var mdBar = document.getElementById("qn-md-bar");
+    var previewEl = document.getElementById("qn-preview");
+    var modeEditBtn = document.getElementById("qn-mode-edit");
+    var modePreviewBtn = document.getElementById("qn-mode-preview");
     if (!workspace || !panel || !bodyEl || !statusEl) return;
 
     var scope = workspace.getAttribute("data-qn-scope") || "personal";
@@ -22,10 +27,14 @@
       clear: workspace.getAttribute("data-qn-clear-url") || "",
       convert: workspace.getAttribute("data-qn-convert-url") || "",
       restore: workspace.getAttribute("data-qn-restore-url") || "",
+      preview:
+        workspace.getAttribute("data-qn-preview-url") || "/api/notebook/preview",
     };
     var saveTimer = null;
+    var previewTimer = null;
     var lastSaved = bodyEl.value;
     var lastFormat = formatEl ? formatEl.value : "plain";
+    var viewMode = "edit"; // edit | preview (markdown only)
     var minW = 240;
     var maxW = 560;
 
@@ -36,6 +45,10 @@
 
     function isOpen() {
       return workspace.classList.contains("is-qn-open");
+    }
+
+    function isMarkdown() {
+      return !!(formatEl && String(formatEl.value || "").toLowerCase() === "markdown");
     }
 
     function currentWidth() {
@@ -51,7 +64,11 @@
       workspace.setAttribute("data-qn-open", open ? "1" : "0");
       if (openBtn) openBtn.setAttribute("aria-expanded", open ? "true" : "false");
       if (backdrop) {
-        if (open && window.matchMedia("(max-width: 980px)").matches) {
+        var isGlobal = workspace.classList.contains("qn-global-host");
+        if (
+          open &&
+          (isGlobal || window.matchMedia("(max-width: 980px)").matches)
+        ) {
           backdrop.hidden = false;
         } else {
           backdrop.hidden = true;
@@ -60,6 +77,70 @@
       if (persist) {
         queueSave({ panel_open: !!open, panel_width: currentWidth() }, true);
       }
+    }
+
+    function setViewMode(mode) {
+      viewMode = mode === "preview" ? "preview" : "edit";
+      if (modeEditBtn) {
+        modeEditBtn.classList.toggle("is-active", viewMode === "edit");
+        modeEditBtn.setAttribute("aria-pressed", viewMode === "edit" ? "true" : "false");
+      }
+      if (modePreviewBtn) {
+        modePreviewBtn.classList.toggle("is-active", viewMode === "preview");
+        modePreviewBtn.setAttribute(
+          "aria-pressed",
+          viewMode === "preview" ? "true" : "false"
+        );
+      }
+      syncEditorChrome();
+      if (viewMode === "preview" && isMarkdown()) {
+        refreshPreview(true);
+      }
+    }
+
+    function syncEditorChrome() {
+      var md = isMarkdown();
+      if (mdBar) {
+        if (md) mdBar.removeAttribute("hidden");
+        else mdBar.setAttribute("hidden", "");
+      }
+      var showPreview = md && viewMode === "preview";
+      if (showPreview) bodyEl.setAttribute("hidden", "");
+      else bodyEl.removeAttribute("hidden");
+      if (previewEl) {
+        if (showPreview) previewEl.removeAttribute("hidden");
+        else previewEl.setAttribute("hidden", "");
+      }
+      panel.classList.toggle("qn-is-markdown", md);
+      panel.classList.toggle("qn-is-preview", showPreview);
+    }
+
+    function refreshPreview(force) {
+      if (!previewEl || !isMarkdown()) return;
+      clearTimeout(previewTimer);
+      var run = function () {
+        fetch(urls.preview, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ markdown: bodyEl.value || "" }),
+        })
+          .then(function (r) {
+            return r.json();
+          })
+          .then(function (data) {
+            if (!data || !data.ok) {
+              previewEl.innerHTML =
+                '<p class="muted">Preview unavailable.</p>';
+              return;
+            }
+            previewEl.innerHTML = data.html || "";
+          })
+          .catch(function () {
+            previewEl.innerHTML = '<p class="muted">Preview failed.</p>';
+          });
+      };
+      if (force) run();
+      else previewTimer = setTimeout(run, 250);
     }
 
     function renderRevisions(revisions) {
@@ -118,6 +199,10 @@
       }
       lastSaved = bodyEl.value;
       lastFormat = formatEl ? formatEl.value : "plain";
+      if (!isMarkdown()) {
+        viewMode = "edit";
+      }
+      syncEditorChrome();
       renderRevisions(pad.revisions);
       setStatus("saved", "Saved");
     }
@@ -172,11 +257,35 @@
     bodyEl.addEventListener("input", function () {
       setStatus("saving", "Saving…");
       queueSave({});
+      if (isMarkdown() && viewMode === "preview") {
+        refreshPreview(false);
+      }
     });
     if (formatEl) {
       formatEl.addEventListener("change", function () {
+        // Preserve scratchpad content; only metadata changes.
+        if (String(formatEl.value || "").toLowerCase() !== "markdown") {
+          setViewMode("edit");
+        }
+        syncEditorChrome();
         setStatus("saving", "Saving…");
         queueSave({ content_format: formatEl.value }, true);
+      });
+    }
+
+    if (modeEditBtn) {
+      modeEditBtn.addEventListener("mousedown", function (ev) {
+        ev.preventDefault();
+      });
+      modeEditBtn.addEventListener("click", function () {
+        setViewMode("edit");
+        bodyEl.focus();
+      });
+    }
+    if (modePreviewBtn) {
+      modePreviewBtn.addEventListener("click", function () {
+        setViewMode("preview");
+        if (previewEl) previewEl.focus();
       });
     }
 
@@ -195,6 +304,12 @@
         applyOpen(false, true);
       });
     }
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape" && isOpen()) {
+        applyOpen(false, true);
+        if (openBtn) openBtn.focus();
+      }
+    });
 
     var copyBtn = document.getElementById("qn-copy");
     if (copyBtn) {
@@ -268,10 +383,10 @@
     if (convertBtn) {
       convertBtn.addEventListener("click", function () {
         if (!(bodyEl.value || "").trim()) {
-            setStatus("error", "Empty");
-            setTimeout(function () {
-              setStatus("saved", "Saved");
-            }, 900);
+          setStatus("error", "Empty");
+          setTimeout(function () {
+            setStatus("saved", "Saved");
+          }, 900);
           return;
         }
         setStatus("saving", "Saving…");
@@ -361,6 +476,8 @@
         );
       }
     });
+
+    syncEditorChrome();
   }
 
   if (document.readyState === "loading") {

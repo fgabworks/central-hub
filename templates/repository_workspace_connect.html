@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_badge, type_badge %}
+{% block title %}Connect · {{ repository.name }} · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header page-header-compact">
+  <div>
+    <p class="muted-2" style="margin:0 0 0.35rem">
+      <a href="{{ url_for('repositories') }}">Repositories</a> /
+      <a href="{{ url_for('repository_detail', repo_id=repository.id) }}">{{ repository.id }}</a> / connect
+    </p>
+    <h1>Connect Local Workspace</h1>
+    <p class="muted">Scan a local folder, review the preview, then confirm. Nothing is saved until you confirm.</p>
+  </div>
+  <div class="page-meta">
+    {{ type_badge(repository.type) }}
+    {{ status_badge(status) }}
+  </div>
+</section>
+{% include "partials/repository_tabs.html" %}
+
+<section class="panel rw-connect" style="margin-top:0.85rem"
+         id="rw-connect"
+         data-repo-id="{{ repository.id }}"
+         data-scan-url="{{ url_for('api_repo_ws_connect_scan', repo_id=repository.id) }}"
+         data-save-url="{{ url_for('api_repo_ws_connect_save', repo_id=repository.id) }}"
+         data-registered-git="{{ repository.git_url or '' }}"
+         data-existing-path="{{ repository.local_path or repository.working_directory or '' }}"
+         data-overview-url="{{ url_for('repository_detail', repo_id=repository.id) }}">
+  <div class="panel-header">
+    <h2>1. Local folder</h2>
+    <span class="muted">Paste a full path. Browser folder pickers cannot expose absolute paths.</span>
+  </div>
+  <div class="panel-body rw-connect-form">
+    <label class="rw-connect-path">Local path
+      <input type="text" id="rw-connect-path" placeholder="C:\PMNP\Data-Script" spellcheck="false"
+             value="{{ repository.local_path or '' }}">
+    </label>
+    <div class="btn-row">
+      <button type="button" class="btn btn-primary" id="rw-connect-scan">Scan Workspace</button>
+      <a class="btn" href="{{ edit_url }}">Manual configuration</a>
+    </div>
+    <p class="muted" id="rw-connect-status"></p>
+  </div>
+
+  <div class="panel-header" style="border-top:1px solid var(--border)">
+    <h2>2. Configuration preview</h2>
+  </div>
+  <div class="panel-body" id="rw-connect-preview" hidden>
+    <div class="rw-connect-warnings" id="rw-connect-warnings"></div>
+    <dl class="detail-list" id="rw-connect-facts"></dl>
+    <div class="rw-connect-edit-grid">
+      <label>Display name
+        <input type="text" id="rw-edit-name" value="{{ repository.name }}">
+      </label>
+      <label>Path
+        <input type="text" id="rw-edit-path" spellcheck="false">
+      </label>
+      <label>Git URL (optional)
+        <input type="text" id="rw-edit-git" spellcheck="false" value="{{ repository.git_url or '' }}">
+      </label>
+      <label>Default environment
+        <select id="rw-edit-env">
+          <option value="development" selected>Development</option>
+          <option value="stage">Stage</option>
+          <option value="live">Live</option>
+        </select>
+      </label>
+    </div>
+
+    <h3 style="margin:1rem 0 0.5rem;font-size:13px">Suggested run profiles (untrusted)</h3>
+    <p class="muted">Review before adding. Nothing runs during scan. Leave unchecked to skip.</p>
+    <div id="rw-connect-profiles" class="rw-connect-profiles"></div>
+
+    <label class="rw-connect-confirm" id="rw-confirm-mismatch" hidden>
+      <input type="checkbox" id="rw-chk-mismatch"> I understand the Git remote does not match the registered URL
+    </label>
+    <label class="rw-connect-confirm" id="rw-confirm-replace" hidden>
+      <input type="checkbox" id="rw-chk-replace"> Replace the existing configured local path
+    </label>
+    <label class="rw-connect-confirm">
+      <input type="checkbox" id="rw-chk-save"> I reviewed this configuration and want to save it
+    </label>
+    <div class="btn-row" style="margin-top:0.85rem">
+      <button type="button" class="btn btn-primary" id="rw-connect-save" disabled>Confirm &amp; Save</button>
+    </div>
+  </div>
+</section>
+<script src="{{ url_for('static', filename='js/repository_connect.js') }}"></script>
+{% endblock %}

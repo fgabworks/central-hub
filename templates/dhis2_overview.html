@@ -44,9 +44,9 @@
       </article>
     </div>
 
-    <form method="post" action="{{ url_for('dhis2') }}" class="nb-filters" style="grid-template-columns:1fr auto;align-items:end">
+    <form method="post" action="{{ url_for('dhis2') }}" class="nb-filters" style="flex-wrap:wrap;align-items:end">
       <input type="hidden" name="action" value="select_instance">
-      <label class="nb-field" style="margin:0">
+      <label class="nb-field" style="margin:0;flex:1 1 16rem;min-width:min(100%,12rem)">
         <span>Select configured profile</span>
         <select name="instance" required>
           <option value="">Choose Stage or Live…</option>
@@ -59,7 +59,7 @@
           {% endfor %}
         </select>
       </label>
-      <button class="btn btn-primary" type="submit">Switch &amp; check connection</button>
+      <button class="btn btn-primary" type="submit" style="flex:0 0 auto">Switch &amp; check connection</button>
     </form>
     <p class="muted" style="margin:0.65rem 0 0">
       Selection is stored locally under <code>data/dhis2/active_instance.json</code> (not in the browser).

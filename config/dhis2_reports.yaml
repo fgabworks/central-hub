@@ -1,0 +1,81 @@
+# Central Hub DHIS2 Report Workspace catalog.
+# Report calculation/generation stays in DHIS2 or connected repositories.
+# Central Hub only catalogs, parameterizes, launches, views, and audits.
+
+reports:
+  - id: dhis2-standard-pivot
+    name: DHIS2 Pivot / Analytics (browser)
+    type: dhis2_standard
+    description: "Open the DHIS2 analytics/pivot UI for the selected Stage or Live instance."
+    source: "DHIS2"
+    environments: ["stage", "live"]
+    url_template: "/dhis-web-data-visualizer/index.html"
+    parameters:
+      - name: period
+        label: Period
+        type: period
+        required: false
+        description: "Optional hint only — set period inside DHIS2 UI."
+      - name: orgUnit
+        label: Organisation unit
+        type: org_unit
+        required: false
+    tags: ["dhis2", "standard"]
+    output_formats: ["html"]
+    allow_scripts: false
+
+  - id: dhis2-standard-reports-app
+    name: DHIS2 Reports app
+    type: dhis2_standard
+    description: "Open the standard DHIS2 Reports application (host allowlisted)."
+    source: "DHIS2"
+    environments: ["stage", "live"]
+    url_template: "/dhis-web-reports/index.html"
+    parameters:
+      - name: period
+        label: Period
+        type: period
+        required: false
+      - name: orgUnit
+        label: Organisation unit UID
+        type: org_unit
+        required: false
+    tags: ["dhis2", "standard"]
+    output_formats: ["html"]
+
+  - id: report-template-static-sample
+    name: Report Template HTML (static)
+    type: static_html
+    description: "Open an existing HTML file under REPORT_TEMPLATE_PATH (no generation)."
+    source: "report-template repository"
+    repository_id: report-template
+    environments: ["stage"]
+    static_relative_path: "index.html"
+    output_roots: ["REPORT_TEMPLATE_PATH"]
+    parameters: []
+    tags: ["repository", "static"]
+    output_formats: ["html"]
+    allow_scripts: false
+
+  - id: report-template-python-preview
+    name: Report Template local preview
+    type: repository_html
+    description: "Launch approved python-http run profile against report-template checkout and open recent HTML."
+    source: "report-template repository"
+    repository_id: report-template
+    environments: ["stage"]
+    run_profile_id: python-http
+    output_glob: "*.html"
+    output_roots: ["REPORT_TEMPLATE_PATH"]
+    parameters:
+      - name: period
+        label: Period
+        type: period
+        required: false
+      - name: orgUnit
+        label: Organisation unit
+        type: org_unit
+        required: false
+    tags: ["repository", "generated"]
+    output_formats: ["html"]
+    allow_scripts: false

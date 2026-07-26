@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}{{ viewer.report_name or 'Report' }} · {{ page_title }} · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header page-header-compact">
+  <div>
+    <h1>{{ viewer.report_name or 'Standard report' }}</h1>
+    <p class="muted">
+      Isolated viewer · {{ viewer.report.environment|title }} · <code>{{ viewer.report.uid }}</code>
+      {% if viewer.period %} · period {{ viewer.period }}{% endif %}
+      {% if viewer.org_unit %} · OU {{ viewer.org_unit }}{% endif %}
+    </p>
+  </div>
+  <div class="page-meta">
+    <a class="btn btn-sm" href="{{ url_for('dhis2_reports_standard_detail', environment=viewer.report.environment, uid=viewer.report.uid, period=viewer.period, org_unit=viewer.org_unit) }}">Details</a>
+    <a class="btn btn-sm btn-primary" href="{{ viewer.open_url }}" target="_blank" rel="noopener">Open in DHIS2</a>
+  </div>
+</section>
+{% include "partials/dhis2_reports_tabs.html" %}
+
+<div class="banner" style="margin-top:0.85rem" id="dr-embed-hint">
+  {{ viewer.fallback_hint }}
+  Prefer DHIS2’s own rendering so report JavaScript context can work. If this frame stays blank (CSP, authentication, or iframe restrictions), use <strong>Open in DHIS2</strong>.
+</div>
+
+<section class="panel" style="margin-top:0.85rem">
+  <div class="panel-header">
+    <h2>{{ viewer.report.name }}</h2>
+    <span class="muted">embed · scripts allowed · no hub credentials in URL</span>
+  </div>
+  {% if viewer.prefer_embed and viewer.embed_url %}
+  <iframe
+    class="dr-viewer-frame"
+    id="dr-standard-frame"
+    title="DHIS2 standard report"
+    sandbox="{{ viewer.sandbox }} allow-popups"
+    referrerpolicy="no-referrer"
+    src="{{ viewer.embed_url }}"></iframe>
+  {% else %}
+  <div class="banner banner-error">
+    Embedding is not preferred for this report type.
+    <a href="{{ viewer.open_url }}" target="_blank" rel="noopener">Open in DHIS2</a>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

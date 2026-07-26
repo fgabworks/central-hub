@@ -84,6 +84,31 @@ class QuickNotepadStoreTests(unittest.TestCase):
         self.assertEqual(narrow["panel_width"], 240)
         self.assertTrue(narrow["panel_open"])
 
+    def test_markdown_formatting_preserved_in_autosave_revision_convert(self) -> None:
+        body = "Keep **bold** and ~~strike~~ markers"
+        saved = self.pad.save(content=body, content_format="markdown")
+        self.assertEqual(saved["content"], body)
+        self.assertEqual(saved["content_format"], "markdown")
+
+        # Format switch must not rewrite content.
+        flipped = self.pad.save(content_format="plain")
+        self.assertEqual(flipped["content"], body)
+        self.assertEqual(flipped["content_format"], "plain")
+        back = self.pad.save(content_format="markdown")
+        self.assertEqual(back["content"], body)
+
+        self.pad.clear()
+        rev = self.pad.get()["revisions"][0]
+        self.assertEqual(rev["content"], body)
+        self.assertIn("**bold**", rev["content"])
+        self.assertIn("~~strike~~", rev["content"])
+
+        self.pad.save(content=body, content_format="markdown")
+        note = self.pad.convert_to_note(self.notes)
+        assert note is not None
+        self.assertIn("**bold**", note["body_md"])
+        self.assertIn("~~strike~~", note["body_md"])
+
 
 class QuickNotepadRouteTests(unittest.TestCase):
     @classmethod
@@ -119,6 +144,12 @@ class QuickNotepadRouteTests(unittest.TestCase):
         self.assertIn('id="qn-body"', html)
         self.assertIn("Convert to Note", html)
         self.assertIn("qn-status", html)
+        self.assertIn('id="qn-md-bar"', html)
+        self.assertNotIn('id="qn-bold"', html)
+        self.assertNotIn('id="qn-strike"', html)
+        self.assertIn('id="qn-mode-edit"', html)
+        self.assertIn('id="qn-mode-preview"', html)
+        self.assertIn('id="qn-preview"', html)
         # No agent / structured fields on the scratchpad
         self.assertNotIn('id="qn-repo"', html)
         self.assertNotIn('id="qn-priority"', html)
@@ -129,6 +160,8 @@ class QuickNotepadRouteTests(unittest.TestCase):
             errors="replace",
         )
         self.assertIn(".qn-panel", css)
+        self.assertIn(".qn-md-bar", css)
+        self.assertIn(".qn-preview", css)
         self.assertIn("max-width: 980px", css)
         self.assertIn(".qn-backdrop", css)
         self.assertIn(".dash-workspace", css)
@@ -151,6 +184,11 @@ class QuickNotepadRouteTests(unittest.TestCase):
         )
         self.assertIn("Saving…", js)
         self.assertIn("Save failed", js)
+        self.assertNotIn("wrapSelection", js)
+        self.assertNotIn("applyWrap", js)
+        self.assertNotIn("qn-bold", js)
+        self.assertIn("setViewMode", js)
+        self.assertIn("/api/notebook/preview", js)
         self.assertIn("overflow", css)  # long-content scrolling on .qn-body
 
     def test_dashboard_loads_same_scratchpad(self) -> None:
@@ -310,6 +348,52 @@ class QuickNotepadRouteTests(unittest.TestCase):
         )
         self.assertEqual(restored.status_code, 200)
         self.assertEqual(restored.get_json()["notepad"]["content"], "API scratch line")
+
+    def test_markdown_preview_api_and_plain_unchanged(self) -> None:
+        preview = self.client.post(
+            "/api/notebook/preview",
+            data=json.dumps(
+                {"markdown": "**hi** ~~bye~~ <script>x</script>"}
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(preview.status_code, 200)
+        data = preview.get_json()
+        self.assertTrue(data["ok"])
+        self.assertIn("<strong>hi</strong>", data["html"])
+        self.assertIn("<del>bye</del>", data["html"])
+        self.assertNotIn("<script>", data["html"])
+
+        put = self.client.put(
+            "/api/notebook/notepad?scope=work",
+            data=json.dumps(
+                {
+                    "scope": "work",
+                    "content": "plain **not rendered**",
+                    "content_format": "plain",
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertTrue(put.get_json()["ok"])
+        pad = put.get_json()["notepad"]
+        self.assertEqual(pad["content_format"], "plain")
+        self.assertEqual(pad["content"], "plain **not rendered**")
+
+        # Switching format keeps raw content.
+        put2 = self.client.put(
+            "/api/notebook/notepad?scope=work",
+            data=json.dumps(
+                {
+                    "scope": "work",
+                    "content": "plain **not rendered**",
+                    "content_format": "markdown",
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(put2.get_json()["notepad"]["content"], "plain **not rendered**")
+        self.assertEqual(put2.get_json()["notepad"]["content_format"], "markdown")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,38 @@
+# Approved Repository Workspace run profiles (Phase 2).
+# Executables + argument arrays only — never raw shell strings.
+# Allowed placeholders: {port}, {repository_path}, {environment}
+#
+# Environment variable *values* are read server-side from the process environment
+# for names listed in allowed_env_names. The UI shows names only.
+
+profiles:
+  - id: python-http
+    name: Python HTTP Server
+    description: "stdlib http.server for local static preview (development only)."
+    repository_ids: []   # empty = available to any local checkout
+    executable: python
+    args: ["-m", "http.server", "{port}"]
+    working_directory: "{repository_path}"
+    environments: ["development"]
+    default_port: 8765
+    local_url: "http://127.0.0.1:{port}/"
+    health_url: "http://127.0.0.1:{port}/"
+    startup_timeout_seconds: 15
+    allowed_env_names: []
+    live_profile: false
+
+  - id: flask-dev
+    name: Flask development server
+    description: "Example Flask profile. Set FLASK_APP in the hub environment."
+    repository_ids: ["live-processing-local"]
+    executable: python
+    args: ["-m", "flask", "run", "--host", "127.0.0.1", "--port", "{port}"]
+    working_directory: "{repository_path}"
+    environments: ["development", "stage"]
+    default_port: 5050
+    port_env: PORT
+    local_url: "http://127.0.0.1:{port}/"
+    health_url: "http://127.0.0.1:{port}/health"
+    startup_timeout_seconds: 45
+    allowed_env_names: ["FLASK_APP", "FLASK_ENV", "FLASK_DEBUG"]
+    live_profile: false

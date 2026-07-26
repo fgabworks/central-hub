@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-07-25 (OpenAI API adapter + Prompting & Agent Center).
+Last verified: 2026-07-25 (DHIS2 Standard Report Manager Phase 1 + Report Workspace).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -8,7 +8,9 @@ Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](doc
 **Phases 1–6 MVP + connected Live Processing + DHIS2 enrichment + Repository Notebook
 + Personal/Work workspace switcher + registry Add/Edit/Disable + SQL Workspace (read-only)
 + Email Center (Gmail readonly) + Calendar Center (Calendar readonly, shared Google accounts)
-+ Prompting & Agent Center (read-only multi-agent MVP, including OpenAI Responses API).**
++ Prompting & Agent Center (read-only multi-agent MVP, including OpenAI Responses API)
++ Repository Workspace Phases 1–2 + Connect Local Workspace
++ DHIS2 Reports — Standard Report Manager Phase 1 (sync/view) + catalog shortcuts.**
 Hub coordinates repos via registry/adapters; DHIS2 stays GET-only; jobs run
 allowlisted capabilities only; Gmail is `gmail.readonly`; Calendar is
 `calendar.calendarlist.readonly` + `calendar.events.readonly` only.
@@ -19,11 +21,13 @@ or the OpenAI Responses API with read-only function tools when enabled.
 |---|---|
 | Registry + health | `config/repositories.yaml`, `${VAR:-default}` expansion, `hub/adapters/` |
 | Registry management | Add / Edit / Enable / Disable via UI → YAML (`hub/registry/store.py`); no auto-clone |
+| Repository Workspace | Phases 1–2 + Connect Local Workspace: Overview / Files / Changes / Run / Logs / Settings; local path via scan→preview→confirm (`/repositories/<id>/connect`) or manual edit; safe text edit + Git inspect + approved run profiles (`hub/repository_workspace/`, `config/run_profiles.yaml`) |
+| DHIS2 Reports | `/dhis2/reports` — Phase 1 Standard Report Manager: sync Stage/Live `/api/reports` metadata cache, filters, View / Open in DHIS2 / HTML source / Download / Refresh; period+OU controls; iframe embed with Open-in-DHIS2 fallback. Catalog shortcuts remain for repository/static HTML (`hub/dhis2_reports/`) |
 | Health probes | Parallel checks; states: Healthy / Unreachable / Not Cloned / Disabled |
 | Live Processing | `live-processing` (API GET-only) + `live-processing-local` (path + git_url) |
 | Data-Script / Report Template | Registered with GitHub URLs; local path optional (`DATA_SCRIPT_PATH`, `REPORT_TEMPLATE_PATH`) |
 | Workspaces | Personal / Work switcher (cookie + `hub_prefs`); System nav always visible |
-| Personal Dashboard | `/personal` — personal tasks/notes + upcoming calendar + Quick Notepad |
+| Personal Dashboard | `/personal` — personal tasks/notes + upcoming calendar + floating Quick Notepad |
 | Work Dashboard | `/work` (legacy `/` redirects here by remembered workspace) — repos, work queue, DHIS2 |
 | Repository Notebook | Scoped notes (`personal` \| `work`); work keeps repo links; personal needs none |
 | Email Center | Shared Gmail service; accounts assigned Personal/Work; readonly OAuth |
@@ -63,9 +67,9 @@ Demo `sample-*` entries removed from the active registry; job tests use
 |---|---|
 | `/` | Redirects to remembered Personal or Work dashboard |
 | `/workspace/<personal\|work>` | Switch workspace (cookie + `hub_prefs`) |
-| `/personal` | Personal Dashboard + Quick Notepad |
+| `/personal` | Personal Dashboard + floating Quick Notepad (no sidebar entry) |
 | `/personal/notebook` | Personal notes/tasks (no repository required) |
-| `/personal/tasks` | Personal open tasks list + Quick Notepad |
+| `/personal/tasks` | Personal open tasks list + floating Quick Notepad |
 | `/work` | Work Dashboard (repos, work queue, DHIS2) |
 | `/work/notebook` | Work notes with repository links |
 | `/notebook` | Compat: GET redirects by note scope / workspace; POST handled in scope |
@@ -102,10 +106,19 @@ OpenAI models: curated Hub catalog ∩ `GET /v1/models` for the configured key
 Ask/Plan=`gpt-5.6-terra`, Review=`gpt-5.6-sol`, with fallbacks. Optional
 `OPENAI_ALLOWED_MODELS`, cache TTL, Pro longer timeout + background mode.
 Reasoning-effort selector only for models that support it.
-Read-only tools: `repo_search`, `read_file`, `uid_lookup`, `sql_lookup`, `notebook_lookup`.
+Read-only tools: `repo_search`, `read_file`, `uid_lookup`, `sql_lookup`, `notebook_lookup`
+(search/read reuse Repository Workspace file services; edits and commands stay disabled).
 Auto-includes repo AI instructions (`AGENTS.md`, `AI_START_HERE.md`, etc.).
 Never packs `.env` / credentials / token paths / binaries. Output treated as untrusted.
 Does not consume Email or Calendar content; does not execute SQL or shell.
+
+## Repository Workspace runs
+
+Approved profiles live in `config/run_profiles.yaml` (`REPO_WS_RUN_PROFILES`).
+Executable + argv arrays only; placeholders `{port}`, `{repository_path}`, `{environment}`.
+UI: `/repositories/<id>/run` and `/repositories/<id>/logs`. State/logs under
+`data/repository_runs/`. Live profiles require `REPO_WS_ALLOW_LIVE_RUNS` + confirm.
+No unrestricted terminal; stop/restart only hub-tracked process groups.
 
 ## Email Center (Gmail readonly)
 
@@ -189,6 +202,8 @@ No LP apply/write proxies. No import of LP Python packages for business logic.
 
 ## Next
 
+DHIS2 Standard Report Manager Phase 2+ (replacement / design write-back) is **not** started.
 Optional: more GET-only LP capabilities via YAML; enrichment Phase A completeness.
+Repository Workspace Phase 3+ (commit/push/pull UI, agent-driven edits) stays deferred.
 Do **not** enable DHIS2 writes without [docs/DHIS2_SAFETY.md](docs/DHIS2_SAFETY.md).
 Do **not** expand Gmail or Calendar beyond readonly without an explicit safety design.

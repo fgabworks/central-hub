@@ -10,7 +10,7 @@
     </div>
     <button type="button" class="btn btn-sm qn-collapse" id="qn-collapse" title="Collapse" aria-label="Collapse Quick Notepad">⟨</button>
   </header>
-  <p class="qn-hint muted">Local scratchpad — separate from structured notes. Autosaves here only. Never sent to agents.</p>
+  <p class="qn-hint muted">Local scratchpad — separate from structured notes. Autosaves here only. Never sent to agents. In Markdown, use <strong>Preview</strong> to view rendered text.</p>
   <div class="qn-toolbar">
     <label class="qn-format">
       <span class="muted">Format</span>
@@ -20,14 +20,26 @@
       </select>
     </label>
     <div class="qn-actions">
-      <button type="button" class="btn btn-sm" id="qn-copy">Copy</button>
-      <button type="button" class="btn btn-sm" id="qn-clear">Clear</button>
-      <button type="button" class="btn btn-sm btn-primary" id="qn-convert">Convert to Note</button>
+      <button type="button" class="btn btn-sm" id="qn-copy" title="Copy all text" aria-label="Copy notepad content">Copy</button>
+      <button type="button" class="btn btn-sm" id="qn-clear" title="Clear notepad" aria-label="Clear notepad">Clear</button>
+      <button type="button" class="btn btn-sm btn-primary" id="qn-convert" title="Convert to structured note" aria-label="Convert to Note">Convert to Note</button>
     </div>
   </div>
-  <textarea id="qn-body" class="qn-body" spellcheck="true"
-            placeholder="Scratch thoughts, paste snippets, draft markdown…"
-            aria-label="Quick Notepad content">{{ notepad.content }}</textarea>
+  <div class="qn-md-bar" id="qn-md-bar" hidden>
+    <div class="qn-md-mode" role="group" aria-label="Markdown view mode">
+      <button type="button" class="btn btn-sm qn-md-btn is-active" id="qn-mode-edit"
+              title="Edit Markdown" aria-pressed="true" aria-label="Edit">Edit</button>
+      <button type="button" class="btn btn-sm qn-md-btn" id="qn-mode-preview"
+              title="Preview rendered Markdown" aria-pressed="false" aria-label="Preview">Preview</button>
+    </div>
+  </div>
+  <div class="qn-editor-wrap" id="qn-editor-wrap">
+    <textarea id="qn-body" class="qn-body" spellcheck="true"
+              placeholder="Scratch thoughts, paste snippets, draft markdown…"
+              aria-label="Quick Notepad content">{{ notepad.content }}</textarea>
+    <div id="qn-preview" class="qn-preview" hidden
+         role="region" aria-label="Markdown preview" tabindex="0"></div>
+  </div>
   {% if show_history|default(true) %}
   <details class="qn-history" id="qn-history">
     <summary>Revision history <span class="muted">({{ (notepad.revisions or [])|length }})</span></summary>

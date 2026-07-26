@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}{{ viewer.report_name or 'Report' }} · {{ page_title }} · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header page-header-compact">
+  <div>
+    <h1>{{ viewer.report_name or 'Report viewer' }}</h1>
+    <p class="muted">Sandboxed HTML view. External navigation and top-level escapes are blocked.</p>
+  </div>
+  <div class="page-meta">
+    <a class="btn btn-sm" href="{{ url_for('dhis2_reports_history') }}">History</a>
+    {% if viewer.kind == 'html' %}
+      <a class="btn btn-sm" href="{{ url_for('dhis2_reports_file', path=viewer.path) }}" target="_blank" rel="noopener">Open in Browser</a>
+    {% elif viewer.kind == 'external' and viewer.url %}
+      <a class="btn btn-sm btn-primary" href="{{ viewer.url }}" target="_blank" rel="noopener">Open in DHIS2</a>
+    {% endif %}
+  </div>
+</section>
+{% include "partials/dhis2_reports_tabs.html" %}
+
+{% if viewer.kind == 'external' %}
+  <div class="banner" style="margin-top:0.85rem">
+    This run points at an external DHIS2 URL. Open it in a new tab — it is not embedded here.
+  </div>
+{% elif viewer.kind == 'html' %}
+  <section class="panel" style="margin-top:0.85rem">
+    <div class="panel-header">
+      <h2>{{ viewer.name }}</h2>
+      <span class="muted">sandbox: {{ viewer.sandbox }}{% if not viewer.allow_scripts %} · scripts blocked{% endif %}</span>
+    </div>
+    <iframe
+      class="dr-viewer-frame"
+      title="Report HTML"
+      sandbox="{{ viewer.sandbox }}"
+      referrerpolicy="no-referrer"
+      src="{{ url_for('dhis2_reports_file', path=viewer.path) }}"></iframe>
+  </section>
+{% else %}
+  <div class="banner banner-error" style="margin-top:0.85rem">Unable to display this report.</div>
+{% endif %}
+{% endblock %}

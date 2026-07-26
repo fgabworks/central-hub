@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% set skip_global_notepad = true %}
 {% from "macros.html" import status_badge, type_badge %}
 {% block title %}{{ page_title }} · {{ app_name }}{% endblock %}
 {% block content %}
@@ -106,6 +107,9 @@
       {% endif %}
     </section>
     {% endif %}
+
+    {% include "partials/dashboard_notebook_queue.html" %}
+
     {% if show_repos %}
     <section class="panel">
       <div class="panel-header">
@@ -154,110 +158,6 @@
       </div>
     </section>
     {% endif %}
-
-    <section class="panel panel-queue">
-      <div class="panel-header panel-header-queue">
-        <h2>{{ queue_title }}</h2>
-        <div class="panel-actions">
-          <a class="quiet" href="{{ url_for(nb_ep) }}">View all</a>
-          <form method="post" action="{{ url_for(nb_ep) }}" class="inline-form">
-            <input type="hidden" name="action" value="new">
-            <button class="btn btn-sm btn-primary" type="submit">+ New Note</button>
-          </form>
-        </div>
-      </div>
-      <div class="queue-tabs" role="tablist" aria-label="Notebook queue filters">
-        <a class="queue-tab{% if work_queue.tab == 'open' %} is-active{% endif %}"
-           href="{{ url_for(dash_ep, queue='open') }}">Open ({{ work_queue.tabs.open }})</a>
-        <a class="queue-tab{% if work_queue.tab == 'pinned' %} is-active{% endif %}"
-           href="{{ url_for(dash_ep, queue='pinned') }}">Pinned ({{ work_queue.tabs.pinned }})</a>
-        <a class="queue-tab{% if work_queue.tab == 'overdue' %} is-active{% endif %}"
-           href="{{ url_for(dash_ep, queue='overdue') }}">Overdue ({{ work_queue.tabs.overdue }})</a>
-        <a class="queue-tab{% if work_queue.tab == 'due_today' %} is-active{% endif %}"
-           href="{{ url_for(dash_ep, queue='due_today') }}">Due Today ({{ work_queue.tabs.due_today }})</a>
-        <a class="queue-tab{% if work_queue.tab == 'upcoming' %} is-active{% endif %}"
-           href="{{ url_for(dash_ep, queue='upcoming') }}">Upcoming ({{ work_queue.tabs.upcoming }})</a>
-        <a class="queue-tab{% if work_queue.tab == 'blocked' %} is-active{% endif %}"
-           href="{{ url_for(dash_ep, queue='blocked') }}">Blocked ({{ work_queue.tabs.blocked }})</a>
-      </div>
-      <div class="table-wrap">
-        <table class="data queue-table">
-          <thead>
-            <tr>
-              <th class="col-pin" aria-label="Pinned"></th>
-              <th>Title</th>
-              {% if show_repos %}<th class="col-repo">Repository</th>{% endif %}
-              <th>Type</th>
-              <th>Status</th>
-              <th>Priority</th>
-              <th>Due</th>
-              <th>Progress</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for note in work_queue.notes %}
-              <tr class="status-{{ note.status }}">
-                <td class="col-pin">
-                  {% if note.flags.pinned %}
-                    <span class="pin-star" title="Pinned" aria-label="Pinned">★</span>
-                  {% else %}
-                    <span class="pin-star is-empty" aria-hidden="true">☆</span>
-                  {% endif %}
-                </td>
-                <td>
-                  <div class="cell-title">{{ note.title }}</div>
-                  <div class="cell-sub">{{ note.type_label }}</div>
-                </td>
-                {% if show_repos %}
-                <td class="col-repo">
-                  <span class="repo-cell{% if note.repo_primary_unavailable %} is-unavailable{% endif %}"
-                        title="{{ note.repo_tooltip }}">
-                    {% if note.repo_extra_count %}
-                      <span class="repo-primary">{{ note.repo_primary_name }}</span>
-                      <span class="repo-extra">+{{ note.repo_extra_count }}</span>
-                    {% else %}
-                      {{ note.repo_cell }}
-                    {% endif %}
-                  </span>
-                </td>
-                {% endif %}
-                <td class="muted">{{ note.type_label }}</td>
-                <td><span class="badge badge-status-{{ note.status }}">{{ note.status_label }}</span></td>
-                <td><span class="badge badge-priority-{{ note.priority }}">{{ note.priority_label }}</span></td>
-                <td>
-                  <span class="due-chip due-{{ note.due_meta.kind }}">{{ note.due_meta.label }}</span>
-                </td>
-                <td>
-                  {% if note.checklist_total %}
-                    <div class="check-progress" title="{{ note.checklist_done }}/{{ note.checklist_total }}">
-                      <div class="check-progress-bar" style="width: {{ (note.checklist_done / note.checklist_total * 100)|round|int }}%"></div>
-                    </div>
-                    <div class="check-progress-label">{{ note.checklist_done }}/{{ note.checklist_total }}</div>
-                  {% else %}
-                    <div class="check-progress-label is-empty">—</div>
-                  {% endif %}
-                </td>
-                <td>
-                  <a class="btn btn-sm" href="{{ url_for(nb_ep, note=note.id) }}">Open</a>
-                </td>
-              </tr>
-            {% else %}
-              <tr>
-                <td colspan="{{ 9 if show_repos else 8 }}" class="muted empty-compact">
-                  No open notebook items in this tab.
-                  <a href="{{ url_for(nb_ep) }}">Create a note</a>
-                  or switch tabs.
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      <div class="panel-footer muted-2">
-        Showing {{ work_queue.shown }} of {{ work_queue.total_open }} open tasks
-      </div>
-    </section>
   </div>
 
   <aside class="stack dash-side-stack">
@@ -334,7 +234,7 @@
 <span id="quick-notepad" class="sr-only" aria-hidden="true"></span>
 {% include "partials/quick_notepad_panel.html" %}
 </div>
-<script src="{{ url_for('static', filename='js/quick_notepad.js') }}"></script>
+<script src="{{ url_for('static', filename='js/quick_notepad.js') }}?v=qn-md-8"></script>
 {% else %}
 </div>
 {% endif %}

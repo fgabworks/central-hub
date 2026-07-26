@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_badge, type_badge %}
+{% block title %}Changes · {{ repository.name }} · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header page-header-compact">
+  <div>
+    <p class="muted-2" style="margin:0 0 0.35rem">
+      <a href="{{ url_for('repositories') }}">Repositories</a> / {{ repository.id }}
+    </p>
+    <h1>{{ repository.name }}</h1>
+  </div>
+  <div class="page-meta">
+    {{ type_badge(repository.type) }}
+    {{ status_badge(status) }}
+  </div>
+</section>
+{% include "partials/repository_tabs.html" %}
+
+{% if not workspace.available %}
+  {# Connect CTA is shown in the tab bar partial #}
+{% elif error %}
+  <div class="banner banner-error" style="margin-top:0.85rem">{{ error }}</div>
+{% else %}
+<section class="panel rw-changes" style="margin-top:0.85rem"
+         id="rw-changes"
+         data-diff-url="{{ url_for('api_repo_ws_diff', repo_id=repository.id) }}"
+         data-files-base="{{ url_for('repository_files', repo_id=repository.id) }}">
+  <div class="panel-header">
+    <h2>Git status</h2>
+    <div class="panel-actions">
+      <span class="badge">{{ changes.branch or '—' }}</span>
+      {% if changes.clean %}
+        <span class="badge badge-healthy">Clean</span>
+      {% else %}
+        <span class="badge badge-warning">Modified</span>
+      {% endif %}
+      <label class="muted" style="font-size:12px">
+        Diff view
+        <select id="rw-diff-view" aria-label="Diff view">
+          <option value="unified">Unified</option>
+          <option value="side">Side-by-side</option>
+        </select>
+      </label>
+    </div>
+  </div>
+  {% if not changes.is_git %}
+    <p class="muted" style="padding:1rem">{{ changes.detail }}</p>
+  {% else %}
+    <div class="rw-change-summary muted" style="padding:0.65rem 1rem;border-bottom:1px solid var(--border)">
+      {{ changes.detail }}
+      · modified {{ changes.counts.modified }}
+      · added {{ changes.counts.added }}
+      · deleted {{ changes.counts.deleted }}
+      · untracked {{ changes.counts.untracked }}
+    </div>
+    <div class="rw-changes-grid">
+      <div class="table-wrap rw-changes-list">
+        <table class="data">
+          <thead><tr><th>Status</th><th>Path</th><th></th></tr></thead>
+          <tbody>
+            {% for f in changes.files %}
+            <tr>
+              <td><span class="badge">{{ f.category }}</span></td>
+              <td class="mono">{{ f.path }}</td>
+              <td>
+                <button type="button" class="btn btn-sm rw-show-diff" data-path="{{ f.path }}">Diff</button>
+                {% if f.category != 'deleted' %}
+                <a class="btn btn-sm" href="{{ url_for('repository_files', repo_id=repository.id, path=f.path) }}">Open</a>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3" class="muted empty-compact">Working tree clean.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <pre class="rw-diff mono" id="rw-changes-diff">Select a file to view its diff.</pre>
+    </div>
+  {% endif %}
+</section>
+<script>
+(function () {
+  var root = document.getElementById("rw-changes");
+  if (!root) return;
+  var diffEl = document.getElementById("rw-changes-diff");
+  var viewEl = document.getElementById("rw-diff-view");
+  function loadDiff(path) {
+    var view = viewEl ? viewEl.value : "unified";
+    var url = root.getAttribute("data-diff-url") + "?path=" + encodeURIComponent(path) + "&view=" + encodeURIComponent(view);
+    diffEl.textContent = "Loading…";
+    fetch(url).then(function (r) { return r.json(); }).then(function (data) {
+      if (!data.ok) {
+        diffEl.textContent = data.error || "Unable to load diff";
+        return;
+      }
+      if (view === "side" && data.diff) {
+        // Lightweight side-by-side: split + / - lines into two columns
+        var left = [], right = [];
+        data.diff.split("\n").forEach(function (line) {
+          if (line.startsWith("-") && !line.startsWith("---")) left.push(line.slice(1));
+          else if (line.startsWith("+") && !line.startsWith("+++")) right.push(line.slice(1));
+          else { left.push(line); right.push(line); }
+        });
+        var width = Math.max(left.length, right.length);
+        var out = [];
+        for (var i = 0; i < width; i++) {
+          out.push((left[i] || "").padEnd(48).slice(0, 48) + " | " + (right[i] || ""));
+        }
+        diffEl.textContent = out.join("\n") || "(no textual diff)";
+      } else {
+        diffEl.textContent = data.diff || "(no textual diff)";
+      }
+    }).catch(function () { diffEl.textContent = "Unable to load diff"; });
+  }
+  root.querySelectorAll(".rw-show-diff").forEach(function (btn) {
+    btn.addEventListener("click", function () { loadDiff(btn.getAttribute("data-path")); });
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

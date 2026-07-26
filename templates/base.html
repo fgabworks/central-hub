@@ -100,6 +100,23 @@
       </main>
     </div>
   </div>
+  {% if notepad and not skip_global_notepad|default(false) %}
+  <div class="qn-host qn-global-host{% if notepad.panel_open %} is-qn-open{% endif %}"
+       id="qn-host"
+       style="--qn-width: {{ notepad.panel_width }}px"
+       data-qn-open="{{ '1' if notepad.panel_open else '0' }}"
+       data-qn-width="{{ notepad.panel_width }}"
+       data-qn-scope="{{ note_scope|default(workspace)|default('work') }}"
+       data-qn-save-url="{{ url_for('api_notebook_notepad_put', scope=note_scope|default(workspace)|default('work')) }}"
+       data-qn-clear-url="{{ url_for('api_notebook_notepad_clear', scope=note_scope|default(workspace)|default('work')) }}"
+       data-qn-convert-url="{{ url_for('api_notebook_notepad_convert', scope=note_scope|default(workspace)|default('work')) }}"
+       data-qn-restore-url="{{ url_for('api_notebook_notepad_restore', scope=note_scope|default(workspace)|default('work')) }}">
+    {% include "partials/quick_notepad_panel.html" %}
+  </div>
+  {% endif %}
   {% block scripts %}{% endblock %}
+  {% if notepad and not skip_global_notepad|default(false) %}
+  <script src="{{ url_for('static', filename='js/quick_notepad.js') }}?v=qn-md-8"></script>
+  {% endif %}
 </body>
 </html>

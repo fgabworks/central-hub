@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% block title %}{{ page_title }} · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header page-header-compact">
+  <div>
+    <h1>{{ page_title }}</h1>
+    <p class="muted">Phase 1 — synchronize and view DHIS2 standard reports. DHIS2 remains the source of truth; the hub caches metadata only.</p>
+  </div>
+  <div class="page-meta">
+    {% if dhis2_instance %}<span class="badge">Active: {{ dhis2_instance }}</span>{% endif %}
+  </div>
+</section>
+{% include "partials/dhis2_reports_tabs.html" %}
+
+<form method="get" class="nb-filters" style="margin-top:0.85rem">
+  <label>Search <input type="search" name="q" value="{{ filters.q }}" placeholder="name or UID"></label>
+  <label>Type
+    <select name="type">
+      <option value="">All</option>
+      {% for t in standard.report_types %}
+        <option value="{{ t }}" {% if filters.type==t %}selected{% endif %}>{{ t }}</option>
+      {% endfor %}
+      <option value="repository_html" {% if filters.type=='repository_html' %}selected{% endif %}>repository_html</option>
+      <option value="static_html" {% if filters.type=='static_html' %}selected{% endif %}>static_html</option>
+    </select>
+  </label>
+  <label>Environment
+    <select name="environment">
+      <option value="">Stage + Live</option>
+      <option value="stage" {% if filters.environment=='stage' %}selected{% endif %}>Stage</option>
+      <option value="live" {% if filters.environment=='live' %}selected{% endif %}>Live</option>
+    </select>
+  </label>
+  <label>HTML design
+    <select name="html">
+      <option value="">Any</option>
+      <option value="1" {% if filters.html=='1' %}selected{% endif %}>Available</option>
+      <option value="0" {% if filters.html=='0' %}selected{% endif %}>Not available</option>
+    </select>
+  </label>
+  <label><input type="checkbox" name="favorites" value="1" {% if filters.favorites %}checked{% endif %}> Favorites</label>
+  <button class="btn btn-sm" type="submit">Filter</button>
+</form>
+
+<section class="panel" style="margin-top:0.85rem">
+  <div class="panel-header">
+    <h2>Synchronize from DHIS2</h2>
+    <span class="muted">GET /api/reports only — no writes</span>
+  </div>
+  <div class="btn-row" style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center">
+    <button type="button" class="btn btn-sm btn-primary" id="dr-sync-stage">Sync Stage</button>
+    <button type="button" class="btn btn-sm" id="dr-sync-live">Sync Live…</button>
+    <label class="muted" style="display:inline-flex; gap:0.35rem; align-items:center">
+      <input type="checkbox" id="dr-sync-live-confirm"> Confirm Live sync
+    </label>
+    <span class="muted" id="dr-sync-status"></span>
+  </div>
+  <p class="muted" style="margin-top:0.5rem">
+    Stage last sync:
+    {% if sync_meta.stage %}{{ sync_meta.stage.status }} · {{ (sync_meta.stage.finished_at or sync_meta.stage.started_at or '')[:19].replace('T',' ') }} · {{ sync_meta.stage.report_count }} reports · v{{ sync_meta.stage.dhis2_version or '?' }}
+    {% else %}never{% endif %}
+    · Live last sync:
+    {% if sync_meta.live %}{{ sync_meta.live.status }} · {{ (sync_meta.live.finished_at or sync_meta.live.started_at or '')[:19].replace('T',' ') }} · {{ sync_meta.live.report_count }} reports · v{{ sync_meta.live.dhis2_version or '?' }}
+    {% else %}never{% endif %}
+  </p>
+</section>
+
+{% for section in standard.sections %}
+<section class="panel" style="margin-top:0.85rem">
+  <div class="panel-header">
+    <h2>{{ section.environment|title }} standard reports</h2>
+    <span class="badge">{{ section.count }}</span>
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Name</th>
+          <th>UID</th>
+          <th>Type</th>
+          <th>Parameters</th>
+          <th>Relative periods</th>
+          <th>Data source</th>
+          <th>HTML</th>
+          <th>Synced</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for report in section.reports %}
+        <tr>
+          <td>
+            <button type="button" class="btn btn-sm dr-fav" data-id="{{ report.id }}" data-on="{{ '1' if report.favorite else '0' }}">
+              {{ '★' if report.favorite else '☆' }}
+            </button>
+          </td>
+          <td>
+            <strong><a href="{{ url_for('dhis2_reports_standard_detail', environment=report.environment, uid=report.uid) }}">{{ report.name }}</a></strong>
+            {% if report.unsupported_reason %}<div class="muted">{{ report.unsupported_reason }}</div>{% endif %}
+          </td>
+          <td><code>{{ report.uid }}</code></td>
+          <td><span class="badge">{{ report.type }}</span></td>
+          <td class="muted">
+            {% if report.report_parameters.param_reporting_month %}period{% endif %}
+            {% if report.report_parameters.param_organisation_unit %}{% if report.report_parameters.param_reporting_month %}, {% endif %}org unit{% endif %}
+            {% if not report.report_parameters.param_reporting_month and not report.report_parameters.param_organisation_unit %}—{% endif %}
+          </td>
+          <td class="muted">{% if report.relative_periods %}{{ report.relative_periods|join(', ') }}{% else %}—{% endif %}</td>
+          <td class="muted">
+            {% if report.data_source.name %}{{ report.data_source.name }}{% elif report.data_source.id %}<code>{{ report.data_source.id }}</code>{% else %}—{% endif %}
+          </td>
+          <td>{% if report.html_design_available %}Yes{% else %}No{% endif %}</td>
+          <td class="muted">{{ (report.last_synced_at or '')[:19].replace('T',' ') or '—' }}</td>
+          <td>
+            <a class="btn btn-sm btn-primary" href="{{ url_for('dhis2_reports_standard_detail', environment=report.environment, uid=report.uid) }}">Open</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="10" class="muted empty-compact">No synced {{ section.environment }} reports. Use Sync {{ section.environment|title }} above.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endfor %}
+
+{% if reports %}
+<section class="panel" style="margin-top:0.85rem">
+  <div class="panel-header">
+    <h2>Catalog shortcuts</h2>
+    <span class="muted">YAML catalog for repository/static HTML — not the DHIS2-owned source of truth</span>
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th></th><th>Name</th><th>Type</th><th>Source</th><th>Environments</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for report in reports %}
+        <tr>
+          <td>
+            <button type="button" class="btn btn-sm dr-fav" data-id="{{ report.id }}" data-on="{{ '1' if report.favorite else '0' }}">
+              {{ '★' if report.favorite else '☆' }}
+            </button>
+          </td>
+          <td>
+            <strong>{{ report.name }}</strong>
+            <div class="muted">{{ report.description }}</div>
+          </td>
+          <td><span class="badge">{{ report.type }}</span></td>
+          <td class="muted">{{ report.source or report.repository_id or '—' }}</td>
+          <td class="muted">{{ report.environments|join(', ') }}</td>
+          <td>
+            <a class="btn btn-sm" href="{{ url_for('dhis2_reports_run', report=report.id) }}">Run</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+<script>
+function syncEnv(env, confirmLive) {
+  var status = document.getElementById("dr-sync-status");
+  status.textContent = "Syncing " + env + "…";
+  fetch("/api/dhis2/reports/sync", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ environment: env, confirm_live: !!confirmLive }),
+  }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+    .then(function (res) {
+      if (!res.ok) {
+        status.textContent = (res.j && res.j.error) || "Sync failed";
+        return;
+      }
+      status.textContent = "Synced " + (res.j.count || 0) + " " + env + " report(s)";
+      location.reload();
+    })
+    .catch(function () { status.textContent = "Sync failed"; });
+}
+document.getElementById("dr-sync-stage").onclick = function () { syncEnv("stage", false); };
+document.getElementById("dr-sync-live").onclick = function () {
+  var ok = document.getElementById("dr-sync-live-confirm").checked;
+  if (!ok) {
+    document.getElementById("dr-sync-status").textContent = "Check Confirm Live sync first.";
+    return;
+  }
+  syncEnv("live", true);
+};
+document.querySelectorAll(".dr-fav").forEach(function (btn) {
+  btn.onclick = function () {
+    var on = btn.getAttribute("data-on") !== "1";
+    fetch("/api/dhis2/reports/" + encodeURIComponent(btn.getAttribute("data-id")) + "/favorite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ favorite: on }),
+    }).then(function () { location.reload(); });
+  };
+});
+</script>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Settings · {{ page_title }} · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header page-header-compact">
+  <div>
+    <h1>{{ page_title }}</h1>
+    <p class="muted">Catalog and output roots. Credentials never appear here.</p>
+  </div>
+</section>
+{% include "partials/dhis2_reports_tabs.html" %}
+
+<section class="panel panel-body" style="margin-top:0.85rem">
+  <h2 style="font-size:14px;margin:0 0 0.75rem">Configuration</h2>
+  <dl class="detail-list">
+    <div><dt>Synced Stage reports</dt><dd>{{ synced.stage_count if synced else 0 }}</dd></div>
+    <div><dt>Synced Live reports</dt><dd>{{ synced.live_count if synced else 0 }}</dd></div>
+    <div><dt>Standard report sync</dt><dd class="muted">GET <code>/api/reports</code> metadata cache in SQLite — DHIS2 remains source of truth. No report replacement.</dd></div>
+    <div><dt>Catalog shortcuts</dt><dd><code>config/dhis2_reports.yaml</code> (override with <code>DHIS2_REPORTS_CATALOG</code>) · {{ catalog_count }} entries</dd></div>
+    <div><dt>History database</dt><dd><code>data/dhis2_reports.db</code> (<code>DHIS2_REPORTS_DATABASE</code>)</dd></div>
+    <div><dt>Output roots</dt><dd class="muted"><code>DHIS2_REPORT_OUTPUT_DIR</code>, <code>REPORT_TEMPLATE_PATH</code>, <code>data/results/</code></dd></div>
+    <div><dt>Allowed DHIS2 hosts</dt><dd class="muted">Derived from Stage/Live base URLs + <code>DHIS2_REPORT_ALLOWED_HOSTS</code></dd></div>
+    <div><dt>Active DHIS2 instance</dt><dd>{% if dhis2_instance %}<code>{{ dhis2_instance }}</code>{% else %}—{% endif %} · <a href="{{ url_for('dhis2') }}">Switch on DHIS2 Overview</a></dd></div>
+  </dl>
+  <p class="muted" style="margin-top:1rem">
+    Central Hub does not duplicate PMNP/DHIS2 report calculations and does not access the DHIS2 database directly.
+    Live sync/view/download requires explicit confirmation. Credentials never appear in URLs or the UI.
+  </p>
+</section>
+{% endblock %}

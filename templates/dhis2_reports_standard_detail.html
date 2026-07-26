@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}{{ report.name }} · {{ page_title }} · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header page-header-compact">
+  <div>
+    <h1>{{ report.name }}</h1>
+    <p class="muted">{{ report.environment|title }} · <code>{{ report.uid }}</code> · {{ report.type }} · DHIS2 source of truth</p>
+  </div>
+  <div class="page-meta">
+    <a class="btn btn-sm" href="{{ url_for('dhis2_reports_library') }}">Library</a>
+  </div>
+</section>
+{% include "partials/dhis2_reports_tabs.html" %}
+
+{% if error %}
+<div class="banner banner-error" style="margin-top:0.85rem">{{ error }}</div>
+{% endif %}
+
+<section class="panel" style="margin-top:0.85rem">
+  <div class="panel-header"><h2>Metadata</h2></div>
+  <dl class="kv">
+    <div><dt>UID</dt><dd><code>{{ report.uid }}</code></dd></div>
+    <div><dt>Type</dt><dd>{{ report.type }}</dd></div>
+    <div><dt>Environment</dt><dd>{{ report.environment }}</dd></div>
+    <div><dt>HTML design</dt><dd>{% if report.html_design_available %}Available{% else %}Not available{% endif %}</dd></div>
+    <div><dt>Report parameters</dt>
+      <dd>
+        period={{ report.report_parameters.param_reporting_month }} ·
+        org unit={{ report.report_parameters.param_organisation_unit }} ·
+        parent OU={{ report.report_parameters.param_parent_organisation_unit }}
+      </dd>
+    </div>
+    <div><dt>Relative periods</dt><dd>{% if report.relative_periods %}{{ report.relative_periods|join(', ') }}{% else %}—{% endif %}</dd></div>
+    <div><dt>Data source</dt>
+      <dd>
+        {% if report.data_source.name or report.data_source.id %}
+          {{ report.data_source.kind }} · {{ report.data_source.name or '—' }}
+          {% if report.data_source.id %}<code>{{ report.data_source.id }}</code>{% endif %}
+        {% else %}—{% endif %}
+      </dd>
+    </div>
+    <div><dt>DHIS2 version</dt><dd>{{ report.dhis2_version or '—' }}</dd></div>
+    <div><dt>Last synchronized</dt><dd>{{ (report.last_synced_at or '')[:19].replace('T',' ') or '—' }}</dd></div>
+    {% if report.unsupported_reason %}
+    <div><dt>Note</dt><dd class="muted">{{ report.unsupported_reason }}</dd></div>
+    {% endif %}
+  </dl>
+</section>
+
+<section class="panel" style="margin-top:0.85rem">
+  <div class="panel-header"><h2>Parameters</h2></div>
+  <form method="get" class="nb-filters">
+    <label>Period
+      <input name="period" value="{{ form.period }}" placeholder="YYYYMM or YYYY-MM-DD" {% if report.needs_period %}required{% endif %}>
+    </label>
+    <label>Organisation unit UID
+      <input name="org_unit" value="{{ form.org_unit }}" placeholder="11-char UID" {% if report.needs_org_unit %}required{% endif %}>
+    </label>
+    <button class="btn btn-sm btn-primary" type="submit">Apply</button>
+  </form>
+  <p class="muted">Period and organisation unit are required when the report declares those parameters or relative periods.</p>
+</section>
+
+<section class="panel" style="margin-top:0.85rem">
+  <div class="panel-header"><h2>Actions</h2></div>
+  <div class="btn-row" style="display:flex; gap:0.5rem; flex-wrap:wrap">
+    {% if urls %}
+      <a class="btn btn-sm btn-primary" href="{{ url_for('dhis2_reports_standard_view', environment=report.environment, uid=report.uid, period=form.period, org_unit=form.org_unit) }}">View Report</a>
+      <a class="btn btn-sm" href="{{ urls.open_url }}" target="_blank" rel="noopener">Open in DHIS2</a>
+    {% else %}
+      <button class="btn btn-sm" type="button" disabled>View Report (set parameters)</button>
+    {% endif %}
+    <a class="btn btn-sm" href="{{ url_for('dhis2_reports_standard_html_source', environment=report.environment, uid=report.uid) }}">View HTML Source</a>
+    {% if urls %}
+      <a class="btn btn-sm" href="{{ url_for('api_dhis2_report_standard_html', environment=report.environment, uid=report.uid, rendered=1, download=1, period=form.period, org_unit=form.org_unit, confirm_live=1 if report.environment=='live' else 0) }}">Download HTML</a>
+    {% endif %}
+    <button type="button" class="btn btn-sm" id="dr-refresh-meta">Refresh Metadata</button>
+    {% if report.environment == 'live' %}
+      <label class="muted" style="display:inline-flex; gap:0.35rem; align-items:center">
+        <input type="checkbox" id="dr-live-confirm"> Confirm Live
+      </label>
+    {% endif %}
+    <span class="muted" id="dr-action-status"></span>
+  </div>
+  <p class="muted" style="margin-top:0.5rem">Credentials and tokens are never placed in URLs or the page. Embedding prefers DHIS2’s own <code>/data.html</code> renderer; use Open in DHIS2 if the iframe is blocked.</p>
+</section>
+<script>
+document.getElementById("dr-refresh-meta").onclick = function () {
+  var status = document.getElementById("dr-action-status");
+  var live = {{ 'true' if report.environment == 'live' else 'false' }};
+  var confirmLive = !live || (document.getElementById("dr-live-confirm") && document.getElementById("dr-live-confirm").checked);
+  if (live && !confirmLive) {
+    status.textContent = "Confirm Live first.";
+    return;
+  }
+  status.textContent = "Refreshing…";
+  fetch("/api/dhis2/reports/standard/{{ report.environment }}/{{ report.uid }}/refresh", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ confirm_live: !!confirmLive }),
+  }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+    .then(function (res) {
+      if (!res.ok) {
+        status.textContent = (res.j && res.j.error) || "Refresh failed";
+        return;
+      }
+      location.reload();
+    });
+};
+</script>
+{% endblock %}
