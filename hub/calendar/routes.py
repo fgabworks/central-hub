@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from flask import Flask, flash, redirect, render_template, request, url_for
+from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
 
 from hub.audit import AuditStore
 from hub.audit import actions as audit_actions
 from hub.calendar.convert import convert_event_to_notebook
+from hub.calendar.fc_events import event_detail_payload
 from hub.calendar.models import CALENDAR_VIEWS, normalize_calendar_view, normalize_workspace
+from hub.calendar.sanitize import sanitize_html
 from hub.calendar.service import CalendarService, CalendarServiceError
 from hub.email.models import ACCOUNT_STATUS_LABELS, CALENDAR_SCOPES, GMAIL_SCOPES
 from hub.email.service import EmailService, EmailServiceError
@@ -62,11 +64,10 @@ def register_calendar_routes(app: Flask) -> None:
         date_from = (request.args.get("from") or "").strip()
         date_to = (request.args.get("to") or "").strip()
         anchor = (request.args.get("anchor") or "").strip() or None
-        page_token = (request.args.get("page") or "").strip() or None
-        tz = (request.args.get("tz") or "").strip() or "UTC"
+        tz = (request.args.get("tz") or "").strip()
         force = request.args.get("refresh") in {"1", "true", "yes"}
         error = None
-        listing: dict[str, Any] | None = None
+        calendars: list[dict] = []
         selected = None
         if account_id:
             selected = next((a for a in accounts if a["id"] == account_id), None)
@@ -78,18 +79,8 @@ def register_calendar_routes(app: Flask) -> None:
                 try:
                     if force:
                         service.refresh_cache(account_id)
-                    listing = service.list_events(
-                        account_id,
-                        view=view,
-                        calendar_id=calendar_id,
-                        q=q,
-                        date_from=date_from,
-                        date_to=date_to,
-                        page_token=page_token,
-                        time_zone=tz,
-                        force_refresh=force,
-                        anchor=anchor,
-                    )
+                    cal_payload = service.list_calendars(account_id, force_refresh=force)
+                    calendars = cal_payload.get("calendars") or []
                 except CalendarServiceError as exc:
                     error = str(exc)
         _audit().append(
@@ -116,12 +107,27 @@ def register_calendar_routes(app: Flask) -> None:
                 date_to=date_to,
                 anchor=anchor or "",
                 tz=tz,
-                listing=listing,
+                calendars=calendars,
                 error=error,
                 status_labels=ACCOUNT_STATUS_LABELS,
                 registry_repos=_registry_options(),
                 calendar_base=url_for(_cal_endpoint(ws)),
                 page_title="Calendar" if ws == "personal" else "Work Calendar",
+                events_api_url=(
+                    url_for("calendar_events_api", account_id=account_id)
+                    if account_id
+                    else ""
+                ),
+                event_api_base=(
+                    url_for(
+                        "calendar_event_api",
+                        account_id=account_id,
+                        calendar_id="__CAL__",
+                        event_id="__EVT__",
+                    )
+                    if account_id
+                    else ""
+                ),
             )
         )
         return apply_workspace_cookie(resp, ws)
@@ -138,6 +144,66 @@ def register_calendar_routes(app: Flask) -> None:
     @app.get("/work/calendar")
     def work_calendar():
         return _render_calendar("work")
+
+    @app.get("/api/calendar/accounts/<account_id>/events")
+    def calendar_events_api(account_id: str):
+        """JSON event feed for FullCalendar (reuses CalendarService cache)."""
+        service = _calendar()
+        start = (request.args.get("start") or request.args.get("from") or "").strip()
+        end = (request.args.get("end") or request.args.get("to") or "").strip()
+        calendar_id = (request.args.get("calendar") or "").strip()
+        q = (request.args.get("q") or "").strip()
+        tz = (request.args.get("tz") or "").strip() or "UTC"
+        force = request.args.get("refresh") in {"1", "true", "yes"}
+        if not start or not end:
+            return jsonify({"ok": False, "error": "start and end are required"}), 400
+        # FullCalendar passes ISO datetimes; service accepts date or datetime strings.
+        date_from = start[:10]
+        date_to = end[:10]
+        try:
+            payload = service.list_events_for_grid(
+                account_id,
+                date_from=date_from,
+                date_to=date_to,
+                calendar_id=calendar_id,
+                q=q,
+                time_zone=tz,
+                force_refresh=force,
+            )
+        except CalendarServiceError as exc:
+            return jsonify({"ok": False, "error": str(exc), "code": exc.code}), 400
+        return jsonify(
+            {
+                "ok": True,
+                "events": payload["fc_events"],
+                "calendars": payload["calendars"],
+                "time_zone": payload["time_zone"],
+                "time_min": payload["time_min"],
+                "time_max": payload["time_max"],
+                "from_cache": payload.get("from_cache", False),
+            }
+        )
+
+    @app.get(
+        "/api/calendar/accounts/<account_id>/calendars/<path:calendar_id>/events/<path:event_id>"
+    )
+    def calendar_event_api(account_id: str, calendar_id: str, event_id: str):
+        service = _calendar()
+        force = request.args.get("refresh") in {"1", "true", "yes"}
+        tz = (request.args.get("tz") or "").strip()
+        try:
+            data = service.get_event(
+                account_id, calendar_id, event_id, force_refresh=force, time_zone=tz
+            )
+        except CalendarServiceError as exc:
+            return jsonify({"ok": False, "error": str(exc), "code": exc.code}), 400
+        detail = event_detail_payload(
+            data["event"],
+            account=data["account"],
+            display_time_zone=tz,
+            registry_repos=_registry_options(),
+        )
+        return jsonify({"ok": True, "event": detail, "from_cache": data.get("from_cache")})
 
     @app.get("/email/oauth/calendar/start")
     def email_oauth_calendar_start():
@@ -203,6 +269,8 @@ def register_calendar_routes(app: Flask) -> None:
             return redirect(url_for(_cal_endpoint(ws), account=account_id))
         acct = data["account"]
         ws = acct.get("workspace") or "work"
+        event = dict(data["event"])
+        event["description_html"] = sanitize_html(event.get("description"))
         _audit().append(
             action=audit_actions.CALENDAR_VIEW,
             target=event_id,
@@ -215,7 +283,7 @@ def register_calendar_routes(app: Flask) -> None:
                 "calendar/event.html",
                 workspace=ws,
                 account=acct,
-                event=data["event"],
+                event=event,
                 from_cache=data.get("from_cache"),
                 registry_repos=_registry_options(),
                 calendar_base=url_for(_cal_endpoint(ws)),

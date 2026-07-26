@@ -14,7 +14,6 @@ from hub.calendar.api import (
     parse_event,
 )
 from hub.calendar.models import (
-    CALENDAR_SCOPES,
     DEFAULT_PAGE_SIZE,
     FORBIDDEN_CALENDAR_ACTIONS,
     MAX_PAGE_SIZE,
@@ -22,7 +21,11 @@ from hub.calendar.models import (
     normalize_calendar_view,
     normalize_workspace,
 )
-from hub.email.models import has_calendar_scopes
+from hub.email.models import (
+    CALENDAR_SCOPES,
+    GMAIL_SCOPES,
+    has_calendar_scopes,
+)
 from hub.email.service import EmailService, EmailServiceError
 from hub.email.store import EmailStore
 
@@ -67,11 +70,16 @@ class CalendarService:
         workspace: str,
         account_id: str | None = None,
     ) -> dict[str, str]:
-        """Incremental OAuth requesting Calendar readonly scopes (keeps prior grants)."""
+        """Incremental OAuth for Calendar — always re-request Gmail+Calendar together.
+
+        Requesting Calendar alone can yield a token that drops Gmail access and looks
+        like the account "disconnected" from Email Center.
+        """
+        scopes = tuple(dict.fromkeys([*GMAIL_SCOPES, *CALENDAR_SCOPES]))
         return self.email.start_oauth(
             workspace=workspace,
             account_id=account_id,
-            scopes=CALENDAR_SCOPES,
+            scopes=scopes,
         )
 
     def list_calendars(
@@ -203,6 +211,78 @@ class CalendarService:
         self.store.touch_sync(account_id)
         result["account"] = acct
         return result
+
+    def list_events_for_grid(
+        self,
+        account_id: str,
+        *,
+        date_from: str,
+        date_to: str,
+        calendar_id: str = "",
+        q: str = "",
+        time_zone: str = "",
+        force_refresh: bool = False,
+        max_pages: int = 5,
+    ) -> dict[str, Any]:
+        """Fetch events across a date range for the calendar grid (paginated)."""
+        from hub.calendar.fc_events import calendar_color_map, to_fullcalendar_event
+
+        collected: list[dict[str, Any]] = []
+        page_token: str | None = None
+        calendars: list[dict[str, Any]] = []
+        time_min = ""
+        time_max = ""
+        tz_name = (time_zone or "").strip() or "UTC"
+        from_cache = False
+        for _ in range(max(1, min(int(max_pages), 10))):
+            listing = self.list_events(
+                account_id,
+                view="month",
+                calendar_id=calendar_id,
+                q=q,
+                date_from=date_from,
+                date_to=date_to,
+                page_token=page_token,
+                page_size=MAX_PAGE_SIZE,
+                time_zone=tz_name,
+                force_refresh=force_refresh and page_token is None,
+            )
+            calendars = listing.get("calendars") or calendars
+            time_min = listing.get("time_min") or time_min
+            time_max = listing.get("time_max") or time_max
+            tz_name = listing.get("time_zone") or tz_name
+            from_cache = bool(listing.get("from_cache")) and page_token is None
+            collected.extend(listing.get("events") or [])
+            page_token = listing.get("next_page_token") or None
+            # Multi-calendar fetches already pull one page per calendar.
+            if not calendar_id or not page_token:
+                break
+        # Deduplicate by calendar_id + event id
+        seen: set[str] = set()
+        unique: list[dict[str, Any]] = []
+        for ev in collected:
+            key = f"{ev.get('calendar_id')}:{ev.get('id')}"
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(ev)
+        unique.sort(key=_event_sort_key)
+        colors = calendar_color_map(calendars)
+        fc_events = [to_fullcalendar_event(ev, calendar_colors=colors) for ev in unique]
+        acct = self._require_calendar_account(account_id)
+        return {
+            "ok": True,
+            "account": acct,
+            "calendars": calendars,
+            "events": unique,
+            "fc_events": fc_events,
+            "time_min": time_min,
+            "time_max": time_max,
+            "time_zone": tz_name,
+            "from_cache": from_cache,
+            "q": q,
+            "calendar_id": calendar_id,
+        }
 
     def get_event(
         self,

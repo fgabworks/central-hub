@@ -22,7 +22,8 @@ Scope: personal, local-first tool. Canonical agent rules: [AGENTS.md](AGENTS.md)
   - OAuth client id/secret only via `GMAIL_CLIENT_ID` / `GMAIL_CLIENT_SECRET`.
   - Gmail scope is **`gmail.readonly` only** (no modify/send).
   - Calendar scopes (incremental): **`calendar.calendarlist.readonly`** and
-    **`calendar.events.readonly`** only (no create/update/delete/RSVP).
+    **`calendar.events.readonly`** only (no create/update/delete/RSVP/drag/resize).
+  - Event description HTML is **allowlist-sanitized** before drawer/detail display.
   - Refresh/access tokens encrypted at rest (Fernet from `CENTRAL_HUB_SECRET_KEY`)
     in `data/email.db`; never returned to templates, JSON, or audit detail.
   - Google passwords are never collected or stored.
@@ -30,6 +31,22 @@ Scope: personal, local-first tool. Canonical agent rules: [AGENTS.md](AGENTS.md)
   - Attachment download validates `attachment_id` against the message metadata
     and streams through the hub (Google tokens stay server-side).
   - No automatic agent/API consumer of mailbox or calendar content.
+- **Prompting & Agent Center:** read-only Find/Ask/Plan/Review only.
+  - Adapter argv from `config/agents.yaml` templates (`shell=False`); cwd jailed
+    to selected local repository roots.
+  - **OpenAI API adapter:** `OPENAI_ENABLED` / `OPENAI_API_KEY` /
+    `OPENAI_DEFAULT_MODEL` / optional `OPENAI_ALLOWED_MODELS` /
+    `OPENAI_MODEL_CACHE_TTL_SECONDS` / `OPENAI_PRO_MODEL_TIMEOUT_SECONDS`.
+    Key never returned to UI, logs, or audit. Curated catalog in
+    `openai_catalog.py` intersected with `GET /v1/models` — inaccessible models
+    are omitted (not errors). Mode recommendations + user override; reasoning
+    effort only when supported; Pro models use background mode and longer timeout.
+    Estimated tier labels only (no hardcoded pricing).
+  - Context packing excludes `.env`, credentials, tokens, binaries, and oversized files.
+  - Hub `.env` secret vars are stripped from child process env where obvious.
+  - Agent stdout/stderr and answers are redacted before audit/history persistence.
+  - Treat agent output as untrusted; Edit/Test modes are disabled.
+  - Does not read Email or Calendar stores.
 
 ## Job / command controls (Phases 3–6)
 
@@ -56,6 +73,8 @@ Scope: personal, local-first tool. Canonical agent rules: [AGENTS.md](AGENTS.md)
 - Email actions: `EMAIL_OAUTH_*`, `EMAIL_VIEW`, `EMAIL_REFRESH`, `EMAIL_CONVERT_*`,
   `EMAIL_LINK_REPO`, `EMAIL_ATTACHMENT_DOWNLOAD`, `EMAIL_ACCOUNT_ASSIGN` (no token values).
 - Calendar / Google Connections: `CALENDAR_*`, `GOOGLE_CONNECTIONS_VIEW` (no token values).
+- Agent Center: `AGENT_CENTER_VIEW`, `AGENT_RUN_*`, `AGENT_PROMPT_*` (no packed secrets;
+  prompt length / ids only on submit).
 
 ## Known gaps
 

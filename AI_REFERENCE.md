@@ -1,16 +1,19 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-07-25 (Calendar Center + Email Center + Personal/Work).
+Last verified: 2026-07-25 (OpenAI API adapter + Prompting & Agent Center).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
 
 **Phases 1–6 MVP + connected Live Processing + DHIS2 enrichment + Repository Notebook
 + Personal/Work workspace switcher + registry Add/Edit/Disable + SQL Workspace (read-only)
-+ Email Center (Gmail readonly) + Calendar Center (Calendar readonly, shared Google accounts).**
++ Email Center (Gmail readonly) + Calendar Center (Calendar readonly, shared Google accounts)
++ Prompting & Agent Center (read-only multi-agent MVP, including OpenAI Responses API).**
 Hub coordinates repos via registry/adapters; DHIS2 stays GET-only; jobs run
 allowlisted capabilities only; Gmail is `gmail.readonly`; Calendar is
 `calendar.calendarlist.readonly` + `calendar.events.readonly` only.
+Agent Center invokes external CLIs with allowlisted argv only (`shell=False`),
+or the OpenAI Responses API with read-only function tools when enabled.
 
 | Area | State |
 |---|---|
@@ -24,9 +27,10 @@ allowlisted capabilities only; Gmail is `gmail.readonly`; Calendar is
 | Work Dashboard | `/work` (legacy `/` redirects here by remembered workspace) — repos, work queue, DHIS2 |
 | Repository Notebook | Scoped notes (`personal` \| `work`); work keeps repo links; personal needs none |
 | Email Center | Shared Gmail service; accounts assigned Personal/Work; readonly OAuth |
-| Calendar Center | Shared Calendar service reusing Google accounts; month/week/day/agenda/upcoming |
+| Calendar Center | Shared Calendar service + FullCalendar grid (month/week/day) + agenda/upcoming |
 | Google Connections | System page to connect/assign/enable Gmail+Calendar scopes |
 | SQL Workspace | Read-only query library/runner (`/sql`); sqlglot allowlist; Live warning |
+| Prompting & Agent Center | Read-only Find/Ask/Plan/Review (`/agents`); Hub Simulator, OpenAI API, Claude/Cursor/Codex; Edit/Test not available |
 | DHIS2 | GET client, discovery, UID mapping, preview builder |
 | UID index admin | LP-style controlled update: dry-run → preview → typed confirm → archive/versions/restore |
 | Metadata enrichment | Read-only DHIS2 enrich → local SQLite relationships + audit statuses |
@@ -36,7 +40,7 @@ allowlisted capabilities only; Gmail is `gmail.readonly`; Calendar is
 | API exec (Phase 4) | GET/HEAD only from YAML `http_path` |
 | Files (Phase 5) | Uploads/results under `data/{uploads,results}/{job_id}/` |
 | Safeguards (Phase 6) | Dry-run default, confirm for apply, max concurrent, owner token |
-| Tests | `tests/` — includes `test_email_center.py`, `test_calendar_center.py` |
+| Tests | `tests/` — includes `test_openai_catalog.py`, `test_openai_agent.py`, `test_agent_center.py` |
 | DHIS2 writes | **Disabled** |
 | Gmail writes | **Disabled** (no send/reply/delete/label/mark-read) |
 | Calendar writes | **Disabled** (no create/update/delete/RSVP) |
@@ -73,7 +77,35 @@ Store: `data/notebook.db` (`hub/notebook/`) migrations include `pinned`, `quick_
 `scope` (`personal`\|`work`) + `hub_prefs`, and separate Quick Notepads (`personal` / `work`).
 Existing notes migrate to **work**. Existing Quick Notepad content migrates to the
 **personal** pad; work starts empty. Convert → note uses the same scope as the pad.
-Work Dashboard queue shows work-scoped notes only. No agent integration yet.
+Work Dashboard queue shows work-scoped notes only. Agent prompting is separate
+(see Prompting & Agent Center); notebook content is not auto-fed to agents.
+
+## Prompting & Agent Center (read-only MVP)
+
+| Route | Purpose |
+|---|---|
+| `/agents` or `/prompting` | Work UI: repos, agent/model, prompt, preview, run, history |
+| `/api/agents` | List adapters with availability / capability status |
+| `/api/agents/<id>/models` | Models from adapter (managed fallback when undiscoverable) |
+| `/api/agents/context/preview` | Instruction + file context preview (secrets excluded) |
+| `/api/agents/runs` | Start run (POST) / history (GET) |
+| `/api/agents/runs/<id>` | Status, logs, answer, referenced files, errors |
+| `/api/agents/runs/<id>/cancel` | Cooperative cancel |
+| `/api/agents/prompts` | Saved prompt library |
+
+Implementation: `hub/agent_center/`, `config/agents.yaml`, SQLite `data/agent_center.db`.
+Modes: Find / Ask / Plan / Review. Edit / Test labeled **Not yet available**.
+Adapters: Hub Simulator (demo), **OpenAI API** (Responses + streaming; `OPENAI_ENABLED` /
+`OPENAI_API_KEY` / `OPENAI_DEFAULT_MODEL`), Claude Code / Cursor Agent / Codex CLIs.
+OpenAI models: curated Hub catalog ∩ `GET /v1/models` for the configured key
+(never shows inaccessible models). Mode recommendations: Find=`gpt-5.6-luna`,
+Ask/Plan=`gpt-5.6-terra`, Review=`gpt-5.6-sol`, with fallbacks. Optional
+`OPENAI_ALLOWED_MODELS`, cache TTL, Pro longer timeout + background mode.
+Reasoning-effort selector only for models that support it.
+Read-only tools: `repo_search`, `read_file`, `uid_lookup`, `sql_lookup`, `notebook_lookup`.
+Auto-includes repo AI instructions (`AGENTS.md`, `AI_START_HERE.md`, etc.).
+Never packs `.env` / credentials / token paths / binaries. Output treated as untrusted.
+Does not consume Email or Calendar content; does not execute SQL or shell.
 
 ## Email Center (Gmail readonly)
 
@@ -95,6 +127,9 @@ assigned to a workspace; UI routes are `/personal/email` and `/work/email`.
 
 Store: `data/email.db`. Refresh tokens encrypted at rest (Fernet derived from
 `CENTRAL_HUB_SECRET_KEY`). Client id/secret via `GMAIL_*` in `.env` (see `.env.example`).
+List rows use Gmail’s `UNREAD` label for unread styling (bold sender/subject/timestamp,
+dot + badge, left accent) vs muted read rows; hover / selected / focus-visible stay
+distinct. Opening a message does **not** mark it read (`gmail.readonly` only).
 No push notifications; limited TTL cache + manual refresh. **No automatic agent access
 to email content.** Passwords never stored; tokens never rendered in UI/logs.
 OAuth supports **incremental scopes** (`include_granted_scopes=true`) so Calendar can be
@@ -108,13 +143,21 @@ Personal|Work assignment from Email Center. Scopes (incremental):
 
 | Route | Purpose |
 |---|---|
-| `/personal/calendar` | Personal Calendar (month / week / day / agenda / upcoming) |
-| `/work/calendar` | Work Calendar (same shared service) |
+| `/personal/calendar` | Personal Calendar — FullCalendar month/week/day grid + agenda/upcoming |
+| `/work/calendar` | Work Calendar (same shared service + grid) |
 | `/calendar` | Redirect by remembered workspace |
+| `/api/calendar/accounts/<id>/events` | JSON feed for FullCalendar (reuses `CalendarService` cache) |
+| `/api/calendar/.../events/<id>` | JSON event detail (sanitized description) for read-only drawer |
 | `/system/google-connections` | Connect, assign workspace, enable Gmail/Calendar scopes, disconnect |
 | `/email/oauth/calendar/start` | Incremental Calendar OAuth start |
-| `/calendar/.../events/<id>` | Event detail (attendees, location, description, Meet, source calendar) |
+| `/calendar/.../events/<id>` | HTML event detail (attendees, location, sanitized description, Meet) |
 | POST convert-note / convert-task / link-repo | Notebook actions (repo link Work-only) |
+
+UI: Today / Prev / Next + date-range title; all-day band; today highlight; colors by
+source calendar; click event → **right-side read-only drawer** (sticky header/footer,
+scrollable sections, sanitized description); search + calendar + timezone filters.
+Default timezone is the browser/account zone (selector preserved). Small screens default
+to Agenda; drawer goes full-width. Create/edit/delete/drag/resize/RSVP remain disabled.
 
 Personal Dashboard shows **Upcoming Personal Events**. Limited local cache + manual
 refresh; no push; no create/update/delete/RSVP; **no automatic agent access**.

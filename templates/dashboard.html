@@ -27,7 +27,7 @@
   </div>
 </section>
 
-<section class="summary-grid">
+<section class="summary-grid summary-cols-{{ summary_cards|length }}">
   {% for card in summary_cards %}
     {% if card.kind == 'open_tasks' %}
       <a class="stat-card stat-card-tasks severity-{{ card.severity }}"
@@ -74,11 +74,11 @@
   {% endfor %}
 </section>
 
-<section class="dash-grid">
-  <div class="stack">
+<section class="dash-grid{% if note_scope == 'personal' %} dash-grid-personal{% endif %}">
+  <div class="stack dash-main-stack">
     {% if note_scope == 'personal' %}
-    <section class="panel">
-      <div class="panel-head">
+    <section class="panel panel-upcoming{% if not upcoming_events %} is-empty{% endif %}">
+      <div class="panel-header">
         <h2>Upcoming Personal Events</h2>
         <div class="panel-actions">
           <a class="quiet" href="{{ url_for('personal_calendar', view='upcoming') }}">Open Calendar</a>
@@ -99,7 +99,10 @@
         {% endfor %}
       </ul>
       {% else %}
-      <p class="muted">No upcoming events. Connect Calendar under Google Connections, then refresh.</p>
+      <div class="panel-empty">
+        <p class="muted">No upcoming events.</p>
+        <a class="quiet" href="{{ url_for('google_connections') }}">Connect Calendar</a>
+      </div>
       {% endif %}
     </section>
     {% endif %}
@@ -144,7 +147,7 @@
                 </td>
               </tr>
             {% else %}
-              <tr><td colspan="6" class="muted">No repositories in registry.</td></tr>
+              <tr><td colspan="6" class="muted empty-compact">No repositories in registry.</td></tr>
             {% endfor %}
           </tbody>
         </table>
@@ -241,10 +244,10 @@
               </tr>
             {% else %}
               <tr>
-                <td colspan="{{ 9 if show_repos else 8 }}" class="muted">
+                <td colspan="{{ 9 if show_repos else 8 }}" class="muted empty-compact">
                   No open notebook items in this tab.
                   <a href="{{ url_for(nb_ep) }}">Create a note</a>
-                  or switch tabs. Done and archived notes are excluded.
+                  or switch tabs.
                 </td>
               </tr>
             {% endfor %}
@@ -257,7 +260,7 @@
     </section>
   </div>
 
-  <aside class="stack">
+  <aside class="stack dash-side-stack">
     {% if show_dhis2 %}
     <section class="panel">
       <div class="panel-header">
@@ -301,7 +304,7 @@
     </section>
     {% endif %}
 
-    <section class="panel panel-activity">
+    <section class="panel panel-activity{% if not activity_rows %} is-empty{% endif %}">
       <div class="panel-header">
         <h2>Recent Activity</h2>
         <a class="quiet" href="{{ url_for('audit') }}">View all</a>

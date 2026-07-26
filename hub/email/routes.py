@@ -25,6 +25,35 @@ from hub.notebook import NotebookStore
 from hub.notebook.workspace import apply_workspace_cookie, persist_workspace
 
 
+def _mailbox_view_counts(labels: list[dict[str, Any]]) -> dict[str, int | None]:
+    """Map Gmail system labels to Inbox/Unread/Starred/Sent badge counts."""
+    by_id = {str(lbl.get("id") or ""): lbl for lbl in labels}
+
+    def _total(label_id: str) -> int | None:
+        raw = by_id.get(label_id, {}).get("messages_total")
+        try:
+            return int(raw) if raw is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    def _unread(label_id: str) -> int | None:
+        raw = by_id.get(label_id, {}).get("messages_unread")
+        try:
+            return int(raw) if raw is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    unread = _total("UNREAD")
+    if unread is None:
+        unread = _unread("INBOX")
+    return {
+        "inbox": _total("INBOX"),
+        "unread": unread,
+        "starred": _total("STARRED"),
+        "sent": _total("SENT"),
+    }
+
+
 def register_email_routes(app: Flask) -> None:
     def _email() -> EmailService:
         return app.config["EMAIL"]
@@ -62,10 +91,17 @@ def register_email_routes(app: Flask) -> None:
         label = (request.args.get("label") or "").strip()
         page_token = (request.args.get("page") or "").strip() or None
         force = request.args.get("refresh") in {"1", "true", "yes"}
+        selected_message_id = (request.args.get("selected") or "").strip()
         error = None
         listing: dict[str, Any] | None = None
         labels: list[dict[str, Any]] = []
         selected = None
+        mailbox_counts: dict[str, int | None] = {
+            "inbox": None,
+            "unread": None,
+            "starred": None,
+            "sent": None,
+        }
         if account_id:
             selected = next((a for a in accounts if a["id"] == account_id), None)
             if selected is None:
@@ -85,6 +121,7 @@ def register_email_routes(app: Flask) -> None:
                         force_refresh=force,
                     )
                     labels = service.list_labels(account_id)
+                    mailbox_counts = _mailbox_view_counts(labels)
                 except EmailServiceError as exc:
                     error = str(exc)
         audit.append(
@@ -102,12 +139,14 @@ def register_email_routes(app: Flask) -> None:
                 accounts=accounts,
                 selected_account=selected,
                 selected_account_id=account_id,
+                selected_message_id=selected_message_id,
                 views=MAILBOX_VIEWS,
                 view=view,
                 q=q,
                 label=label,
                 labels=labels,
                 listing=listing,
+                mailbox_counts=mailbox_counts,
                 error=error,
                 status_labels=ACCOUNT_STATUS_LABELS,
                 registry_repos=_registry_options(),
@@ -170,7 +209,8 @@ def register_email_routes(app: Flask) -> None:
                 detail=str(exc)[:200],
                 ok=False,
             )
-            return redirect(url_for("email_redirect"))
+            # Prefer Connections page so the user can start a fresh Connect click.
+            return redirect(url_for("google_connections"))
         ws = account.get("workspace") or "work"
         _audit().append(
             action=audit_actions.EMAIL_OAUTH_CONNECT,

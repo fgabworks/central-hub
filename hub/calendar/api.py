@@ -112,8 +112,25 @@ class CalendarClient:
                 rate_limited=True,
             )
         if resp.status_code in {401, 403}:
+            api_msg = ""
+            err = payload.get("error")
+            if isinstance(err, dict):
+                api_msg = str(err.get("message") or "")
+            lowered = api_msg.lower()
+            if "has not been used" in lowered or "disabled" in lowered or "accessnotconfigured" in lowered.replace(" ", ""):
+                raise CalendarApiError(
+                    "Google Calendar API is not enabled for this Cloud project — "
+                    "enable it in Google Cloud Console, then reconnect",
+                    status_code=resp.status_code,
+                )
+            if resp.status_code == 401:
+                raise CalendarApiError(
+                    "Calendar token expired or invalid — reconnect on Google Connections",
+                    status_code=401,
+                )
             raise CalendarApiError(
-                "Calendar access denied — reconnect and grant Calendar scopes",
+                "Calendar access denied — reconnect and approve Calendar scopes "
+                "(and enable Google Calendar API in Cloud Console)",
                 status_code=resp.status_code,
             )
         if resp.status_code >= 400:

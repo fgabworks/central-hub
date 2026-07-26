@@ -7,7 +7,6 @@
     <p class="page-sub">
       Read-only Gmail for the {{ workspace_labels[workspace] }} workspace.
       Scope <code>gmail.readonly</code> only — no send, reply, delete, or mark-read.
-      Tokens stay encrypted server-side. No automatic agent access to mail content.
     </p>
   </div>
 </div>
@@ -27,46 +26,50 @@
 {% endif %}
 
 <div class="email-shell">
-  <aside class="email-accounts card" aria-label="Gmail accounts">
-    <div class="email-panel-head">
-      <strong>Accounts</strong>
+  <aside class="email-account-card card" aria-label="{{ workspace_labels[workspace] }} email account">
+    <p class="email-account-card-label">{{ workspace_labels[workspace] }} email account</p>
+
+    {% if selected_account %}
+    {% set email = selected_account.email or '(unnamed)' %}
+    {% set initials = (email[:2] | upper) %}
+    <div class="email-account-active">
+      <span class="email-account-avatar" aria-hidden="true">{{ initials }}</span>
+      <div class="email-account-active-meta">
+        <strong class="email-account-email" title="{{ email }}">{{ email }}</strong>
+        <span class="email-account-status badge badge-{{ 'healthy' if selected_account.status == 'connected' else 'warning' if selected_account.status == 'needs_reauth' else 'offline' }}">
+          {{ status_labels.get(selected_account.status, selected_account.status) }}
+        </span>
+        <span class="muted email-account-workspace">{{ workspace_labels[workspace] }} workspace</span>
+      </div>
+    </div>
+    {% if accounts|length > 1 %}
+    <label class="email-account-switch muted" for="email-account-switch">Switch account</label>
+    <select id="email-account-switch" class="email-account-switch-select"
+            onchange="if (this.value) window.location.href=this.value" aria-label="Switch account">
+      {% for acct in accounts %}
+      <option value="{{ email_base }}?account={{ acct.id }}&view={{ view }}&q={{ q }}&label={{ label }}"
+              {% if selected_account_id == acct.id %}selected{% endif %}>
+        {{ acct.email or '(unnamed)' }}
+      </option>
+      {% endfor %}
+    </select>
+    {% endif %}
+    {% else %}
+    <p class="muted email-account-empty">No Gmail account connected for {{ workspace_labels[workspace] }}.</p>
+    {% endif %}
+
+    <div class="email-account-cta">
       {% if oauth.configured and oauth.enabled %}
-      <a class="btn btn-sm btn-primary"
-         href="{{ url_for('email_oauth_start', workspace=workspace) }}">+ Connect</a>
+      <a class="btn btn-sm btn-primary email-connect-btn"
+         href="{{ url_for('email_oauth_start', workspace=workspace) }}">+ Connect Account</a>
+      {% endif %}
+      <a class="btn btn-sm email-manage-btn" href="{{ url_for('google_connections') }}">Manage Connections</a>
+      {% if selected_account and selected_account.status in ['needs_reauth', 'error'] and oauth.configured %}
+      <a class="btn btn-sm"
+         href="{{ url_for('email_oauth_start', workspace=workspace, account=selected_account.id) }}">Reconnect</a>
       {% endif %}
     </div>
-    <ul class="email-account-list">
-      {% for acct in accounts %}
-      <li class="email-account-row{% if selected_account_id == acct.id %} is-active{% endif %}">
-        <a href="{{ email_base }}?account={{ acct.id }}&view={{ view }}">
-          <strong>{{ acct.email or '(unnamed)' }}</strong>
-          <span class="badge badge-{{ 'healthy' if acct.status == 'connected' else 'warning' if acct.status == 'needs_reauth' else 'offline' }}">
-            {{ status_labels.get(acct.status, acct.status) }}
-          </span>
-        </a>
-        <div class="email-account-actions">
-          <form method="post" action="{{ url_for('email_account_assign', account_id=acct.id) }}" class="email-inline-form">
-            <select name="workspace" aria-label="Assign workspace">
-              {% for ws in workspaces %}
-              <option value="{{ ws }}" {% if acct.workspace == ws %}selected{% endif %}>{{ workspace_labels[ws] }}</option>
-              {% endfor %}
-            </select>
-            <button type="submit" class="btn btn-sm">Assign</button>
-          </form>
-          {% if acct.status in ['needs_reauth', 'error'] and oauth.configured %}
-          <a class="btn btn-sm" href="{{ url_for('email_oauth_start', workspace=workspace, account=acct.id) }}">Reconnect</a>
-          {% endif %}
-          <form method="post" action="{{ url_for('email_account_disconnect', account_id=acct.id) }}"
-                onsubmit="return confirm('Disconnect and revoke this Google account access?');">
-            <input type="hidden" name="revoke" value="1">
-            <button type="submit" class="btn btn-sm">Disconnect</button>
-          </form>
-        </div>
-      </li>
-      {% else %}
-      <li class="muted">No Gmail accounts for {{ workspace_labels[workspace] }} yet.</li>
-      {% endfor %}
-    </ul>
+    <p class="muted email-account-footnote">Read-only access · Gmail API</p>
   </aside>
 
   <section class="email-main card">
@@ -75,7 +78,12 @@
       <nav class="email-views" aria-label="Mailbox views">
         {% for key, meta in views.items() %}
         <a class="email-view{% if view == key %} is-active{% endif %}"
-           href="{{ email_base }}?account={{ selected_account.id }}&view={{ key }}&q={{ q }}&label={{ label }}">{{ meta.label }}</a>
+           href="{{ email_base }}?account={{ selected_account.id }}&view={{ key }}&q={{ q }}&label={{ label }}">
+          {{ meta.label }}
+          {% if mailbox_counts.get(key) is not none %}
+          <span class="email-view-count">{{ mailbox_counts[key] }}</span>
+          {% endif %}
+        </a>
         {% endfor %}
       </nav>
       <form class="email-search" method="get" action="{{ email_base }}">
@@ -105,25 +113,50 @@
     <div class="email-list" role="list">
       {% if listing %}
         {% for msg in listing.messages %}
-        <a class="email-row{% if msg.is_unread %} is-unread{% endif %}" role="listitem"
-           href="{{ url_for('email_message_detail', account_id=selected_account.id, message_id=msg.id) }}">
-          <div class="email-row-top">
-            <span class="email-from">{{ msg.from_addr or '—' }}</span>
-            <span class="email-date muted">{{ msg.date_header or msg.internal_date }}</span>
-          </div>
-          <div class="email-subject">
-            {% if msg.is_starred %}<span class="email-star" title="Starred">★</span>{% endif %}
-            {{ msg.subject }}
-          </div>
-          <div class="email-snippet muted">{{ msg.snippet }}</div>
+        {% set from_raw = msg.from_addr or '' %}
+        {% set from_display = from_raw.split('<')[0]|trim|replace('"', '')|replace("'", '') %}
+        {% if not from_display %}{% set from_display = from_raw or '—' %}{% endif %}
+        <a class="email-row{% if msg.is_unread %} is-unread{% else %} is-read{% endif %}{% if selected_message_id == msg.id %} is-selected{% endif %}"
+           role="listitem"
+           href="{{ url_for('email_message_detail', account_id=selected_account.id, message_id=msg.id) }}"
+           {% if msg.is_unread %}aria-label="Unread: {{ msg.subject }}"{% endif %}>
+          <span class="email-row-indicator" aria-hidden="true">
+            {% if msg.is_unread %}
+            <span class="email-unread-dot" title="Unread"></span>
+            {% elif msg.is_starred %}
+            <span class="email-star" title="Starred">★</span>
+            {% else %}
+            <span class="email-star email-star-muted" title="Read">☆</span>
+            {% endif %}
+          </span>
+          <span class="email-from">{{ from_display }}</span>
+          <span class="email-row-body">
+            <span class="email-subject">{{ msg.subject }}</span>
+            <span class="email-snippet">{{ msg.snippet }}</span>
+          </span>
+          <span class="email-row-meta">
+            <span class="email-date">{{ msg.date_header or msg.internal_date }}</span>
+            <span class="email-folder-badge">{{ views[view].label if view in views else 'Mail' }}</span>
+          </span>
         </a>
         {% else %}
         <div class="muted email-empty">No messages in this view.</div>
         {% endfor %}
-        {% if listing.next_page_token %}
+        {% if listing.messages %}
         <div class="email-pager">
+          {% if listing.result_size_estimate %}
+          <span class="muted email-pager-range">
+            {% if not request.args.get('page') %}
+            1–{{ listing.messages|length }} of {{ listing.result_size_estimate }}
+            {% else %}
+            {{ listing.messages|length }} of ~{{ listing.result_size_estimate }}
+            {% endif %}
+          </span>
+          {% endif %}
+          {% if listing.next_page_token %}
           <a class="btn btn-sm"
              href="{{ email_base }}?account={{ selected_account.id }}&view={{ view }}&q={{ q }}&label={{ label }}&page={{ listing.next_page_token }}">Next page</a>
+          {% endif %}
         </div>
         {% endif %}
       {% else %}
@@ -131,7 +164,13 @@
       {% endif %}
     </div>
     {% else %}
-    <div class="muted email-empty">Connect a Google account assigned to {{ workspace_labels[workspace] }} to begin.</div>
+    <div class="muted email-empty">
+      Connect a Google account for {{ workspace_labels[workspace] }} to begin.
+      {% if oauth.configured and oauth.enabled %}
+      <a href="{{ url_for('email_oauth_start', workspace=workspace) }}">Connect Account</a>
+      or <a href="{{ url_for('google_connections') }}">Manage Connections</a>.
+      {% endif %}
+    </div>
     {% endif %}
   </section>
 </div>

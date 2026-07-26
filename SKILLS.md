@@ -16,6 +16,7 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 | Personal Dashboard + Tasks + Quick Notepad | `/personal`, `/personal/tasks` |
 | Repository Notebook (scoped personal\|work notes) | `/personal/notebook`, `/work/notebook`, `hub/notebook/` |
 | SQL Workspace (read-only query library/runner) | `/sql`, `hub/sql_workspace/`, `data/sql_workspace.db` |
+| Prompting & Agent Center (read-only) | `/agents`, `hub/agent_center/`, `config/agents.yaml`, `data/agent_center.db` |
 | Email Center (Gmail readonly OAuth) | `/personal/email`, `/work/email`, `hub/email/`, `data/email.db` |
 | Calendar Center (Calendar readonly) | `/personal/calendar`, `/work/calendar`, `hub/calendar/` |
 | Google Connections | `/system/google-connections` — shared accounts + incremental scopes |
@@ -46,8 +47,9 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 | UID conflict resolve | Conflicts skipped by default; no per-UID take/keep form yet |
 | Enrichment raw metadata | Not bulk-stored; live GET only when detail `?tab=raw&raw=1` |
 | SQL Workspace | Implemented — SELECT/WITH/EXPLAIN only; Live warning; never auto-run |
-| Email Center | Implemented — `gmail.readonly` only; encrypted tokens; no send/modify; no agent mail access; limited cache |
-| Calendar Center | Implemented — calendar list/events readonly; reuses Google accounts; no create/RSVP; no agent access; limited cache |
+| Prompting & Agent Center | Implemented — Find/Ask/Plan/Review; curated OpenAI catalog ∩ API access; Hub Simulator; Claude/Cursor/Codex CLIs; Edit/Test not available; no mail/calendar/SQL-exec |
+| Email Center | Implemented — `gmail.readonly` only; unread/read list styling from `UNREAD`; encrypted tokens; no send/modify/mark-read; no agent mail access; limited cache |
+| Calendar Center | Implemented — FullCalendar grid (month/week/day) + agenda/upcoming; readonly; sanitized descriptions; no create/RSVP/drag; no agent access; limited cache |
 | Repository Notebook | Manual notes with `personal`\|`work` scope + separate Quick Notepads per workspace — no agent assist |
 | Quick Notepad | Personal and Work pads are independent; legacy content → personal |
 | API writes | Blocked even if YAML `allow_write` (Phase 4 GET-only) |
@@ -58,6 +60,7 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 ## Placeholder / Planned
 
 - More GET-only connected-repo capability packs (via YAML only)
-- Notebook agent integration / automatic repository scanning
+- Agent Center Edit/Test modes and write-capable confirm gates
+- Notebook automatic repository scanning (manual notes remain)
 - DHIS2 writes after full safety lifecycle
 - CSRF for browser POSTs if exposed beyond localhost

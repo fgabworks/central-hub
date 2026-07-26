@@ -1,0 +1,81 @@
+# Connected coding agents for Prompting & Agent Center (read-only MVP).
+# Executables must be on PATH (except hub-simulator). Secrets stay in .env.
+# command_templates are allowlisted argv only (shell=False). Placeholders:
+#   {executable} {prompt} {prompt_file} {model} {cwd} {mode}
+# Prefer {prompt_file} for large packed prompts (Windows argv limits).
+
+agents:
+  - id: hub-simulator
+    label: Hub Simulator (demo)
+    provider: hub_simulator
+    executable: python
+    enabled: true
+    modes: [find, ask, plan, review]
+    models_managed: [simulator]
+    notes: "Local demo adapter — verifies packing/run without an external CLI."
+    command_templates:
+      find: ["{executable}", "-m", "hub.agent_center.simulator", "--prompt-file", "{prompt_file}", "--mode", "{mode}", "--model", "{model}", "--cwd", "{cwd}"]
+      ask: ["{executable}", "-m", "hub.agent_center.simulator", "--prompt-file", "{prompt_file}", "--mode", "{mode}", "--model", "{model}", "--cwd", "{cwd}"]
+      plan: ["{executable}", "-m", "hub.agent_center.simulator", "--prompt-file", "{prompt_file}", "--mode", "{mode}", "--model", "{model}", "--cwd", "{cwd}"]
+      review: ["{executable}", "-m", "hub.agent_center.simulator", "--prompt-file", "{prompt_file}", "--mode", "{mode}", "--model", "{model}", "--cwd", "{cwd}"]
+
+  - id: openai-api
+    label: OpenAI API
+    provider: openai_api
+    executable: ""
+    enabled: true
+    modes: [find, ask, plan, review]
+    models_managed: []
+    notes: "OpenAI Responses API. Models loaded dynamically when OPENAI_ENABLED=true. Read-only tools only."
+
+  - id: claude-code
+    label: Claude Code
+    provider: claude_code
+    executable: claude
+    enabled: true
+    modes: [find, ask, plan, review]
+    models_managed:
+      - claude-opus-4
+      - claude-sonnet-4
+      - claude-haiku-4
+    notes: "Requires `claude` on PATH. Edit/Test not available."
+    command_templates:
+      find: ["{executable}", "-p", "{prompt}", "--output-format", "text"]
+      ask: ["{executable}", "-p", "{prompt}", "--output-format", "text"]
+      plan: ["{executable}", "-p", "{prompt}", "--output-format", "text"]
+      review: ["{executable}", "-p", "{prompt}", "--output-format", "text"]
+
+  - id: cursor-agent
+    label: Cursor Agent
+    provider: cursor_agent
+    executable: agent
+    enabled: true
+    modes: [find, ask, plan, review]
+    models_managed:
+      - inherit
+      - composer-2.5-fast
+      - gpt-5.6-sol-medium
+      - claude-sonnet-5-thinking-high
+    notes: "Requires Cursor Agent CLI (`agent` or `cursor-agent`). The IDE `cursor` binary is not valid."
+    command_templates:
+      find: ["{executable}", "-p", "{prompt_file}"]
+      ask: ["{executable}", "-p", "{prompt_file}"]
+      plan: ["{executable}", "-p", "{prompt_file}"]
+      review: ["{executable}", "-p", "{prompt_file}"]
+
+  - id: codex
+    label: Codex
+    provider: codex
+    executable: codex
+    enabled: true
+    modes: [find, ask, plan, review]
+    models_managed:
+      - o4-mini
+      - gpt-5
+      - codex-mini
+    notes: "Requires `codex` on PATH. Read-only hub mode (no auto-apply)."
+    command_templates:
+      find: ["{executable}", "exec", "--skip-git-repo-check", "{prompt}"]
+      ask: ["{executable}", "exec", "--skip-git-repo-check", "{prompt}"]
+      plan: ["{executable}", "exec", "--skip-git-repo-check", "{prompt}"]
+      review: ["{executable}", "exec", "--skip-git-repo-check", "{prompt}"]

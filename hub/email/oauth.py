@@ -10,13 +10,14 @@ from urllib.parse import urlencode
 
 import requests
 
-from hub.email.models import GMAIL_SCOPES, OAUTH_STATE_TTL_SECONDS
+from hub.email.models import GMAIL_SCOPES, OAUTH_STATE_TTL_SECONDS, with_identity_scopes
 from hub.email.settings_gmail import GmailOAuthSettings
 
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
+GMAIL_PROFILE_URL = "https://gmail.googleapis.com/gmail/v1/users/me/profile"
 
 HttpPost = Callable[..., Any]
 
@@ -48,7 +49,7 @@ def build_authorization_url(
     if not settings.is_configured:
         raise OAuthError("Gmail OAuth is not configured (set GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET)")
     assert settings.client_id is not None
-    scope_list = tuple(scopes) if scopes else GMAIL_SCOPES
+    scope_list = with_identity_scopes(scopes if scopes is not None else GMAIL_SCOPES)
     if not scope_list:
         raise OAuthError("OAuth requires at least one scope")
     params: dict[str, str] = {
@@ -172,6 +173,60 @@ def fetch_userinfo(
     if resp.status_code >= 400:
         raise OAuthError("Could not load Google account profile", status_code=resp.status_code)
     return data
+
+
+def fetch_gmail_profile(
+    access_token: str,
+    *,
+    http_get: Callable[..., Any] | None = None,
+    timeout: float = 15.0,
+) -> dict[str, Any]:
+    """Fallback profile via Gmail API (works with gmail.readonly)."""
+    get = http_get or requests.get
+    try:
+        resp = get(
+            GMAIL_PROFILE_URL,
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=timeout,
+        )
+    except requests.RequestException as exc:
+        raise OAuthError("Gmail profile network error") from exc
+    data = _json_or_empty(resp)
+    if resp.status_code >= 400:
+        raise OAuthError("Could not load Gmail profile", status_code=resp.status_code)
+    email = str(data.get("emailAddress") or "").strip()
+    if not email:
+        raise OAuthError("Gmail profile missing email")
+    return {"email": email, "sub": email}
+
+
+def resolve_google_profile(
+    access_token: str,
+    *,
+    http_get: Callable[..., Any] | None = None,
+    fallback_email: str = "",
+    fallback_sub: str = "",
+) -> dict[str, Any]:
+    """Resolve email/sub from userinfo, Gmail profile, or reconnect fallbacks."""
+    try:
+        data = fetch_userinfo(access_token, http_get=http_get)
+        email = str(data.get("email") or "").strip()
+        sub = str(data.get("sub") or "").strip()
+        if email:
+            return {"email": email, "sub": sub or email}
+    except OAuthError:
+        pass
+    try:
+        return fetch_gmail_profile(access_token, http_get=http_get)
+    except OAuthError:
+        pass
+    email = (fallback_email or "").strip()
+    sub = (fallback_sub or "").strip()
+    if email:
+        return {"email": email, "sub": sub or email}
+    raise OAuthError(
+        "Could not load Google account profile — reconnect and approve email access"
+    )
 
 
 def access_expires_at_iso(token_response: dict[str, Any]) -> str | None:

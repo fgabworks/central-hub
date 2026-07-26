@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}Prompting & Agent Center · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Prompting &amp; Agent Center</h1>
+    <p class="page-sub">Select repositories, choose an available agent and model, run one read-only prompt, and review the output. Edit/Test are not yet available. Agent output is untrusted.</p>
+  </div>
+</div>
+
+<div class="agent-safety" role="status">
+  <strong>Read-only MVP.</strong>
+  No repository edits, arbitrary commands, or automatic merges.
+  Secrets (<code>.env</code>, credentials, tokens) are excluded from context.
+  Runtime is scoped to selected local repositories with timeouts and cancel.
+</div>
+
+<div class="agent-shell">
+  <aside class="agent-library card" aria-label="Saved prompts">
+    <div class="agent-lib-head">
+      <strong>Prompt library</strong>
+      <button type="button" class="btn btn-sm" id="agent-prompt-save">Save</button>
+    </div>
+    <ul class="agent-prompt-list" id="agent-prompt-list">
+      {% for p in prompts %}
+      <li>
+        <button type="button" class="agent-prompt-item" data-id="{{ p.id }}" data-mode="{{ p.mode }}" data-body="{{ p.body|e }}">
+          <span class="agent-prompt-title">{{ p.title }}</span>
+          <span class="muted">{{ p.mode }}</span>
+        </button>
+      </li>
+      {% else %}
+      <li class="muted">No saved prompts yet.</li>
+      {% endfor %}
+    </ul>
+    <div class="agent-history-head"><strong>Recent runs</strong></div>
+    <ul class="agent-history-list" id="agent-history-list">
+      {% for r in history %}
+      <li>
+        <button type="button" class="agent-history-item" data-id="{{ r.id }}">
+          <span class="status-pill status-{{ r.status }}">{{ r.status }}</span>
+          <span>{{ r.agent_label or r.agent_id }} · {{ r.mode }}</span>
+          <span class="muted">{{ r.prompt_preview }}</span>
+        </button>
+      </li>
+      {% else %}
+      <li class="muted">No runs yet.</li>
+      {% endfor %}
+    </ul>
+  </aside>
+
+  <section class="agent-main card" aria-label="Run composer">
+    <div class="agent-modes" role="group" aria-label="Modes">
+      {% for m in modes %}
+        {% if m.enabled %}
+        <label class="agent-mode">
+          <input type="radio" name="agent-mode" value="{{ m.id }}" {% if m.id == 'ask' %}checked{% endif %}>
+          <span>{{ m.label }}</span>
+        </label>
+        {% else %}
+        <span class="agent-mode agent-mode-disabled" title="{{ m.note }}">{{ m.label }} · Not yet available</span>
+        {% endif %}
+      {% endfor %}
+    </div>
+
+    <div class="agent-grid">
+      <fieldset class="agent-repos">
+        <legend>Repositories (read-only)</legend>
+        {% for repo in repositories %}
+        <label class="agent-repo {% if not repo.selectable %}is-disabled{% endif %}">
+          <input type="checkbox" name="repo" value="{{ repo.id }}" {% if not repo.selectable %}disabled{% endif %}>
+          <span>
+            <strong>{{ repo.name }}</strong>
+            <span class="muted">{{ repo.id }} · {{ repo.type }}</span>
+            {% if not repo.selectable %}<span class="muted"> — {{ repo.reason }}</span>{% endif %}
+          </span>
+        </label>
+        {% else %}
+        <p class="muted">No repositories in registry.</p>
+        {% endfor %}
+      </fieldset>
+
+      <div class="agent-selectors">
+        <label>
+          Agent
+          <select id="agent-select" aria-label="Agent">
+            {% for a in agents %}
+            <option value="{{ a.id }}" data-status="{{ a.status }}" data-runnable="{{ '1' if a.runnable else '0' }}"
+              {% if not a.runnable %}disabled{% endif %}>
+              {{ a.label }} — {{ a.status }}{% if a.models_source %} ({{ a.models_source }} models){% endif %}
+            </option>
+            {% endfor %}
+          </select>
+        </label>
+        <p class="muted" id="agent-detail"></p>
+        <p class="agent-none-warn" id="agent-none-warn" hidden>
+          No runnable agents. Use <strong>Hub Simulator (demo)</strong> or install <code>claude</code> / Cursor <code>agent</code> / <code>codex</code> on PATH.
+          The IDE <code>cursor</code> binary is not an agent CLI.
+        </p>
+        <label>
+          Model
+          <select id="agent-model" aria-label="Model"></select>
+        </label>
+        <p class="muted" id="agent-model-meta"></p>
+        <label id="agent-effort-wrap" hidden>
+          Reasoning effort
+          <select id="agent-effort" aria-label="Reasoning effort">
+            <option value="low">low</option>
+            <option value="medium" selected>medium</option>
+            <option value="high">high</option>
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <label class="agent-prompt-label" for="agent-prompt">Prompt</label>
+    <textarea id="agent-prompt" rows="8" placeholder="Ask a read-only question about the selected repositories…"></textarea>
+
+    <div class="agent-actions">
+      <button type="button" class="btn" id="agent-preview">Preview context</button>
+      <button type="button" class="btn btn-primary" id="agent-run">Run</button>
+      <button type="button" class="btn" id="agent-cancel" disabled>Cancel</button>
+      <span class="status-pill" id="agent-status">idle</span>
+    </div>
+
+    <details class="agent-preview-box" id="agent-preview-box">
+      <summary>Context preview</summary>
+      <pre id="agent-preview-body" class="agent-pre">Select repositories and click Preview context.</pre>
+    </details>
+  </section>
+
+  <section class="agent-output card" aria-label="Run output">
+    <div class="agent-out-head">
+      <strong>Output</strong>
+      <span class="muted" id="agent-run-meta">No active run</span>
+    </div>
+    <h3 class="agent-out-title">Answer</h3>
+    <pre id="agent-answer" class="agent-pre agent-answer">—</pre>
+    <h3 class="agent-out-title">Streaming logs</h3>
+    <pre id="agent-logs" class="agent-pre agent-logs">—</pre>
+    <h3 class="agent-out-title">Referenced files</h3>
+    <ul id="agent-refs" class="agent-refs"><li class="muted">—</li></ul>
+    <h3 class="agent-out-title">Tool activity</h3>
+    <pre id="agent-tools" class="agent-pre agent-tools">—</pre>
+    <h3 class="agent-out-title">Usage</h3>
+    <pre id="agent-usage" class="agent-pre agent-usage">—</pre>
+    <h3 class="agent-out-title">Errors</h3>
+    <pre id="agent-error" class="agent-pre agent-error">—</pre>
+  </section>
+</div>
+
+<script type="application/json" id="agent-bootstrap">{{ bootstrap|tojson }}</script>
+<script src="{{ url_for('static', filename='js/agent_center.js') }}" defer></script>
+{% endblock %}

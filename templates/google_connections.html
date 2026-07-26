@@ -21,6 +21,11 @@
 {% endif %}
 
 <div class="card" style="padding:1rem;margin-bottom:1rem">
+  <p class="muted" style="margin:0 0 0.75rem;font-size:13px">
+    In Google Cloud Console, enable <strong>Gmail API</strong> and <strong>Google Calendar API</strong>
+    for the same OAuth client. Then connect Gmail first, and use <strong>Enable Calendar</strong>
+    on the account row (approve Calendar on the consent screen).
+  </p>
   <div class="email-actions">
     {% if oauth.configured and oauth.enabled %}
     <a class="btn btn-sm btn-primary" href="{{ url_for('email_oauth_start', workspace='personal') }}">+ Connect (Gmail)</a>

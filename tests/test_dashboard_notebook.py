@@ -456,7 +456,7 @@ class DashboardRouteTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         html = r.get_data(as_text=True)
         self.assertIn("Recent Activity", html)
-        self.assertIn('class="panel panel-activity"', html)
+        self.assertIn("panel-activity", html)
         self.assertIn('class="activity-scroll"', html)
         self.assertIn('href="/audit"', html)
         # Header + View all stay outside the scroll region.
@@ -473,13 +473,46 @@ class DashboardRouteTests(unittest.TestCase):
         )
         self.assertIn(".panel-activity .activity-scroll", css)
         self.assertIn("overflow-y: auto", css)
-        self.assertIn(".dash-grid > .stack > .panel:last-child", css)
+        self.assertIn(".dash-main-stack > .panel-queue", css)
+        self.assertIn(".dash-side-stack > .panel-activity", css)
         # Small screens restore normal page scrolling.
         self.assertIn("max-width: 1180px", css)
         self.assertRegex(
             css,
             r"@media \(max-width: 1180px\)[\s\S]*?\.panel-activity \.activity-scroll\s*\{[\s\S]*?overflow:\s*visible",
         )
+
+    def test_personal_dashboard_layout_balance(self) -> None:
+        """Personal dashboard keeps 5 top cards balanced and compact empty upcoming."""
+        r = self.client.get("/personal")
+        self.assertEqual(r.status_code, 200)
+        html = r.get_data(as_text=True)
+        self.assertIn("Personal Dashboard", html)
+        self.assertIn("summary-cols-5", html)
+        self.assertIn("Personal Tasks", html)
+        self.assertIn("Personal Notes", html)
+        self.assertIn("Upcoming Events", html)
+        self.assertIn("Quick Notepad", html)
+        self.assertIn("Audit Events", html)
+        self.assertIn("Upcoming Personal Events", html)
+        self.assertIn("Personal Task Queue", html)
+        self.assertIn("Recent Activity", html)
+        self.assertIn("panel-upcoming", html)
+        self.assertIn("dash-grid-personal", html)
+        self.assertIn("panel-empty", html)
+        self.assertIn("No upcoming events.", html)
+        self.assertIn("Connect Calendar", html)
+
+        css = (Path(__file__).resolve().parents[1] / "static" / "css" / "style.css").read_text(
+            encoding="utf-8",
+            errors="replace",
+        )
+        self.assertIn(".summary-grid.summary-cols-5", css)
+        self.assertIn("repeat(5, minmax(0, 1fr))", css)
+        self.assertIn(".panel-upcoming.is-empty", css)
+        self.assertIn(".panel-empty", css)
+        self.assertIn(".dash-grid-personal", css)
+        self.assertIn("empty-compact", css)
 
     def test_task_row_status_accent_only(self) -> None:
         """Dashboard + Notebook task rows use left status accents, not full-row tints."""

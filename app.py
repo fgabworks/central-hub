@@ -95,9 +95,15 @@ from hub.email.settings_gmail import load_gmail_oauth_settings
 from hub.email.store import EmailStore
 from hub.calendar.routes import register_calendar_routes
 from hub.calendar.service import CalendarService
+from hub.agent_center.db import AgentCenterDb
+from hub.agent_center.openai_settings import load_openai_settings
+from hub.agent_center.routes import register_agent_center_routes
+from hub.agent_center.service import AgentCenterService
+from hub.agent_center.store import AgentCenterStore
 from hub.registry import load_registry
 from hub.registry.git_util import default_search_roots, find_local_checkout, slugify_repo_id
 from hub.registry.loader import RegistryError
+from hub.registry.models import Registry
 from hub.registry.status import ui_repo_status
 from hub.registry.store import RegistryStore, build_entry_from_form
 from hub.settings import ROOT_DIR, load_settings
@@ -237,6 +243,26 @@ def create_app() -> Flask:
     register_email_routes(app)
     register_calendar_routes(app)
 
+    agent_db_path = os.environ.get("CENTRAL_HUB_AGENT_DATABASE") or str(
+        ROOT_DIR / "data" / "agent_center.db"
+    )
+    agent_store = AgentCenterStore(AgentCenterDb(Path(agent_db_path)))
+
+    def _agent_audit(**kwargs):
+        app.config["AUDIT"].append(**kwargs)
+
+    app.config["AGENT_CENTER"] = AgentCenterService(
+        registry if registry is not None else Registry([]),
+        store=agent_store,
+        audit=_agent_audit,
+        timeout_seconds=float(os.environ.get("AGENT_CENTER_TIMEOUT_SECONDS") or 120),
+        openai_settings=load_openai_settings(),
+        notebook=app.config["NOTEBOOK"],
+        sql_store=app.config["SQL_WS_STORE"],
+        uid_index=app.config["DHIS2_UID_INDEX"],
+    )
+    register_agent_center_routes(app)
+
     @app.context_processor
     def inject_globals():
         dhis2_client: Dhis2Client = app.config["DHIS2"]
@@ -276,11 +302,12 @@ def create_app() -> Flask:
             "repository_edit",
             "repository_detail",
             "sql_workspace",
+            "agent_center",
             "dhis2",
             "jobs",
             "job_detail",
             "health",
-        } or (ep.startswith("dhis2") if ep else False) or (ep.startswith("repository") if ep else False) or (ep.startswith("sql_") if ep else False):
+        } or (ep.startswith("dhis2") if ep else False) or (ep.startswith("repository") if ep else False) or (ep.startswith("sql_") if ep else False) or (ep.startswith("api_agent") if ep else False) or (ep.startswith("api_agents") if ep else False) or (ep.startswith("api_context") if ep else False) or (ep.startswith("api_prompts") if ep else False):
             workspace = "work"
         elif ep in {
             "personal_dashboard",
@@ -361,6 +388,12 @@ def create_app() -> Flask:
                 "label": "SQL Workspace",
                 "icon": "▦",
                 "active_prefix": "sql_workspace",
+            },
+            {
+                "endpoint": "agent_center",
+                "label": "Prompting & Agents",
+                "icon": "⌘",
+                "active_prefix": "agent_center",
             },
             {
                 "endpoint": "work_email",

@@ -57,8 +57,8 @@ class EmailStore:
             "requested_scopes": scopes,
         }
 
-    def consume_oauth_state(self, state: str) -> dict[str, Any] | None:
-        """Validate and delete one-time OAuth state. Returns None if invalid/expired."""
+    def get_oauth_state(self, state: str) -> dict[str, Any] | None:
+        """Validate OAuth state without consuming it. Returns None if invalid/expired."""
         raw = (state or "").strip()
         if not raw:
             return None
@@ -70,7 +70,6 @@ class EmailStore:
             ).fetchone()
             if not row:
                 return None
-            conn.execute("DELETE FROM gmail_oauth_states WHERE state = ?", (raw,))
             try:
                 expires = datetime.fromisoformat(str(row["expires_at"]).replace("Z", "+00:00"))
             except ValueError:
@@ -78,6 +77,7 @@ class EmailStore:
             if expires.tzinfo is None:
                 expires = expires.replace(tzinfo=timezone.utc)
             if now > expires:
+                conn.execute("DELETE FROM gmail_oauth_states WHERE state = ?", (raw,))
                 return None
             keys = row.keys()
             requested = row["requested_scopes"] if "requested_scopes" in keys else ""
@@ -87,6 +87,22 @@ class EmailStore:
                 "account_id": row["account_id"] or "",
                 "requested_scopes": requested or "",
             }
+
+    def consume_oauth_state(self, state: str) -> dict[str, Any] | None:
+        """Validate and delete one-time OAuth state. Returns None if invalid/expired."""
+        saved = self.get_oauth_state(state)
+        if not saved:
+            return None
+        with self.db.connect() as conn:
+            conn.execute("DELETE FROM gmail_oauth_states WHERE state = ?", (saved["state"],))
+        return saved
+
+    def delete_oauth_state(self, state: str) -> None:
+        raw = (state or "").strip()
+        if not raw:
+            return
+        with self.db.connect() as conn:
+            conn.execute("DELETE FROM gmail_oauth_states WHERE state = ?", (raw,))
 
     # --- Accounts ---
 
@@ -113,6 +129,32 @@ class EmailStore:
                 "SELECT * FROM gmail_accounts WHERE id = ?",
                 (account_id,),
             ).fetchone()
+        if not row:
+            return None
+        data = dict(row)
+        if include_secrets:
+            return data
+        return self._public_row(data)
+
+    def find_account(
+        self,
+        *,
+        email: str | None = None,
+        google_sub: str | None = None,
+        include_secrets: bool = False,
+    ) -> dict[str, Any] | None:
+        with self.db.connect() as conn:
+            row = None
+            if google_sub:
+                row = conn.execute(
+                    "SELECT * FROM gmail_accounts WHERE google_sub = ?",
+                    (google_sub,),
+                ).fetchone()
+            if row is None and email:
+                row = conn.execute(
+                    "SELECT * FROM gmail_accounts WHERE lower(email) = lower(?)",
+                    (email,),
+                ).fetchone()
         if not row:
             return None
         data = dict(row)

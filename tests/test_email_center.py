@@ -14,7 +14,7 @@ from urllib.parse import parse_qs, urlparse
 
 from hub.email.crypto import decrypt_token_blob, encrypt_token_blob, redact_account_public
 from hub.email.db import EmailDatabase
-from hub.email.gmail_api import GmailApiError, GmailClient, parse_message_detail
+from hub.email.gmail_api import GmailApiError, GmailClient, parse_message_detail, parse_message_summary
 from hub.email.oauth import (
     OAuthError,
     build_authorization_url,
@@ -81,24 +81,29 @@ class OAuthStateAndCallbackTests(unittest.TestCase):
         qs = parse_qs(parsed.query)
         self.assertEqual(qs["state"], ["abc"])
         self.assertIn("gmail.readonly", qs["scope"][0])
+        self.assertIn("openid", qs["scope"][0])
+        self.assertIn("email", qs["scope"][0])
         self.assertNotIn("gmail.modify", qs["scope"][0])
         self.assertEqual(qs["access_type"], ["offline"])
 
     def test_oauth_state_single_use_and_expiry(self) -> None:
         self.store.create_oauth_state(workspace="personal", state="st1")
+        peeked = self.store.get_oauth_state("st1")
+        self.assertIsNotNone(peeked)
         first = self.store.consume_oauth_state("st1")
         self.assertIsNotNone(first)
         self.assertEqual(first["workspace"], "personal")
         self.assertIsNone(self.store.consume_oauth_state("st1"))
 
         self.store.create_oauth_state(workspace="work", state="st2", ttl_seconds=-1)
+        self.assertIsNone(self.store.get_oauth_state("st2"))
         self.assertIsNone(self.store.consume_oauth_state("st2"))
 
     def test_callback_rejects_invalid_state(self) -> None:
         with self.assertRaises(EmailServiceError) as ctx:
             self.service.complete_oauth(state="nope", code="code")
         self.assertEqual(ctx.exception.code, "invalid_state")
-
+        self.assertIn("Connect again", str(ctx.exception))
     def test_callback_success_assigns_workspace(self) -> None:
         started = self.service.start_oauth(workspace="personal")
         state = started["state"]
@@ -299,11 +304,14 @@ class MessageListingTests(unittest.TestCase):
         )
         self.assertEqual(len(result["messages"]), 1)
         self.assertEqual(result["messages"][0]["subject"], "Subj")
+        self.assertTrue(result["messages"][0]["is_unread"])
+        self.assertIn("UNREAD", result["messages"][0]["label_ids"])
         self.assertEqual(result["next_page_token"], "page-2")
         self.assertIn("invoice", result["query"])
         self.assertFalse(result["from_cache"])
         cached = self.service.list_messages(self.acct["id"], view="inbox", q="invoice")
         self.assertTrue(cached["from_cache"])
+        self.assertTrue(cached["messages"][0]["is_unread"])
 
     def test_thread_loading(self) -> None:
         def fake_get(url, headers=None, params=None, timeout=None):
@@ -539,12 +547,17 @@ class EmailRouteTests(unittest.TestCase):
         html = r.get_data(as_text=True)
         self.assertIn("Email Center", html)
         self.assertIn("gmail.readonly", html)
+        self.assertIn("email-account-card", html)
+        self.assertIn("Connect Account", html)
+        self.assertIn("Manage Connections", html)
         self.assertNotIn("csecret", html)
         self.assertNotIn("token_encrypted", html)
 
         r2 = self.client.get("/work/email")
         self.assertEqual(r2.status_code, 200)
-        self.assertIn("Email Center", r2.get_data(as_text=True))
+        work_html = r2.get_data(as_text=True)
+        self.assertIn("Email Center", work_html)
+        self.assertIn("Work email account", work_html)
 
     def test_oauth_start_redirects(self) -> None:
         r = self.client.get("/email/oauth/start?workspace=personal")
@@ -562,6 +575,308 @@ class EmailRouteTests(unittest.TestCase):
         self.assertIn("Email Center", r.get_data(as_text=True))
         r2 = self.client.get("/work")
         self.assertIn("Email Center", r2.get_data(as_text=True))
+
+
+class UnreadVisibilityTests(unittest.TestCase):
+    def test_unread_label_detection(self) -> None:
+        unread = parse_message_summary(
+            {
+                "id": "u1",
+                "threadId": "t",
+                "snippet": "Hi",
+                "labelIds": ["INBOX", "UNREAD"],
+                "payload": {
+                    "headers": [
+                        {"name": "Subject", "value": "Unread mail"},
+                        {"name": "From", "value": "a@x.com"},
+                        {"name": "Date", "value": "Sat, 25 Jul 2026"},
+                    ]
+                },
+            }
+        )
+        read = parse_message_summary(
+            {
+                "id": "r1",
+                "threadId": "t",
+                "snippet": "Bye",
+                "labelIds": ["INBOX"],
+                "payload": {
+                    "headers": [
+                        {"name": "Subject", "value": "Read mail"},
+                        {"name": "From", "value": "b@x.com"},
+                        {"name": "Date", "value": "Sat, 25 Jul 2026"},
+                    ]
+                },
+            }
+        )
+        self.assertTrue(unread["is_unread"])
+        self.assertFalse(read["is_unread"])
+
+    def test_mixed_list_search_pagination_preserves_status(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        store = EmailStore(EmailDatabase(Path(tmp.name) / "e.db"), secret_key="sec")
+        future = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+        acct = store.upsert_connected_account(
+            workspace="personal",
+            email="me@example.com",
+            google_sub="sub-u",
+            token_payload={"refresh_token": "rt", "access_token": "at"},
+            access_expires_at=future,
+            scopes="gmail.readonly",
+        )
+
+        def fake_get(url, headers=None, params=None, timeout=None):
+            resp = MagicMock()
+            resp.status_code = 200
+            resp.content = b"{}"
+            if url.endswith("/messages") and "attachments" not in url:
+                resp.json.return_value = {
+                    "messages": [
+                        {"id": "m-unread", "threadId": "t1"},
+                        {"id": "m-read", "threadId": "t2"},
+                    ],
+                    "nextPageToken": "page-next",
+                    "resultSizeEstimate": 2,
+                }
+            elif "/messages/m-unread" in url:
+                resp.json.return_value = {
+                    "id": "m-unread",
+                    "threadId": "t1",
+                    "snippet": "New note",
+                    "labelIds": ["INBOX", "UNREAD", "STARRED"],
+                    "payload": {
+                        "headers": [
+                            {"name": "Subject", "value": "Unread Subject"},
+                            {"name": "From", "value": "new@x.com"},
+                            {"name": "Date", "value": "Fri, 25 Jul 2026"},
+                        ]
+                    },
+                }
+            elif "/messages/m-read" in url:
+                resp.json.return_value = {
+                    "id": "m-read",
+                    "threadId": "t2",
+                    "snippet": "Old note",
+                    "labelIds": ["INBOX"],
+                    "payload": {
+                        "headers": [
+                            {"name": "Subject", "value": "Read Subject"},
+                            {"name": "From", "value": "old@x.com"},
+                            {"name": "Date", "value": "Thu, 24 Jul 2026"},
+                        ]
+                    },
+                }
+            else:
+                resp.json.return_value = {}
+            return resp
+
+        service = EmailService(
+            store,
+            oauth_settings=_oauth_settings(),
+            gmail_client=GmailClient(http_get=fake_get),
+        )
+        listing = service.list_messages(
+            acct["id"], view="inbox", q="note", force_refresh=True
+        )
+        self.assertEqual(len(listing["messages"]), 2)
+        by_id = {m["id"]: m for m in listing["messages"]}
+        self.assertTrue(by_id["m-unread"]["is_unread"])
+        self.assertFalse(by_id["m-read"]["is_unread"])
+        self.assertEqual(listing["next_page_token"], "page-next")
+        self.assertIn("note", listing["query"])
+
+        # Pagination / search cache must keep unread flags.
+        cached = service.list_messages(acct["id"], view="inbox", q="note")
+        self.assertTrue(cached["from_cache"])
+        cached_by_id = {m["id"]: m for m in cached["messages"]}
+        self.assertTrue(cached_by_id["m-unread"]["is_unread"])
+        self.assertFalse(cached_by_id["m-read"]["is_unread"])
+
+        # Unread mailbox view still uses the same flag from labels.
+        unread_view = service.list_messages(acct["id"], view="unread", force_refresh=True)
+        self.assertTrue(any(m["is_unread"] for m in unread_view["messages"]))
+
+
+class UnreadStyleRouteTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._tmp = tempfile.TemporaryDirectory()
+        root = Path(cls._tmp.name)
+        os.environ["CENTRAL_HUB_AUDIT_LOG"] = str(root / "audit.jsonl")
+        os.environ["CENTRAL_HUB_DATABASE"] = str(root / "hub.db")
+        os.environ["CENTRAL_HUB_EMAIL_DATABASE"] = str(root / "email.db")
+        os.environ["CENTRAL_HUB_SECRET_KEY"] = "unread-style-secret"
+        os.environ["GMAIL_CLIENT_ID"] = "cid"
+        os.environ["GMAIL_CLIENT_SECRET"] = "csecret"
+        os.environ["GMAIL_REDIRECT_URI"] = "http://127.0.0.1:8080/email/oauth/callback"
+        for key in ("DHIS2_BASE_URL", "DHIS2_USERNAME", "DHIS2_PASSWORD"):
+            os.environ.pop(key, None)
+
+        import hub.settings as settings_mod
+        import app as app_mod
+
+        importlib.reload(settings_mod)
+        importlib.reload(app_mod)
+        from app import create_app
+
+        cls.app = create_app()
+        cls.app.config["NOTEBOOK"] = NotebookStore(NotebookDatabase(root / "notebook.db"))
+        cls.app.config["TESTING"] = True
+        cls.client = cls.app.test_client()
+        store: EmailStore = cls.app.config["EMAIL"].store
+        future = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+        cls.acct = store.upsert_connected_account(
+            workspace="personal",
+            email="me@example.com",
+            google_sub="sub-style",
+            token_payload={"refresh_token": "rt", "access_token": "at"},
+            access_expires_at=future,
+            scopes="gmail.readonly",
+        )
+
+        def fake_get(url, headers=None, params=None, timeout=None):
+            resp = MagicMock()
+            resp.status_code = 200
+            resp.content = b"{}"
+            if url.endswith("/messages") and "attachments" not in url:
+                resp.json.return_value = {
+                    "messages": [
+                        {"id": "m-unread", "threadId": "t1"},
+                        {"id": "m-read", "threadId": "t2"},
+                    ],
+                    "nextPageToken": "page-2",
+                }
+            elif "/messages/m-unread" in url:
+                resp.json.return_value = {
+                    "id": "m-unread",
+                    "threadId": "t1",
+                    "snippet": "New",
+                    "labelIds": ["INBOX", "UNREAD"],
+                    "payload": {
+                        "headers": [
+                            {"name": "Subject", "value": "Unread Subject"},
+                            {"name": "From", "value": "new@x.com"},
+                            {"name": "Date", "value": "Fri, 25 Jul 2026"},
+                        ]
+                    },
+                }
+            elif "/messages/m-read" in url:
+                resp.json.return_value = {
+                    "id": "m-read",
+                    "threadId": "t2",
+                    "snippet": "Old",
+                    "labelIds": ["INBOX"],
+                    "payload": {
+                        "headers": [
+                            {"name": "Subject", "value": "Read Subject"},
+                            {"name": "From", "value": "old@x.com"},
+                            {"name": "Date", "value": "Thu, 24 Jul 2026"},
+                        ]
+                    },
+                }
+            elif url.endswith("/labels"):
+                resp.json.return_value = {"labels": [{"id": "INBOX", "name": "INBOX"}]}
+            else:
+                resp.json.return_value = {}
+            return resp
+
+        cls.app.config["EMAIL"].gmail = GmailClient(http_get=fake_get)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._tmp.cleanup()
+
+    def test_unread_and_read_row_classes(self) -> None:
+        r = self.client.get(
+            f"/personal/email?account={self.acct['id']}&view=inbox&refresh=1"
+        )
+        self.assertEqual(r.status_code, 200)
+        html = r.get_data(as_text=True)
+        self.assertIn("email-row is-unread", html)
+        self.assertIn("email-row is-read", html)
+        self.assertIn("email-unread-dot", html)
+        self.assertIn("email-account-card", html)
+        self.assertIn("Connect Account", html)
+        self.assertIn("Manage Connections", html)
+        self.assertIn("Unread Subject", html)
+        self.assertIn("Read Subject", html)
+        # Stylesheet distinguishes hover / selected / focus
+        css = (Path(__file__).resolve().parents[1] / "static" / "css" / "style.css").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(".email-row.is-unread", css)
+        self.assertIn(".email-row.is-read", css)
+        self.assertIn(".email-row:hover", css)
+        self.assertIn(".email-row.is-selected", css)
+        self.assertIn(".email-row:focus-visible", css)
+        self.assertIn("border-left-color", css)
+        self.assertIn(".email-account-card", css)
+        self.assertIn("grid-template-columns: minmax(220px, 280px) 1fr", css)
+
+    def test_selected_state_and_no_auto_mark_read(self) -> None:
+        r = self.client.get(
+            f"/personal/email?account={self.acct['id']}&view=inbox&selected=m-unread&refresh=1"
+        )
+        html = r.get_data(as_text=True)
+        self.assertIn("is-unread is-selected", html)
+        # Opening the list must not imply write/mark-read capability.
+        self.assertNotIn("mark as read", html.lower())
+        self.assertIn("gmail.readonly", html.lower())
+
+    def test_search_and_starred_views_keep_unread_markup(self) -> None:
+        for view in ("inbox", "unread", "starred", "sent"):
+            r = self.client.get(
+                f"/personal/email?account={self.acct['id']}&view={view}&q=Subject&refresh=1"
+            )
+            self.assertEqual(r.status_code, 200, view)
+            html = r.get_data(as_text=True)
+            self.assertIn("is-unread", html, view)
+            self.assertIn("is-read", html, view)
+
+
+class EmailLayoutUiTests(unittest.TestCase):
+    """Focused layout checks for the preview-style Email Center shell."""
+
+    def test_mailbox_view_counts_helper(self) -> None:
+        from hub.email.routes import _mailbox_view_counts
+
+        counts = _mailbox_view_counts(
+            [
+                {"id": "INBOX", "messages_total": 128, "messages_unread": 23},
+                {"id": "UNREAD", "messages_total": 23},
+                {"id": "STARRED", "messages_total": 4},
+                {"id": "SENT", "messages_total": 50},
+            ]
+        )
+        self.assertEqual(counts["inbox"], 128)
+        self.assertEqual(counts["unread"], 23)
+        self.assertEqual(counts["starred"], 4)
+        self.assertEqual(counts["sent"], 50)
+
+    def test_center_template_has_account_card_and_main_list_hooks(self) -> None:
+        html = (
+            Path(__file__).resolve().parents[1] / "templates" / "email" / "center.html"
+        ).read_text(encoding="utf-8")
+        self.assertIn("email-account-card", html)
+        self.assertIn("Connect Account", html)
+        self.assertIn("Manage Connections", html)
+        self.assertIn("Read-only access · Gmail API", html)
+        self.assertIn("email-views", html)
+        self.assertIn("email-search", html)
+        self.assertIn("email-list", html)
+        self.assertIn("email-unread-dot", html)
+        self.assertIn("is-unread", html)
+        self.assertIn("is-read", html)
+        self.assertNotIn("email-account-actions", html)
+
+    def test_responsive_account_card_stacks_above_list(self) -> None:
+        css = (
+            Path(__file__).resolve().parents[1] / "static" / "css" / "style.css"
+        ).read_text(encoding="utf-8")
+        self.assertIn(".email-account-card", css)
+        self.assertIn("order: -1", css)
+        self.assertIn("@media (max-width: 900px)", css)
 
 
 class ExchangeRefreshUnitTests(unittest.TestCase):

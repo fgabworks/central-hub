@@ -10,9 +10,10 @@ Agent rules: [AGENTS.md](AGENTS.md). Current state: [AI_REFERENCE.md](AI_REFEREN
 The hub owns: registry, adapters, **job engine (SQLite + worker)**, UI, health checks,
 audit, a **read-only DHIS2 Web API client**, a **local metadata capability catalog**,
 a **local UID mapping index**, a preview-only metadata builder, a **Repository Notebook** (local SQLite notes
-linked to registry repos), a **SQL Workspace** (read-only query library/runner), and an
-**Email Center** (Gmail `gmail.readonly` OAuth; shared Personal/Work service), and a
-**Calendar Center** (Calendar readonly; reuses the same Google accounts).
+linked to registry repos), a **SQL Workspace** (read-only query library/runner), an
+**Email Center** (Gmail `gmail.readonly` OAuth; shared Personal/Work service), a
+**Calendar Center** (Calendar readonly; reuses the same Google accounts), and a
+**Prompting & Agent Center** (read-only multi-agent orchestration via external CLIs).
 Connected repos own: domain rules, data models, their own APIs and secrets handling.
 The hub must never duplicate PMNP, DHIS2 *domain/business* logic, reporting,
 convergence, immunization, DDS, tetanus, or scorecard rules — those stay in the
@@ -32,14 +33,23 @@ Browser ──HTTP──> Flask app (app.py, create_app)
                                   hub/sql_workspace/             data/hub.db
                                   hub/email/                     data/email.db
                                   hub/calendar/
+                                  hub/agent_center/              data/agent_center.db
                                   data/notebook.db
                                   data/sql_workspace.db
                                                                  data/{uploads,results,jobs}/
 ```
 
-- **`hub/calendar/`** — Shared Calendar Center: readonly Google Calendar API, month/week/
-  day/agenda/upcoming views, event detail, convert-to-note/task. Reuses `hub/email/`
-  accounts, encrypted tokens, and incremental OAuth scopes. No writes/RSVP/push/agent access.
+- **`hub/agent_center/`** — Prompting & Agent Center: Find/Ask/Plan/Review (read-only),
+  adapter registry for Hub Simulator / OpenAI Responses API / Claude Code / Cursor Agent /
+  Codex / future agents. OpenAI curated catalog (`openai_catalog.py`) ∩ live model list,
+  grouped selector, mode recommendations, reasoning effort, Pro background/timeouts,
+  context packing with secret exclusion + repo AI instructions, cancellable runs,
+  tool activity + usage, local history/audit. Tools allowlisted and read-only.
+  Edit/Test not available. No Email/Calendar feed; agent output is untrusted.
+- **`hub/calendar/`** — Shared Calendar Center: readonly Google Calendar API + FullCalendar
+  grid (month/week/day) and list agenda/upcoming, JSON event feed, sanitized HTML
+  descriptions, read-only detail drawer. Reuses `hub/email/` accounts, encrypted tokens,
+  and incremental OAuth scopes. No writes/RSVP/drag/resize/push/agent access.
 - **`hub/email/`** — Shared Email Center: OAuth 2.0 web-server flow, multi-account
   Personal/Work assignment, Fernet-encrypted refresh tokens in `data/email.db`,
   Gmail REST readonly client, limited list/message cache + manual refresh.

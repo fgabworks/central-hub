@@ -56,6 +56,8 @@ def _connected_account(store: EmailStore, *, workspace: str = "personal", scopes
 
 class IncrementalOAuthTests(unittest.TestCase):
     def test_calendar_scopes_in_auth_url(self) -> None:
+        # Direct Calendar scopes still get identity scopes; Calendar Center
+        # start requests Gmail+Calendar together (covered in merge test).
         url = build_authorization_url(
             _oauth_settings(), state="s1", scopes=CALENDAR_SCOPES
         )
@@ -63,6 +65,7 @@ class IncrementalOAuthTests(unittest.TestCase):
         scope = qs["scope"][0]
         self.assertIn("calendar.calendarlist.readonly", scope)
         self.assertIn("calendar.events.readonly", scope)
+        self.assertIn("openid", scope)
         self.assertNotIn("gmail.modify", scope)
         self.assertEqual(qs["include_granted_scopes"], ["true"])
 
@@ -71,6 +74,7 @@ class IncrementalOAuthTests(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         store = EmailStore(EmailDatabase(Path(tmp.name) / "email.db"), secret_key="sec")
         email = EmailService(store, oauth_settings=_oauth_settings())
+        cal = CalendarService(store, email_service=email)
         # Existing gmail-only account
         acct = store.upsert_connected_account(
             workspace="personal",
@@ -80,9 +84,13 @@ class IncrementalOAuthTests(unittest.TestCase):
             access_expires_at=None,
             scopes=" ".join(GMAIL_SCOPES),
         )
-        started = email.start_oauth(
-            workspace="personal", account_id=acct["id"], scopes=CALENDAR_SCOPES
-        )
+        started = cal.start_calendar_oauth(workspace="personal", account_id=acct["id"])
+        # Auth URL must include both Gmail and Calendar so Gmail is not dropped.
+        from urllib.parse import parse_qs, urlparse
+
+        scope = parse_qs(urlparse(started["authorization_url"]).query)["scope"][0]
+        self.assertIn("gmail.readonly", scope)
+        self.assertIn("calendar.events.readonly", scope)
 
         def fake_post(url, data=None, params=None, timeout=None):
             resp = MagicMock()
@@ -90,6 +98,7 @@ class IncrementalOAuthTests(unittest.TestCase):
             resp.json.return_value = {
                 "access_token": "access-new",
                 "expires_in": 3600,
+                # Google often returns only newly granted scopes in the response.
                 "scope": " ".join(CALENDAR_SCOPES),
             }
             return resp
@@ -104,10 +113,59 @@ class IncrementalOAuthTests(unittest.TestCase):
         email._http_post = fake_post
         email._http_get = fake_get
         updated = email.complete_oauth(state=started["state"], code="code")
+        self.assertEqual(updated["id"], acct["id"])
         self.assertTrue(updated["has_gmail"])
+        # Token response only listed Calendar scopes; prior Gmail scopes are preserved.
         self.assertTrue(updated["has_calendar"])
         self.assertTrue(has_calendar_scopes(updated["scopes"]))
         self.assertTrue(has_gmail_scopes(updated["scopes"]))
+        # Refresh token preserved when Google omits it on incremental grant.
+        payload = store.get_token_payload(updated["id"])
+        self.assertEqual(payload["refresh_token"], "rt")
+
+    def test_requested_scopes_not_stored_without_google_grant(self) -> None:
+        """Requested Calendar must not mark has_calendar if Google didn't grant it."""
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        store = EmailStore(EmailDatabase(Path(tmp.name) / "email.db"), secret_key="sec")
+        email = EmailService(store, oauth_settings=_oauth_settings())
+        acct = store.upsert_connected_account(
+            workspace="personal",
+            email="me@example.com",
+            google_sub="sub-1",
+            token_payload={"refresh_token": "rt", "scope": " ".join(GMAIL_SCOPES)},
+            access_expires_at=None,
+            scopes=" ".join(GMAIL_SCOPES),
+        )
+        started = email.start_oauth(
+            workspace="personal",
+            account_id=acct["id"],
+            scopes=(*GMAIL_SCOPES, *CALENDAR_SCOPES),
+        )
+
+        def fake_post(url, data=None, params=None, timeout=None):
+            resp = MagicMock()
+            resp.status_code = 200
+            # Google returned only Gmail — user denied Calendar on consent.
+            resp.json.return_value = {
+                "access_token": "access-new",
+                "expires_in": 3600,
+                "scope": "openid email profile " + " ".join(GMAIL_SCOPES),
+            }
+            return resp
+
+        def fake_get(url, headers=None, params=None, timeout=None):
+            resp = MagicMock()
+            resp.status_code = 200
+            resp.content = b"{}"
+            resp.json.return_value = {"email": "me@example.com", "sub": "sub-1"}
+            return resp
+
+        email._http_post = fake_post
+        email._http_get = fake_get
+        updated = email.complete_oauth(state=started["state"], code="code")
+        self.assertTrue(updated["has_gmail"])
+        self.assertFalse(updated["has_calendar"])
 
 
 class WorkspaceFilterTests(unittest.TestCase):
@@ -349,6 +407,8 @@ class CalendarRouteTests(unittest.TestCase):
         html = r.get_data(as_text=True)
         self.assertIn("Calendar", html)
         self.assertIn("calendar.events.readonly", html)
+        self.assertIn("cal-shell", html)
+        self.assertIn("fullcalendar", html.lower())
         self.assertNotIn("csecret", html)
 
         r2 = self.client.get("/work/calendar")
@@ -367,6 +427,7 @@ class CalendarRouteTests(unittest.TestCase):
         loc = r.headers.get("Location", "")
         self.assertIn("accounts.google.com", loc)
         self.assertIn("calendar.events.readonly", loc)
+        self.assertIn("gmail.readonly", loc)
 
     def test_personal_dashboard_upcoming_section(self) -> None:
         r = self.client.get("/personal")

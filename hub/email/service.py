@@ -8,6 +8,7 @@ from typing import Any, Callable
 from hub.email.crypto import decrypt_token_blob
 from hub.email.gmail_api import GmailApiError, GmailClient, parse_message_detail, parse_message_summary
 from hub.email.models import (
+    CALENDAR_SCOPES,
     DEFAULT_PAGE_SIZE,
     FORBIDDEN_GMAIL_ACTIONS,
     GMAIL_SCOPES,
@@ -16,16 +17,17 @@ from hub.email.models import (
     merge_scope_strings,
     normalize_mailbox_view,
     normalize_workspace,
+    with_identity_scopes,
 )
 from hub.email.oauth import (
     OAuthError,
     access_expires_at_iso,
     build_authorization_url,
     exchange_code,
-    fetch_userinfo,
     generate_state,
     is_expired,
     refresh_access_token,
+    resolve_google_profile,
     revoke_token,
 )
 from hub.email.settings_gmail import GmailOAuthSettings, load_gmail_oauth_settings
@@ -91,12 +93,20 @@ class EmailService:
             )
         ws = normalize_workspace(workspace)
         hint = login_hint
+        acct = None
         if account_id:
             acct = self.store.get_account(account_id)
             if not acct:
                 raise EmailServiceError("Account not found", code="not_found")
             hint = hint or acct.get("email") or None
-        scope_tuple = tuple(scopes) if scopes else GMAIL_SCOPES
+        if scopes is None:
+            # Reconnecting / enabling Gmail on a Calendar account must keep Calendar.
+            if acct and acct.get("has_calendar"):
+                scope_tuple = with_identity_scopes((*GMAIL_SCOPES, *CALENDAR_SCOPES))
+            else:
+                scope_tuple = with_identity_scopes(GMAIL_SCOPES)
+        else:
+            scope_tuple = with_identity_scopes(scopes)
         state = generate_state()
         self.store.create_oauth_state(
             workspace=ws,
@@ -116,73 +126,110 @@ class EmailService:
     def complete_oauth(self, *, state: str, code: str) -> dict[str, Any]:
         if not code or not state:
             raise EmailServiceError("Missing OAuth code or state", code="invalid_callback")
-        saved = self.store.consume_oauth_state(state)
+        # Peek first — only consume after success so a failed profile/token step
+        # does not strand the user on callback refresh with a confusing state error.
+        saved = self.store.get_oauth_state(state)
         if not saved:
-            raise EmailServiceError("Invalid or expired OAuth state", code="invalid_state")
+            raise EmailServiceError(
+                "OAuth session expired or already used — click Connect again",
+                code="invalid_state",
+            )
         try:
             tokens = exchange_code(self.oauth, code, http_post=self._http_post)
         except OAuthError as exc:
+            # Auth code is one-time; drop state so the next attempt starts clean.
+            self.store.delete_oauth_state(state)
             raise EmailServiceError(str(exc), code="oauth_exchange") from exc
         access = str(tokens.get("access_token") or "")
         if not access:
+            self.store.delete_oauth_state(state)
             raise EmailServiceError("No access token returned", code="oauth_exchange")
-        # Require refresh token for durable server-side storage.
-        if not tokens.get("refresh_token") and not saved.get("account_id"):
+
+        existing_acct: dict[str, Any] | None = None
+        existing_payload: dict[str, Any] = {}
+        if saved.get("account_id"):
+            existing_acct = self.store.get_account(saved["account_id"], include_secrets=True)
+
+        try:
+            profile = resolve_google_profile(
+                access,
+                http_get=self._http_get,
+                fallback_email=(existing_acct or {}).get("email") or "",
+                fallback_sub=(existing_acct or {}).get("google_sub") or "",
+            )
+        except OAuthError as exc:
+            self.store.delete_oauth_state(state)
+            raise EmailServiceError(str(exc), code="oauth_profile") from exc
+        email = str(profile.get("email") or "").strip()
+        sub = str(profile.get("sub") or "").strip()
+
+        # Always merge into the existing Google account for this email/sub so
+        # Calendar enable does not drop Gmail scopes/tokens.
+        if existing_acct is None and sub:
+            existing_acct = self.store.find_account(google_sub=sub, include_secrets=True)
+        if existing_acct is None and email:
+            existing_acct = self.store.find_account(email=email, include_secrets=True)
+
+        prior_scopes = ""
+        fallback_email = email
+        fallback_sub = sub
+        if existing_acct:
+            prior_scopes = str(existing_acct.get("scopes") or "")
+            fallback_email = str(existing_acct.get("email") or email)
+            fallback_sub = str(existing_acct.get("google_sub") or sub)
+            existing_payload = self.store.get_token_payload(existing_acct["id"]) or {}
+            if existing_payload.get("scope"):
+                prior_scopes = merge_scope_strings(
+                    prior_scopes, str(existing_payload.get("scope") or "")
+                )
+            if not tokens.get("refresh_token") and existing_payload.get("refresh_token"):
+                tokens = {**tokens, "refresh_token": existing_payload["refresh_token"]}
+
+        if not tokens.get("refresh_token") and not existing_acct:
+            self.store.delete_oauth_state(state)
             raise EmailServiceError(
                 "Google did not return a refresh token — try reconnect with consent",
                 code="oauth_exchange",
             )
-        try:
-            profile = fetch_userinfo(access, http_get=self._http_get)
-        except OAuthError as exc:
-            raise EmailServiceError(str(exc), code="oauth_profile") from exc
-        email = str(profile.get("email") or "").strip()
-        sub = str(profile.get("sub") or "").strip()
-        prior_scopes = ""
-        if saved.get("account_id"):
-            existing_acct = self.store.get_account(saved["account_id"], include_secrets=True)
-            if existing_acct:
-                prior_scopes = str(existing_acct.get("scopes") or "")
-            existing = self.store.get_token_payload(saved["account_id"]) or {}
-            if not tokens.get("refresh_token") and existing.get("refresh_token"):
-                tokens = {**tokens, "refresh_token": existing["refresh_token"]}
-            if existing.get("scope"):
-                prior_scopes = merge_scope_strings(prior_scopes, str(existing.get("scope") or ""))
         if not tokens.get("refresh_token"):
+            self.store.delete_oauth_state(state)
             raise EmailServiceError(
                 "Refresh token unavailable — disconnect and reconnect with consent",
                 code="oauth_exchange",
             )
+
         requested = saved.get("requested_scopes") or ""
-        scope = merge_scope_strings(
-            prior_scopes,
-            str(tokens.get("scope") or ""),
-            requested,
-        )
+        # Store only scopes Google actually tied to this token, plus prior real grants.
+        # Never copy "requested" into granted scopes — that falsely enabled Calendar.
+        token_scope = str(tokens.get("scope") or "")
+        scope = merge_scope_strings(prior_scopes, token_scope)
         if not scope:
             scope = " ".join(GMAIL_SCOPES)
+
+        # Keep existing workspace when linking Calendar onto an already-connected account
+        # unless this OAuth start targeted that account explicitly.
+        if existing_acct and not saved.get("account_id"):
+            workspace = str(existing_acct.get("workspace") or saved["workspace"])
+        else:
+            workspace = saved["workspace"]
+
+        token_payload = {
+            **{k: v for k, v in existing_payload.items() if k != "access_token"},
+            "refresh_token": tokens["refresh_token"],
+            "token_type": tokens.get("token_type") or "Bearer",
+            "scope": scope,
+            "access_token": access,
+        }
         account = self.store.upsert_connected_account(
-            workspace=saved["workspace"],
-            email=email,
-            google_sub=sub,
-            token_payload={
-                "refresh_token": tokens["refresh_token"],
-                "token_type": tokens.get("token_type") or "Bearer",
-                "scope": scope,
-            },
-            access_expires_at=None,
-            scopes=scope,
-            account_id=saved.get("account_id") or None,
-        )
-        # Store access token alongside for immediate use (still encrypted).
-        payload = self.store.get_token_payload(account["id"]) or {}
-        payload["access_token"] = access
-        payload["scope"] = scope
-        self.store.update_tokens(
-            account["id"],
-            payload,
+            workspace=workspace,
+            email=email or fallback_email,
+            google_sub=sub or fallback_sub,
+            token_payload=token_payload,
             access_expires_at=access_expires_at_iso(tokens),
+            scopes=scope,
+            account_id=(existing_acct or {}).get("id") or saved.get("account_id") or None,
         )
+        self.store.delete_oauth_state(state)
         return self.store.get_account(account["id"]) or account
 
     def assign_workspace(self, account_id: str, workspace: str) -> dict[str, Any]:

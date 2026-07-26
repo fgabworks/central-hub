@@ -4,33 +4,30 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**Calendar Center (Google Calendar readonly)** — shared `hub/calendar/` reusing Email
-Center Google accounts, encrypted tokens, and Personal/Work assignment.
+**Curated OpenAI model catalog** for Prompting & Agent Center.
 
-- Incremental OAuth: `calendar.calendarlist.readonly` + `calendar.events.readonly`
-- Nav: Personal → Calendar · Work → Work Calendar · System → Google Connections
-- Views: month / week / day / agenda / upcoming; search; date filters; pagination; TZ
-- Event detail: attendees, location, description, Meet link, source calendar, recurrence
-- Convert to Note / Create Task / Work-only Link Repository
-- Personal Dashboard: Upcoming Personal Events
-- Read-only only — no create/update/delete/RSVP, no push, no agent access
-- Prior: Email Center, Personal/Work workspaces, SQL Workspace, GET-only DHIS2
+- Catalog in `hub/agent_center/openai_catalog.py` (Sol/Terra/Luna, 5.5/5.5-pro, 5.4 family)
+- Accessible models = catalog ∩ `GET /v1/models` (optional `OPENAI_ALLOWED_MODELS`)
+- Grouped selector: Recommended / Advanced / Balanced / Fast / Pro
+- Mode defaults: Find→luna, Ask/Plan→terra, Review→sol (+ fallbacks); user override OK
+- Reasoning-effort only when supported; Pro uses background + longer timeout
+- Revalidate before each run; model ID stored in history/audit
+- Prior: OpenAI Responses adapter, CLI agents, Calendar/Email, SQL, DHIS2 GET-only
 
 ## Verify
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-python -m unittest tests.test_calendar_center tests.test_email_center -v
+python -m unittest tests.test_openai_catalog tests.test_openai_agent tests.test_agent_center -v
 python -m unittest discover -s tests -v
 python app.py
 ```
 
-1. Enable Calendar API on the Google Cloud OAuth client; grant Calendar from Google Connections
-2. Personal / Work calendar pages load; charcoal/crimson (Work) preserved
-3. Personal Dashboard shows upcoming events panel
-4. Email, SQL, repos, jobs, health, audit, DHIS2 still load
+1. Enable OpenAI in `.env`; open `/agents` → OpenAI API
+2. Confirm only key-accessible curated models appear, grouped
+3. Switch Find/Ask/Plan/Review → recommended model updates; override works
+4. Pro model shows longer-run behavior; effort selector only on supported models
 
 ## Next task
 
-Optional: set `DATA_SCRIPT_PATH` / `REPORT_TEMPLATE_PATH` after manual clone.
-Keep DHIS2 / Gmail / Calendar writes off. Do not auto-feed mail or calendar to agents.
+Keep write paths off. Do not auto-feed mail/calendar to agents.

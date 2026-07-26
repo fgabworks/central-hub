@@ -7,6 +7,9 @@ from hub.notebook.models import DEFAULT_WORKSPACE, WORKSPACES, normalize_workspa
 GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 GMAIL_SCOPES = (GMAIL_READONLY_SCOPE,)
 
+# Required so OAuth can resolve email/sub via OpenID userinfo.
+IDENTITY_SCOPES = ("openid", "email", "profile")
+
 # Calendar readonly (incremental — request with include_granted_scopes).
 CALENDAR_CALENDARLIST_READONLY_SCOPE = (
     "https://www.googleapis.com/auth/calendar.calendarlist.readonly"
@@ -18,6 +21,13 @@ CALENDAR_SCOPES = (
     CALENDAR_CALENDARLIST_READONLY_SCOPE,
     CALENDAR_EVENTS_READONLY_SCOPE,
 )
+
+
+def with_identity_scopes(scopes: tuple[str, ...] | list[str] | None) -> tuple[str, ...]:
+    """Always include OpenID identity scopes alongside API scopes."""
+    base = tuple(scopes) if scopes else GMAIL_SCOPES
+    merged = merge_scope_strings(" ".join(IDENTITY_SCOPES), " ".join(base))
+    return tuple(merged.split())
 
 
 def scopes_include(granted: str | None, required: tuple[str, ...] | list[str]) -> bool:
@@ -69,7 +79,7 @@ DEFAULT_VIEW = "inbox"
 DEFAULT_PAGE_SIZE = 25
 MAX_PAGE_SIZE = 50
 CACHE_TTL_SECONDS = 300  # limited local cache; manual refresh invalidates
-OAUTH_STATE_TTL_SECONDS = 600
+OAUTH_STATE_TTL_SECONDS = 1800  # 30 minutes — enough for consent + retries
 MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024  # 15 MiB passthrough cap
 
 # Forbidden write operations (documented + guarded in service).
@@ -106,6 +116,7 @@ __all__ = [
     "FORBIDDEN_GMAIL_ACTIONS",
     "GMAIL_READONLY_SCOPE",
     "GMAIL_SCOPES",
+    "IDENTITY_SCOPES",
     "MAILBOX_VIEWS",
     "MAX_ATTACHMENT_BYTES",
     "MAX_PAGE_SIZE",
@@ -118,4 +129,5 @@ __all__ = [
     "normalize_mailbox_view",
     "normalize_workspace",
     "scopes_include",
+    "with_identity_scopes",
 ]
