@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
 from pathlib import Path
 
 from flask import Flask, abort, jsonify, redirect, render_template, request, send_file, session, url_for, Response
@@ -55,6 +56,18 @@ from hub.dhis2.uid_mapping.compare import resolve_plural
 from hub.dhis2.uid_mapping.reverse_trace import logical_storage_hint, reverse_trace_links
 from hub.dhis2.uid_mapping.scan import parse_csv_text, parse_json_text
 from hub.dhis2.uid_mapping.search import facet_values, filter_records
+from hub.dhis2.uid_mapping.missing import (
+    CONFIRM_ADD_MISSING,
+    confirm_phrase_for_add_missing,
+    discover_missing_uids,
+    export_source_update_csv_rows,
+    filter_missing_rows,
+    paginate_rows,
+    scannable_type_options,
+    selected_rows_to_records,
+    source_badge,
+)
+from hub.dhis2.uid_mapping.models import SOURCE_MANUAL
 from hub.dhis2.redact import redact_mapping
 from hub.notebook import (
     NOTE_TYPE_LABELS,
@@ -116,6 +129,11 @@ from hub.registry.loader import RegistryError
 from hub.registry.models import Registry
 from hub.registry.status import ui_repo_status
 from hub.registry.store import RegistryStore, build_entry_from_form
+from hub.registry.grouping import (
+    ACTIVE_RUN_STATUSES,
+    build_grouped_rows,
+    linked_api_repositories,
+)
 from hub.settings import ROOT_DIR, load_settings
 
 settings = load_settings()
@@ -128,10 +146,11 @@ _DHIS2_TOOLS = [
     {"label": "Authorities", "icon": "☰", "endpoint": "dhis2_authorities"},
     {"label": "Metadata Lookup", "icon": "⌕", "endpoint": "dhis2_lookup"},
     {"label": "UID & Mapping Explorer", "icon": "⇄", "endpoint": "dhis2_uid_explorer"},
-    {"label": "UID Index Management", "icon": "⧉", "endpoint": "dhis2_uid_index_manage"},
-    {"label": "Metadata Enrichment", "icon": "⊕", "endpoint": "dhis2_enrichment"},
+    {"label": "UID Index", "icon": "⧉", "endpoint": "dhis2_uid_index_manage"},
+    {"label": "Find Missing UIDs", "icon": "⌀", "endpoint": "dhis2_uid_find_missing"},
+    {"label": "Refresh UID Details", "icon": "⊕", "endpoint": "dhis2_enrichment"},
     {"label": "Metadata Builder", "icon": "✎", "endpoint": "dhis2_metadata_builder"},
-    {"label": "Run Discovery", "icon": "↻", "endpoint": "dhis2_discover"},
+    {"label": "Scan DHIS2", "icon": "↻", "endpoint": "dhis2_discover"},
 ]
 
 
@@ -825,7 +844,35 @@ def create_app() -> Flask:
             "local_path": (request.form.get("local_path") or "").strip(),
             "base_url": (request.form.get("base_url") or "").strip(),
             "description": (request.form.get("description") or "").strip(),
+            "repository_group_id": (request.form.get("repository_group_id") or "").strip(),
         }
+
+    def _active_run_repo_ids() -> set[str]:
+        workspace = app.config.get("REPO_WORKSPACE")
+        if workspace is None:
+            return set()
+        try:
+            runs = workspace.processes.list_runs()
+        except Exception:  # noqa: BLE001
+            return set()
+        return {
+            str(r.repo_id)
+            for r in runs
+            if getattr(r, "status", None) in ACTIVE_RUN_STATUSES
+        }
+
+    def _build_registry_rows(registry, health_results: list[dict] | None = None):
+        adapters: AdapterManager | None = app.config["ADAPTERS"]
+        results = health_results
+        if results is None:
+            results = adapters.check_all(enabled_only=False) if adapters else []
+        by_id = {item.get("repository_id"): item for item in results}
+        return build_grouped_rows(
+            registry,
+            by_id,
+            active_run_repo_ids=_active_run_repo_ids(),
+            url_for=url_for,
+        )
 
     def _maybe_reuse_checkout(form: dict) -> tuple[dict, str | None]:
         """If git_url set and local_path empty, reuse a matching existing checkout."""
@@ -849,25 +896,7 @@ def create_app() -> Flask:
         registry = app.config["REGISTRY"]
         adapters: AdapterManager | None = app.config["ADAPTERS"]
         health_results = adapters.check_all(enabled_only=False) if adapters else []
-        by_id = {item.get("repository_id"): item for item in health_results}
-        rows = []
-        for repo in registry.repositories if registry else []:
-            health = by_id.get(repo.id) or {}
-            status = ui_repo_status(repo, health)
-            connection = repo.base_url or repo.local_path or "—"
-            rows.append(
-                {
-                    "id": repo.id,
-                    "name": repo.name,
-                    "description": repo.description,
-                    "type": repo.type,
-                    "enabled": repo.enabled,
-                    "status": status,
-                    "git_url": repo.git_url,
-                    "connection": connection,
-                    "capability_count": len(repo.capabilities),
-                }
-            )
+        rows = _build_registry_rows(registry, health_results)
         return render_template(
             "repositories.html",
             rows=rows,
@@ -887,6 +916,7 @@ def create_app() -> Flask:
             "local_path": "",
             "base_url": "",
             "description": "",
+            "repository_group_id": "",
         }
         error = None
         notice = None
@@ -903,6 +933,7 @@ def create_app() -> Flask:
                     base_url=form["base_url"] or None,
                     description=form["description"],
                     repo_id=form["id"] or None,
+                    repository_group_id=form.get("repository_group_id") or None,
                 )
                 store = _registry_store()
                 saved = store.add(entry)
@@ -961,6 +992,7 @@ def create_app() -> Flask:
             "local_path": str(raw.get("local_path") or ""),
             "base_url": str(raw.get("base_url") or ""),
             "description": str(raw.get("description") or ""),
+            "repository_group_id": str(raw.get("repository_group_id") or ""),
         }
         error = None
         notice = None
@@ -978,6 +1010,7 @@ def create_app() -> Flask:
                     "working_directory": form["local_path"] or None,
                     "base_url": form["base_url"] or None,
                     "description": form["description"],
+                    "repository_group_id": form.get("repository_group_id") or None,
                 }
                 # Rebuild health_check defaults when type/path change.
                 rebuilt = build_entry_from_form(
@@ -989,6 +1022,7 @@ def create_app() -> Flask:
                     base_url=form["base_url"] or None,
                     description=form["description"],
                     repo_id=repo_id,
+                    repository_group_id=form.get("repository_group_id") or None,
                 )
                 updates["health_check"] = rebuilt.get("health_check")
                 store.update(repo_id, updates)
@@ -1067,6 +1101,16 @@ def create_app() -> Flask:
             if (not item.get("enabled")) or item.get("status") == "skipped"
         )
         offline = max(len(results) - healthy - disabled, 0)
+        local_processes: list[dict] = []
+        registry = app.config.get("REGISTRY")
+        workspace = app.config.get("REPO_WORKSPACE")
+        if registry is not None and workspace is not None:
+            try:
+                local_processes = workspace.summarize_local_processes(
+                    list(registry.repositories)
+                )
+            except Exception:  # noqa: BLE001
+                local_processes = []
         return render_template(
             "health.html",
             results=results,
@@ -1074,7 +1118,24 @@ def create_app() -> Flask:
             offline_count=offline,
             disabled_count=disabled,
             total_count=len(results),
+            local_processes=local_processes,
         )
+
+    @app.get("/api/health/local-processes")
+    def api_health_local_processes():
+        registry = app.config.get("REGISTRY")
+        workspace = app.config.get("REPO_WORKSPACE")
+        if registry is None or workspace is None:
+            return jsonify({"ok": False, "error": "Unavailable", "code": "unavailable"}), 503
+        rows = workspace.summarize_local_processes(list(registry.repositories))
+        app.config["AUDIT"].append(
+            action=audit_actions.REPO_WS_PROCESS_SCAN,
+            actor=current_actor(),
+            target="health",
+            detail=f"local process monitor count={len(rows)}",
+            ok=True,
+        )
+        return jsonify({"ok": True, "count": len(rows), "processes": rows})
 
     @app.route("/jobs", methods=["GET", "POST"])
     def jobs():
@@ -1703,6 +1764,8 @@ def create_app() -> Flask:
             kwargs["panel_open"] = bool(data.get("panel_open"))
         if "panel_width" in data:
             kwargs["panel_width"] = data.get("panel_width")
+        if "panel_size" in data:
+            kwargs["panel_size"] = str(data.get("panel_size") or "normal")
         try:
             saved = pad.save(**kwargs)
             return jsonify({"ok": True, "notepad": saved})
@@ -1718,6 +1781,28 @@ def create_app() -> Flask:
             action=audit_actions.NOTEBOOK_NOTEPAD_CLEAR,
             target=f"quick-notepad:{pad.notepad_id}",
             detail=f"Cleared {pad.notepad_id} Quick Notepad (revision kept)",
+            ok=True,
+        )
+        return jsonify({"ok": True, "notepad": saved})
+
+    @app.post("/api/notebook/notepad/snapshot")
+    def api_notebook_notepad_snapshot():
+        """Save current pad content into revision history (manual snapshot)."""
+        audit: AuditStore = app.config["AUDIT"]
+        data = request.get_json(silent=True) or {}
+        pad = _quick_notepad()
+        kwargs: dict = {}
+        if "content" in data:
+            kwargs["content"] = str(data.get("content") or "")
+        if "content_format" in data:
+            kwargs["content_format"] = str(data.get("content_format") or "plain")
+        saved = pad.snapshot(**kwargs)
+        if not saved:
+            return jsonify({"ok": False, "error": "Quick Notepad is empty."}), 400
+        audit.append(
+            action=audit_actions.NOTEBOOK_NOTEPAD_SNAPSHOT,
+            target=f"quick-notepad:{pad.notepad_id}",
+            detail=f"Saved {pad.notepad_id} Quick Notepad revision snapshot",
             ok=True,
         )
         return jsonify({"ok": True, "notepad": saved})
@@ -2440,6 +2525,7 @@ def create_app() -> Flask:
                 if row.get("uid") in conflict_uids:
                     flags.append("conflicting")
                 row["flags"] = flags
+                row["source_badge"] = source_badge(row)
                 extras = row.get("extras") if isinstance(row.get("extras"), dict) else {}
                 row["answer_label"] = derive_answer_type(
                     str(row.get("value_type") or extras.get("valueType") or ""),
@@ -2846,6 +2932,7 @@ def create_app() -> Flask:
                             "repository_id": request.form.get("repository_id") or "upload",
                             "environment": request.form.get("environment") or "unknown",
                             "column_map": {},
+                            "source_origin": SOURCE_MANUAL,
                         }
                         if fmt == "csv":
                             incoming = parse_csv_text(text, source=source, source_file=filename)
@@ -2991,6 +3078,231 @@ def create_app() -> Flask:
             mimetype="application/json",
             as_attachment=True,
             download_name="hub_uid_index_latest.json",
+        )
+
+    @app.get("/dhis2/uid-index/export-source-csv")
+    def dhis2_uid_index_export_source_csv():
+        """Export DHIS2-imported rows not yet synced to the canonical CSV."""
+        import csv
+        import io
+
+        store: MappingIndexStore = app.config["DHIS2_MAPPING_INDEX"]
+        audit: AuditStore = app.config["AUDIT"]
+        rows = export_source_update_csv_rows(store.records())
+        buf = io.StringIO()
+        fieldnames = [
+            "id",
+            "name",
+            "code",
+            "kind",
+            "valueType",
+            "domainType",
+            "program",
+            "programStage",
+            "optionSet",
+            "categoryCombo",
+            "environment",
+            "source_origin",
+            "csv_synced",
+        ]
+        writer = csv.DictWriter(buf, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+        audit.append(
+            action=audit_actions.DHIS2_UID_INDEX_EXPORT,
+            target="source-update-csv",
+            detail=f"Exported {len(rows)} DHIS2-import rows for canonical CSV sync",
+            ok=True,
+            metadata={"count": len(rows), "dhis2_writes": 0},
+        )
+        return Response(
+            buf.getvalue(),
+            mimetype="text/csv",
+            headers={
+                "Content-Disposition": "attachment; filename=hub_uid_dhis2_import_source_update.csv"
+            },
+        )
+
+    @app.route("/dhis2/uid-index/find-missing", methods=["GET", "POST"])
+    def dhis2_uid_find_missing():
+        store: MappingIndexStore = app.config["DHIS2_MAPPING_INDEX"]
+        client: Dhis2Client = app.config["DHIS2"]
+        audit: AuditStore = app.config["AUDIT"]
+        flash_error = None
+        flash_notice = None
+        scan_result = app.config.get("DHIS2_MISSING_SCAN")
+        preview = app.config.get("DHIS2_MISSING_PREVIEW")
+        selected_instance = app.config.get("DHIS2_SELECTED_INSTANCE") or ""
+
+        if request.method == "POST":
+            action = request.form.get("action") or ""
+            try:
+                if action == "scan_dhis2":
+                    if not client.public_config().get("configured"):
+                        flash_error = "Connect a Stage/Live DHIS2 instance before scanning."
+                    else:
+                        env = (request.form.get("environment") or selected_instance or "live").strip()
+                        types = request.form.getlist("object_types")
+                        scan_result = discover_missing_uids(
+                            client,
+                            store.records(),
+                            environment=env,
+                            object_types=types or None,
+                        )
+                        # UI-only id so client selection resets on a new scan.
+                        scan_result["scan_id"] = (
+                            f"{env}-{scan_result.get('missing_count', 0)}-"
+                            f"{scan_result.get('index_uid_count', 0)}-"
+                            f"{uuid.uuid4().hex[:10]}"
+                        )
+                        app.config["DHIS2_MISSING_SCAN"] = scan_result
+                        app.config["DHIS2_MISSING_PREVIEW"] = None
+                        preview = None
+                        flash_notice = (
+                            f"Scan complete: {scan_result.get('missing_count', 0)} missing "
+                            f"of {scan_result.get('index_uid_count', 0)} indexed UIDs "
+                            f"(dhis2_writes={scan_result.get('dhis2_writes', 0)})."
+                        )
+                        audit.append(
+                            action=audit_actions.DHIS2_UID_INDEX_FIND_MISSING,
+                            target=env,
+                            detail=flash_notice,
+                            ok=bool(scan_result.get("ok")),
+                            metadata={
+                                "per_type": scan_result.get("per_type"),
+                                "truncated": scan_result.get("truncated"),
+                                "dhis2_writes": 0,
+                            },
+                        )
+                elif action == "preview_selected":
+                    if not scan_result:
+                        flash_error = "Scan DHIS2 first."
+                    else:
+                        selected_uids = set(request.form.getlist("uid"))
+                        selected = [
+                            row
+                            for row in (scan_result.get("missing") or [])
+                            if row.get("uid") in selected_uids
+                        ]
+                        if not selected:
+                            flash_error = "Select at least one missing UID."
+                        else:
+                            incoming = selected_rows_to_records(
+                                selected,
+                                environment=str(scan_result.get("environment") or ""),
+                            )
+                            preview = enrich_controlled_preview(
+                                merge_preview(store.records(), incoming),
+                                existing=store.records(),
+                                incoming=incoming,
+                                store=store,
+                            )
+                            preview["selected_count"] = len(incoming)
+                            app.config["DHIS2_MISSING_PREVIEW"] = preview
+                            flash_notice = (
+                                f"Preview ready for {len(incoming)} DHIS2-imported UID(s). "
+                                "Review, then type the confirmation phrase."
+                            )
+                elif action == "add_to_index":
+                    if not preview:
+                        flash_error = "Preview selected UIDs before adding."
+                    else:
+                        result = apply_with_confirmation(
+                            store,
+                            preview,
+                            request.form.get("confirmation") or "",
+                            confirm_phrase=CONFIRM_ADD_MISSING,
+                        )
+                        if not result.get("ok"):
+                            flash_error = result.get("error") or "Add to index failed."
+                        else:
+                            app.config["DHIS2_MISSING_PREVIEW"] = None
+                            app.config["DHIS2_MISSING_SCAN"] = None
+                            preview = None
+                            scan_result = None
+                            flash_notice = (
+                                "Added selected UIDs to the local index. "
+                                "Next: Refresh UID Details. Export DHIS2→CSV updates when ready."
+                            )
+                            audit.append(
+                                action=audit_actions.DHIS2_UID_INDEX_ADD_MISSING,
+                                target="local-index",
+                                detail=flash_notice,
+                                ok=True,
+                                metadata={
+                                    "change_counts": result.get("change_counts"),
+                                    "dhis2_writes": 0,
+                                },
+                            )
+                else:
+                    flash_error = f"Unknown action: {action}"
+            except Exception as exc:  # noqa: BLE001
+                flash_error = str(exc)
+                audit.append(
+                    action=audit_actions.DHIS2_UID_INDEX_FIND_MISSING,
+                    target="find-missing",
+                    detail=str(exc),
+                    ok=False,
+                )
+
+        filters = {
+            "object_type": (request.args.get("object_type") or "").strip(),
+            "program_uid": (request.args.get("program_uid") or "").strip(),
+            "program_stage_uid": (request.args.get("program_stage_uid") or "").strip(),
+            "dataset_uid": (request.args.get("dataset_uid") or "").strip(),
+            "environment": (request.args.get("environment") or "").strip(),
+            "q": (request.args.get("q") or "").strip(),
+        }
+        filtered_missing = []
+        pagination = None
+        page_rows: list = []
+        filtered_uids: list[str] = []
+        visible_uids: list[str] = []
+        if scan_result:
+            filtered_missing = filter_missing_rows(
+                list(scan_result.get("missing") or []),
+                object_type=filters["object_type"],
+                program_uid=filters["program_uid"],
+                program_stage_uid=filters["program_stage_uid"],
+                dataset_uid=filters["dataset_uid"],
+                environment=filters["environment"],
+                q=filters["q"],
+            )
+            try:
+                page = int(request.args.get("page") or 1)
+            except ValueError:
+                page = 1
+            try:
+                per_page = int(request.args.get("per_page") or 50)
+            except ValueError:
+                per_page = 50
+            pagination = paginate_rows(filtered_missing, page=page, per_page=per_page)
+            page_rows = list(pagination.get("rows") or [])
+            filtered_uids = list(pagination.get("uids") or [])
+            visible_uids = [str(r.get("uid") or "") for r in page_rows if r.get("uid")]
+
+        type_options = scannable_type_options()
+        type_labels = {t["id"]: t["label"] for t in type_options}
+
+        return render_template(
+            "dhis2_uid_find_missing.html",
+            flash_error=flash_error,
+            flash_notice=flash_notice,
+            scan_result=scan_result,
+            filtered_missing=filtered_missing,
+            page_rows=page_rows,
+            pagination=pagination,
+            filtered_uids=filtered_uids,
+            visible_uids=visible_uids,
+            filters=filters,
+            preview=preview,
+            confirm_phrase=confirm_phrase_for_add_missing(),
+            type_options=type_options,
+            type_labels=type_labels,
+            client_ready=bool(client.public_config().get("configured")),
+            selected_instance=selected_instance,
+            config=client.public_config(),
         )
 
     @app.get("/dhis2/metadata/<resource_type>/<uid>")
@@ -3397,25 +3709,61 @@ def _builder_form_from_request(type_spec) -> dict:
 def _repos_from_health(registry, health_results: list[dict]) -> list[dict]:
     """Build dashboard repository rows from live adapter health (not demo fixtures)."""
     by_id = {item.get("repository_id"): item for item in health_results}
-    rows: list[dict] = []
-    repos = registry.repositories if registry else []
-    for repo in repos:
-        health = by_id.get(repo.id) or {}
-        status = ui_repo_status(repo, health)
-        path_or_url = repo.git_url or repo.local_path or repo.base_url or "—"
-        rows.append(
-            {
-                "repo_id": repo.id,
-                "name": repo.name,
-                "subtitle": repo.description or repo.type,
-                "type": repo.type,
-                "status": status,
-                "branch_path": path_or_url,
-                "last_check": (health.get("checked_at") or "")[:19].replace("T", " ") or "—",
-                "icon": "API" if repo.type == "api" else "CLI",
-            }
+    # Prefer process-aware grouped rows when Flask app context is available.
+    try:
+        from flask import current_app, has_app_context, url_for as flask_url_for
+
+        active: set[str] = set()
+        url_fn = None
+        if has_app_context():
+            workspace = current_app.config.get("REPO_WORKSPACE")
+            if workspace is not None:
+                try:
+                    active = {
+                        str(r.repo_id)
+                        for r in workspace.processes.list_runs()
+                        if getattr(r, "status", None) in ACTIVE_RUN_STATUSES
+                    }
+                except Exception:  # noqa: BLE001
+                    active = set()
+            url_fn = flask_url_for
+        rows = build_grouped_rows(
+            registry, by_id, active_run_repo_ids=active, url_for=url_fn
         )
-    return rows
+        for row in rows:
+            # Dashboard expects last_check on each row
+            member_ids = row.get("member_ids") or [row.get("repo_id")]
+            checks = [
+                (by_id.get(mid) or {}).get("checked_at")
+                for mid in member_ids
+                if (by_id.get(mid) or {}).get("checked_at")
+            ]
+            row["last_check"] = (
+                max(checks)[:19].replace("T", " ") if checks else "—"
+            )
+        return rows
+    except Exception:  # noqa: BLE001
+        # Fallback flat rows
+        rows: list[dict] = []
+        repos = registry.repositories if registry else []
+        for repo in repos:
+            health = by_id.get(repo.id) or {}
+            status = ui_repo_status(repo, health)
+            path_or_url = repo.git_url or repo.local_path or repo.base_url or "—"
+            rows.append(
+                {
+                    "repo_id": repo.id,
+                    "name": repo.name,
+                    "subtitle": repo.description or repo.type,
+                    "type": repo.type,
+                    "status": status,
+                    "branch_path": path_or_url,
+                    "last_check": (health.get("checked_at") or "")[:19].replace("T", " ")
+                    or "—",
+                    "icon": "API" if repo.type == "api" else "CLI",
+                }
+            )
+        return rows
 
 
 def _repo_to_dict(repo) -> dict:
@@ -3430,6 +3778,7 @@ def _repo_to_dict(repo) -> dict:
         "base_url": repo.base_url,
         "git_url": repo.git_url,
         "tags": repo.tags,
+        "repository_group_id": getattr(repo, "repository_group_id", None),
         "capabilities": [
             {
                 "id": cap.id,

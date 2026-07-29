@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-07-25 (DHIS2 Standard Report Manager Phase 1 + Report Workspace).
+Last verified: 2026-07-27 (Repository grouping + Run Profile Builder + Repository Processes).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -20,8 +20,9 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Area | State |
 |---|---|
 | Registry + health | `config/repositories.yaml`, `${VAR:-default}` expansion, `hub/adapters/` |
+| Registry grouping | Optional `repository_group_id` merges adapters into one UI row (`hub/registry/grouping.py`); Workspace / Application / API statuses independent |
 | Registry management | Add / Edit / Enable / Disable via UI → YAML (`hub/registry/store.py`); no auto-clone |
-| Repository Workspace | Phases 1–2 + Connect Local Workspace: Overview / Files / Changes / Run / Logs / Settings; local path via scan→preview→confirm (`/repositories/<id>/connect`) or manual edit; safe text edit + Git inspect + approved run profiles (`hub/repository_workspace/`, `config/run_profiles.yaml`) |
+| Repository Workspace | Phases 1–2 + Connect + Run Profile Builder + Active Application status card: Overview / Files / Changes / Run / Logs / Settings; process vs HTTP health reconciled (`hub/repository_workspace/run_status.py`); YAML templates + SQLite repo profiles |
 | DHIS2 Reports | `/dhis2/reports` — Phase 1 Standard Report Manager: sync Stage/Live `/api/reports` metadata cache, filters, View / Open in DHIS2 / HTML source / Download / Refresh; period+OU controls; iframe embed with Open-in-DHIS2 fallback. Catalog shortcuts remain for repository/static HTML (`hub/dhis2_reports/`) |
 | Health probes | Parallel checks; states: Healthy / Unreachable / Not Cloned / Disabled |
 | Live Processing | `live-processing` (API GET-only) + `live-processing-local` (path + git_url) |
@@ -53,8 +54,8 @@ or the OpenAI Responses API with read-only function tools when enabled.
 
 | id | Role |
 |---|---|
-| `live-processing` | API — GET health/history/preview |
-| `live-processing-local` | Local checkout of same GitHub repo (`LIVE_PROCESSING_PATH`) |
+| `live-processing` | API — GET health/history/preview · group `pmnp-live-processing` |
+| `live-processing-local` | Local checkout of same GitHub repo (`LIVE_PROCESSING_PATH`) · same group |
 | `data-script` | Git URL `PMNP-IS/Data-Script` — Not Cloned until path set |
 | `report-template` | Git URL `PMNP-IS/REPORT_TEMPLATE` — Not Cloned until path set |
 
@@ -78,7 +79,8 @@ Demo `sample-*` entries removed from the active registry; job tests use
 | `/api/notebook/notepad*` | Quick Notepad GET/PUT/clear/convert/restore (`?scope=`) |
 
 Store: `data/notebook.db` (`hub/notebook/`) migrations include `pinned`, `quick_notepad`,
-`scope` (`personal`\|`work`) + `hub_prefs`, and separate Quick Notepads (`personal` / `work`).
+`scope` (`personal`\|`work`) + `hub_prefs`, separate Quick Notepads (`personal` / `work`),
+and `panel_size` (`normal`\|`expanded`\|`maximized`) for the shared floating drawer.
 Existing notes migrate to **work**. Existing Quick Notepad content migrates to the
 **personal** pad; work starts empty. Convert → note uses the same scope as the pad.
 Work Dashboard queue shows work-scoped notes only. Agent prompting is separate
@@ -114,11 +116,25 @@ Does not consume Email or Calendar content; does not execute SQL or shell.
 
 ## Repository Workspace runs
 
-Approved profiles live in `config/run_profiles.yaml` (`REPO_WS_RUN_PROFILES`).
+YAML templates live in `config/run_profiles.yaml` (`REPO_WS_RUN_PROFILES`).
+Repository-specific profiles (Settings → Run Profiles) are stored in SQLite
+(`REPO_WS_PROFILE_DATABASE` / `data/repository_workspace.db`) and override templates
+by profile id without rewriting YAML. Connect suggestions are saved untrusted/
+disabled until approved in the builder.
+
 Executable + argv arrays only; placeholders `{port}`, `{repository_path}`, `{environment}`.
-UI: `/repositories/<id>/run` and `/repositories/<id>/logs`. State/logs under
-`data/repository_runs/`. Live profiles require `REPO_WS_ALLOW_LIVE_RUNS` + confirm.
-No unrestricted terminal; stop/restart only hub-tracked process groups.
+Port modes: `none` | `fixed` | `argument` | `environment_variable`. Fixed ports block
+startup when occupied (never auto-kill). Env values stay server-side (UI shows names).
+**Repository Processes** (Run tab): detects hub-tracked and related local PIDs (cwd /
+command path / entry point / profile port — never name-only). Stop Gracefully / Force
+Stop only a verified PID tree; Medium external requires typed `STOP PROCESS <PID>`;
+Low is view-only. Start blocks on conflicts / occupied fixed ports and points users
+to Repository Processes (no silent fixed-port switching). Health → Local Process
+Monitor is a read-only cross-repo summary.
+UI: `/repositories/<id>/settings#run-profiles`, `/run`, `/logs`. State/logs under
+`data/repository_runs/`. Live / write-capable live profiles require
+`REPO_WS_ALLOW_LIVE_RUNS` + confirm. No unrestricted terminal; stop/restart only
+hub-tracked process groups.
 
 ## Email Center (Gmail readonly)
 

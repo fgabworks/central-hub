@@ -425,11 +425,16 @@ class ServiceScopeTests(unittest.TestCase):
                 }
             )
             with mock.patch(
-                "hub.repository_workspace.service.load_run_profiles",
+                "hub.repository_workspace.run_profiles.load_run_profiles",
                 return_value=[profile],
             ), mock.patch(
                 "hub.repository_workspace.service.profiles_for_repository",
-                side_effect=lambda rid, profiles=None: [
+                side_effect=lambda rid, profiles=None, **kwargs: [
+                    p for p in [profile] if p.applies_to(rid)
+                ],
+            ), mock.patch(
+                "hub.repository_workspace.service.merged_profiles_for_repository",
+                side_effect=lambda rid, **kwargs: [
                     p for p in [profile] if p.applies_to(rid)
                 ],
             ):

@@ -1,36 +1,50 @@
 {# Shared Quick Notepad panel — same SQLite scratchpad on Dashboard + Notebook. #}
-<aside class="qn-panel card" id="qn-panel" aria-label="Quick Notepad">
+<aside class="qn-panel card" id="qn-panel" aria-label="Quick Notepad"
+       data-qn-size="{{ notepad.panel_size|default('normal') }}">
   {% if show_resize|default(true) %}
   <div class="qn-resize" id="qn-resize" role="separator" aria-orientation="vertical" aria-label="Resize Quick Notepad" tabindex="0"></div>
   {% endif %}
-  <header class="qn-header">
-    <div class="qn-header-main">
-      <h2>Quick Notepad</h2>
-      <span class="qn-status" id="qn-status" data-state="saved">Saved</span>
+  <div class="qn-chrome" id="qn-chrome">
+    <header class="qn-header">
+      <div class="qn-header-main">
+        <h2>Quick Notepad</h2>
+        <span class="qn-status" id="qn-status" data-state="saved">Saved</span>
+      </div>
+      <div class="qn-window-controls" role="toolbar" aria-label="Quick Notepad window size">
+        <button type="button" class="btn btn-sm qn-win-btn" id="qn-expand"
+                title="Expand notepad" aria-label="Expand Quick Notepad" aria-pressed="false">Expand</button>
+        <button type="button" class="btn btn-sm qn-win-btn" id="qn-maximize"
+                title="Maximize notepad" aria-label="Maximize Quick Notepad" aria-pressed="false">Maximize</button>
+        <button type="button" class="btn btn-sm qn-win-btn" id="qn-minimize" hidden
+                title="Minimize to normal size" aria-label="Minimize Quick Notepad">Minimize</button>
+        <button type="button" class="btn btn-sm qn-win-btn" id="qn-close"
+                title="Close notepad" aria-label="Close Quick Notepad">Close</button>
+      </div>
+    </header>
+    <p class="qn-hint muted">Local scratchpad — separate from structured notes. Autosaves continuously; <strong>Save</strong> stores a revision snapshot (last 3 kept). Never sent to agents. In Markdown, use <strong>Preview</strong> to view rendered text.</p>
+    <div class="qn-toolbar">
+      <label class="qn-format">
+        <span class="muted">Format</span>
+        <select id="qn-format" aria-label="Notepad format">
+          <option value="plain"{% if notepad.content_format != 'markdown' %} selected{% endif %}>Plain text</option>
+          <option value="markdown"{% if notepad.content_format == 'markdown' %} selected{% endif %}>Markdown</option>
+        </select>
+      </label>
+      <div class="qn-actions">
+        <button type="button" class="btn btn-sm btn-primary" id="qn-save"
+                title="Save a revision snapshot" aria-label="Save notepad revision">Save</button>
+        <button type="button" class="btn btn-sm" id="qn-copy" title="Copy all text" aria-label="Copy notepad content">Copy</button>
+        <button type="button" class="btn btn-sm" id="qn-clear" title="Clear notepad" aria-label="Clear notepad">Clear</button>
+        <button type="button" class="btn btn-sm" id="qn-convert" title="Convert to structured note" aria-label="Convert to Note">Convert to Note</button>
+      </div>
     </div>
-    <button type="button" class="btn btn-sm qn-collapse" id="qn-collapse" title="Collapse" aria-label="Collapse Quick Notepad">⟨</button>
-  </header>
-  <p class="qn-hint muted">Local scratchpad — separate from structured notes. Autosaves here only. Never sent to agents. In Markdown, use <strong>Preview</strong> to view rendered text.</p>
-  <div class="qn-toolbar">
-    <label class="qn-format">
-      <span class="muted">Format</span>
-      <select id="qn-format" aria-label="Notepad format">
-        <option value="plain"{% if notepad.content_format != 'markdown' %} selected{% endif %}>Plain text</option>
-        <option value="markdown"{% if notepad.content_format == 'markdown' %} selected{% endif %}>Markdown</option>
-      </select>
-    </label>
-    <div class="qn-actions">
-      <button type="button" class="btn btn-sm" id="qn-copy" title="Copy all text" aria-label="Copy notepad content">Copy</button>
-      <button type="button" class="btn btn-sm" id="qn-clear" title="Clear notepad" aria-label="Clear notepad">Clear</button>
-      <button type="button" class="btn btn-sm btn-primary" id="qn-convert" title="Convert to structured note" aria-label="Convert to Note">Convert to Note</button>
-    </div>
-  </div>
-  <div class="qn-md-bar" id="qn-md-bar" hidden>
-    <div class="qn-md-mode" role="group" aria-label="Markdown view mode">
-      <button type="button" class="btn btn-sm qn-md-btn is-active" id="qn-mode-edit"
-              title="Edit Markdown" aria-pressed="true" aria-label="Edit">Edit</button>
-      <button type="button" class="btn btn-sm qn-md-btn" id="qn-mode-preview"
-              title="Preview rendered Markdown" aria-pressed="false" aria-label="Preview">Preview</button>
+    <div class="qn-md-bar" id="qn-md-bar" hidden>
+      <div class="qn-md-mode" role="group" aria-label="Markdown view mode">
+        <button type="button" class="btn btn-sm qn-md-btn is-active" id="qn-mode-edit"
+                title="Edit Markdown" aria-pressed="true" aria-label="Edit">Edit</button>
+        <button type="button" class="btn btn-sm qn-md-btn" id="qn-mode-preview"
+                title="Preview rendered Markdown" aria-pressed="false" aria-label="Preview">Preview</button>
+      </div>
     </div>
   </div>
   <div class="qn-editor-wrap" id="qn-editor-wrap">

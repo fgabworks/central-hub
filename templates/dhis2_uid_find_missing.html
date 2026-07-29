@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+{% block title %}Find Missing UIDs · DHIS2 · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <p class="muted-2" style="margin:0 0 0.35rem"><a href="{{ url_for('dhis2') }}">DHIS2</a> / Find Missing UIDs</p>
+    <h1>Find Missing UIDs</h1>
+    <p>Scan DHIS2 metadata collections and list objects absent from the local UID index. Add selected rows locally — never writes to DHIS2. Reload from Source CSV remains a separate action on <a href="{{ url_for('dhis2_uid_index_manage') }}">UID Index</a>.</p>
+  </div>
+  <div class="page-meta">
+    <span class="badge badge-env">READ-ONLY GET · LOCAL INDEX WRITE</span>
+    <a class="btn btn-sm" href="{{ url_for('dhis2_uid_index_manage') }}">UID Index</a>
+    <a class="btn btn-sm" href="{{ url_for('dhis2_enrichment') }}">Refresh UID Details</a>
+  </div>
+</section>
+
+{% if flash_error %}<div class="banner banner-error">{{ flash_error }}</div>{% endif %}
+{% if flash_notice %}<div class="banner" style="background:rgba(59,130,246,0.12);border-color:rgba(59,130,246,0.35);color:#93c5fd">{{ flash_notice }}</div>{% endif %}
+
+<nav class="fm-steps" aria-label="Find Missing UIDs workflow">
+  <div class="fm-step{% if not scan_result %} is-current{% elif not preview %} is-done{% else %} is-done{% endif %}">
+    <span class="fm-step__num">1</span>
+    <span class="fm-step__label">Scan DHIS2</span>
+  </div>
+  <div class="fm-step{% if scan_result and not preview %} is-current{% elif preview %} is-done{% endif %}">
+    <span class="fm-step__num">2</span>
+    <span class="fm-step__label">Filter Results</span>
+  </div>
+  <div class="fm-step{% if scan_result and not preview %} is-current{% elif preview %} is-done{% endif %}">
+    <span class="fm-step__num">3</span>
+    <span class="fm-step__label">Select UIDs</span>
+  </div>
+  <div class="fm-step{% if preview %} is-current{% endif %}">
+    <span class="fm-step__num">4</span>
+    <span class="fm-step__label">Add to Local Index</span>
+  </div>
+</nav>
+
+<section class="fm-layout" id="find-missing-root"
+  data-scan-id="{{ scan_result.scan_id if scan_result and scan_result.scan_id else 'none' }}"
+  data-filtered-uids='{{ filtered_uids|tojson }}'
+  data-visible-uids='{{ visible_uids|tojson }}'
+  data-selected-size="0">
+
+  <div class="fm-main stack">
+    <section class="panel fm-scan-panel">
+      <div class="panel-header"><h2>1. Scan DHIS2</h2></div>
+      <div class="panel-body">
+        <form method="post" class="fm-scan-toolbar">
+          <input type="hidden" name="action" value="scan_dhis2">
+          <label class="fm-field">
+            <span>Environment</span>
+            <select name="environment">
+              <option value="{{ selected_instance or 'live' }}" selected>{{ (selected_instance or 'live')|capitalize }}</option>
+              <option value="stage">Stage</option>
+              <option value="live">Live</option>
+            </select>
+          </label>
+          <label class="fm-field fm-field--types">
+            <span>Metadata types (optional)</span>
+            <select name="object_types" multiple size="3" aria-label="Limit metadata types">
+              {% for t in type_options %}
+                <option value="{{ t.id }}">{{ t.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <div class="fm-scan-actions">
+            <button class="btn btn-primary btn-sm" type="submit" {% if not client_ready %}disabled{% endif %}>Scan DHIS2</button>
+          </div>
+        </form>
+        {% if not client_ready %}
+          <p class="muted" style="margin:0.5rem 0 0">Connect a Stage/Live instance first.</p>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="panel fm-results-panel">
+      <div class="panel-header">
+        <h2>2–3. Filter &amp; Select</h2>
+        {% if scan_result %}
+          <span class="muted">Missing {{ pagination.total if pagination else filtered_missing|length }} / {{ scan_result.missing_count }}
+            · Index {{ scan_result.index_uid_count }}
+            {% if scan_result.truncated %}<span class="badge badge-warning">truncated pages</span>{% endif %}
+          </span>
+        {% endif %}
+      </div>
+      <div class="panel-body fm-results-body">
+        {% if scan_result %}
+          <form method="get" class="fm-filter-toolbar">
+            <label class="fm-field">
+              <span>Type</span>
+              <select name="object_type">
+                <option value="">All</option>
+                {% for t in type_options %}
+                  <option value="{{ t.id }}" {% if filters.object_type == t.id %}selected{% endif %}>{{ t.label }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label class="fm-field"><span>Program UID</span><input type="text" name="program_uid" value="{{ filters.program_uid }}"></label>
+            <label class="fm-field"><span>Program stage UID</span><input type="text" name="program_stage_uid" value="{{ filters.program_stage_uid }}"></label>
+            <label class="fm-field"><span>Dataset UID</span><input type="text" name="dataset_uid" value="{{ filters.dataset_uid }}"></label>
+            <label class="fm-field"><span>Environment</span><input type="text" name="environment" value="{{ filters.environment }}"></label>
+            <label class="fm-field"><span>Search</span><input type="text" name="q" value="{{ filters.q }}" placeholder="uid / name / code"></label>
+            <div class="fm-scan-actions">
+              <button class="btn btn-sm" type="submit">Apply filters</button>
+            </div>
+          </form>
+
+          <div class="fm-select-tools" role="group" aria-label="Selection tools">
+            <button type="button" class="btn btn-sm" data-action="select-visible">Select visible</button>
+            <button type="button" class="btn btn-sm" data-action="select-filtered">Select all filtered</button>
+            <button type="button" class="btn btn-sm" data-action="clear-selection">Clear selection</button>
+          </div>
+
+          <div class="fm-bulk-bar" role="status" aria-live="polite">
+            <span>Selected: <strong data-selected-count>0</strong></span>
+            <span class="fm-bulk-bar__sep" aria-hidden="true">|</span>
+            <button type="submit" form="fm-preview-form" class="btn btn-primary btn-sm" data-action="preview-selected" disabled>Add to Local Index</button>
+            <button type="button" class="btn btn-sm" data-action="clear-selection">Clear</button>
+          </div>
+
+          <form method="post" id="fm-preview-form" data-preview-form>
+            <input type="hidden" name="action" value="preview_selected">
+            <div class="fm-table-scroll">
+              <table class="data fm-results-table">
+                <thead>
+                  <tr>
+                    <th class="fm-col-check">
+                      <input type="checkbox" data-select-all-visible aria-label="Select all visible rows">
+                    </th>
+                    <th>UID</th>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Value type</th>
+                    <th>Program</th>
+                    <th>Code</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in page_rows %}
+                  <tr>
+                    <td class="fm-col-check">
+                      <input type="checkbox" data-uid-check value="{{ row.uid }}" aria-label="Select {{ row.uid }}">
+                    </td>
+                    <td class="mono">{{ row.uid }}</td>
+                    <td>{{ row.name }}</td>
+                    <td>{{ type_labels.get(row.object_type, row.object_type) }}</td>
+                    <td>{{ row.value_type or '—' }}</td>
+                    <td class="mono">{{ row.program_uid or '—' }}</td>
+                    <td class="mono">{{ row.code or '—' }}</td>
+                  </tr>
+                  {% else %}
+                  <tr><td colspan="7" class="muted">No missing objects for the current filters. Run Scan DHIS2 first.</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </form>
+
+          {% if pagination and pagination.total_pages > 1 %}
+          <nav class="fm-pagination" aria-label="Results pages">
+            {% set qs = filters %}
+            {% if pagination.page > 1 %}
+              <a class="btn btn-sm" href="{{ url_for('dhis2_uid_find_missing', page=pagination.page - 1, per_page=pagination.per_page, **qs) }}">Previous</a>
+            {% endif %}
+            <span class="muted">Page {{ pagination.page }} / {{ pagination.total_pages }} · {{ pagination.total }} filtered</span>
+            {% if pagination.page < pagination.total_pages %}
+              <a class="btn btn-sm" href="{{ url_for('dhis2_uid_find_missing', page=pagination.page + 1, per_page=pagination.per_page, **qs) }}">Next</a>
+            {% endif %}
+          </nav>
+          {% elif scan_result %}
+            <p class="muted fm-page-meta">Showing {{ page_rows|length }} of {{ pagination.total if pagination else 0 }} filtered results.</p>
+          {% endif %}
+          <p class="muted">Selection is kept when you filter or change pages. Add to Local Index opens a preview — typed confirmation is still required.</p>
+        {% else %}
+          <p class="muted">Run Scan DHIS2 to populate missing objects.</p>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="panel" id="fm-add-step">
+      <div class="panel-header"><h2>4. Add to Local Index</h2></div>
+      <div class="panel-body">
+        {% if preview %}
+          {% set cc = preview.change_counts or preview.counts or {} %}
+          <p>Preview for {{ preview.selected_count or 0 }} UID(s) — New: {{ cc.NEW_UID or cc.added or 0 }} · Changed: {{ cc.CHANGED_NAME or 0 }} · Conflicts: {{ cc.CONFLICTING or cc.conflicting or 0 }}</p>
+          <form method="post" class="fm-confirm-form">
+            <input type="hidden" name="action" value="add_to_index">
+            <label class="fm-field">
+              <span>Type <code>{{ confirm_phrase }}</code> to confirm</span>
+              <input type="text" name="confirmation" autocomplete="off" required>
+            </label>
+            <button class="btn btn-primary" type="submit">Confirm Add to Local Index</button>
+          </form>
+          <p class="muted">Creates a versioned backup. DHIS2-imported rows are flagged as not yet synchronized to the canonical CSV.</p>
+          <p style="margin-top:0.75rem"><a class="btn" href="{{ url_for('dhis2_enrichment') }}">Refresh UID Details</a></p>
+        {% else %}
+          <p class="muted">Select UIDs, then use <strong>Add to Local Index</strong> on the bulk bar to preview. Typed confirmation is required before the local index updates.</p>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+
+  <aside class="fm-side stack">
+    <details class="panel fm-summary-card" {% if scan_result %}open{% endif %}>
+      <summary class="panel-header fm-summary-toggle">
+        <h2>Scan Summary</h2>
+      </summary>
+      <div class="panel-body">
+        {% if scan_result and scan_result.per_type %}
+          <div class="table-wrap">
+            <table class="data">
+              <thead><tr><th>Type</th><th>Scanned</th><th>Missing</th></tr></thead>
+              <tbody>
+                {% for ot, stats in scan_result.per_type.items() %}
+                <tr>
+                  <td>{{ type_labels.get(ot, ot) }}</td>
+                  <td>{{ stats.scanned }}</td>
+                  <td>{{ stats.missing }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <p class="muted">Environment: {{ scan_result.environment or '—' }} · dhis2_writes={{ scan_result.dhis2_writes }}</p>
+        {% else %}
+          <p class="muted">No scan yet.</p>
+        {% endif %}
+        {% if scan_result and scan_result.errors %}
+          <div class="banner banner-error">
+            {% for err in scan_result.errors %}<div>{{ err }}</div>{% endfor %}
+          </div>
+        {% endif %}
+      </div>
+    </details>
+
+    <section class="panel">
+      <div class="panel-header"><h2>Safeguards</h2></div>
+      <div class="panel-body muted">
+        <ul>
+          <li>GET-only DHIS2 access; no create/update/delete/import.</li>
+          <li>Local index updates require preview + typed confirmation and create backups.</li>
+          <li>Source CSV reload is separate on UID Index.</li>
+          <li>DHIS2 Import rows exportable for canonical CSV sync.</li>
+        </ul>
+      </div>
+    </section>
+  </aside>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dhis2_find_missing.js') }}?v=fm-1"></script>
+{% endblock %}

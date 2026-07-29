@@ -94,6 +94,7 @@ def _parse_repository(item: Any, index: int) -> Repository:
         health_check=_parse_health_check(item.get("health_check"), f"repositories[{index}]"),
         capabilities=capabilities,
         tags=[str(tag) for tag in (item.get("tags") or [])],
+        repository_group_id=_optional_str(item.get("repository_group_id")),
     )
 
 

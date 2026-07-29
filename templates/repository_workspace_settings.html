@@ -19,7 +19,6 @@
 <section class="panel panel-body" style="margin-top:0.85rem">
   <h2 style="margin:0 0 0.75rem;font-size:14px">Repository settings</h2>
   <p class="muted">Workspace browse/edit requires a configured local checkout path. The hub never clones automatically.</p>
-  <p class="muted">Run profiles are defined centrally in <code>config/run_profiles.yaml</code> (executable + argument arrays only — no unrestricted terminal). Live profiles also need <code>REPO_WS_ALLOW_LIVE_RUNS</code>.</p>
   {% if not workspace.available %}
     {% include "partials/repository_connect_cta.html" %}
   {% endif %}
@@ -43,4 +42,175 @@
     {% endif %}
   </div>
 </section>
+
+{% if workspace.available %}
+<section class="panel" style="margin-top:0.85rem" id="run-profiles"
+         data-repo-id="{{ repository.id }}"
+         data-list-url="{{ url_for('api_repo_ws_managed_profiles', repo_id=repository.id) }}"
+         data-save-url="{{ url_for('api_repo_ws_managed_profiles_save', repo_id=repository.id) }}"
+         data-test-url="{{ url_for('api_repo_ws_managed_profiles_test', repo_id=repository.id) }}"
+         data-dup-base="{{ url_for('api_repo_ws_managed_profiles_duplicate', repo_id=repository.id, profile_id='__ID__') }}"
+         data-enable-base="{{ url_for('api_repo_ws_managed_profiles_enable', repo_id=repository.id, profile_id='__ID__') }}"
+         data-delete-base="{{ url_for('api_repo_ws_managed_profiles_delete', repo_id=repository.id, profile_id='__ID__') }}"
+         data-live-allowed="{{ '1' if managed_profiles.live_runs_allowed else '0' }}">
+  <div class="panel-header">
+    <h2>Run Profiles</h2>
+    <span class="muted">Repository-specific profiles override YAML templates by id. Secret values are never stored here.</span>
+  </div>
+  <div class="panel-body">
+    <p class="muted">Built-in templates remain in <code>config/run_profiles.yaml</code>. UI-created profiles are stored in the hub database and stay scoped to this repository.</p>
+    {% if not managed_profiles.live_runs_allowed %}
+      <p class="muted">Live / write-capable live profiles need <code>REPO_WS_ALLOW_LIVE_RUNS=true</code> plus confirmation at start.</p>
+    {% endif %}
+
+    <div class="btn-row" style="margin-bottom:0.85rem">
+      <button type="button" class="btn btn-primary" id="rpb-add">Add Run Profile</button>
+      <button type="button" class="btn" id="rpb-refresh">Refresh</button>
+      <a class="btn" href="{{ url_for('repository_run', repo_id=repository.id) }}">Open Run</a>
+    </div>
+    <div class="muted" id="rpb-status" style="margin-bottom:0.75rem"></div>
+
+    <h3 class="nav-label">Current Approved Profiles</h3>
+    <div class="table-wrap" style="margin-bottom:1rem">
+      <table class="data" id="rpb-approved-table">
+        <thead>
+          <tr>
+            <th>Name</th><th>ID</th><th>Env</th><th>Port</th><th>Enabled</th><th>Source</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in managed_profiles.approved %}
+          <tr data-profile-id="{{ p.id }}">
+            <td>{{ p.name }}</td>
+            <td class="mono">{{ p.id }}</td>
+            <td>{{ p.environments|join(', ') }}</td>
+            <td class="mono">{{ p.port_mode }}{% if p.fixed_port or p.default_port %} · {{ p.fixed_port or p.default_port }}{% endif %}</td>
+            <td>{{ 'yes' if p.enabled else 'no' }}</td>
+            <td>{{ p.source }}</td>
+            <td class="btn-row">
+              <button type="button" class="btn btn-sm rpb-edit" data-id="{{ p.id }}">Edit</button>
+              <button type="button" class="btn btn-sm rpb-dup" data-id="{{ p.id }}">Duplicate</button>
+              <button type="button" class="btn btn-sm rpb-toggle" data-id="{{ p.id }}" data-enabled="{{ '0' if p.enabled else '1' }}">{{ 'Disable' if p.enabled else 'Enable' }}</button>
+              <button type="button" class="btn btn-sm rpb-del" data-id="{{ p.id }}">Delete</button>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" class="muted empty-compact">No repository-specific approved profiles yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="nav-label">Built-in Templates</h3>
+    <div class="table-wrap" style="margin-bottom:1rem">
+      <table class="data" id="rpb-templates-table">
+        <thead>
+          <tr><th>Name</th><th>ID</th><th>Env</th><th>Port</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for p in managed_profiles.templates %}
+          <tr>
+            <td>{{ p.name }}</td>
+            <td class="mono">{{ p.id }}</td>
+            <td>{{ p.environments|join(', ') }}</td>
+            <td class="mono">{{ p.port_mode }}</td>
+            <td class="btn-row">
+              <button type="button" class="btn btn-sm rpb-edit" data-id="{{ p.id }}">Customize</button>
+              <button type="button" class="btn btn-sm rpb-dup" data-id="{{ p.id }}">Duplicate</button>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="muted empty-compact">No YAML templates apply to this repository.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="nav-label">Newly Detected Suggestions</h3>
+    <p class="muted">Untrusted until reviewed and saved. Rescans never overwrite approved profiles.</p>
+    <div class="table-wrap" style="margin-bottom:1rem">
+      <table class="data" id="rpb-suggestions-table">
+        <thead>
+          <tr><th>Name</th><th>ID</th><th>Port</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for p in managed_profiles.suggestions %}
+          <tr>
+            <td>{{ p.name }} <span class="badge badge-warning">untrusted</span></td>
+            <td class="mono">{{ p.id }}</td>
+            <td class="mono">{{ p.port_mode }}</td>
+            <td class="btn-row">
+              <button type="button" class="btn btn-sm rpb-edit" data-id="{{ p.id }}">Review &amp; approve</button>
+              <button type="button" class="btn btn-sm rpb-del" data-id="{{ p.id }}">Discard</button>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="muted empty-compact">No pending suggestions. Connect a local workspace to detect starters.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="rpb-editor panel panel-body" id="rpb-editor" hidden>
+      <h3 style="margin-top:0;font-size:14px" id="rpb-editor-title">Add Run Profile</h3>
+      <div class="rpb-grid">
+        <label>Profile ID <input id="rpb-id" class="mono" autocomplete="off"></label>
+        <label>Profile name <input id="rpb-name" autocomplete="off"></label>
+        <label>Enabled <select id="rpb-enabled"><option value="1">yes</option><option value="0">no</option></select></label>
+        <label>Environment
+          <select id="rpb-environment">
+            <option value="development">development</option>
+            <option value="stage">stage</option>
+            <option value="live">live</option>
+            <option value="custom">custom</option>
+          </select>
+        </label>
+        <label>Also allow environments (comma-separated)
+          <input id="rpb-environments" placeholder="development,stage" autocomplete="off">
+        </label>
+        <label>Executable <input id="rpb-exe" class="mono" placeholder="python" autocomplete="off"></label>
+        <label class="rpb-span2">Arguments (one per line)
+          <textarea id="rpb-args" rows="4" class="mono" placeholder="-m&#10;http.server&#10;{port}"></textarea>
+        </label>
+        <label>Working directory <input id="rpb-cwd" class="mono" value="{repository_path}" autocomplete="off"></label>
+        <label>Startup timeout (s) <input id="rpb-timeout" type="number" min="1" max="600" value="30"></label>
+        <label>Port mode
+          <select id="rpb-port-mode">
+            <option value="none">none</option>
+            <option value="fixed">fixed</option>
+            <option value="argument">argument</option>
+            <option value="environment_variable">environment_variable</option>
+          </select>
+        </label>
+        <label id="rpb-fixed-wrap">Fixed port <input id="rpb-fixed-port" type="number" min="1" max="65535"></label>
+        <label id="rpb-default-wrap">Default port <input id="rpb-default-port" type="number" min="1" max="65535" value="8000"></label>
+        <label id="rpb-port-arg-wrap">Port argument pattern <input id="rpb-port-arg" class="mono" placeholder="--port {port}" autocomplete="off"></label>
+        <label id="rpb-port-env-wrap">Port env var name <input id="rpb-port-env" class="mono" placeholder="PORT" autocomplete="off"></label>
+        <label>Local URL template <input id="rpb-local-url" class="mono" value="http://127.0.0.1:{port}/" autocomplete="off"></label>
+        <label>Health URL (optional) <input id="rpb-health-url" class="mono" placeholder="http://127.0.0.1:{port}/health" autocomplete="off"></label>
+        <label>Env var names (comma-separated, values from server env)
+          <input id="rpb-env-names" class="mono" placeholder="FLASK_APP,FLASK_ENV" autocomplete="off">
+        </label>
+        <label class="rpb-check"><input type="checkbox" id="rpb-provides-api"> Provides API</label>
+        <label class="rpb-check"><input type="checkbox" id="rpb-live"> Live profile</label>
+        <label class="rpb-check"><input type="checkbox" id="rpb-write"> Write-capable profile</label>
+        <label class="rpb-check" id="rpb-live-confirm-wrap" hidden>
+          <input type="checkbox" id="rpb-confirm-live"> I confirm configuring a Live profile
+        </label>
+      </div>
+      <div class="rw-preview-box" style="margin-top:0.85rem">
+        <div class="nav-label">Command preview (redacted)</div>
+        <pre class="mono" id="rpb-preview">Save or Test to preview.</pre>
+      </div>
+      <div class="btn-row" style="margin-top:0.85rem">
+        <button type="button" class="btn" id="rpb-test">Test Configuration</button>
+        <button type="button" class="btn btn-primary" id="rpb-save">Save &amp; Approve</button>
+        <button type="button" class="btn" id="rpb-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+</section>
+<script type="application/json" id="rpb-bootstrap">{{ managed_profiles|tojson }}</script>
+<script src="{{ url_for('static', filename='js/repository_profiles.js') }}"></script>
+{% endif %}
 {% endblock %}

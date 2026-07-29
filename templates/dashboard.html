@@ -11,8 +11,10 @@
      style="--qn-width: {{ notepad.panel_width }}px"
      data-qn-open="{{ '1' if notepad.panel_open else '0' }}"
      data-qn-width="{{ notepad.panel_width }}"
+     data-qn-size="{{ notepad.panel_size|default('normal') }}"
      data-qn-scope="{{ note_scope|default('personal') }}"
      data-qn-save-url="{{ url_for('api_notebook_notepad_put', scope=note_scope|default('personal')) }}"
+     data-qn-snapshot-url="{{ url_for('api_notebook_notepad_snapshot', scope=note_scope|default('personal')) }}"
      data-qn-clear-url="{{ url_for('api_notebook_notepad_clear', scope=note_scope|default('personal')) }}"
      data-qn-convert-url="{{ url_for('api_notebook_notepad_convert', scope=note_scope|default('personal')) }}"
      data-qn-restore-url="{{ url_for('api_notebook_notepad_restore', scope=note_scope|default('personal')) }}"{% endif %}>
@@ -135,11 +137,49 @@
                   <div class="cell-title">
                     <span class="cell-ico" aria-hidden="true">{{ row.icon }}</span>
                     <span>{{ row.name }}</span>
+                    {% if row.is_group %}<span class="badge">group</span>{% endif %}
                   </div>
                   <div class="cell-sub">{{ row.subtitle }}</div>
+                  {% if row.repository_group_id %}
+                    <div class="cell-sub mono">group: {{ row.repository_group_id }}</div>
+                  {% endif %}
                 </td>
                 <td>{{ type_badge(row.type) }}</td>
-                <td>{{ status_badge(row.status) }}</td>
+                <td>
+                  {% if row.workspace_status or row.application_status or row.api_status %}
+                    <div class="status-facets">
+                      {% if row.workspace_status %}
+                        <div><span class="muted">WS</span>
+                          {% if row.workspace_status == 'Ready' %}
+                            <span class="badge badge-healthy">Ready</span>
+                          {% else %}
+                            <span class="badge badge-warning">{{ row.workspace_status }}</span>
+                          {% endif %}
+                        </div>
+                      {% endif %}
+                      {% if row.application_status %}
+                        <div><span class="muted">App</span>
+                          {% if row.application_status == 'Running' %}
+                            <span class="badge badge-healthy">Running</span>
+                          {% else %}
+                            <span class="badge">{{ row.application_status }}</span>
+                          {% endif %}
+                        </div>
+                      {% endif %}
+                      {% if row.api_status %}
+                        <div><span class="muted">API</span>
+                          {% if row.api_status == 'Online' %}
+                            <span class="badge badge-healthy">Online</span>
+                          {% else %}
+                            <span class="badge badge-warning">{{ row.api_status }}</span>
+                          {% endif %}
+                        </div>
+                      {% endif %}
+                    </div>
+                  {% else %}
+                    {{ status_badge(row.status) }}
+                  {% endif %}
+                </td>
                 <td class="mono muted">{{ row.branch_path }}</td>
                 <td class="muted-2">{{ row.last_check }}</td>
                 <td>
@@ -234,7 +274,7 @@
 <span id="quick-notepad" class="sr-only" aria-hidden="true"></span>
 {% include "partials/quick_notepad_panel.html" %}
 </div>
-<script src="{{ url_for('static', filename='js/quick_notepad.js') }}?v=qn-md-8"></script>
+<script src="{{ url_for('static', filename='js/quick_notepad.js') }}?v=qn-save-1"></script>
 {% else %}
 </div>
 {% endif %}

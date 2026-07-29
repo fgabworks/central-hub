@@ -84,4 +84,47 @@
     </table>
   </div>
 </section>
+
+<section class="panel">
+  <div class="panel-header">
+    <h2>Local Process Monitor</h2>
+    <a class="quiet" href="{{ url_for('api_health_local_processes') }}">JSON</a>
+  </div>
+  <p class="muted" style="padding:0 1.1rem">Read-only summary across connected repositories. Stopping is done per repository under Run → Repository Processes.</p>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Repository</th>
+          <th>PID</th>
+          <th>Executable</th>
+          <th>Port</th>
+          <th>Managed</th>
+          <th>Confidence</th>
+          <th>Reason</th>
+          <th>Command</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in local_processes %}
+          <tr>
+            <td>
+              <div class="cell-title">{{ p.repository_name or p.repo_id }}</div>
+              <div class="cell-sub"><code>{{ p.repo_id }}</code></div>
+            </td>
+            <td class="mono">{{ p.pid }}</td>
+            <td class="mono">{{ p.executable }}</td>
+            <td class="mono">{{ p.port or '—' }}</td>
+            <td>{{ 'Yes' if p.managed_by_hub else 'No' }}</td>
+            <td>{{ p.confidence }}</td>
+            <td class="muted">{{ (p.detection_reasons or [])|join(', ') }}</td>
+            <td class="muted mono" style="max-width:22rem;word-break:break-word">{{ p.command_redacted }}</td>
+          </tr>
+        {% else %}
+          <tr class="empty-row"><td colspan="8">No repository-related processes detected.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
 {% endblock %}

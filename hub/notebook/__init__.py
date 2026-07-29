@@ -25,7 +25,9 @@ from hub.notebook.notepad import (
     MAX_WIDTH,
     MIN_WIDTH,
     NOTEPAD_IDS,
+    PANEL_SIZES as NOTEPAD_PANEL_SIZES,
     QuickNotepadStore,
+    normalize_panel_size,
 )
 from hub.notebook.store import NotebookStore
 
@@ -35,6 +37,7 @@ __all__ = [
     "NOTE_TYPE_LABELS",
     "NOTE_TYPES",
     "NOTEPAD_FORMATS",
+    "NOTEPAD_PANEL_SIZES",
     "PRIORITIES",
     "PRIORITY_LABELS",
     "REPO_ROLE_LABELS",
@@ -52,6 +55,7 @@ __all__ = [
     "NotebookStore",
     "QuickNotepadStore",
     "default_notebook_db_path",
+    "normalize_panel_size",
     "normalize_scope",
     "normalize_workspace",
     "render_markdown",

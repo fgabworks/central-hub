@@ -23,9 +23,21 @@ INDEX_FIELDS: tuple[str, ...] = (
     "program_stage_uid",
     "option_set_uid",
     "category_combo_uid",
+    "source_origin",
+    "csv_synced",
     "last_synced",
     "checksum",
 )
+
+SOURCE_CSV = "csv"
+SOURCE_DHIS2_IMPORT = "dhis2_import"
+SOURCE_MANUAL = "manual"
+
+SOURCE_LABELS: dict[str, str] = {
+    SOURCE_CSV: "Source CSV",
+    SOURCE_DHIS2_IMPORT: "DHIS2 Import",
+    SOURCE_MANUAL: "Manual",
+}
 
 
 def _now_iso() -> str:
@@ -48,8 +60,16 @@ def checksum_for(payload: dict[str, Any]) -> str:
         "program_stage_uid",
         "option_set_uid",
         "category_combo_uid",
+        "source_origin",
+        "csv_synced",
     ]
-    material = {k: (payload.get(k) or "") for k in keys}
+    material = {}
+    for k in keys:
+        value = payload.get(k)
+        if isinstance(value, bool):
+            material[k] = value
+        else:
+            material[k] = value or ""
     blob = json.dumps(material, sort_keys=True, ensure_ascii=True)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
 
@@ -69,6 +89,8 @@ class NormalizedUidRecord:
     program_stage_uid: str = ""
     option_set_uid: str = ""
     category_combo_uid: str = ""
+    source_origin: str = SOURCE_CSV
+    csv_synced: bool = True
     last_synced: str = ""
     checksum: str = ""
     # Non-indexed extras kept for raw JSON view / import round-trip
@@ -78,14 +100,26 @@ class NormalizedUidRecord:
         data = asdict(self)
         if not data.get("last_synced"):
             data["last_synced"] = _now_iso()
+        data["csv_synced"] = bool(data.get("csv_synced", True))
+        data["source_origin"] = str(data.get("source_origin") or SOURCE_CSV)
         if not data.get("checksum"):
             data["checksum"] = checksum_for(data)
         return data
 
     @classmethod
     def from_mapping(cls, raw: dict[str, Any]) -> "NormalizedUidRecord":
-        known = {k: (raw.get(k) or "") for k in INDEX_FIELDS if k != "checksum" and k != "last_synced"}
+        skip = {"checksum", "last_synced", "csv_synced", "extras"}
+        known = {
+            k: (raw.get(k) or "")
+            for k in INDEX_FIELDS
+            if k not in skip
+        }
         known["uid"] = str(raw.get("uid") or "").strip()
+        origin = str(raw.get("source_origin") or "").strip() or SOURCE_CSV
+        if "csv_synced" in raw:
+            csv_synced = bool(raw.get("csv_synced"))
+        else:
+            csv_synced = origin == SOURCE_CSV
         extras = {
             k: v
             for k, v in raw.items()
@@ -107,6 +141,8 @@ class NormalizedUidRecord:
             program_stage_uid=str(known.get("program_stage_uid") or ""),
             option_set_uid=str(known.get("option_set_uid") or ""),
             category_combo_uid=str(known.get("category_combo_uid") or ""),
+            source_origin=origin,
+            csv_synced=csv_synced,
             last_synced=str(raw.get("last_synced") or _now_iso()),
             checksum="",
             extras=extras,

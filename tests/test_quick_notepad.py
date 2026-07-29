@@ -63,6 +63,25 @@ class QuickNotepadStoreTests(unittest.TestCase):
         # Scratchpad content preserved after convert
         self.assertIn("Draft title", self.pad.get()["content"])
 
+    def test_manual_save_creates_revision_snapshot(self) -> None:
+        empty = self.pad.snapshot(content="   ")
+        self.assertIsNone(empty)
+        saved = self.pad.snapshot(content="Manual checkpoint", content_format="plain")
+        assert saved is not None
+        self.assertEqual(saved["content"], "Manual checkpoint")
+        self.assertGreaterEqual(len(saved["revisions"]), 1)
+        self.assertEqual(saved["revisions"][0]["reason"], "save")
+        self.assertEqual(saved["revisions"][0]["content"], "Manual checkpoint")
+        # Cap still applies (MAX_REVISIONS=3)
+        self.pad.snapshot(content="v2")
+        self.pad.snapshot(content="v3")
+        self.pad.snapshot(content="v4")
+        pad = self.pad.get()
+        self.assertLessEqual(len(pad["revisions"]), 3)
+        self.assertEqual(pad["revisions"][0]["content"], "v4")
+        reasons = {r["reason"] for r in pad["revisions"]}
+        self.assertIn("save", reasons)
+
     def test_restore_and_revision_cap(self) -> None:
         self.pad.save(content="keep-me")
         for i in range(MAX_REVISIONS + 5):
@@ -83,6 +102,9 @@ class QuickNotepadStoreTests(unittest.TestCase):
         narrow = self.pad.save(panel_width=10, panel_open=True)
         self.assertEqual(narrow["panel_width"], 240)
         self.assertTrue(narrow["panel_open"])
+        sized = self.pad.save(panel_size="maximized")
+        self.assertEqual(sized["panel_size"], "maximized")
+        self.assertEqual(self.pad.save(panel_size="weird")["panel_size"], "normal")
 
     def test_markdown_formatting_preserved_in_autosave_revision_convert(self) -> None:
         body = "Keep **bold** and ~~strike~~ markers"
@@ -150,6 +172,13 @@ class QuickNotepadRouteTests(unittest.TestCase):
         self.assertIn('id="qn-mode-edit"', html)
         self.assertIn('id="qn-mode-preview"', html)
         self.assertIn('id="qn-preview"', html)
+        self.assertIn('id="qn-expand"', html)
+        self.assertIn('id="qn-maximize"', html)
+        self.assertIn('id="qn-minimize"', html)
+        self.assertIn('id="qn-close"', html)
+        self.assertIn('id="qn-chrome"', html)
+        self.assertIn('id="qn-save"', html)
+        self.assertIn("data-qn-snapshot-url=", html)
         # No agent / structured fields on the scratchpad
         self.assertNotIn('id="qn-repo"', html)
         self.assertNotIn('id="qn-priority"', html)
@@ -162,6 +191,15 @@ class QuickNotepadRouteTests(unittest.TestCase):
         self.assertIn(".qn-panel", css)
         self.assertIn(".qn-md-bar", css)
         self.assertIn(".qn-preview", css)
+        # Floating drawer must be opaque so page tables do not bleed through.
+        self.assertRegex(
+            css,
+            r"\.qn-panel\s*\{[^}]*background:\s*var\(--panel\)",
+        )
+        self.assertRegex(
+            css,
+            r"\.qn-global-host\s+\.qn-panel\s*\{[^}]*background:\s*var\(--panel\)",
+        )
         self.assertIn("max-width: 980px", css)
         self.assertIn(".qn-backdrop", css)
         self.assertIn(".dash-workspace", css)
@@ -188,6 +226,11 @@ class QuickNotepadRouteTests(unittest.TestCase):
         self.assertNotIn("applyWrap", js)
         self.assertNotIn("qn-bold", js)
         self.assertIn("setViewMode", js)
+        self.assertIn("setSizeMode", js)
+        self.assertIn("minimizeSize", js)
+        self.assertIn("resolveEscapeAction", js)
+        self.assertIn("urls.snapshot", js)
+        self.assertIn('getElementById("qn-save")', js)
         self.assertIn("/api/notebook/preview", js)
         self.assertIn("overflow", css)  # long-content scrolling on .qn-body
 
@@ -348,6 +391,32 @@ class QuickNotepadRouteTests(unittest.TestCase):
         )
         self.assertEqual(restored.status_code, 200)
         self.assertEqual(restored.get_json()["notepad"]["content"], "API scratch line")
+
+    def test_api_snapshot_saves_revision(self) -> None:
+        empty = self.client.post(
+            "/api/notebook/notepad/snapshot",
+            data=json.dumps({"scope": "personal", "content": ""}),
+            content_type="application/json",
+        )
+        self.assertEqual(empty.status_code, 400)
+
+        snap = self.client.post(
+            "/api/notebook/notepad/snapshot",
+            data=json.dumps(
+                {
+                    "scope": "personal",
+                    "content": "Checkpoint body",
+                    "content_format": "markdown",
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(snap.status_code, 200)
+        data = snap.get_json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["notepad"]["content"], "Checkpoint body")
+        self.assertEqual(data["notepad"]["revisions"][0]["reason"], "save")
+        self.assertEqual(data["notepad"]["revisions"][0]["content"], "Checkpoint body")
 
     def test_markdown_preview_api_and_plain_unchanged(self) -> None:
         preview = self.client.post(

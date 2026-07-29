@@ -171,6 +171,17 @@ _MIGRATIONS: list[tuple[str, str]] = [
             ON quick_notepad_revisions(notepad_id, created_at DESC);
         """,
     ),
+    (
+        "006_notepad_panel_size",
+        """
+        ALTER TABLE quick_notepad ADD COLUMN panel_size TEXT NOT NULL DEFAULT 'normal';
+        UPDATE quick_notepad
+           SET panel_size = 'normal'
+         WHERE panel_size IS NULL
+            OR TRIM(panel_size) = ''
+            OR lower(panel_size) NOT IN ('normal', 'expanded', 'maximized');
+        """,
+    ),
 ]
 
 

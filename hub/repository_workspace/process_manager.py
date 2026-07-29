@@ -143,7 +143,7 @@ class ProcessManager:
         raw = json.loads(path.read_text(encoding="utf-8"))
         return ManagedRun(**raw)
 
-    def list_runs(self, *, repo_id: str | None = None) -> list[ManagedRun]:
+    def list_runs(self, *, repo_id: str | None = None, refresh: bool = False) -> list[ManagedRun]:
         runs: list[ManagedRun] = []
         for path in sorted(self.state_dir.glob("*.json")):
             try:
@@ -154,6 +154,14 @@ class ProcessManager:
             if repo_id and run.repo_id != repo_id:
                 continue
             runs.append(run)
+        if refresh:
+            with self._lock:
+                refreshed: list[ManagedRun] = []
+                for run in runs:
+                    if run.status not in TERMINAL_STATUSES:
+                        self._refresh_status(run)
+                    refreshed.append(run)
+                runs = refreshed
         return runs
 
     def get(self, run_id: str) -> ManagedRun | None:
@@ -328,25 +336,34 @@ class ProcessManager:
         launch: PreparedLaunch,
     ) -> ManagedRun:
         with self._lock:
+            launch_port = 0 if launch.port is None else int(launch.port)
             # Duplicate protection: same repo/profile/port while active
             for existing in self.list_runs(repo_id=repo_id):
                 if existing.status not in ACTIVE_STATUSES:
                     continue
+                existing_port = int(existing.port or 0)
                 if (
                     existing.profile_id == launch.profile_id
-                    and int(existing.port) == int(launch.port)
+                    and existing_port == launch_port
                 ):
                     raise RunProfileError(
                         "A run with this repository/profile/port is already active.",
                         code="duplicate_run",
                     )
-            if not port_available(launch.port):
-                alt = self.find_port(launch.port)
-                raise RunProfileError(
-                    f"Port {launch.port} is occupied."
-                    + (f" Suggested alternate: {alt}." if alt else ""),
-                    code="port_occupied",
-                )
+            if launch.port is not None:
+                if not port_available(int(launch.port)):
+                    # Never kill the occupant; optionally suggest an alternate for dynamic modes.
+                    alt = None
+                    if getattr(launch, "port_mode", "argument") in {
+                        "argument",
+                        "environment_variable",
+                    }:
+                        alt = self.find_port(int(launch.port))
+                    raise RunProfileError(
+                        f"Port {launch.port} is occupied."
+                        + (f" Suggested alternate: {alt}." if alt else ""),
+                        code="port_occupied",
+                    )
 
             found = shutil.which(launch.executable)
             if found:
@@ -400,7 +417,7 @@ class ProcessManager:
                 repo_id=repo_id,
                 profile_id=launch.profile_id,
                 environment=launch.environment,
-                port=launch.port,
+                port=launch_port,
                 status="starting",
                 pid=proc.pid,
                 pgid=proc.pid,
@@ -416,7 +433,11 @@ class ProcessManager:
             self._procs[run_id] = proc
             self._save(run)
             self._start_log_readers(run_id, proc)
-            self.logs.append(run_id, f"Started pid={proc.pid} port={launch.port}", stream="stdout")
+            self.logs.append(
+                run_id,
+                f"Started pid={proc.pid} port={launch.port if launch.port is not None else 'none'}",
+                stream="stdout",
+            )
             self._audit(
                 audit_actions.REPO_WS_RUN_START,
                 repo_id,

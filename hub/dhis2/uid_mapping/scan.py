@@ -10,7 +10,12 @@ from typing import Any
 import yaml
 
 from hub.dhis2.uid_mapping.audit_profile import enrich_record_mapping_fields
-from hub.dhis2.uid_mapping.models import NormalizedUidRecord
+from hub.dhis2.uid_mapping.models import (
+    SOURCE_CSV,
+    SOURCE_DHIS2_IMPORT,
+    SOURCE_MANUAL,
+    NormalizedUidRecord,
+)
 from hub.settings import ROOT_DIR
 
 _DEFAULT_CONFIG = ROOT_DIR / "config" / "uid_mapping_sources.yaml"
@@ -74,6 +79,13 @@ def normalize_row(
     if not uid:
         return None
     env = _pick(row, "source_environment", column_map) or str(source.get("environment") or "")
+    origin = str(source.get("source_origin") or row.get("source_origin") or SOURCE_CSV).strip()
+    if origin not in {SOURCE_CSV, SOURCE_DHIS2_IMPORT, SOURCE_MANUAL}:
+        origin = SOURCE_CSV
+    if "csv_synced" in row:
+        csv_synced = str(row.get("csv_synced")).strip().lower() in {"1", "true", "yes"}
+    else:
+        csv_synced = origin == SOURCE_CSV
     record = NormalizedUidRecord.from_mapping(
         {
             "uid": uid,
@@ -89,6 +101,8 @@ def normalize_row(
             "program_stage_uid": _pick(row, "program_stage_uid", column_map),
             "option_set_uid": _pick(row, "option_set_uid", column_map),
             "category_combo_uid": _pick(row, "category_combo_uid", column_map),
+            "source_origin": origin,
+            "csv_synced": csv_synced,
             "extras": {
                 k: v
                 for k, v in row.items()
@@ -101,6 +115,8 @@ def normalize_row(
                     "id",
                     "name",
                     "code",
+                    "source_origin",
+                    "csv_synced",
                 }
                 and v not in (None, "")
             },

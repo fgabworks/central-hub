@@ -102,12 +102,14 @@
           <a class="tool-btn" href="{{ url_for('dhis2_authorities') }}"><span class="ico">☰</span><span>Permissions / Authorities</span></a>
           <a class="tool-btn" href="{{ url_for('dhis2_lookup') }}"><span class="ico">⌕</span><span>Metadata Lookup</span></a>
           <a class="tool-btn" href="{{ url_for('dhis2_uid_explorer') }}"><span class="ico">⇄</span><span>UID &amp; Mapping Explorer</span></a>
-          <a class="tool-btn" href="{{ url_for('dhis2_uid_index_manage') }}"><span class="ico">⧉</span><span>UID Index Management</span></a>
+          <a class="tool-btn" href="{{ url_for('dhis2_uid_index_manage') }}"><span class="ico">⧉</span><span>UID Index</span></a>
+          <a class="tool-btn" href="{{ url_for('dhis2_uid_find_missing') }}"><span class="ico">⌀</span><span>Find Missing UIDs</span></a>
+          <a class="tool-btn" href="{{ url_for('dhis2_enrichment') }}"><span class="ico">⊕</span><span>Refresh UID Details</span></a>
           <a class="tool-btn" href="{{ url_for('dhis2_metadata_builder') }}"><span class="ico">✎</span><span>Metadata Builder (preview)</span></a>
           {% if discovery_ready %}
-            <a class="tool-btn" href="{{ url_for('dhis2_discover') }}"><span class="ico">↻</span><span>Run Discovery</span></a>
+            <a class="tool-btn" href="{{ url_for('dhis2_discover') }}"><span class="ico">↻</span><span>Scan DHIS2</span></a>
           {% else %}
-            <span class="tool-btn is-disabled" title="Select and connect a DHIS2 instance first"><span class="ico">↻</span><span>Run Discovery</span></span>
+            <span class="tool-btn is-disabled" title="Select and connect a DHIS2 instance first"><span class="ico">↻</span><span>Scan DHIS2</span></span>
           {% endif %}
         </div>
         <div class="warning-banner" style="margin-top:1rem">

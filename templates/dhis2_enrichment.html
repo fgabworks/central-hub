@@ -1,16 +1,17 @@
 {% extends "base.html" %}
-{% block title %}Metadata Enrichment · DHIS2 · {{ app_name }}{% endblock %}
+{% block title %}Refresh UID Details · DHIS2 · {{ app_name }}{% endblock %}
 {% block content %}
 <section class="page-header">
   <div>
-    <p class="muted-2" style="margin:0 0 0.35rem"><a href="{{ url_for('dhis2') }}">DHIS2</a> / Enrichment</p>
-    <h1>DHIS2 Metadata Enrichment</h1>
+    <p class="muted-2" style="margin:0 0 0.35rem"><a href="{{ url_for('dhis2') }}">DHIS2</a> / Refresh UID Details</p>
+    <h1>Refresh UID Details</h1>
     <p>Fetch read-only configuration + relationships for repository UIDs. Saves a local versioned snapshot only — never writes to DHIS2 or Live Processing.</p>
   </div>
   <div class="page-meta">
     <span class="badge badge-env">READ-ONLY GET</span>
     <a class="btn btn-sm" href="{{ url_for('dhis2_uid_explorer') }}">Open explorer</a>
-    <a class="btn btn-sm" href="{{ url_for('dhis2_uid_index_manage') }}">UID Index Management</a>
+    <a class="btn btn-sm" href="{{ url_for('dhis2_uid_index_manage') }}">UID Index</a>
+    <a class="btn btn-sm" href="{{ url_for('dhis2_uid_find_missing') }}">Find Missing UIDs</a>
   </div>
 </section>
 
@@ -44,7 +45,7 @@
                   <input type="text" name="environment" value="default" {% if not config.configured %}disabled{% endif %}>
                 </label>
                 <div style="display:flex;align-items:end">
-                  <button class="btn btn-primary" type="submit" {% if not config.configured %}disabled{% endif %}>Fetch metadata (dry preview)</button>
+                  <button class="btn btn-primary" type="submit" {% if not config.configured %}disabled{% endif %}>Refresh UID Details (dry preview)</button>
                 </div>
               </form>
               {% if run %}
@@ -164,7 +165,7 @@
       <div class="panel-body">
         <div class="warning-banner">
           <span class="shield">🛡</span>
-          <div>Repository UID Index Management is unchanged. Enrichment uses that index as the UID list and DHIS2 GET as the configuration source.</div>
+          <div>UID Index is unchanged as the UID list source. Refresh UID Details uses that index and DHIS2 GET as the configuration source.</div>
         </div>
       </div>
     </section>

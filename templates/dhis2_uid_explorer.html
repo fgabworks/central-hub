@@ -21,7 +21,7 @@
 
 {% if total == 0 %}
 <section class="panel panel-body">
-  <p class="muted">No UID index yet. <a href="{{ url_for('dhis2_uid_index_manage') }}">Scan configured sources</a> or import a JSON/CSV index.</p>
+  <p class="muted">No UID index yet. <a href="{{ url_for('dhis2_uid_index_manage') }}">Reload from Source CSV</a> or <a href="{{ url_for('dhis2_uid_find_missing') }}">Find Missing UIDs</a>.</p>
 </section>
 {% else %}
 <section class="summary-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:1rem">
@@ -173,6 +173,7 @@
           <th>Answer</th>
           <th>Program / stage</th>
           <th>Flags</th>
+          <th>Source</th>
           <th></th>
         </tr>
       </thead>
@@ -193,10 +194,20 @@
               <span class="badge badge-warning">{{ flag }}</span>
             {% endfor %}
           </td>
+          <td>
+            {% if row.source_badge %}
+              <span class="badge">{{ row.source_badge.label }}</span>
+              {% if row.source_badge.needs_csv_export %}
+                <span class="badge badge-warning">CSV pending</span>
+              {% endif %}
+            {% else %}
+              —
+            {% endif %}
+          </td>
           <td><a href="{{ url_for('dhis2_uid_detail', uid=row.uid) }}">Open</a></td>
         </tr>
         {% else %}
-        <tr><td colspan="8" class="muted">No matches for the current filters.</td></tr>
+        <tr><td colspan="9" class="muted">No matches for the current filters.</td></tr>
         {% endfor %}
       </tbody>
     </table>

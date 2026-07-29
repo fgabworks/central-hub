@@ -3,96 +3,104 @@
 # Demo/sample repos live in tests/fixtures/ — not in the active registry.
 
 repositories:
-  # GET-only hub jobs. Domain writes stay in Live Processing.
-  # Set LIVE_PROCESSING_BASE_URL in .env (see .env.example).
-  - id: live-processing
-    name: PMNP Live Processing (API)
-    type: api
-    enabled: true
-    description: "PMNP Live Processing API. Hub exposes GET health/history/preview only — no apply/write proxies."
-    git_url: "https://github.com/PMNP-IS/pmnp-live-processing.git"
-    base_url: "${LIVE_PROCESSING_BASE_URL:-http://127.0.0.1:5050}"
-    tags: ["pmnp", "api", "connected"]
-    health_check:
-      type: http
-      method: GET
-      path: "/api/healthz"
-      timeout_seconds: 1.5
-    capabilities:
-      - id: healthz
-        label: Healthz (GET)
-        adapter_type: api
-        input_types: []
-        dry_run_default: true
-        http_method: GET
-        http_path: "/api/healthz"
-        timeout_seconds: 10
-      - id: bulk_apply_history
-        label: Bulk apply history (GET)
-        adapter_type: api
-        input_types: []
-        dry_run_default: true
-        http_method: GET
-        http_path: "/api/bulk-apply-history"
-        timeout_seconds: 15
-      - id: bulk_preview
-        label: Bulk preview dry-run (GET)
-        adapter_type: api
-        input_types: []
-        dry_run_default: true
-        http_method: GET
-        http_path: "/api/bulk-preview"
-        timeout_seconds: 60
-
-  # Local checkout for the same GitHub repo (path presence only — no domain commands).
-  - id: live-processing-local
-    name: PMNP Live Processing
-    type: command
-    enabled: true
-    description: "Local checkout of PMNP Live Processing. Reuses LIVE_PROCESSING_PATH when present. No auto-clone."
-    git_url: "https://github.com/PMNP-IS/pmnp-live-processing.git"
-    local_path: "${LIVE_PROCESSING_PATH:-C:/PMNP/pmnp-live-processing}"
-    working_directory: "${LIVE_PROCESSING_PATH:-C:/PMNP/pmnp-live-processing}"
-    tags: ["pmnp", "command", "connected"]
-    health_check:
-      type: path
-      local_path: "${LIVE_PROCESSING_PATH:-C:/PMNP/pmnp-live-processing}"
-      executable: "python"
-      timeout_seconds: 3
-    capabilities: []
-
-  - id: data-script
-    name: Data-Script
-    type: command
-    enabled: true
-    description: "PMNP Data-Script repository. Optional local path — hub does not auto-clone."
-    git_url: "https://github.com/PMNP-IS/Data-Script"
-    local_path: "${DATA_SCRIPT_PATH:-}"
-    working_directory: "${DATA_SCRIPT_PATH:-}"
-    tags: ["pmnp", "command", "connected"]
-    health_check:
-      type: path
-      local_path: "${DATA_SCRIPT_PATH:-}"
-      executable: "python"
-      timeout_seconds: 3
-    capabilities: []
-
-  - id: report-template
-    name: Report Template
-    type: command
-    enabled: true
-    description: "PMNP REPORT_TEMPLATE repository. Optional local path — hub does not auto-clone."
-    git_url: "https://github.com/PMNP-IS/REPORT_TEMPLATE.git"
-    local_path: "${REPORT_TEMPLATE_PATH:-}"
-    working_directory: "${REPORT_TEMPLATE_PATH:-}"
-    tags: ["pmnp", "command", "connected"]
-    health_check:
-      type: path
-      local_path: "${REPORT_TEMPLATE_PATH:-}"
-      executable: "python"
-      timeout_seconds: 3
-    capabilities: []
-
+- id: live-processing
+  name: PMNP Live Processing (API)
+  type: api
+  enabled: true
+  description: PMNP Live Processing API. Hub exposes GET health/history/preview only — no apply/write
+    proxies.
+  git_url: https://github.com/PMNP-IS/pmnp-live-processing.git
+  base_url: ${LIVE_PROCESSING_BASE_URL:-http://127.0.0.1:5050}
+  repository_group_id: pmnp-live-processing
+  tags:
+  - pmnp
+  - api
+  - connected
+  health_check:
+    type: http
+    method: GET
+    path: /api/healthz
+    timeout_seconds: 2
+  capabilities:
+  - id: healthz
+    label: Healthz (GET)
+    adapter_type: api
+    input_types: []
+    dry_run_default: true
+    http_method: GET
+    http_path: /api/healthz
+    timeout_seconds: 10
+  - id: bulk_apply_history
+    label: Bulk apply history (GET)
+    adapter_type: api
+    input_types: []
+    dry_run_default: true
+    http_method: GET
+    http_path: /api/bulk-apply-history
+    timeout_seconds: 15
+  - id: bulk_preview
+    label: Bulk preview dry-run (GET)
+    adapter_type: api
+    input_types: []
+    dry_run_default: true
+    http_method: GET
+    http_path: /api/bulk-preview
+    timeout_seconds: 60
+- id: live-processing-local
+  name: PMNP Live Processing
+  type: command
+  enabled: true
+  description: Local checkout of PMNP Live Processing. Reuses LIVE_PROCESSING_PATH when present. No auto-clone.
+  git_url: https://github.com/PMNP-IS/pmnp-live-processing.git
+  local_path: ${LIVE_PROCESSING_PATH:-C:/PMNP/pmnp-live-processing}
+  working_directory: ${LIVE_PROCESSING_PATH:-C:/PMNP/pmnp-live-processing}
+  repository_group_id: pmnp-live-processing
+  tags:
+  - pmnp
+  - command
+  - connected
+  health_check:
+    type: path
+    local_path: ${LIVE_PROCESSING_PATH:-C:/PMNP/pmnp-live-processing}
+    executable: python
+    timeout_seconds: 3
+  capabilities: []
+- id: data-script
+  name: Data-Script
+  type: command
+  enabled: true
+  description: PMNP Data-Script repository. Optional local path — hub does not auto-clone.
+  git_url: https://github.com/PMNP-IS/Data-Script
+  local_path: ${DATA_SCRIPT_PATH:-}
+  working_directory: ${DATA_SCRIPT_PATH:-}
+  tags:
+  - pmnp
+  - command
+  - connected
+  health_check:
+    type: path
+    local_path: ${DATA_SCRIPT_PATH:-}
+    executable: python
+    timeout_seconds: 3
+  capabilities: []
+- id: report-template
+  name: Report Template
+  type: command
+  enabled: true
+  description: PMNP REPORT_TEMPLATE repository. Optional local path — hub does not auto-clone.
+  git_url: https://github.com/PMNP-IS/REPORT_TEMPLATE.git
+  local_path: ${REPORT_TEMPLATE_PATH:-}
+  working_directory: ${REPORT_TEMPLATE_PATH:-}
+  tags:
+  - pmnp
+  - command
+  - connected
+  health_check:
+    type: path
+    local_path: ${REPORT_TEMPLATE_PATH:-}
+    executable: python
+    timeout_seconds: 3
+  capabilities: []
 defaults:
   job_timeout_seconds: 3600
   max_concurrent_jobs: 2

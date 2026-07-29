@@ -62,9 +62,33 @@
       .replace(/"/g, "&quot;");
   }
 
+  function renderApproved(list) {
+    var box = document.getElementById("rw-connect-approved");
+    if (!box) return;
+    if (!list || !list.length) {
+      box.innerHTML = '<p class="muted">No approved repository profiles yet.</p>';
+      return;
+    }
+    box.innerHTML =
+      "<ul class='muted'>" +
+      list
+        .map(function (p) {
+          return (
+            "<li><code>" +
+            escapeHtml(p.id) +
+            "</code> — " +
+            escapeHtml(p.name) +
+            (p.enabled ? "" : " (disabled)") +
+            "</li>"
+          );
+        })
+        .join("") +
+      "</ul>";
+  }
+
   function renderProfiles(list) {
     if (!list || !list.length) {
-      profilesEl.innerHTML = '<p class="muted">No run-profile suggestions.</p>';
+      profilesEl.innerHTML = '<p class="muted">No newly detected suggestions.</p>';
       return;
     }
     profilesEl.innerHTML = list
@@ -75,10 +99,10 @@
           '">' +
           '<label class="rw-profile-select"><input type="checkbox" class="rw-profile-chk" data-idx="' +
           idx +
-          '"> Add this profile</label>' +
+          '"> Queue for Run Profile Builder</label>' +
           "<div class='muted'>" +
           escapeHtml(p.rationale || "") +
-          " · untrusted suggestion</div>" +
+          " · untrusted until reviewed in Settings → Run Profiles</div>" +
           "<label>Name<input type='text' class='rw-p-name' value='" +
           escapeHtml(p.name || "") +
           "'></label>" +
@@ -105,6 +129,9 @@
           '">' +
           '<input type="hidden" class="rw-p-portenv" value="' +
           escapeHtml(p.port_env || "") +
+          '">' +
+          '<input type="hidden" class="rw-p-portmode" value="' +
+          escapeHtml(p.port_mode || "argument") +
           '">' +
           '<input type="hidden" class="rw-p-local" value="' +
           escapeHtml(p.local_url || "") +
@@ -142,6 +169,7 @@
         environments: [document.getElementById("rw-edit-env").value || "development"],
         allowed_env_names: JSON.parse(card.querySelector(".rw-p-envnames").value || "[]"),
         port_env: card.querySelector(".rw-p-portenv").value || null,
+        port_mode: card.querySelector(".rw-p-portmode").value || "argument",
         local_url: card.querySelector(".rw-p-local").value || "http://127.0.0.1:{port}/",
         health_url: card.querySelector(".rw-p-health").value || null,
         rationale: "Reviewed during Connect Local Workspace",
@@ -179,7 +207,13 @@
         renderFacts(scan);
         editPath.value = scan.path;
         if (scan.git_remote_url && !editGit.value) editGit.value = scan.git_remote_url;
-        renderProfiles((data.editable && data.editable.profiles) || scan.suggested_profiles || []);
+        renderApproved(data.approved_profiles || []);
+        renderProfiles(
+          data.suggested_profiles ||
+            (data.editable && data.editable.profiles) ||
+            scan.suggested_profiles ||
+            []
+        );
         mismatchBox.hidden = !scan.remote_mismatch;
         replaceBox.hidden = !scan.replacing_existing_path;
         chkMismatch.checked = false;
@@ -228,8 +262,11 @@
           setStatus(data.error || "Save failed");
           return;
         }
-        setStatus("Saved. Refreshing…");
-        window.location.href = root.getAttribute("data-overview-url");
+        setStatus("Saved. Open Settings → Run Profiles to approve suggestions…");
+        window.location.href =
+          data.redirect ||
+          root.getAttribute("data-settings-url") ||
+          root.getAttribute("data-overview-url");
       })
       .catch(function (err) {
         setStatus(String(err));

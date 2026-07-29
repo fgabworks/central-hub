@@ -337,8 +337,9 @@ def apply_with_confirmation(
     confirmation: str,
     *,
     include_conflicts: bool = False,
+    confirm_phrase: str | None = None,
 ) -> dict[str, Any]:
-    expected = CONFIRM_APPLY
+    expected = confirm_phrase or CONFIRM_APPLY
     if (confirmation or "") != expected:
         return {
             "ok": False,

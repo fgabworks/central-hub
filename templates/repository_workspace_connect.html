@@ -25,7 +25,8 @@
          data-save-url="{{ url_for('api_repo_ws_connect_save', repo_id=repository.id) }}"
          data-registered-git="{{ repository.git_url or '' }}"
          data-existing-path="{{ repository.local_path or repository.working_directory or '' }}"
-         data-overview-url="{{ url_for('repository_detail', repo_id=repository.id) }}">
+         data-overview-url="{{ url_for('repository_detail', repo_id=repository.id) }}"
+         data-settings-url="{{ url_for('repository_settings', repo_id=repository.id) }}#run-profiles">
   <div class="panel-header">
     <h2>1. Local folder</h2>
     <span class="muted">Paste a full path. Browser folder pickers cannot expose absolute paths.</span>
@@ -67,8 +68,11 @@
       </label>
     </div>
 
-    <h3 style="margin:1rem 0 0.5rem;font-size:13px">Suggested run profiles (untrusted)</h3>
-    <p class="muted">Review before adding. Nothing runs during scan. Leave unchecked to skip.</p>
+    <h3 style="margin:1rem 0 0.5rem;font-size:13px">Current Approved Profiles</h3>
+    <div id="rw-connect-approved" class="rw-connect-profiles"></div>
+
+    <h3 style="margin:1rem 0 0.5rem;font-size:13px">Newly Detected Suggestions</h3>
+    <p class="muted">Untrusted until reviewed in Settings → Run Profiles. Queued suggestions stay disabled; rescans never overwrite approved profiles.</p>
     <div id="rw-connect-profiles" class="rw-connect-profiles"></div>
 
     <label class="rw-connect-confirm" id="rw-confirm-mismatch" hidden>

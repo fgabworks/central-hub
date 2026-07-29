@@ -7,7 +7,7 @@ Agent rules: [AGENTS.md](AGENTS.md). Current state: [AI_REFERENCE.md](AI_REFEREN
 > Central Hub **coordinates** connected repositories. Connected repositories
 > **execute** and remain the source of truth for their own logic.
 
-The hub owns: registry, adapters, **job engine (SQLite + worker)**, UI, health checks,
+The hub owns: registry (optional `repository_group_id` UI grouping), adapters, **job engine (SQLite + worker)**, UI, health checks,
 audit, a **read-only DHIS2 Web API client**, a **local metadata capability catalog**,
 a **local UID mapping index**, a preview-only metadata builder, a **Repository Notebook** (local SQLite notes
 linked to registry repos), a **SQL Workspace** (read-only query library/runner), an
@@ -72,14 +72,19 @@ Browser ──HTTP──> Flask app (app.py, create_app)
 - **`hub/repository_workspace/`** — Repository Workspace Phases 1–2 for configured
   **local** checkouts only. Phase 1: browse / preview / search / safe text edit /
   Git inspect (path jail; no auto-clone; no commit / push / pull / merge / reset /
-  checkout). Phase 2: approved **run profiles** (`config/run_profiles.yaml`) launch
-  apps with `shell=False` argv arrays, dedicated ports, process-group isolation,
-  hub-tracked PIDs only, redacted logs, and optional health probes. Tabs: Overview /
-  Files / Changes / Run / Logs / Settings. Connect Local Workspace
-  (`connect_scan.py` / `connect.py`) scans a user-selected folder read-only, then
-  saves path (+ optional reviewed run profiles) only after confirm. No unrestricted
-  terminal. Agents reuse workspace file search/read; agent file edits and command
-  execution stay disabled.
+  checkout). Phase 2: approved **run profiles** — YAML templates in
+  `config/run_profiles.yaml` plus repository-specific profiles in SQLite
+  (`profile_store.py` / `data/repository_workspace.db`, DB overrides by id).
+  Settings → Run Profiles builder manages CRUD/test/preview. Launch uses
+  `shell=False` argv arrays, port modes (none/fixed/argument/env), process-group
+  isolation, hub-tracked PIDs only, redacted logs, and optional health probes.
+  **Repository Processes** (`process_detect.py`) inventories related local PIDs and
+  stops only verified trees; Health → Local Process Monitor is read-only reuse.
+  Tabs: Overview / Files / Changes / Run / Logs / Settings. Connect Local Workspace
+  (`connect_scan.py` / `connect.py`) scans a user-selected folder read-only, queues
+  untrusted suggestions into the profile store (never overwrites approved), then
+  saves the path only after confirm. No unrestricted terminal. Agents reuse
+  workspace file search/read; agent file edits and command execution stay disabled.
 
 - **`hub/jobs/`** — SQLite job store, daemon worker, allowlisted command/API executors,
   upload/result helpers, optional owner token. Capabilities declared in

@@ -167,6 +167,10 @@ class ConnectSaveTests(unittest.TestCase):
             )
             profiles_path = base / "run_profiles.yaml"
             profiles_path.write_text("profiles: []\n", encoding="utf-8")
+            profile_db = base / "profiles.db"
+            from hub.repository_workspace.profile_store import RunProfileStore
+
+            profile_store = RunProfileStore(profile_db)
             store = RegistryStore(registry_path)
             repo = Repository(
                 id="demo-repo",
@@ -182,6 +186,7 @@ class ConnectSaveTests(unittest.TestCase):
                     path=str(repo_dir),
                     confirm_save=False,
                     profiles_path=profiles_path,
+                    profile_store=profile_store,
                 )
             self.assertEqual(ctx.exception.code, "confirm_required")
 
@@ -190,7 +195,7 @@ class ConnectSaveTests(unittest.TestCase):
             def audit(action, target, detail, ok=True):
                 audits.append((action, target, detail, ok))
 
-            preview = preview_connect(repo, path=str(repo_dir))
+            preview = preview_connect(repo, path=str(repo_dir), profile_store=profile_store)
             profile = preview["editable"]["profiles"][0]
             result = save_connect(
                 repo,
@@ -207,14 +212,20 @@ class ConnectSaveTests(unittest.TestCase):
                 ],
                 audit=audit,
                 profiles_path=profiles_path,
+                profile_store=profile_store,
             )
             self.assertEqual(result["local_path"], str(repo_dir.resolve()))
             raw = store.get_raw("demo-repo")
             assert raw is not None
             self.assertEqual(raw["local_path"], str(repo_dir.resolve()))
             self.assertEqual(raw["name"], "Demo Connected")
-            loaded = load_run_profiles(profiles_path)
-            self.assertTrue(any(p.id == profile["suggestion_id"] or p.id.endswith("-connected") for p in loaded))
+            # UI/connect profiles land in SQLite as untrusted suggestions (YAML untouched)
+            loaded_yaml = load_run_profiles(profiles_path)
+            self.assertEqual(loaded_yaml, [])
+            row = profile_store.get("demo-repo", profile["suggestion_id"])
+            assert row is not None
+            self.assertFalse(row["approved"])
+            self.assertFalse(row["enabled"])
             self.assertTrue(any(a[0] == "REPO_WS_CONNECT_SAVE" for a in audits))
             for _a, _t, detail, _ok in audits:
                 self.assertNotIn("SECRET=", detail)

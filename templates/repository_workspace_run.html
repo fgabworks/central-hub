@@ -29,9 +29,61 @@
          data-stop-base="{{ url_for('api_repo_ws_run_stop', repo_id=repository.id, run_id='__ID__') }}"
          data-restart-base="{{ url_for('api_repo_ws_run_restart', repo_id=repository.id, run_id='__ID__') }}"
          data-logs-page="{{ url_for('repository_logs', repo_id=repository.id) }}"
-         data-live-allowed="{{ '1' if live_runs_allowed else '0' }}">
+         data-processes-url="{{ url_for('api_repo_ws_processes', repo_id=repository.id) }}"
+         data-process-stop-url="{{ url_for('api_repo_ws_processes_stop', repo_id=repository.id) }}"
+         data-live-allowed="{{ '1' if live_runs_allowed else '0' }}"
+         data-auto-refresh="{{ '1' if dashboard and dashboard.auto_refresh else '0' }}"
+         data-status-interval-ms="{{ polling.active_status_interval_ms if polling else 4000 }}"
+         data-scan-interval-ms="{{ polling.process_scan_interval_ms if polling else 15000 }}"
+         data-scan-timeout-ms="{{ polling.process_scan_timeout_ms if polling else 10000 }}">
+
+  {# ---- 1. Active Application ---- #}
   <div class="panel-header">
-    <h2>Run application</h2>
+    <h2>Active Application</h2>
+    <span class="muted" id="rw-active-refresh-hint">Process and health are shown separately</span>
+  </div>
+  <div class="panel-body" id="rw-active-card">
+    {% set a = active_run or {} %}
+    <div class="rw-active-layout">
+      <div class="rw-active-status">
+        <span class="rw-status-badge tone-{{ a.display_tone or 'gray' }}" id="rw-active-badge">{{ a.display_status or 'Stopped' }}</span>
+        <div class="rw-facet-row" id="rw-active-facets">
+          <div><span class="muted">Process</span> <strong id="rw-facet-process">{{ a.process_state or 'stopped' }}</strong></div>
+          <div><span class="muted">Health</span> <strong id="rw-facet-health">{% if a.health_state == 'stale' %}—{% elif a.health_detail %}{{ a.health_detail }}{% else %}—{% endif %}</strong></div>
+        </div>
+      </div>
+      <dl class="rw-active-meta" id="rw-active-meta">
+        <div><dt>Profile</dt><dd id="rw-meta-profile">{{ a.profile_id or '—' }}</dd></div>
+        <div><dt>Environment</dt><dd id="rw-meta-env">{{ a.environment or '—' }}</dd></div>
+        <div><dt>PID</dt><dd class="mono" id="rw-meta-pid">{{ a.pid or '—' }}</dd></div>
+        <div><dt>Port</dt><dd class="mono" id="rw-meta-port">{{ a.port or '—' }}</dd></div>
+        <div><dt>Uptime</dt><dd id="rw-meta-uptime">{{ a.uptime or '—' }}</dd></div>
+        <div><dt>Local URL</dt><dd id="rw-meta-url">{% if a.local_url %}<a href="{{ a.local_url }}" target="_blank" rel="noopener">{{ a.local_url }}</a>{% else %}—{% endif %}</dd></div>
+        <div><dt>Latest health</dt><dd id="rw-meta-health">{% if a.health_state in ['stale','none'] or not a.health_detail %}—{% else %}{{ a.health_detail }}{% endif %}</dd></div>
+      </dl>
+    </div>
+    <div class="banner banner-error" id="rw-active-warning" {% if not a.warning %}hidden{% endif %}>
+      <span id="rw-active-warning-text">{{ a.warning or '' }}</span>
+      {% if a.warning_code == 'port_orphan' %}
+        <a class="btn btn-sm" href="#repository-processes" id="rw-warning-processes">Repository Processes</a>
+      {% else %}
+        <a class="btn btn-sm" href="#repository-processes" id="rw-warning-processes" hidden>Repository Processes</a>
+      {% endif %}
+    </div>
+    <div class="btn-row" id="rw-active-actions">
+      <button type="button" class="btn btn-primary" id="rw-start" data-action="start" {% if not profiles %}disabled{% endif %}>Start</button>
+      <button type="button" class="btn" id="rw-stop" data-action="stop" disabled>Stop</button>
+      <button type="button" class="btn" id="rw-restart" data-action="restart" disabled>Restart</button>
+      <button type="button" class="btn" id="rw-retry" data-action="retry" hidden disabled>Retry</button>
+      <a class="btn" id="rw-open-app" data-action="open_app" href="#" target="_blank" rel="noopener" hidden>Open App</a>
+      <a class="btn" id="rw-view-logs" data-action="view_logs" href="{{ url_for('repository_logs', repo_id=repository.id) }}">View Logs</a>
+    </div>
+    <div class="rw-run-status muted" id="rw-run-status" role="status" aria-live="polite">Ready.</div>
+  </div>
+
+  {# ---- 2. Selected Run Profile / Command Preview ---- #}
+  <div class="panel-header" style="border-top:1px solid var(--border)">
+    <h2>Selected Run Profile</h2>
     <span class="muted">Approved profiles only — no unrestricted terminal.</span>
   </div>
   <div class="panel-body rw-run-form">
@@ -39,10 +91,16 @@
       <select id="rw-profile" aria-label="Run profile">
         {% for p in profiles %}
           <option value="{{ p.id }}"
-                  data-port="{{ p.default_port }}"
+                  data-port="{{ p.default_port or p.fixed_port or '' }}"
+                  data-port-mode="{{ p.port_mode }}"
                   data-envs="{{ p.environments|join(',') }}"
                   data-live="{{ '1' if p.live_profile else '0' }}"
-                  data-env-names="{{ p.allowed_env_names|join(', ') }}">{{ p.name }}</option>
+                  data-write="{{ '1' if p.write_capable else '0' }}"
+                  data-env-names="{{ p.allowed_env_names|join(', ') }}"
+                  data-local="{{ p.local_url_template }}"
+                  data-health="{{ p.health_url_template or '' }}"
+                  data-cwd="{{ p.working_directory }}"
+                  {% if preferred_profile_id and p.id == preferred_profile_id %}selected{% elif not preferred_profile_id and loop.first %}selected{% endif %}>{{ p.name }}</option>
         {% else %}
           <option value="">No profiles configured</option>
         {% endfor %}
@@ -53,64 +111,105 @@
         <option value="development">Development</option>
         <option value="stage">Stage</option>
         <option value="live">Live</option>
+        <option value="custom">Custom</option>
       </select>
     </label>
-    <label>Port
-      <input type="number" id="rw-port" min="1" max="65535" value="{{ profiles[0].default_port if profiles else 8000 }}">
+    <label id="rw-port-wrap">Port
+      {% set pref = (profiles|selectattr('id', 'equalto', preferred_profile_id)|list|first) if preferred_profile_id else none %}
+      {% set port_default = (pref.fixed_port or pref.default_port) if pref else (profiles[0].default_port if profiles and profiles[0].default_port else 8000) %}
+      <input type="number" id="rw-port" min="1" max="65535" value="{{ port_default }}">
     </label>
     <button type="button" class="btn btn-sm" id="rw-find-port">Find available port</button>
+    <div class="muted" id="rw-port-note" hidden></div>
     <div class="rw-env-names muted" id="rw-env-names">Env vars (names only): —</div>
-    <label class="rw-live-confirm" id="rw-live-confirm" hidden>
-      <input type="checkbox" id="rw-confirm-live"> I confirm starting this Live profile
-    </label>
+    <div class="muted" id="rw-meta">Working directory / URLs appear after Preview.</div>
+    <div class="banner" id="rw-live-gate" hidden style="margin:0.65rem 0">
+      <label class="rw-live-confirm" id="rw-live-confirm" style="display:flex;gap:0.5rem;align-items:flex-start">
+        <input type="checkbox" id="rw-confirm-live">
+        <span><strong>Confirm Live profile</strong> — required before Start. Live runs use fixed port and real environment settings.</span>
+      </label>
+    </div>
     {% if not live_runs_allowed %}
       <p class="muted">Live profiles are blocked until <code>REPO_WS_ALLOW_LIVE_RUNS=true</code>.</p>
     {% endif %}
+    <p class="muted" id="rw-live-env-hint" hidden></p>
     <div class="rw-preview-box">
       <div class="nav-label">Command preview (redacted)</div>
       <pre class="mono" id="rw-cmd-preview">Select a profile and click Preview.</pre>
     </div>
     <div class="btn-row">
       <button type="button" class="btn" id="rw-preview">Preview</button>
-      <button type="button" class="btn btn-primary" id="rw-start" {% if not profiles %}disabled{% endif %}>Start</button>
-      <button type="button" class="btn" id="rw-stop" disabled>Stop</button>
-      <button type="button" class="btn" id="rw-restart" disabled>Restart</button>
-      <a class="btn" id="rw-open-app" href="#" target="_blank" rel="noopener" hidden>Open App</a>
-      <a class="btn" id="rw-view-logs" href="{{ url_for('repository_logs', repo_id=repository.id) }}">View Logs</a>
     </div>
-    <div class="rw-run-status muted" id="rw-run-status">No active selection.</div>
   </div>
 
+  {# ---- 3. Tracked Run History ---- #}
   <div class="panel-header" style="border-top:1px solid var(--border)">
-    <h2>Tracked runs</h2>
+    <h2>Run History</h2>
+    <span class="muted">Previous hub-managed runs · click a row for details</span>
   </div>
-  <div class="table-wrap">
-    <table class="data" id="rw-runs-table">
-      <thead>
-        <tr>
-          <th>Status</th><th>Profile</th><th>Env</th><th>Port</th><th>PID</th><th>Started</th><th>Health</th><th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for run in runs %}
-        <tr data-run-id="{{ run.run_id }}">
-          <td><span class="badge">{{ run.status }}</span></td>
-          <td>{{ run.profile_id }}</td>
-          <td>{{ run.environment }}</td>
-          <td class="mono">{{ run.port }}</td>
-          <td class="mono">{{ run.pid or '—' }}</td>
-          <td class="muted">{{ (run.started_at or '')[:19].replace('T',' ') }}</td>
-          <td class="muted">{{ run.last_health_detail or '—' }}</td>
-          <td>
-            <button type="button" class="btn btn-sm rw-select-run" data-run-id="{{ run.run_id }}">Select</button>
-            {% if run.local_url %}<a class="btn btn-sm" href="{{ run.local_url }}" target="_blank" rel="noopener">Open</a>{% endif %}
-          </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="8" class="muted empty-compact">No hub-managed runs yet.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+  <details class="rw-history-details" id="rw-history-details" open>
+    <summary class="muted">Show / hide history (latest <span id="rw-history-count">{{ run_history|length }}</span>)</summary>
+    <div class="table-wrap">
+      <table class="data" id="rw-runs-table">
+        <thead>
+          <tr>
+            <th>Status</th><th>Process</th><th>Health</th><th>Profile</th><th>Env</th><th>Port</th><th>PID</th><th>Started</th>
+          </tr>
+        </thead>
+        <tbody id="rw-history-body">
+          {% for run in run_history[:5] %}
+          <tr class="rw-history-row" data-run-id="{{ run.run_id }}" tabindex="0">
+            <td><span class="rw-status-badge tone-{{ run.display_tone }}">{{ run.display_status }}</span></td>
+            <td>{{ run.process_state }}</td>
+            <td class="muted">{% if run.health_state in ['stale','none'] %}—{% else %}{{ run.health_detail or '—' }}{% endif %}</td>
+            <td>{{ run.profile_id }}</td>
+            <td>{{ run.environment }}</td>
+            <td class="mono">{{ run.port or '—' }}</td>
+            <td class="mono">{{ run.pid or '—' }}</td>
+            <td class="muted">{{ (run.started_at or '')[:19].replace('T',' ') }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="8" class="muted empty-compact">No previous runs yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="muted" id="rw-history-detail" style="padding:0.5rem 0.85rem"></div>
+  </details>
+
+  {# ---- 4. Repository Processes ---- #}
+  <div class="panel-header" style="border-top:1px solid var(--border)" id="repository-processes">
+    <h2>Repository Processes</h2>
+    <span class="muted">Detect hub-tracked and related local processes. Never auto-kills external apps.</span>
+  </div>
+  <div class="panel-body" id="rw-proc-panel">
+    <p class="muted">Stops only a verified PID (+ child tree). Medium-confidence external stops require typing <code>STOP PROCESS &lt;PID&gt;</code>. Low confidence is view-only. Managed processes that match the Active Application are labeled as linked above.</p>
+    <div class="btn-row" style="margin-bottom:0.75rem">
+      <button type="button" class="btn btn-primary" id="rw-proc-scan">Scan / Refresh</button>
+      <span class="rw-scan-spinner" id="rw-proc-spinner" hidden aria-hidden="true"></span>
+      <span class="muted" id="rw-proc-last-scanned">Last scanned: —</span>
+    </div>
+    <div class="muted" id="rw-proc-status" style="margin-bottom:0.65rem" role="status" aria-live="polite"></div>
+    <div class="table-wrap">
+      <table class="data" id="rw-proc-table">
+        <thead>
+          <tr>
+            <th>PID</th>
+            <th>Kind</th>
+            <th>Executable</th>
+            <th>Command</th>
+            <th>Port</th>
+            <th>Started</th>
+            <th>Reason</th>
+            <th>Confidence</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td colspan="9" class="muted empty-compact">Click Scan / Refresh to detect processes.</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </section>
 <script src="{{ url_for('static', filename='js/repository_run.js') }}"></script>

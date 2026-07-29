@@ -8,7 +8,8 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 |---|---|
 | Repository registry + health | `hub/registry/`, `hub/adapters/` |
 | Registry Add / Edit / Disable | `/repositories/new`, store writes YAML; no auto-clone |
-| Repository Workspace Phases 1–2 + Connect | `/repositories/<id>` tabs + `/connect` scan→confirm; `hub/repository_workspace/`; `config/run_profiles.yaml` |
+| Registry grouping | Optional `repository_group_id` — one UI row for local + API (+ future) adapters; independent Workspace / Application / API statuses (`hub/registry/grouping.py`) |
+| Repository Workspace Phases 1–2 + Connect + Run Profile Builder + Processes + Active Application | `/repositories/<id>` tabs + `/connect` + Settings → Run Profiles + Run → Active Application / History / Processes; Health Local Process Monitor; `hub/repository_workspace/` |
 | DHIS2 Reports (Standard Report Manager Phase 1) | `/dhis2/reports` sync/view Stage+Live standard reports; `hub/dhis2_reports/`; catalog shortcuts `config/dhis2_reports.yaml` |
 | `${VAR:-default}` in registry YAML | `hub/registry/loader.py` |
 | Live Processing (GET-only API + path health) | `config/repositories.yaml` |
@@ -24,11 +25,10 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 | Google Connections | `/system/google-connections` — shared accounts + incremental scopes |
 | Dashboard Notebook Work Queue | `/work` Open Tasks + queue tabs (work scope only) |
 | Health probe cache + parallel checks | `hub/adapters/manager.py`, `CENTRAL_HUB_HEALTH_CACHE_TTL` |
-| UID index controlled update (LP-style) | `/dhis2/uid-index/manage`, `hub/dhis2/uid_mapping/admin.py` |
+| UID Index + Find Missing UIDs | `/dhis2/uid-index/manage`, `/dhis2/uid-index/find-missing`, `hub/dhis2/uid_mapping/` — CSV reload separate from DHIS2→index import |
 | UID audit mapping profile | answer kind, program/stage, option-set choices on detail |
-| DHIS2 metadata enrichment + relationship audit | `/dhis2/enrichment`, `hub/dhis2/enrichment/`, `data/dhis2/enrichment.db` |
-| Enrichment explorer tabs/filters | overview / configuration / relationships / option set / PI / sources / history / raw |
-| DHIS2 GET / discovery / UID mapping / preview builder | `hub/dhis2/`, `/dhis2/*` |
+| Refresh UID Details (enrichment) | `/dhis2/enrichment`, `hub/dhis2/enrichment/`, `data/dhis2/enrichment.db` |
+| Scan DHIS2 (discovery) + GET / UID mapping | `hub/dhis2/`, `/dhis2/*` |
 | Job store (SQLite) | `hub/jobs/`, `data/hub.db` |
 | Job worker (cancel/pause/resume) | `hub/jobs/worker.py` |
 | Command capability execution | `hub/jobs/executor.py` + YAML templates |

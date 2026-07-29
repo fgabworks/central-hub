@@ -10,7 +10,7 @@ job engine (SQLite), safe command/API capabilities, uploads/results, owner role.
 ## What is included
 
 - Repository registry (`config/repositories.yaml`) + health checks
-- Repository Workspace: local browse/edit + approved run profiles (`config/run_profiles.yaml`)
+- Repository Workspace: local browse/edit + Run Profile Builder (YAML templates + SQLite repo profiles)
 - DHIS2 Reports: Standard Report Manager Phase 1 (sync/view Stage+Live `/api/reports`) + catalog shortcuts (`config/dhis2_reports.yaml`)
 - DHIS2 GET client, discovery/catalog, UID mapping explorer, preview metadata builder
 - Job engine: submit / list / poll / cancel / pause / resume

@@ -169,6 +169,8 @@ class RegistryStore:
             cleaned["tags"] = current.get("tags") or []
         if "description" not in updates and "description" in current:
             cleaned["description"] = current.get("description") or ""
+        if "repository_group_id" not in updates and "repository_group_id" in current:
+            cleaned["repository_group_id"] = current.get("repository_group_id")
         repos[idx] = cleaned
         data["repositories"] = repos
         self.write_raw(data)
@@ -189,6 +191,7 @@ def build_entry_from_form(
     description: str = "",
     repo_id: str | None = None,
     tags: list[str] | None = None,
+    repository_group_id: str | None = None,
 ) -> dict[str, Any]:
     rid = (repo_id or slugify_repo_id(name)).strip()
     if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", rid):
@@ -197,6 +200,12 @@ def build_entry_from_form(
         )
     if repo_type not in {"api", "command"}:
         raise RegistryError("type must be 'api' or 'command'")
+
+    group_id = (repository_group_id or "").strip() or None
+    if group_id and not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", group_id):
+        raise RegistryError(
+            "repository_group_id must be lowercase alphanumeric with hyphens/underscores (max 64)"
+        )
 
     entry: dict[str, Any] = {
         "id": rid,
@@ -207,6 +216,8 @@ def build_entry_from_form(
         "tags": tags or (["connected", repo_type]),
         "capabilities": [],
     }
+    if group_id:
+        entry["repository_group_id"] = group_id
     if git_url:
         entry["git_url"] = git_url.strip()
     if local_path:
@@ -262,4 +273,7 @@ def _clean_entry(entry: dict[str, Any]) -> dict[str, Any]:
         cleaned["health_check"] = entry.get("health_check")
     if entry.get("capabilities") is not None:
         cleaned["capabilities"] = entry.get("capabilities") or []
+    group_id = entry.get("repository_group_id")
+    if group_id is not None and str(group_id).strip():
+        cleaned["repository_group_id"] = str(group_id).strip()
     return cleaned

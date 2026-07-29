@@ -7,17 +7,14 @@ from typing import Any, Callable
 
 import yaml
 
-from hub.registry.git_util import normalize_git_url
 from hub.registry.models import Repository
 from hub.registry.store import RegistryStore
-from hub.repository_workspace.connect_scan import (
-    SuggestedProfile,
-    WorkspaceScanResult,
-    scan_workspace_path,
-)
+from hub.repository_workspace.connect_scan import scan_workspace_path
+from hub.repository_workspace.profile_store import RunProfileStore
 from hub.repository_workspace.run_profiles import (
     default_profiles_path,
     parse_profile,
+    public_profile,
 )
 from hub.repository_workspace.security import (
     WorkspaceSecurityError,
@@ -32,6 +29,7 @@ def preview_connect(
     repo: Repository,
     *,
     path: str,
+    profile_store: RunProfileStore | None = None,
 ) -> dict[str, Any]:
     existing = (repo.local_path or repo.working_directory or "").strip() or None
     scan = scan_workspace_path(
@@ -43,6 +41,23 @@ def preview_connect(
     )
     if not scan.ok:
         raise WorkspaceSecurityError(scan.error or "Scan failed.", code=scan.error_code or "scan_failed")
+
+    store = profile_store or RunProfileStore()
+    approved_db = [
+        public_profile(parse_profile(row))
+        for row in store.list_for_repo(repo.id, include_unapproved=False)
+        if row.get("approved")
+    ]
+    suggestions = [p.to_public() for p in scan.suggested_profiles]
+    for item in suggestions:
+        item.setdefault("port_mode", "argument" if "{port}" in " ".join(item.get("args") or []) else (
+            "environment_variable" if item.get("port_env") else "argument"
+        ))
+        item["enabled"] = False
+        item["approved"] = False
+        item["untrusted"] = True
+        item["source"] = "suggestion"
+
     return {
         "scan": scan.to_public(),
         "editable": {
@@ -50,14 +65,17 @@ def preview_connect(
             "path": scan.path,
             "git_url": repo.git_url or scan.git_remote_url or "",
             "default_environment": "development",
-            "profiles": [p.to_public() for p in scan.suggested_profiles],
+            "profiles": suggestions,
         },
+        "approved_profiles": approved_db,
+        "suggested_profiles": suggestions,
         "requires": {
             "confirm_save": True,
             "confirm_remote_mismatch": bool(scan.remote_mismatch),
             "confirm_replace_path": bool(scan.replacing_existing_path),
             "review_profiles": True,
         },
+        "builder_url": f"/repositories/{repo.id}/settings#run-profiles",
     }
 
 
@@ -65,31 +83,56 @@ def _profile_from_edit(raw: dict[str, Any], *, repo_id: str) -> dict[str, Any]:
     pid = str(raw.get("id") or raw.get("suggestion_id") or "").strip()
     if not pid:
         raise WorkspaceSecurityError("Profile id is required.", code="invalid_profile")
-    # Scope profile to this repository
+    args = list(raw.get("args") or [])
+    port_mode = str(raw.get("port_mode") or "").strip().lower()
+    if not port_mode:
+        if raw.get("port_env"):
+            port_mode = "environment_variable"
+        elif any("{port}" in str(a) for a in args) or raw.get("port_arg"):
+            port_mode = "argument"
+        elif raw.get("fixed_port") is not None:
+            port_mode = "fixed"
+        else:
+            port_mode = "argument"
     entry = {
         "id": pid,
         "name": str(raw.get("name") or pid).strip(),
-        "description": str(raw.get("rationale") or raw.get("description") or "Connected via workspace scan.").strip(),
+        "description": str(
+            raw.get("rationale") or raw.get("description") or "Connected via workspace scan."
+        ).strip(),
         "repository_ids": [repo_id],
         "executable": str(raw.get("executable") or "").strip(),
-        "args": list(raw.get("args") or []),
+        "args": args,
         "working_directory": str(raw.get("working_directory") or "{repository_path}").strip(),
         "environments": list(raw.get("environments") or ["development"]),
-        "default_port": int(raw.get("default_port") or raw.get("port") or 8000),
+        "default_port": raw.get("default_port") if raw.get("default_port") is not None else raw.get("port"),
+        "fixed_port": raw.get("fixed_port"),
+        "port_mode": port_mode,
+        "port_arg": raw.get("port_arg"),
         "local_url": str(raw.get("local_url") or "http://127.0.0.1:{port}/").strip(),
         "health_url": raw.get("health_url"),
         "startup_timeout_seconds": float(raw.get("startup_timeout_seconds") or 30),
         "allowed_env_names": list(raw.get("allowed_env_names") or []),
         "live_profile": bool(raw.get("live_profile", False)),
+        "write_capable": bool(raw.get("write_capable", False)),
+        "provides_api": bool(raw.get("provides_api", False)),
         "port_env": raw.get("port_env"),
+        "enabled": False,
+        "approved": False,
+        "source": "suggestion",
     }
-    # Validate via existing schema
+    if entry["default_port"] is None and port_mode != "none":
+        entry["default_port"] = 8000
     parse_profile(entry)
     return entry
 
 
 def append_run_profiles(entries: list[dict[str, Any]], *, path: Path | None = None) -> list[str]:
-    """Append validated profiles to run_profiles.yaml. Returns added ids."""
+    """Legacy helper: append validated profiles to run_profiles.yaml.
+
+    Prefer RunProfileStore for UI/connect-created profiles. Kept for tests and
+    rare operator export workflows.
+    """
     cfg_path = path or default_profiles_path()
     if cfg_path.exists():
         raw = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
@@ -105,7 +148,6 @@ def append_run_profiles(entries: list[dict[str, Any]], *, path: Path | None = No
     for entry in entries:
         pid = str(entry.get("id"))
         if pid in existing_ids:
-            # Replace same id only when scoped update — skip duplicates silently with rename
             entry = {**entry, "id": f"{pid}-connected"}
             pid = entry["id"]
             if pid in existing_ids:
@@ -121,10 +163,38 @@ def append_run_profiles(entries: list[dict[str, Any]], *, path: Path | None = No
         "# Executables + argument arrays only — never raw shell strings.\n"
         "# Allowed placeholders: {port}, {repository_path}, {environment}\n\n"
     )
-    body = yaml.safe_dump(raw, default_flow_style=False, allow_unicode=True, sort_keys=False, width=100)
+    body = yaml.safe_dump(
+        raw, default_flow_style=False, allow_unicode=True, sort_keys=False, width=100
+    )
     tmp = cfg_path.with_suffix(cfg_path.suffix + ".tmp")
     tmp.write_text(header + body, encoding="utf-8")
     tmp.replace(cfg_path)
+    return added
+
+
+def save_connect_suggestions(
+    repo_id: str,
+    selected: list[dict[str, Any]],
+    *,
+    store: RunProfileStore | None = None,
+) -> list[str]:
+    """Persist scan suggestions as untrusted/disabled DB rows.
+
+    Never overwrites an already-approved repository profile with the same id.
+    """
+    profile_store = store or RunProfileStore()
+    added: list[str] = []
+    for item in selected:
+        entry = _profile_from_edit(item, repo_id=repo_id)
+        existing = profile_store.get(repo_id, entry["id"])
+        if existing and existing.get("approved"):
+            # Rescan / connect must not clobber approved profiles
+            continue
+        entry["approved"] = False
+        entry["enabled"] = False
+        entry["source"] = "suggestion"
+        profile_store.upsert(repo_id, entry)
+        added.append(entry["id"])
     return added
 
 
@@ -141,6 +211,8 @@ def save_connect(
     selected_profiles: list[dict[str, Any]] | None = None,
     audit: AuditFn | None = None,
     profiles_path: Path | None = None,
+    profile_store: RunProfileStore | None = None,
+    write_yaml_profiles: bool = False,
 ) -> dict[str, Any]:
     if not confirm_save:
         raise WorkspaceSecurityError(
@@ -148,7 +220,7 @@ def save_connect(
             code="confirm_required",
         )
 
-    preview = preview_connect(repo, path=path)
+    preview = preview_connect(repo, path=path, profile_store=profile_store)
     scan = preview["scan"]
     if scan.get("remote_mismatch") and not confirm_remote_mismatch:
         raise WorkspaceSecurityError(
@@ -177,7 +249,6 @@ def save_connect(
             "timeout_seconds": 3,
         },
     }
-    # Only set git_url when provided and repo has none, or user explicitly edits
     incoming_git = (git_url or "").strip()
     if incoming_git:
         updates["git_url"] = incoming_git
@@ -189,8 +260,18 @@ def save_connect(
     added_profiles: list[str] = []
     selected = selected_profiles or []
     if selected:
-        entries = [_profile_from_edit(item, repo_id=repo.id) for item in selected]
-        added_profiles = append_run_profiles(entries, path=profiles_path)
+        db_store = profile_store or RunProfileStore()
+        added_profiles = save_connect_suggestions(
+            repo.id, selected, store=db_store
+        )
+        if write_yaml_profiles:
+            # Opt-in legacy path for operators; UI never sets this.
+            entries = [_profile_from_edit(item, repo_id=repo.id) for item in selected]
+            for entry in entries:
+                entry["approved"] = True
+                entry["enabled"] = True
+                entry["source"] = "yaml"
+            append_run_profiles(entries, path=profiles_path)
 
     detail = (
         f"Connected local workspace path_set=1 replace={bool(scan.get('replacing_existing_path'))} "
@@ -207,7 +288,7 @@ def save_connect(
         "name": new_name,
         "git_url": saved.get("git_url"),
         "profiles_added": added_profiles,
-        "redirect": f"/repositories/{repo.id}",
+        "redirect": f"/repositories/{repo.id}/settings#run-profiles",
         "scan_summary": {
             "is_git": scan.get("is_git"),
             "frameworks": scan.get("frameworks"),

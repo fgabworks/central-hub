@@ -58,6 +58,8 @@ class LiveProcessingRegistryTests(unittest.TestCase):
         self.assertTrue(local.local_path)
         self.assertTrue(local.git_url)
         self.assertEqual(local.capabilities, [])
+        self.assertEqual(api.repository_group_id, "pmnp-live-processing")
+        self.assertEqual(local.repository_group_id, "pmnp-live-processing")
 
     def test_env_overrides_lp_base_url(self) -> None:
         yaml_text = """

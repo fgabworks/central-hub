@@ -60,18 +60,33 @@ Scope: personal, local-first tool. Canonical agent rules: [AGENTS.md](AGENTS.md)
   - Git inspect is read-only (`status` / `diff`); no commit, push, pull, merge,
     reset, checkout, or discard-all.
   - External open allowlists `code` / `cursor` / `explorer` (`shell=False`).
-  - **Runs (Phase 2):** profiles from `REPO_WS_RUN_PROFILES` / `config/run_profiles.yaml`
-    use executable + argument arrays only (placeholders `{port}`, `{repository_path}`,
-    `{environment}`). `shell=False`; new process group/session; stop/restart only
+  - **Runs (Phase 2):** YAML templates from `REPO_WS_RUN_PROFILES` /
+    `config/run_profiles.yaml` plus repository-specific profiles in
+    `REPO_WS_PROFILE_DATABASE` / `data/repository_workspace.db` (DB overrides by id;
+    UI builder never rewrites YAML for every create). Executable + argument arrays
+    only (placeholders `{port}`, `{repository_path}`, `{environment}`). Port modes:
+    `none` / `fixed` / `argument` / `environment_variable`. Fixed ports block when
+    occupied and never auto-kill occupants; Find available port is disabled for
+    fixed/none. `shell=False`; new process group/session; stop/restart only
     hub-tracked fingerprints (stale PID / PID-reuse refused). No auto-restart on
     file edits; no unrestricted terminal. Env values stay server-side (UI shows names).
-    Live / `live_profile` requires `REPO_WS_ALLOW_LIVE_RUNS` plus explicit confirmation.
-    Port occupancy checked; alternate ports suggested; duplicate repo/profile/port
-    runs blocked. Logs under `REPO_WS_RUN_LOG_DIR` with size/retention caps + redaction.
+    Live / write-capable live profiles require `REPO_WS_ALLOW_LIVE_RUNS` plus
+    explicit confirmation. Duplicate repo/profile/port runs blocked. Logs under
+    `REPO_WS_RUN_LOG_DIR` with size/retention caps + redaction. Audit:
+    `REPO_WS_PROFILE_CREATE` / `UPDATE` / `DUPLICATE` / `ENABLE` / `DISABLE` /
+    `DELETE` / `TEST` (field names only; paths/env values redacted).
+  - **Repository Processes:** OS inventory + hub state (`process_detect.py`). Match
+    hub-tracked, cwd-in-repo, command path/entry, profile port — never generic
+    runtime names alone. Stop only a verified PID (+ tree); Medium external needs
+    typed `STOP PROCESS <PID>`; Low view-only; fingerprint before signal; confirm
+    ended + port released. Start conflicts / occupied fixed ports block with a
+    pointer to the Run tab (no silent fixed-port switch). Audit:
+    `REPO_WS_PROCESS_SCAN` / `STOP` / `FORCE_STOP` / `STOP_BLOCKED`.
   - **Connect Local Workspace:** user-selected folder only; scan is read-only (no
     subprocess, no installs, no secret-file reads). Git remote mismatch and path
-    replacement require explicit confirm. Suggested run profiles are untrusted until
-    reviewed; saved as argv arrays only (`REPO_WS_CONNECT_SCAN` / `PREVIEW` / `SAVE`).
+    replacement require explicit confirm. Suggested run profiles are untrusted /
+    disabled until reviewed in Settings → Run Profiles; rescans never overwrite
+    approved profiles (`REPO_WS_CONNECT_SCAN` / `PREVIEW` / `SAVE`).
 - **DHIS2 Reports / Standard Report Manager:** Stage/Live connections from `.env` only.
   - Sync caches metadata (+ optional `designContent`) in SQLite; never credentials/tokens.
   - View embeds allowlisted DHIS2 `/api/reports/{uid}/data.html` URLs (no secrets in URL);
@@ -113,6 +128,9 @@ Scope: personal, local-first tool. Canonical agent rules: [AGENTS.md](AGENTS.md)
   `REPO_WS_RENAME`, `REPO_WS_DELETE`, `REPO_WS_OPEN_EXTERNAL`,
   `REPO_WS_RUN_START` / `STOP` / `RESTART` / `FAIL` / `HEALTH` / `PORT`,
   `REPO_WS_CONNECT_SCAN` / `PREVIEW` / `SAVE`,
+  `REPO_WS_PROFILE_CREATE` / `UPDATE` / `DUPLICATE` / `ENABLE` / `DISABLE` /
+  `DELETE` / `TEST`,
+  `REPO_WS_PROCESS_SCAN` / `STOP` / `FORCE_STOP` / `STOP_BLOCKED`,
   `DHIS2_REPORT_VIEW` / `VIEW_HTML` / `PREVIEW` / `GENERATE` / `FAIL` / `FAVORITE` /
   `PRESET_SAVE` / `PRESET_DELETE` / `DOWNLOAD`
   (paths and commands redacted; no secret values / unredacted argv).

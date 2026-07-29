@@ -4,40 +4,34 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**DHIS2 Standard Report Manager — Phase 1** under `Work → DHIS2 → Reports` (`/dhis2/reports`)
+**Find Missing UIDs UI** — selection + compact layout
 
-- Sync accessible standard reports from Stage/Live via GET `/api/reports` (paginated)
-- Local SQLite metadata/cache only; DHIS2 remains source of truth
-- Library: Stage and Live lists separated; search/filters (type, env, HTML, favorite)
-- Actions: View Report, Open in DHIS2, View HTML Source, Download HTML, Refresh Metadata
-- Period + organisation-unit controls before render
-- Prefer DHIS2 `/data.html` embed; fallback Open in DHIS2 when iframe/CSP/auth blocks
-- No report replacement; no DHIS2 writes; no direct DB access; no credentials in UI/URLs
-
-Package: `hub/dhis2_reports/` (+ `standard_sync.py`, `standard_models.py`). Catalog YAML remains for repository/static shortcuts only.
+- Select all visible / all filtered / clear; selection survives filter & pagination
+- Sticky bulk bar (`Selected: N | Add to Local Index | Clear`); Add disabled until selection
+- Preview + typed confirm still required before local index update
+- Compact Scan toolbar; clear steps 1–4; scrollable results; collapsible Scan Summary
+- Readable type labels (Data Element, Program Indicator, …)
 
 ## Verify
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-python -m unittest tests.test_dhis2_standard_reports tests.test_dhis2_reports -v
-python -m unittest discover -s tests -v
+python -m unittest tests.test_dhis2_find_missing tests.test_dhis2_find_missing_ui tests.test_dhis2_uid_mapping tests.test_uid_index_admin tests.test_dhis2_enrichment tests.test_dhis2_discovery -v
+node tests/dhis2_find_missing_selection.test.js
 python app.py
 ```
 
-1. Open `/dhis2/reports` → Sync Stage (and Live with confirm)
-2. Open a report → set period/OU → View Report / Open in DHIS2
-3. View HTML Source / Download HTML
-4. Refresh Metadata on one report
-5. Confirm Stage and Live lists stay separate; no passwords in page/network URLs
+1. DHIS2 → Find Missing UIDs → Scan → select visible / all filtered → Add to Local Index (preview)
+2. Confirm with `ADD MISSING UIDS TO INDEX`
+3. Change page/filters — selection count should persist
+4. Scan button is compact in the toolbar; Scan Summary collapses on the side
 
 ## Next task
 
 Do **not** implement yet unless asked:
 
-- Report replacement / design upload
-- Writing report metadata back to DHIS2
-- Direct DHIS2 database access
-- Copying PMNP report calculation into the hub
+- Writing DHIS2-imported UIDs back into Live Processing’s `AI_UID_INDEX.csv` automatically
+- Auto-killing processes that occupy fixed ports
+- Free-form terminal / unrestricted shell
 
 Keep DHIS2 writes off. Do not auto-feed mail/calendar to agents.

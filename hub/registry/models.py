@@ -48,6 +48,9 @@ class Repository:
     health_check: HealthCheckConfig | None = None
     capabilities: list[Capability] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
+    # Optional: multiple registry entries that represent one logical project.
+    # Grouping is by this ID only — never by name or product-specific logic.
+    repository_group_id: str | None = None
 
 
 @dataclass(frozen=True)

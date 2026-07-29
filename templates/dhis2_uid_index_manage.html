@@ -1,17 +1,19 @@
 {% extends "base.html" %}
-{% block title %}UID Index Management · DHIS2 · {{ app_name }}{% endblock %}
+{% block title %}UID Index · DHIS2 · {{ app_name }}{% endblock %}
 {% block content %}
 <section class="page-header">
   <div>
     <p class="muted-2" style="margin:0 0 0.35rem"><a href="{{ url_for('dhis2') }}">DHIS2</a> / UID Index</p>
-    <h1>UID Index Management</h1>
-    <p>Controlled update of the hub’s local UID index (same lifecycle as Live Processing: dry-run → review → typed confirm → versioned backup). Does not write DHIS2 or LP’s CSV.</p>
+    <h1>UID Index</h1>
+    <p>Controlled update of the hub’s local UID index (dry-run → review → typed confirm → versioned backup). Does not write DHIS2 or LP’s CSV. Use <a href="{{ url_for('dhis2_uid_find_missing') }}">Find Missing UIDs</a> to import DHIS2-only objects.</p>
   </div>
   <div class="page-meta">
     <span class="badge badge-env">ADMIN · CONTROLLED UPDATE</span>
+    <a class="btn btn-sm" href="{{ url_for('dhis2_uid_find_missing') }}">Find Missing UIDs</a>
     <a class="btn btn-sm" href="{{ url_for('dhis2_uid_explorer') }}">Open explorer</a>
     {% if index_meta %}
       <a class="btn btn-sm" href="{{ url_for('dhis2_uid_index_export') }}">Export JSON</a>
+      <a class="btn btn-sm" href="{{ url_for('dhis2_uid_index_export_source_csv') }}">Export DHIS2→CSV updates</a>
     {% endif %}
   </div>
 </section>
@@ -69,7 +71,7 @@
               <p class="muted" style="margin:0.25rem 0 0.5rem">Never writes the index. Shows exact new / changed / missing / conflict counts.</p>
               <form method="post" style="margin-bottom:0.75rem">
                 <input type="hidden" name="action" value="scan">
-                <button class="btn btn-primary" type="submit">Scan configured sources (dry-run)</button>
+                <button class="btn btn-primary" type="submit">Reload from Source CSV (dry-run)</button>
               </form>
               <form method="post" enctype="multipart/form-data" class="builder-controls">
                 <input type="hidden" name="action" value="import_upload">
@@ -196,7 +198,7 @@
                   <span class="muted">Include conflicts (still skips unresolved peers)</span>
                 </label>
                 <div class="btn-row">
-                  <button class="btn btn-primary" type="submit" {% if preview.blocking and preview.blocking.blocked %}disabled{% endif %}>Apply UID Index</button>
+                  <button class="btn btn-primary" type="submit" {% if preview.blocking and preview.blocking.blocked %}disabled{% endif %}>Apply Source CSV Reload</button>
                 </div>
               </form>
               <form method="post" style="margin-top:0.5rem">
@@ -291,7 +293,7 @@
             </select>
           </label>
           <div style="display:flex;align-items:end">
-            <button class="btn" type="submit">Compare</button>
+            <button class="btn" type="submit">Check Changes</button>
           </div>
         </form>
 

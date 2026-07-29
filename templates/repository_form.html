@@ -71,6 +71,14 @@
     </label>
 
     <label class="nb-field">
+      <span>Repository group ID (optional)</span>
+      <input type="text" name="repository_group_id" value="{{ form.repository_group_id }}"
+             pattern="[a-z0-9][a-z0-9_-]{0,63}"
+             placeholder="shared-id — groups local + API adapters as one project">
+    </label>
+    <p class="muted" style="margin-top:-0.35rem">Use the same group ID on multiple registry entries (for example a local workspace and an API adapter) so the registry shows one logical repository with separate Workspace / Application / API statuses.</p>
+
+    <label class="nb-field">
       <span>Description</span>
       <textarea name="description" rows="3">{{ form.description }}</textarea>
     </label>
