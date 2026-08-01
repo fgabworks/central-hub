@@ -54,7 +54,7 @@ Scope: personal, local-first tool. Canonical agent rules: [AGENTS.md](AGENTS.md)
   - Treat agent output as untrusted; Edit/Test modes are disabled.
   - **AI Connections:** CLI login uses only each provider's browser/device flow. The Hub never
     accepts passwords, browser cookies, private sessions, or CLI tokens. Codex uses
-    `codex login --device-auth`, Claude Code uses `claude auth login`, and Cursor uses
+    `codex login`, Claude Code uses `claude auth login`, and Cursor uses
     `agent login`; their logout/status commands remain provider-owned.
   - OpenAI and xAI keys are environment-only (`OPENAI_API_KEY`, `XAI_API_KEY`). Disconnecting
     an API provider disables it in Hub metadata and never reads, returns, or deletes the env key.

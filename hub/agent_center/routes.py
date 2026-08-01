@@ -123,7 +123,7 @@ def register_agent_center_routes(app: Flask) -> None:
         refresh = request.args.get("refresh") == "1"
         # Default: serve cache/placeholder; refresh=1 probes providers.
         probe = refresh or request.args.get("probe", "0") == "1"
-        return jsonify({"agents": _svc().list_agents(mode=mode, probe=probe)})
+        return jsonify({"agents": _svc().list_agents(mode=mode, probe=probe, profile_id=profile_id)})
 
     @app.get("/api/agents/<agent_id>/models")
     @app.get("/api/assistants/<profile_id>/agents/<agent_id>/models")

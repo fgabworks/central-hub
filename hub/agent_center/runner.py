@@ -11,8 +11,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from hub.agent_center.codex_jsonl import CodexJsonlAccumulator
+from hub.agent_center.codex_safety import assert_git_unchanged, git_status_snapshot
 from hub.agent_center.models import DEFAULT_TIMEOUT_SECONDS, MAX_TIMEOUT_SECONDS
-from hub.agent_center.redact import redact_text
+from hub.agent_center.redact import classify_provider_error, redact_text
 from hub.agent_center.store import AgentCenterStore
 
 AuditFn = Callable[..., None]
@@ -34,6 +36,9 @@ class AgentRunner:
         cwd: Path,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
         env: dict[str, str] | None = None,
+        stdin_path: str | None = None,
+        jsonl: bool = False,
+        safety_repo: str | None = None,
     ) -> None:
         timeout_seconds = max(5.0, min(float(timeout_seconds), float(MAX_TIMEOUT_SECONDS)))
         thread = threading.Thread(
@@ -44,6 +49,9 @@ class AgentRunner:
                 "cwd": str(cwd),
                 "timeout_seconds": timeout_seconds,
                 "env": env,
+                "stdin_path": stdin_path,
+                "jsonl": jsonl,
+                "safety_repo": safety_repo,
             },
             daemon=True,
             name=f"agent-run-{run_id[:8]}",
@@ -74,14 +82,15 @@ class AgentRunner:
         cwd: str,
         timeout_seconds: float,
         env: dict[str, str] | None,
+        stdin_path: str | None = None,
+        jsonl: bool = False,
+        safety_repo: str | None = None,
     ) -> None:
         now = datetime.now(timezone.utc).isoformat()
         self.store.update_run(run_id, status="running", started_at=now)
         if self.audit:
             self.audit(action="AGENT_RUN_START", detail={"run_id": run_id, "argv0": argv[:1]})
 
-        # Never inherit secrets from hub .env into child unless already on process env;
-        # still strip known secret keys from a copy.
         child_env = dict(os.environ)
         if env:
             child_env.update(env)
@@ -90,11 +99,16 @@ class AgentRunner:
             if any(s in upper for s in ("PASSWORD", "SECRET", "TOKEN", "API_KEY", "PRIVATE_KEY", "COOKIE")):
                 child_env.pop(key, None)
 
+        before = git_status_snapshot(Path(safety_repo)) if safety_repo else None
+        stdin_handle = None
         try:
+            if stdin_path:
+                stdin_handle = open(stdin_path, "r", encoding="utf-8", errors="replace")
             proc = subprocess.Popen(
                 argv,
                 cwd=cwd,
                 shell=False,
+                stdin=stdin_handle if stdin_handle else subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -103,14 +117,17 @@ class AgentRunner:
                 env=child_env,
             )
         except OSError as exc:
+            if stdin_handle:
+                stdin_handle.close()
+            classified = classify_provider_error(str(exc))
             self.store.update_run(
                 run_id,
                 status="failed",
-                error=f"Failed to start agent: {exc}",
+                error=classified["detail"],
                 finished_at=datetime.now(timezone.utc).isoformat(),
             )
             if self.audit:
-                self.audit(action="AGENT_RUN_FAILED", detail={"run_id": run_id, "error": str(exc)})
+                self.audit(action="AGENT_RUN_FAILED", detail={"run_id": run_id, "error": classified["code"]})
             return
 
         with self._lock:
@@ -118,22 +135,22 @@ class AgentRunner:
         self.store.update_run(run_id, pid=proc.pid)
 
         chunks: list[str] = []
+        accumulator = CodexJsonlAccumulator() if jsonl else None
         deadline = time.monotonic() + timeout_seconds
         assert proc.stdout is not None
         try:
             while True:
                 run = self.store.get_run(run_id)
                 if run and run.get("cancel_requested"):
-                    proc.terminate()
-                    try:
-                        proc.wait(timeout=5)
-                    except subprocess.TimeoutExpired:
-                        proc.kill()
+                    self._terminate(proc)
                     self.store.append_log(run_id, "\n[cancelled]\n")
+                    answer = accumulator.final_answer() if accumulator else redact_text("".join(chunks))
                     self.store.update_run(
                         run_id,
                         status="cancelled",
-                        answer=redact_text("".join(chunks)),
+                        answer=answer,
+                        tool_activity=(accumulator.tool_activity if accumulator else None),
+                        usage=(accumulator.usage if accumulator else None),
                         finished_at=datetime.now(timezone.utc).isoformat(),
                     )
                     if self.audit:
@@ -141,17 +158,16 @@ class AgentRunner:
                     return
 
                 if time.monotonic() > deadline:
-                    proc.terminate()
-                    try:
-                        proc.wait(timeout=5)
-                    except subprocess.TimeoutExpired:
-                        proc.kill()
+                    self._terminate(proc)
                     self.store.append_log(run_id, "\n[timeout]\n")
+                    answer = accumulator.final_answer() if accumulator else redact_text("".join(chunks))
                     self.store.update_run(
                         run_id,
                         status="failed",
-                        error=f"Timed out after {int(timeout_seconds)}s",
-                        answer=redact_text("".join(chunks)),
+                        error=classify_provider_error(f"Timed out after {int(timeout_seconds)}s")["detail"],
+                        answer=answer,
+                        tool_activity=(accumulator.tool_activity if accumulator else None),
+                        usage=(accumulator.usage if accumulator else None),
                         finished_at=datetime.now(timezone.utc).isoformat(),
                     )
                     if self.audit:
@@ -160,21 +176,39 @@ class AgentRunner:
 
                 line = proc.stdout.readline()
                 if line:
-                    chunks.append(line)
-                    self.store.append_log(run_id, line)
+                    if accumulator is not None:
+                        chunk = accumulator.feed(line)
+                        if chunk:
+                            chunks.append(chunk)
+                            self.store.append_log(run_id, chunk)
+                            if accumulator.tool_activity:
+                                self.store.update_run(run_id, tool_activity=accumulator.tool_activity)
+                            if accumulator.usage:
+                                self.store.update_run(run_id, usage=accumulator.usage)
+                    else:
+                        chunks.append(line)
+                        self.store.append_log(run_id, line)
                 elif proc.poll() is not None:
                     break
                 else:
                     time.sleep(0.05)
 
-            # Drain remainder
             rest = proc.stdout.read() or ""
             if rest:
-                chunks.append(rest)
-                self.store.append_log(run_id, rest)
+                if accumulator is not None:
+                    for rest_line in rest.splitlines(keepends=True):
+                        chunk = accumulator.feed(rest_line)
+                        if chunk:
+                            chunks.append(chunk)
+                            self.store.append_log(run_id, chunk)
+                else:
+                    chunks.append(rest)
+                    self.store.append_log(run_id, rest)
 
             code = proc.wait()
-            answer = redact_text("".join(chunks))
+            answer = accumulator.final_answer() if accumulator else redact_text("".join(chunks))
+            if not answer and chunks:
+                answer = redact_text("".join(chunks))
             finished = datetime.now(timezone.utc).isoformat()
             run = self.store.get_run(run_id)
             if run and run.get("cancel_requested"):
@@ -182,31 +216,70 @@ class AgentRunner:
                     run_id,
                     status="cancelled",
                     answer=answer,
+                    tool_activity=(accumulator.tool_activity if accumulator else None),
+                    usage=(accumulator.usage if accumulator else None),
                     finished_at=finished,
                 )
                 if self.audit:
                     self.audit(action="AGENT_RUN_CANCELLED", detail={"run_id": run_id})
                 return
+
+            safety_error = ""
+            if before is not None and safety_repo:
+                after = git_status_snapshot(Path(safety_repo))
+                try:
+                    assert_git_unchanged(before, after)
+                except RuntimeError as exc:
+                    safety_error = str(exc)
+
+            if safety_error:
+                self.store.update_run(
+                    run_id,
+                    status="failed",
+                    answer=answer,
+                    error=safety_error,
+                    tool_activity=(accumulator.tool_activity if accumulator else None),
+                    usage=(accumulator.usage if accumulator else None),
+                    finished_at=finished,
+                )
+                if self.audit:
+                    self.audit(action="AGENT_RUN_FAILED", detail={"run_id": run_id, "error": "read_only_violation"})
+                return
+
             if code == 0:
                 self.store.update_run(
                     run_id,
                     status="completed",
                     answer=answer,
+                    tool_activity=(accumulator.tool_activity if accumulator else None),
+                    usage=(accumulator.usage if accumulator else None),
                     finished_at=finished,
                 )
                 if self.audit:
                     self.audit(action="AGENT_RUN_COMPLETED", detail={"run_id": run_id})
             else:
+                err = ""
+                if accumulator and accumulator.errors:
+                    err = accumulator.error_summary()
+                if not err:
+                    err = classify_provider_error(f"Agent exited with code {code}")["detail"]
                 self.store.update_run(
                     run_id,
                     status="failed",
                     answer=answer,
-                    error=f"Agent exited with code {code}",
+                    error=err,
+                    tool_activity=(accumulator.tool_activity if accumulator else None),
+                    usage=(accumulator.usage if accumulator else None),
                     finished_at=finished,
                 )
                 if self.audit:
                     self.audit(action="AGENT_RUN_FAILED", detail={"run_id": run_id, "code": code})
         finally:
+            if stdin_handle:
+                try:
+                    stdin_handle.close()
+                except Exception:  # noqa: BLE001
+                    pass
             try:
                 if proc.stdout is not None:
                     proc.stdout.close()
@@ -215,3 +288,15 @@ class AgentRunner:
             with self._lock:
                 self._procs.pop(run_id, None)
                 self._threads.pop(run_id, None)
+
+    @staticmethod
+    def _terminate(proc: subprocess.Popen[str]) -> None:
+        try:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=5)
+        except OSError:
+            pass

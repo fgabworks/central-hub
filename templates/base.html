@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=ad-dock-5">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=wc-1">
   {% block head_extra %}{% endblock %}
 </head>
 <body class="theme-{{ workspace|default('work') }}">
   {% from "macros.html" import brand_icon %}
-  <div class="app-shell{% if assistant_dock and not skip_assistant_dock|default(false) %} has-ad-rail{% endif %}{% if assistant_dock and assistant_dock.prefs.open and not assistant_dock.prefs.minimized %} is-ad-open{% elif assistant_dock and assistant_dock.prefs.minimized %} is-ad-open is-ad-minimized{% endif %}"
-       {% if assistant_dock %}style="--ad-width: {{ assistant_dock.prefs.width }}px"{% endif %}>
+  <div class="app-shell{% if assistant_dock and not skip_assistant_dock|default(false) %} has-ad-rail{% endif %}{% if assistant_dock and assistant_dock.prefs.open and not assistant_dock.prefs.minimized %} is-ad-open{% elif assistant_dock and assistant_dock.prefs.minimized %} is-ad-open is-ad-minimized{% endif %}{% if workspace_console and workspace_console.prefs.open and not workspace_console.prefs.minimized %} is-wc-open{% elif workspace_console and workspace_console.prefs.minimized %} is-wc-open is-wc-minimized{% endif %}{% if workspace_console and workspace_console.prefs.maximized %} is-wc-maximized{% endif %}"
+       style="{% if assistant_dock %}--ad-width: {{ assistant_dock.prefs.width }}px;{% endif %}{% if workspace_console %}--wc-height: {{ workspace_console.prefs.height }}px;{% endif %}">
     <aside class="sidebar">
       <div class="sidebar-brand">
         <div class="brand-mark">{{ brand_icon() }}</div>
@@ -85,6 +85,16 @@
             <span>{{ assistant_dock.profile.name }}</span>
           </button>
           {% endif %}
+          {% if workspace_console %}
+          <button type="button"
+                  class="btn btn-sm wc-topbar-btn"
+                  id="wc-topbar-toggle"
+                  aria-controls="wc-panel"
+                  aria-expanded="{{ 'true' if workspace_console.prefs.open and not workspace_console.prefs.minimized else 'false' }}"
+                  title="Toggle Workspace Console (Ctrl+J)">
+            Console
+          </button>
+          {% endif %}
           <span class="icon-btn" title="Theme" aria-label="Theme">☾</span>
           <span class="icon-btn" title="Notifications" aria-label="Notifications">
             🔔
@@ -128,6 +138,14 @@
       </button>
     </aside>
     {% endif %}
+    {% if workspace_console %}
+    <div class="wc-host"
+         id="workspace-console-host"
+         {% if not workspace_console.prefs.open %}hidden{% endif %}
+         data-wc-bootstrap='{{ workspace_console|tojson }}'>
+      {% include "partials/workspace_console_panel.html" %}
+    </div>
+    {% endif %}
   </div>
   {% if assistant_dock and not skip_assistant_dock|default(false) %}
   <div class="ad-backdrop" id="ad-backdrop" hidden></div>
@@ -155,6 +173,10 @@
   {% if assistant_dock and not skip_assistant_dock|default(false) %}
   <script src="{{ url_for('static', filename='js/hub_perf.js') }}?v=perf-1"></script>
   <script src="{{ url_for('static', filename='js/assistant_dock.js') }}?v=ad-dock-5"></script>
+  {% endif %}
+  {% if workspace_console %}
+  <script src="{{ url_for('static', filename='js/hub_perf.js') }}?v=perf-1"></script>
+  <script src="{{ url_for('static', filename='js/workspace_console.js') }}?v=wc-1"></script>
   {% endif %}
 </body>
 </html>

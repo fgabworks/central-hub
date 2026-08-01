@@ -171,6 +171,10 @@ class AgentConnectionRegistry:
         status["status"] = PUBLIC_STATES[state]
         status["last_successful_check"] = saved.get("last_successful_check") or ""
         status["last_check"] = saved.get("last_check") or ""
+        status["installed"] = bool(status.get("installed"))
+        status["authenticated"] = bool(status.get("authenticated")) if "authenticated" in status else state == "connected"
+        status["version"] = redact_text(str(status.get("version") or ""), limit=80)
+        status["error_code"] = str(status.get("error_code") or "")
         status["capabilities"] = adapter.capabilities() if hasattr(adapter, "capabilities") else {
             "modes": list(adapter.descriptor.modes), "streaming": True, "cancel": True,
             "dynamic_models": False, "read_only": True, "file_write": False,
@@ -198,5 +202,8 @@ class AgentConnectionRegistry:
             "detail": detail,
             "account_label": "",
             "installed": False,
+            "authenticated": False,
+            "version": "",
             "available": False,
+            "error_code": "",
         }

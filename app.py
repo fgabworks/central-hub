@@ -118,6 +118,8 @@ from hub.agent_center.openai_settings import load_openai_settings
 from hub.agent_center.routes import register_agent_center_routes
 from hub.agent_center.service import AgentCenterService
 from hub.agent_center.store import AgentCenterStore
+from hub.workspace_console import WorkspaceConsoleService, console_shell_bootstrap
+from hub.workspace_console.routes import register_workspace_console_routes
 from hub.repository_workspace import load_workspace_settings
 from hub.repository_workspace.routes import register_repository_workspace_routes
 from hub.dhis2_reports.routes import register_dhis2_reports_routes
@@ -316,6 +318,16 @@ def create_app() -> Flask:
         audit=_repo_ws_audit,
     )
     register_repository_workspace_routes(app)
+
+    app.config["WORKSPACE_CONSOLE"] = WorkspaceConsoleService(
+        registry=app.config.get("REGISTRY"),
+        repo_workspace=app.config["REPO_WORKSPACE"],
+        job_store=app.config.get("JOB_STORE"),
+        audit=app.config.get("AUDIT"),
+        agent_center=app.config.get("AGENT_CENTER"),
+        adapters=app.config.get("ADAPTERS"),
+    )
+    register_workspace_console_routes(app)
 
     def _reports_audit(action: str, target: str, detail: str, ok: bool = True) -> None:
         app.config["AUDIT"].append(
@@ -582,6 +594,7 @@ def create_app() -> Flask:
             workspace=workspace,
             endpoint=ep,
         )
+        workspace_console = console_shell_bootstrap(notebook.db, workspace=workspace)
 
         return {
             "app_name": settings.app_name,
@@ -601,6 +614,7 @@ def create_app() -> Flask:
             "notepad": notepad,
             "note_scope": workspace,
             "assistant_dock": assistant_dock,
+            "workspace_console": workspace_console,
         }
 
     def _set_workspace_and_redirect(workspace: str, next_url: str | None = None):

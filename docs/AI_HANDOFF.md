@@ -4,49 +4,53 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**VS Code / Cursor-style assistant right rail (2026-08-02)**
+**VS Code-style Workspace Console (bottom dock) — 2026-08-02**
 
-- Persistent far-right rail toggle for Aira (Personal) / Okarun (Work)
-- Click rail → panel opens and main content grid-shrinks; click again or × → hides
-- Desktop docks as a grid column (not overlay/modal); mobile uses right overlay drawer
-- Pin / minimize / drag-resize; prefs per workspace
-- Panel: header+status, Conversation/Output, suggestions, context preview button,
-  agent/model selector, fixed prompt
-- Full Assistant Center pages keep advanced settings and also show the dock
-- Lazy provider load; read-only; no voice/TTS
+- Bottom panel with Problems / Output / Debug Console / Terminal / Ports
+- Toggle via topbar **Console** button and `Ctrl+J`
+- Drag resize, minimize / maximize / restore / close
+- Height + active tab persisted per workspace
+- Main content uses `padding-bottom`; right Aira/Okarun dock remains independent
+- Lazy tab loads; polling pauses when hidden/minimized/closed
+- Terminal = approved repository run profiles only (no free shell)
+- Ports reuses process monitor; stops require confirm + identity token
 
-Focused verification: `python -m unittest tests.test_assistant_dock tests.test_perf_navigation -v`
+Focused verification:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest tests.test_workspace_console tests.test_assistant_dock tests.test_perf_navigation -v
+```
 
 ## Prior milestones (retained)
 
-**Navigation performance — defer probes + Server-Timing**
+**Codex CLI first real provider — Okarun MVP**
 
-- Shell routes avoid sync health/calendar/process/AI probes
-- Secondary panels hydrate via async APIs
+**VS Code / Cursor-style assistant right rail**
 
-**AI Connections** — shared provider registry for isolated Aira/Okarun profiles.
+**Navigation performance** — defer probes + Server-Timing
+
+**AI Connections** — shared provider registry
 
 ## Verify
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-python -m unittest tests.test_perf_navigation tests.test_assistant_dock -v
+python -m unittest tests.test_workspace_console tests.test_assistant_dock -v
 python app.py
 ```
 
-1. Navigate Work ↔ Personal ↔ Repositories — shell should feel instant
-2. DevTools Network: HTML responses include `Server-Timing`; health/calendar fetch after paint
-3. AI Connections: statuses appear immediately, then refresh in background
-4. Health → process rows fill after shell; Re-check uses `?fresh=1`
+1. Hard-refresh; click **Console** or press `Ctrl+J`
+2. Open Okarun on the right and Console at the bottom together — both should resize content
+3. Switch tabs; leave Console and confirm network polling stops when closed/hidden
+4. Terminal lists approved profiles only; Ports Stop asks for confirmation
 
 ## Next task
 
 Do **not** implement yet unless asked:
 
-- Writing DHIS2-imported UIDs back into Live Processing’s `AI_UID_INDEX.csv` automatically
-- Auto-killing processes that occupy fixed ports
 - Free-form terminal / unrestricted shell
+- Auto-killing processes on fixed ports
 - SPA rewrite
+- DHIS2 writeback into Live Processing UID index
 
-Keep DHIS2 writes off. Never preload mail/calendar on navigation; assistant lookup stays
-explicit, read-only, minimal, and workspace-scoped.
+Keep DHIS2 writes off. Assistant stays read-only / workspace-scoped.

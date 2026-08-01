@@ -20,7 +20,8 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 | Repository Notebook (scoped personal\|work notes) | `/personal/notebook`, `/work/notebook`, `hub/notebook/` |
 | SQL Workspace (read-only query library/runner) | `/sql`, `hub/sql_workspace/`, `data/sql_workspace.db` |
 | AI Assistant Center (read-only) | `/personal/aira`, `/work/okarun`, dock on all pages via `templates/partials/assistant_dock_panel.html` + `static/js/assistant_dock.js`, `hub/agent_center/`, `config/agents.yaml`, `data/agent_center.db` |
-| AI Connections | `/system/ai-connections` — cached status on page load; background refresh; provider-neutral status/auth/test/dynamic-model/capability/disconnect registry |
+| Workspace Console | Bottom dock on all pages via `templates/partials/workspace_console_panel.html` + `static/js/workspace_console.js`, `hub/workspace_console/` — reuses repo runner / process monitor / jobs / audit |
+| AI Connections | `/system/ai-connections` — Installed/Authenticated/Version/Last Checked; connect uses visible provider login; Codex CLI first real provider (Okarun MVP) |
 | Email Center (Gmail readonly OAuth) | `/personal/email`, `/work/email`, `hub/email/`, `data/email.db` |
 | Calendar Center (Calendar readonly) | `/personal/calendar`, `/work/calendar`, `hub/calendar/` |
 | Google Connections | `/system/google-connections` — shared accounts + incremental scopes |
@@ -50,7 +51,8 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 | UID conflict resolve | Conflicts skipped by default; no per-UID take/keep form yet |
 | Enrichment raw metadata | Not bulk-stored; live GET only when detail `?tab=raw&raw=1` |
 | SQL Workspace | Implemented — SELECT/WITH/EXPLAIN only; Live warning; never auto-run |
-| AI Assistant Center | Implemented — isolated Aira/Okarun profiles; persistent dock (resize/pin/minimize; per-workspace prefs; lazy providers); provider switching; Find/Ask/Plan/Review; dynamic adapter models; context preview; streaming/cancel/retry/history; scoped read-only tools; no write/execution; no voice |
+| AI Assistant Center | Implemented — isolated Aira/Okarun profiles; persistent dock; Codex CLI real provider (Okarun, read-only `codex exec --json`); provider switching; Find/Ask/Plan/Review; context preview; streaming/cancel/retry/history; scoped read-only tools; no write/execution; no voice |
+| Workspace Console | Implemented — bottom VS Code-style panel (Problems/Output/Debug/Terminal/Ports); resize/minimize/maximize; per-workspace prefs; lazy loads; pauses when hidden; controlled terminal + verified process stops; coexists with right AI dock |
 | Email Center | Implemented — `gmail.readonly` only; encrypted tokens; no send/modify/mark-read; opt-in assistant metadata search forced to active workspace |
 | Calendar Center | Implemented — FullCalendar grid + agenda/upcoming; readonly; sanitized descriptions; no create/RSVP/drag; opt-in assistant lookup forced to active workspace |
 | Repository Notebook | Manual notes with `personal`\|`work` scope + separate Quick Notepads; profile-scoped assistant lookup is read-only |

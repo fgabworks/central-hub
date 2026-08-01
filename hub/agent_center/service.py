@@ -7,6 +7,8 @@ from typing import Any, Callable
 
 from hub.agent_center.adapters import build_adapters
 from hub.agent_center.adapters.base import AgentAdapter, public_availability
+from hub.agent_center.adapters.codex import CodexAdapter
+from hub.agent_center.codex_safety import assert_safe_codex_argv, resolve_approved_repo_cwd
 from hub.agent_center.context_builder import build_context_preview, selectable_repositories
 from hub.agent_center.connections import AgentConnectionRegistry
 from hub.agent_center.models import (
@@ -92,18 +94,32 @@ class AgentCenterService:
             rows.append({"id": m, "label": mode_label(m), "enabled": False, "note": "Not yet available"})
         return rows
 
-    def list_agents(self, *, mode: str | None = None, probe: bool = True) -> list[dict[str, Any]]:
+    def list_agents(
+        self,
+        *,
+        mode: str | None = None,
+        probe: bool = True,
+        profile_id: str | None = None,
+    ) -> list[dict[str, Any]]:
         mode_n = normalize_mode(mode) if mode else None
         out: list[dict[str, Any]] = []
         for adapter in self.adapters:
+            allowed = getattr(adapter, "profiles_allowed", None)
+            if profile_id and allowed and profile_id not in allowed:
+                continue
             if adapter.descriptor.id not in self.connections.adapters:
                 av = adapter.availability()
                 row = public_availability(av)
                 row["connection_state"] = "connected"
             else:
                 connection = self.connections.get(adapter.descriptor.id, probe=probe)
-                models = []
+                models: list[str] = []
                 source = "none"
+                if hasattr(adapter, "list_models"):
+                    try:
+                        models, source = adapter.list_models()
+                    except Exception:
+                        models, source = [], "none"
                 row = {
                     "id": adapter.descriptor.id,
                     "label": adapter.descriptor.label,
@@ -111,6 +127,9 @@ class AgentCenterService:
                     "connection_state": connection["state"],
                     "detail": connection["detail"],
                     "executable_found": connection["installed"],
+                    "installed": connection.get("installed"),
+                    "authenticated": connection.get("authenticated"),
+                    "version": connection.get("version") or "",
                     "modes": list(adapter.descriptor.modes),
                     "models": models,
                     "models_source": source,
@@ -233,6 +252,12 @@ class AgentCenterService:
         adapter = self.get_agent(agent_id)
         if adapter is None:
             raise AgentCenterError(f"Unknown agent: {agent_id}", code="unknown_agent")
+        allowed_profiles = getattr(adapter, "profiles_allowed", None)
+        if allowed_profiles and profile.id not in allowed_profiles:
+            raise AgentCenterError(
+                f"{adapter.descriptor.label} is available for Okarun only in this MVP",
+                code="profile_unsupported",
+            )
         connection = self.connections.get(agent_id) if agent_id in self.connections.adapters else None
         av = adapter.availability()
         if connection is not None and connection["state"] != "connected" or connection is None and av.status not in {"available", "degraded"}:
@@ -303,9 +328,12 @@ class AgentCenterService:
             }
         else:
             models, source = adapter.list_models()
-            if not model and models:
-                model = models[0]
-            if models and model and model not in models:
+            default_token = getattr(adapter, "default_model_token", None)
+            if not model:
+                model = default_token or (models[0] if models else "")
+            if default_token and model in {"", default_token, "__provider_default__"}:
+                model = default_token
+            elif models and model and model not in models:
                 if not (source == "fallback" and model == self.openai_settings.default_model):
                     raise AgentCenterError(f"Model not offered by agent: {model}", code="model_invalid")
             if not model:
@@ -319,7 +347,19 @@ class AgentCenterService:
             raise AgentCenterError(msg, code="scope_invalid")
 
         roots = preview["roots"]
-        cwd = Path(roots[0]["path"]) if roots else ROOT_DIR
+        if isinstance(adapter, CodexAdapter):
+            if not roots:
+                raise AgentCenterError(
+                    "Codex requires a selected connected repository",
+                    code="repository_required",
+                )
+            approved = [Path(r["path"]) for r in roots]
+            try:
+                cwd = resolve_approved_repo_cwd(roots[0]["path"], approved)
+            except ValueError as exc:
+                raise AgentCenterError(str(exc), code="scope_invalid") from exc
+        else:
+            cwd = Path(roots[0]["path"]) if roots else ROOT_DIR
         packed = preview["packed_prompt"]
         referenced = [
             {"repo_id": f["repo_id"], "path": f["path"]} for f in preview.get("files") or []
@@ -436,7 +476,8 @@ class AgentCenterService:
         prompt_dir.mkdir(parents=True, exist_ok=True)
         prompt_path = prompt_dir / "prompt.txt"
         prompt_path.write_text(packed, encoding="utf-8")
-        if profile.id == "aira":
+        provider = getattr(adapter.descriptor, "provider", "")
+        if profile.id == "aira" and not isinstance(adapter, CodexAdapter):
             cwd = prompt_dir
 
         try:
@@ -467,19 +508,35 @@ class AgentCenterService:
                     run["id"], status="failed", error="Rejected unsafe argv token", finished_at=run["created_at"]
                 )
                 raise AgentCenterError("Rejected unsafe argv token", code="argv_unsafe")
+        if isinstance(adapter, CodexAdapter):
+            try:
+                assert_safe_codex_argv(argv)
+            except ValueError as exc:
+                self.store.update_run(
+                    run["id"], status="failed", error=str(exc), finished_at=run["created_at"]
+                )
+                raise AgentCenterError(str(exc), code="argv_unsafe") from exc
 
         run_cwd = prompt_dir
-        if (
-            getattr(adapter.descriptor, "provider", "") == "hub_simulator"
-            or agent_id == "hub-simulator"
-        ):
+        safety_repo = None
+        stdin_path = None
+        jsonl = bool(getattr(adapter, "uses_jsonl", False))
+        if provider == "hub_simulator" or agent_id == "hub-simulator":
             run_cwd = ROOT_DIR
+        elif isinstance(adapter, CodexAdapter):
+            run_cwd = cwd
+            safety_repo = str(cwd)
+            if argv and argv[-1] == "-":
+                stdin_path = str(prompt_path)
 
         self.runner.start(
             run_id=run["id"],
             argv=argv,
             cwd=run_cwd,
             timeout_seconds=float(payload.get("timeout_seconds") or self.timeout_seconds),
+            stdin_path=stdin_path,
+            jsonl=jsonl,
+            safety_repo=safety_repo,
         )
         return self.store.get_run(run["id"]) or run
 
@@ -526,7 +583,7 @@ class AgentCenterService:
             "profiles": [item.public() for item in PROFILES.values()],
             "modes": self.list_modes(),
             # Never probe providers on full-page render — use cached/placeholder status.
-            "agents": self.list_agents(probe=False),
+            "agents": self.list_agents(probe=False, profile_id=profile.id),
             "repositories": self.repositories(profile.id),
             "prompts": self.store.list_prompts(profile_id=profile.id),
             "history": self.history(limit=30, profile_id=profile.id),

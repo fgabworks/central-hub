@@ -62,4 +62,4 @@ agents:
     enabled: true
     modes: [find, ask, plan, review]
     models_managed: []
-    notes: "Requires `codex` on PATH. Read-only hub mode (no auto-apply)."
+    notes: "Codex CLI via PATH or ~/.codex/.sandbox-bin. Okarun MVP: read-only `codex exec -C … --sandbox read-only --ephemeral --json`. Uses authenticated default model. Hub never stores Codex tokens."

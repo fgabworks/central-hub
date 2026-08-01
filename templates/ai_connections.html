@@ -23,8 +23,11 @@
       <span class="status-pill connection-status status-{{ item.state|replace('_', '-') }}">{{ item.status }}</span>
     </div>
     <dl class="connection-facts">
+      <div><dt>Installed</dt><dd class="connection-installed">{{ 'Yes' if item.installed else 'No' }}</dd></div>
+      <div><dt>Authenticated</dt><dd class="connection-authenticated">{{ 'Yes' if item.authenticated else 'No' }}</dd></div>
+      <div><dt>Version</dt><dd class="connection-version">{{ item.version or '—' }}</dd></div>
+      <div><dt>Last Checked</dt><dd class="connection-last-check">{{ item.last_check or 'Never' }}</dd></div>
       <div><dt>Account</dt><dd class="connection-account">{{ item.account_label or 'Not exposed' }}</dd></div>
-      <div><dt>Last successful check</dt><dd class="connection-last-success">{{ item.last_successful_check or 'Never' }}</dd></div>
       <div><dt>Credential storage</dt><dd>{{ item.credential_storage }}</dd></div>
     </dl>
     <p class="connection-detail">{{ item.detail }}</p>
@@ -35,12 +38,14 @@
     <div class="connection-actions">
       <button type="button" class="btn btn-primary" data-action="{{ 'reconnect' if item.state == 'connected' else 'connect' }}">{{ 'Reconnect' if item.state == 'connected' else 'Connect' }}</button>
       <button type="button" class="btn" data-action="test">Test Connection</button>
+      {% if item.id != 'codex' %}
       <button type="button" class="btn" data-action="refresh-models">Refresh Models</button>
+      {% endif %}
       <button type="button" class="btn" data-action="disconnect">Disconnect</button>
     </div>
   </section>
   {% endfor %}
 </div>
 <script src="{{ url_for('static', filename='js/hub_perf.js') }}?v=perf-1"></script>
-<script src="{{ url_for('static', filename='js/ai_connections.js') }}?v=perf-1" defer></script>
+<script src="{{ url_for('static', filename='js/ai_connections.js') }}?v=codex-1" defer></script>
 {% endblock %}

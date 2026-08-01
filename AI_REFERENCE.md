@@ -37,8 +37,9 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Calendar Center | Shared Calendar service + FullCalendar grid (month/week/day) + agenda/upcoming |
 | Google Connections | System page to connect/assign/enable Gmail+Calendar scopes |
 | SQL Workspace | Read-only query library/runner (`/sql`); sqlglot allowlist; Live warning |
-| AI Assistant Center | Aira at `/personal/aira`; Okarun at `/work/okarun`; persistent right-dock panel on other pages (`hub/agent_center/dock.py`); isolated histories/summaries/context/tools; Find/Ask/Plan/Review; dynamic Codex, Claude Code, Cursor, Grok, and OpenAI API providers |
-| AI Connections | `/system/ai-connections`; connect/test/model refresh/capabilities/disconnect through one provider-neutral registry |
+| AI Assistant Center | Aira at `/personal/aira`; Okarun at `/work/okarun`; persistent right-dock panel on other pages (`hub/agent_center/dock.py`); isolated histories/summaries/context/tools; Find/Ask/Plan/Review; Codex CLI (Okarun MVP), Claude Code, Cursor, Grok, and OpenAI API providers |
+| Workspace Console | Bottom VS Code-style panel (`hub/workspace_console/`); Problems/Output/Debug/Terminal/Ports; works with the right AI dock; controlled terminal + verified process stops |
+| AI Connections | `/system/ai-connections`; Installed/Authenticated/Version/Last Checked + connect/test/capabilities/disconnect; Codex never stores tokens |
 | DHIS2 | GET client, discovery, UID mapping, preview builder |
 | UID index admin | LP-style controlled update: dry-run → preview → typed confirm → archive/versions/restore |
 | Metadata enrichment | Read-only DHIS2 enrich → local SQLite relationships + audit statuses |
@@ -111,9 +112,11 @@ Modes: Find / Ask / Plan / Review. Edit / Test labeled **Not yet available**.
 Adapters: Hub Simulator (demo), **OpenAI API** and **Grok/xAI** Responses APIs,
 plus Claude Code / Cursor Agent / Codex CLIs. Provider accounts are managed at
 `/system/ai-connections`; Aira and Okarun are profiles, never providers.
-OpenAI and Grok models come from the provider model-list endpoint; Codex uses
-`app-server model/list`; Cursor uses `agent models`. Claude Code currently exposes
-only its provider default because its supported non-interactive CLI has no model-list command.
+OpenAI and Grok models come from the provider model-list endpoint; Codex MVP uses the
+authenticated Codex default model only (`__provider_default__`, no discovery yet) via
+`codex exec -C <repo> --sandbox read-only --ephemeral --json` for Okarun. Cursor uses
+`agent models`. Claude Code currently exposes only its provider default because its
+supported non-interactive CLI has no model-list command.
 Inaccessible models are never shown. Optional `OPENAI_ALLOWED_MODELS` can further restrict
 the live list; cache TTL and Pro timeout settings remain available.
 

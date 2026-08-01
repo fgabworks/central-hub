@@ -148,12 +148,16 @@ class AiConnectionsTests(unittest.TestCase):
         def descriptor(agent_id, provider, executable):
             return AgentDescriptor(id=agent_id, label=agent_id, provider=provider, executable=executable, modes=["ask"])
 
-        codex = CodexAdapter(descriptor("codex", "codex", sys.executable))
-        codex_argv = codex.build_argv(mode="ask", prompt="p", model="m", cwd=self.temp.name)
+        codex = CodexAdapter(descriptor("codex", "codex", "codex"))
+        codex.resolve_executable = lambda: sys.executable
+        codex_argv = codex.build_argv(mode="ask", prompt="p", model="__provider_default__", cwd=self.temp.name, prompt_file="prompt.txt")
         self.assertIn("read-only", codex_argv)
-        self.assertIn("--ignore-user-config", codex_argv)
         self.assertIn("--ephemeral", codex_argv)
-        self.assertIn("shell_tool", codex_argv)
+        self.assertIn("--json", codex_argv)
+        self.assertIn("-C", codex_argv)
+        self.assertNotIn("--yolo", codex_argv)
+        self.assertNotIn("workspace-write", codex_argv)
+        self.assertNotIn("danger-full-access", codex_argv)
 
         claude = ClaudeCodeAdapter(descriptor("claude-code", "claude_code", sys.executable))
         claude_argv = claude.build_argv(mode="ask", prompt="p", model="__provider_default__", cwd=self.temp.name)
