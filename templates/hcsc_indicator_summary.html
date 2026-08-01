@@ -1,28 +1,27 @@
 {% extends "base.html" %}
 {% block title %}{{ page_title }} · {{ app_name }}{% endblock %}
 {% block head_extra %}
-<script src="{{ url_for('static', filename='js/hcsc_indicator_summary.js') }}?v=hcsc-rf" defer></script>
+<script src="{{ url_for('static', filename='js/dhis2_org_unit_picker.js') }}?v=ou-preview-1" defer></script>
+<script src="{{ url_for('static', filename='js/hcsc_indicator_summary.js') }}?v=hcsc-preview-1" defer></script>
 {% endblock %}
 {% block content %}
-<section class="page-header page-header-compact">
+<section class="page-header page-header-compact hcsc-page-header">
   <div>
-    <p class="muted-2" style="margin:0 0 0.35rem">
+    <p class="muted-2 hcsc-crumb" style="margin:0 0 0.35rem">
       <a href="{{ url_for('dhis2') }}">DHIS2</a> / HCSC–RF
     </p>
     <h1>{{ page_title }}</h1>
     <p class="muted" id="hcsc-subtitle">
       {{ bootstrap.page_subtitle }} — {{ bootstrap.page_meaning }}.
-      Reference: <code>{{ bootstrap.npmo_report_uid }}</code> {{ bootstrap.npmo_report_name }}.
     </p>
   </div>
   <div class="page-meta">
-    {% if dhis2_instance %}<span class="badge">Active: {{ dhis2_instance }}</span>{% endif %}
+    {% if dhis2_instance %}<span class="badge badge-live">Active: {{ dhis2_instance }}</span>{% endif %}
     <span class="badge">GET-only</span>
     <a class="btn btn-sm" href="{{ url_for('dhis2') }}">DHIS2 Overview</a>
   </div>
 </section>
 
-{# Bootstrap as JSON script (not an HTML attribute) so apostrophes / size cannot hide the shell. #}
 <script type="application/json" id="hcsc-bootstrap">{{ bootstrap | tojson }}</script>
 
 <div id="hcsc-root"
@@ -37,43 +36,111 @@
 
   <div class="hcsc-shell-state" id="hcsc-shell-banner" hidden role="status"></div>
 
-  <form class="hcsc-controls nb-filters" id="hcsc-controls">
-    <label>Environment
-      <select id="hcsc-env" name="environment" class="hcsc-control">
-        <option value="stage">Stage</option>
+  <form class="hcsc-param-row hcsc-filter-card" id="hcsc-controls">
+    <div class="hcsc-filter-field hcsc-filter-env">
+      <label class="hcsc-field-label" for="hcsc-env">Environment</label>
+      <select id="hcsc-env" name="environment" class="hcsc-control" aria-label="Environment">
         <option value="live">Live</option>
+        <option value="stage">Stage</option>
       </select>
-    </label>
-    <label>Reporting Quarter
-      <select id="hcsc-period" name="period" class="hcsc-control"></select>
-    </label>
-    <label>Organisation Unit
-      <input type="search" id="hcsc-ou-search" class="hcsc-control" placeholder="Search name / code / UID" autocomplete="off">
-      <input type="hidden" id="hcsc-ou" name="orgUnit">
-      <ul class="hcsc-ou-results" id="hcsc-ou-results" hidden></ul>
-      <span class="muted" id="hcsc-ou-label"></span>
-    </label>
-    <label>Disaggregation
-      <select id="hcsc-disagg" name="disaggregation" class="hcsc-control">
+    </div>
+
+    <div class="hcsc-filter-field hcsc-filter-period">
+      <label class="hcsc-field-label" for="hcsc-period">Reporting Quarter</label>
+      <select id="hcsc-period" name="period" class="hcsc-control" aria-describedby="hcsc-period-error" aria-label="Reporting Quarter"></select>
+      <p class="hcsc-field-error" id="hcsc-period-error" hidden></p>
+    </div>
+
+    <div class="hcsc-filter-field hcsc-filter-ou">
+      <label class="hcsc-field-label" id="hcsc-ou-label">Organisation Unit (Region › Province › Municipality/City › Barangay)</label>
+      <div class="hcsc-ou-picker" id="hcsc-ou-picker" aria-labelledby="hcsc-ou-label">
+        <div class="hcsc-ou-levels" role="group" aria-label="Organisation unit levels">
+          <select id="hcsc-ou-region" class="hcsc-control hcsc-ou-select" data-ou-level="0" aria-label="Region">
+            <option value="">Region…</option>
+          </select>
+          <select id="hcsc-ou-province" class="hcsc-control hcsc-ou-select" data-ou-level="1" aria-label="Province" disabled>
+            <option value="">Province…</option>
+          </select>
+          <select id="hcsc-ou-municipality" class="hcsc-control hcsc-ou-select" data-ou-level="2" aria-label="Municipality/City" disabled>
+            <option value="">Municipality/City…</option>
+          </select>
+          <select id="hcsc-ou-barangay" class="hcsc-control hcsc-ou-select" data-ou-level="3" aria-label="Barangay" disabled>
+            <option value="">Barangay…</option>
+          </select>
+        </div>
+        <div class="hcsc-ou-search-wrap">
+          <input type="search" id="hcsc-ou-search" class="hcsc-control" placeholder="Search organisation unit" autocomplete="off" aria-label="Search organisation unit" aria-controls="hcsc-ou-search-results" aria-expanded="false">
+          <div id="hcsc-ou-search-results" class="hcsc-ou-search-results" hidden role="listbox"></div>
+        </div>
+        <div class="hcsc-ou-chip-row" id="hcsc-ou-chip-row" hidden>
+          <span class="hcsc-ou-chip">
+            <span id="hcsc-ou-chip-label"></span>
+            <button type="button" class="hcsc-ou-chip-clear" id="hcsc-ou-clear" title="Clear organisation unit" aria-label="Clear organisation unit">×</button>
+          </span>
+        </div>
+        <p class="muted hcsc-ou-path" id="hcsc-ou-path" hidden></p>
+        <p class="muted hcsc-ou-sync" id="hcsc-ou-sync" hidden></p>
+        <input type="hidden" id="hcsc-ou" name="orgUnit" value="">
+        <div class="hcsc-ou-meta-actions">
+          <button type="button" class="btn btn-sm" id="hcsc-ou-retry" title="Retry organisation unit load" hidden>Retry</button>
+          <button type="button" class="btn btn-sm" id="hcsc-ou-refresh-meta" title="Refresh organisation-unit metadata" hidden>Refresh Metadata</button>
+        </div>
+      </div>
+      <p class="hcsc-field-error" id="hcsc-ou-error" hidden></p>
+    </div>
+
+    <div class="hcsc-filter-field hcsc-filter-disagg">
+      <label class="hcsc-field-label" for="hcsc-disagg">Disaggregation</label>
+      <select id="hcsc-disagg" name="disaggregation" class="hcsc-control" aria-label="Disaggregation">
         <option value="none">All</option>
-        <option value="ip" disabled>IP / non-IP (planned)</option>
       </select>
-    </label>
-    <button type="submit" class="btn btn-sm btn-primary" id="hcsc-run">Generate Report</button>
-    <button type="button" class="btn btn-sm" id="hcsc-refresh" title="Force refresh">Refresh</button>
+    </div>
+
+    <div class="hcsc-filter-field hcsc-filter-actions">
+      <span class="hcsc-field-label" aria-hidden="true">&nbsp;</span>
+      <div class="hcsc-action-btns">
+        <button type="submit" class="btn btn-sm btn-primary" id="hcsc-run" disabled>Generate Report</button>
+        <button type="button" class="btn btn-sm" id="hcsc-refresh" title="Force refresh" disabled>Refresh</button>
+      </div>
+    </div>
   </form>
 
-  <p class="muted hcsc-status" id="hcsc-status">Select environment, quarter, and organisation unit — shell is ready before analytics load.</p>
+  <div class="hcsc-status-strip" id="hcsc-status-strip" aria-live="polite">
+    <div class="hcsc-status-col">
+      <span class="hcsc-status-kicker">Status</span>
+      <p class="hcsc-status-value" id="hcsc-status">Select an organisation unit to continue</p>
+    </div>
+    <div class="hcsc-status-col">
+      <span class="hcsc-status-kicker">Selected Parameters</span>
+      <div class="hcsc-param-chips" id="hcsc-param-chips">
+        <span class="hcsc-param-chip muted">—</span>
+      </div>
+    </div>
+    <div class="hcsc-status-col">
+      <span class="hcsc-status-kicker">Last Run</span>
+      <p class="hcsc-status-value muted" id="hcsc-last-run">No report generated yet</p>
+    </div>
+  </div>
 
   <section class="hcsc-overview-cards" id="hcsc-cards" aria-label="Overview cards">
-    <article class="hcsc-card is-blue hcsc-card-placeholder">
-      <h3>Eligible Households</h3>
-      <p class="hcsc-card-value muted">—</p>
-      <p class="muted">Awaiting report</p>
-    </article>
+    <article class="hcsc-card is-blue hcsc-card-placeholder"><h3>Eligible Households</h3><p class="hcsc-card-value muted">—</p><p class="muted">Awaiting report</p></article>
+    <article class="hcsc-card is-green hcsc-card-placeholder"><h3>Approved Eligible Households</h3><p class="hcsc-card-value muted">—</p><p class="muted">Awaiting report</p></article>
+    <article class="hcsc-card is-purple hcsc-card-placeholder"><h3>Convergent Households</h3><p class="hcsc-card-value muted">—</p><p class="muted">Awaiting report</p></article>
+    <article class="hcsc-card is-amber hcsc-card-placeholder"><h3>Overall Convergence Rate</h3><p class="hcsc-card-value muted">—</p><p class="muted">Awaiting report</p></article>
+    <article class="hcsc-card is-teal hcsc-card-placeholder"><h3>Completion Rate</h3><p class="hcsc-card-value muted">—</p><p class="muted">Awaiting report</p></article>
   </section>
 
-  <nav class="hcsc-tabs" id="hcsc-tabs" role="tablist" aria-label="Report sections">
+  <nav class="hcsc-category-nav" id="hcsc-category-nav" aria-label="Report categories">
+    <button type="button" class="hcsc-cat is-active" data-category="overview">Overview</button>
+    <button type="button" class="hcsc-cat" data-category="eligible_beneficiaries">Eligible Beneficiaries</button>
+    <button type="button" class="hcsc-cat" data-category="maternal_health">Maternal Health</button>
+    <button type="button" class="hcsc-cat" data-category="child_nutrition_health">Child Nutrition &amp; Health</button>
+    <button type="button" class="hcsc-cat" data-category="household_wash_sbc">Household / WASH / SBC</button>
+    <button type="button" class="hcsc-cat" data-category="food_security">Food Security</button>
+    <button type="button" class="hcsc-cat" data-category="unresolved">Unresolved</button>
+  </nav>
+
+  <nav class="hcsc-tabs" id="hcsc-tabs" role="tablist" aria-label="Technical tabs">
     <button type="button" class="hcsc-tab is-active" data-tab="summary" role="tab" aria-selected="true">Indicator Summary</button>
     <button type="button" class="hcsc-tab" data-tab="mapping" role="tab" aria-selected="false">Data Mapping</button>
     <button type="button" class="hcsc-tab" data-tab="lineage" role="tab" aria-selected="false">Lineage &amp; Sources</button>
@@ -82,9 +149,58 @@
   </nav>
 
   <section class="hcsc-tab-panel" data-panel="summary" id="hcsc-panel-summary">
-    <div class="hcsc-table-toolbar">
-      <input type="search" id="hcsc-filter" class="hcsc-control" placeholder="Search indicators…" aria-label="Filter indicators">
-      <label class="hcsc-toggle"><input type="checkbox" id="hcsc-pct-only"> Show only % metrics</label>
+    <div class="hcsc-table-toolbar" id="hcsc-indicator-toolbar">
+      <input type="search" id="hcsc-filter" class="hcsc-control" placeholder="Search indicators" aria-label="Search indicators">
+      <select id="hcsc-filter-type" class="hcsc-control" aria-label="Result Type">
+        <option value="">Result Type</option>
+        <option value="Count">Count</option>
+        <option value="Percentage">Percentage</option>
+        <option value="Ratio">Ratio</option>
+        <option value="Status">Status</option>
+      </select>
+      <select id="hcsc-filter-source" class="hcsc-control" aria-label="Source">
+        <option value="">Source</option>
+        <option value="PI">PI</option>
+        <option value="IND">IND</option>
+        <option value="DE">DE</option>
+        <option value="SQL">SQL</option>
+        <option value="LP">LP</option>
+      </select>
+      <select id="hcsc-filter-validation" class="hcsc-control" aria-label="Validation Status">
+        <option value="">Validation Status</option>
+        <option value="Exact Match">Exact Match</option>
+        <option value="Rounding Difference">Rounding Difference</option>
+        <option value="Expected Logic Difference">Expected Logic Difference</option>
+        <option value="Unexplained Difference">Unexplained Difference</option>
+        <option value="Not Yet Validated">Not Yet Validated</option>
+        <option value="Comparison Source Unavailable">Comparison Source Unavailable</option>
+      </select>
+      <div class="hcsc-toolbar-actions">
+        <details class="hcsc-menu" id="hcsc-export-menu">
+          <summary class="btn btn-sm">Export</summary>
+          <div class="hcsc-menu-panel" role="menu">
+            <button type="button" class="hcsc-menu-item" data-export="csv" role="menuitem">CSV (visible rows)</button>
+            <button type="button" class="hcsc-menu-item" data-export="json" role="menuitem">JSON (visible rows)</button>
+          </div>
+        </details>
+        <details class="hcsc-menu" id="hcsc-columns-menu">
+          <summary class="btn btn-sm">Columns</summary>
+          <div class="hcsc-menu-panel" role="menu">
+            <label class="hcsc-menu-item"><input type="checkbox" data-col="basis" checked> Calculation Basis</label>
+            <label class="hcsc-menu-item"><input type="checkbox" data-col="scope" checked> Population / Scope</label>
+            <label class="hcsc-menu-item"><input type="checkbox" data-col="validation" checked> Validation</label>
+            <label class="hcsc-menu-item"><input type="checkbox" data-col="updated" checked> Last Updated</label>
+          </div>
+        </details>
+        <details class="hcsc-menu" id="hcsc-legend-menu">
+          <summary class="btn btn-sm">Legend</summary>
+          <div class="hcsc-menu-panel hcsc-legend-panel" role="menu">
+            <p><span class="hcsc-type-pill is-count">Count</span> <span class="hcsc-type-pill is-percentage">Percentage</span> <span class="hcsc-type-pill is-ratio">Ratio</span></p>
+            <p><span class="hcsc-badge is-hcsc">HCSC</span> <span class="hcsc-badge is-rf">RF</span> <span class="hcsc-badge is-hcsc-rf">HCSC–RF</span> <span class="hcsc-badge is-unresolved">Unresolved</span></p>
+            <p><span class="hcsc-badge is-pi">PI</span> <span class="hcsc-badge is-ind">IND</span> <span class="hcsc-badge is-de">DE</span> <span class="hcsc-badge is-sql">SQL</span> <span class="hcsc-badge is-lp">LP</span></p>
+          </div>
+        </details>
+      </div>
       <span class="muted" id="hcsc-freshness"></span>
     </div>
     <div class="hcsc-table-scroll">
@@ -92,35 +208,27 @@
         <thead>
           <tr>
             <th>Indicator</th>
-            <th>Result Type</th>
             <th>Value</th>
-            <th>Population / Scope</th>
+            <th data-col="basis">Calculation Basis</th>
+            <th data-col="scope">Population / Scope</th>
             <th>Source</th>
             <th>UID</th>
-            <th>Last Updated</th>
+            <th data-col="validation">Validation</th>
+            <th data-col="updated">Last Updated</th>
           </tr>
         </thead>
         <tbody id="hcsc-tbody">
-          <tr><td colspan="7" class="muted">Shell ready. Generate a report to load indicator values.</td></tr>
+          <tr class="hcsc-empty-row">
+            <td colspan="8">
+              <div class="hcsc-empty">
+                <strong>No indicators to display</strong>
+                <p class="muted">Select an organisation unit and generate the report.</p>
+              </div>
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>
-    <footer class="hcsc-legend muted">
-      <span><span class="hcsc-type-pill is-count">Count</span></span>
-      <span><span class="hcsc-type-pill is-percentage">Percentage</span></span>
-      <span><span class="hcsc-type-pill is-ratio">Ratio</span></span>
-      <span><span class="hcsc-type-pill is-status">Status</span></span>
-      <span><span class="hcsc-type-pill is-disaggregation">Disaggregation</span></span>
-      <span class="hcsc-badge is-hcsc">HCSC</span>
-      <span class="hcsc-badge is-rf">RF</span>
-      <span class="hcsc-badge is-hcsc-rf">HCSC + RF</span>
-      <span class="hcsc-badge is-unresolved">Unresolved</span>
-      <span class="hcsc-badge is-pi">PI</span> Program Indicator
-      <span class="hcsc-badge is-ind">IND</span> Aggregate Indicator
-      <span class="hcsc-badge is-de">DE</span> Data Element
-      <span class="hcsc-badge is-sql">SQL</span> Approved query
-      <span class="hcsc-badge is-lp">LP</span> Live Processing
-    </footer>
   </section>
 
   <section class="hcsc-tab-panel" data-panel="mapping" id="hcsc-panel-mapping" hidden>

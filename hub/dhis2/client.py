@@ -797,8 +797,11 @@ class Dhis2Client:
         params: dict[str, Any] | list[tuple[str, str]] | None = None,
         *,
         timeout: float | None = None,
+        retry_max: int | None = None,
     ) -> dict[str, Any]:
-        data = self._get_json_any(path, params=params, timeout=timeout)
+        data = self._get_json_any(
+            path, params=params, timeout=timeout, retry_max=retry_max
+        )
         if not isinstance(data, dict):
             raise Dhis2Error("Unexpected DHIS2 response shape.")
         return data
@@ -809,12 +812,14 @@ class Dhis2Client:
         params: dict[str, Any] | list[tuple[str, str]] | None = None,
         *,
         timeout: float | None = None,
+        retry_max: int | None = None,
     ) -> Any:
         """Hard read-only: this client only issues GET (with bounded retries)."""
         response = self._get_response(
             path,
             params=params,
             timeout=timeout,
+            retry_max=retry_max,
             accept="application/json",
         )
         try:
@@ -831,11 +836,13 @@ class Dhis2Client:
         accept: str = "*/*",
         timeout: float | None = None,
         max_bytes: int = 5_000_000,
+        retry_max: int | None = None,
     ) -> bytes:
         response = self._get_response(
             path,
             params=params,
             timeout=timeout,
+            retry_max=retry_max,
             accept=accept,
         )
         content = response.content or b""
@@ -851,6 +858,7 @@ class Dhis2Client:
         params: dict[str, Any] | list[tuple[str, str]] | None = None,
         *,
         timeout: float | None = None,
+        retry_max: int | None = None,
         accept: str = "application/json",
     ) -> requests.Response:
         """Hard read-only GET with bounded retries. Never POST/PUT/PATCH/DELETE."""
@@ -860,7 +868,10 @@ class Dhis2Client:
         timeout_s = float(
             self.settings.timeout_seconds if timeout is None else timeout
         )
-        max_attempts = 1 + max(0, int(self.settings.retry_max))
+        retries = (
+            self.settings.retry_max if retry_max is None else retry_max
+        )
+        max_attempts = 1 + max(0, int(retries))
         last_error: Dhis2Error | None = None
         headers = {"Accept": accept} if accept and accept != "application/json" else None
 

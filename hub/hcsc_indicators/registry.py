@@ -257,12 +257,19 @@ def load_registry(path: Path | None = None, *, force: bool = False) -> dict[str,
     for row in indicators:
         by_section.setdefault(row["section"], []).append(row)
         by_group.setdefault(row["display_group"], []).append(row)
+    reporting_cycle = data.get("reporting_cycle") if isinstance(data.get("reporting_cycle"), dict) else {}
     payload = {
         "ok": True,
         "path": str(registry_path),
         "npmo_report_uid": _as_str(data.get("npmo_report_uid")) or "qTQD08sNuzZ",
         "npmo_report_name": _as_str(data.get("npmo_report_name"))
         or "HCSC Summary Tables (NPMO)",
+        "reporting_cycle": {
+            "id": reporting_cycle.get("id") or 1,
+            "label": _as_str(reporting_cycle.get("label")) or "Cycle 1",
+            "quarter_start": _as_str(reporting_cycle.get("quarter_start")) or "2025Q3",
+            "quarter_end": _as_str(reporting_cycle.get("quarter_end")) or "2027Q4",
+        },
         "indicators": indicators,
         "overview_indicators": [row for row in indicators if row.get("overview")],
         "unresolved_keys": [row["key"] for row in indicators if row.get("unresolved")],

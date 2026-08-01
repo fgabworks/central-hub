@@ -39,6 +39,7 @@ def register_dhis2_reports_routes(app: Flask) -> None:
             "secret_blocked": 403,
             "environment_blocked": 403,
             "unavailable": 409,
+            "maintenance": 503,
             "unauthorized": 403,
             "dhis2_unconfigured": 400,
             "invalid_period": 400,
@@ -561,13 +562,33 @@ def register_dhis2_reports_routes(app: Flask) -> None:
         env = (request.args.get("environment") or "stage").strip()
         q = (request.args.get("q") or "").strip()
         parent_id = (request.args.get("parent_id") or request.args.get("parent") or "").strip()
+        level = request.args.get("level", type=int)
         limit = request.args.get("limit", 25, type=int) or 25
+        refresh = (request.args.get("refresh") or "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }
         try:
             return jsonify(
-                _svc().search_org_units(env, q=q, limit=limit, parent_id=parent_id)
+                _svc().search_org_units(
+                    env,
+                    q=q,
+                    limit=limit,
+                    parent_id=parent_id,
+                    level=level,
+                    refresh=refresh,
+                )
             )
         except ReportSecurityError as exc:
             return _json_error(exc)
+
+    @app.get("/api/dhis2/reports/environment-status")
+    def api_dhis2_report_environment_status():
+        from hub.dhis2_reports.maintenance import environment_availability
+
+        env = (request.args.get("environment") or "stage").strip()
+        return jsonify({"ok": True, **environment_availability(env)})
 
     @app.post("/api/dhis2/reports/generate-and-view")
     def api_dhis2_report_generate_and_view():

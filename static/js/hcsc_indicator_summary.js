@@ -30,7 +30,29 @@
     validation: null,
     activeTab: "summary",
     activeRtab: "retrieval_request",
+    activeCategory: "overview",
+    lastRunAt: null,
+    lastRunDurationMs: null,
+    statusMode: "need_ou",
+    generated: false,
   };
+  var ouPicker = null;
+  var allowedQuarters = {};
+  var CARD_TITLES = {
+    eligible_households: "Eligible Households",
+    approved_eligible_households: "Approved Eligible Households",
+    convergent_households: "Convergent Households",
+    convergence_rate: "Overall Convergence Rate",
+    completion_validated_eligible_rate: "Completion Rate",
+  };
+  var CARD_KEYS = [
+    "eligible_households",
+    "approved_eligible_households",
+    "convergent_households",
+    "convergence_rate",
+    "completion_validated_eligible_rate",
+  ];
+  var hiddenCols = {};
 
   function $(id) {
     return document.getElementById(id);
@@ -66,20 +88,207 @@
   }
 
   function setStatus(msg, isError) {
-    var el = $("hcsc-status");
-    if (!el) return;
-    el.textContent = msg || "";
-    el.classList.toggle("is-error", !!isError);
+    updateStatusStrip(msg, isError ? "error" : null);
     if (isError) showShellBanner(msg, true);
+  }
+
+  function storageKey(kind) {
+    var env = ($("hcsc-env") && $("hcsc-env").value) || "stage";
+    return "centralhub.hcsc." + kind + "." + env;
+  }
+
+  function loadRememberedQuarter() {
+    try {
+      var raw = JSON.parse(localStorage.getItem(storageKey("period")) || "null");
+      return raw && raw.id ? String(raw.id) : "";
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function saveRememberedQuarter(id) {
+    try {
+      localStorage.setItem(storageKey("period"), JSON.stringify({ id: id, at: Date.now() }));
+    } catch (e) {}
+  }
+
+  function setFieldError(id, msg) {
+    var el = $(id);
+    if (!el) return;
+    if (!msg) {
+      el.hidden = true;
+      el.textContent = "";
+      return;
+    }
+    el.hidden = false;
+    el.textContent = msg;
+  }
+
+  function isValidOuUid(value) {
+    if (window.CentralHubOuPicker && window.CentralHubOuPicker.isValidUid) {
+      return window.CentralHubOuPicker.isValidUid(value);
+    }
+    return /^[A-Za-z0-9]{11}$/.test(String(value || "").trim());
+  }
+
+  function selectedPeriod() {
+    var pe = ($("hcsc-period") && $("hcsc-period").value) || "";
+    return allowedQuarters[pe] ? pe : "";
+  }
+
+  function selectedOu() {
+    if (ouPicker && ouPicker.selectedUid) return ouPicker.selectedUid();
+    var ou = ($("hcsc-ou") && $("hcsc-ou").value) || "";
+    return isValidOuUid(ou) ? ou.trim() : "";
+  }
+
+  function formatDuration(ms) {
+    var total = Math.max(0, Math.round((ms || 0) / 1000));
+    var m = Math.floor(total / 60);
+    var s = total % 60;
+    return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+  }
+
+  function formatRunStamp(iso) {
+    if (!iso) return "";
+    try {
+      var d = new Date(iso);
+      if (isNaN(d.getTime())) return String(iso).replace("T", " ").slice(0, 19);
+      return d.toLocaleString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+    } catch (e) {
+      return String(iso);
+    }
+  }
+
+  function selectedDisaggLabel() {
+    var sel = $("hcsc-disagg");
+    if (!sel || !sel.selectedOptions || !sel.selectedOptions[0]) return "All";
+    return sel.selectedOptions[0].textContent || "All";
+  }
+
+  function selectedOuPath() {
+    if (ouPicker && ouPicker.selectedPath) {
+      var p = ouPicker.selectedPath();
+      if (p && p.path) return p.path;
+      if (p && p.name) return p.name;
+    }
+    var chip = $("hcsc-ou-chip-label");
+    return (chip && chip.textContent) || "";
+  }
+
+  function updateStatusStrip(explicitMsg, mode) {
+    var el = $("hcsc-status");
+    var pe = selectedPeriod();
+    var ou = selectedOu();
+    var resolved =
+      mode ||
+      (state.statusMode === "loading"
+        ? "loading"
+        : state.statusMode === "error"
+          ? "error"
+          : !ou
+            ? "need_ou"
+            : pe && ou
+              ? "ready"
+              : "need_ou");
+    if (mode) state.statusMode = mode;
+    else if (resolved === "ready" || resolved === "need_ou") state.statusMode = resolved;
+    var msg =
+      explicitMsg ||
+      (resolved === "loading"
+        ? "Loading"
+        : resolved === "error"
+          ? "Error"
+          : resolved === "ready"
+            ? "Ready to generate"
+            : "Select an organisation unit to continue");
+    if (el) {
+      el.textContent = msg;
+      el.classList.toggle("is-error", resolved === "error");
+      el.classList.toggle("is-loading", resolved === "loading");
+      el.classList.toggle("is-ready", resolved === "ready");
+    }
+    var chips = $("hcsc-param-chips");
+    if (chips) {
+      var envRaw = (($("hcsc-env") && $("hcsc-env").value) || "stage").toLowerCase();
+      var peLabel =
+        ($("hcsc-period") &&
+          $("hcsc-period").selectedOptions &&
+          $("hcsc-period").selectedOptions[0] &&
+          $("hcsc-period").selectedOptions[0].textContent) ||
+        pe ||
+        "—";
+      var path = selectedOuPath() || "—";
+      var disagg = selectedDisaggLabel();
+      chips.innerHTML =
+        '<span class="hcsc-param-chip">' +
+        escapeHtml(envRaw === "live" ? "Live" : "Stage") +
+        "</span>" +
+        '<span class="hcsc-param-chip">' +
+        escapeHtml(peLabel) +
+        "</span>" +
+        '<span class="hcsc-param-chip" title="' +
+        escapeHtml(path) +
+        '">' +
+        escapeHtml(path) +
+        "</span>" +
+        '<span class="hcsc-param-chip">' +
+        escapeHtml(disagg) +
+        "</span>";
+    }
+    var last = $("hcsc-last-run");
+    if (last) {
+      if (!state.lastRunAt) {
+        last.textContent = "No report generated yet";
+        last.classList.add("muted");
+      } else {
+        last.classList.remove("muted");
+        last.textContent =
+          formatRunStamp(state.lastRunAt) +
+          (state.lastRunDurationMs != null
+            ? " · " + formatDuration(state.lastRunDurationMs)
+            : "");
+      }
+    }
+  }
+
+  function validateForm() {
+    var pe = selectedPeriod();
+    var ou = selectedOu();
+    var peOk = !!pe;
+    var ouOk = !!ou;
+    setFieldError("hcsc-period-error", peOk ? "" : "Select a valid quarter.");
+    setFieldError("hcsc-ou-error", ouOk ? "" : "Select an organisation unit.");
+    var run = $("hcsc-run");
+    if (run) run.disabled = !(peOk && ouOk);
+    var refresh = $("hcsc-refresh");
+    if (refresh) refresh.disabled = !(peOk && ouOk);
+    if (state.statusMode !== "loading" && state.statusMode !== "error") {
+      state.statusMode = peOk && ouOk ? "ready" : "need_ou";
+    }
+    updateStatusStrip();
+    return peOk && ouOk;
   }
 
   function fillPeriods() {
     var sel = $("hcsc-period");
     if (!sel) return;
     var quarters = (boot.periods && boot.periods.quarters) || [];
-    var def = (boot.periods && boot.periods.default_period) || "";
+    var remembered = loadRememberedQuarter();
+    var def =
+      (remembered && quarters.some(function (q) { return q.id === remembered; }) && remembered) ||
+      (boot.periods && boot.periods.default_period) ||
+      "";
+    allowedQuarters = {};
     sel.innerHTML = quarters
       .map(function (q) {
+        allowedQuarters[q.id] = true;
         return (
           '<option value="' +
           escapeHtml(q.id) +
@@ -91,6 +300,9 @@
         );
       })
       .join("");
+    if (!sel.value && sel.options.length) sel.selectedIndex = 0;
+    if (sel.value) saveRememberedQuarter(sel.value);
+    validateForm();
   }
 
   function typePill(displayType) {
@@ -168,64 +380,106 @@
   }
 
   function valueCell(row) {
-    var main = escapeHtml(row.value_text || "—");
-    var basis = row.calculation_basis
-      ? '<div class="hcsc-basis">' + escapeHtml(row.calculation_basis) + "</div>"
-      : "";
-    var popHint =
-      row.display_result_type === "Count" && row.population_definition_reference
-        ? '<div class="muted hcsc-basis">' + escapeHtml(row.population_definition_reference) + "</div>"
-        : "";
-    // Count population goes in Population/Scope column; avoid duplicating unless basis empty.
-    if (row.display_result_type === "Count") popHint = "";
-    return "<div class=\"hcsc-value\">" + main + basis + popHint + "</div>";
+    return '<div class="hcsc-value">' + escapeHtml(row.value_text || "—") + "</div>";
+  }
+
+  function validationCell(row) {
+    var status = row.validation_status || "Not Yet Validated";
+    var cls = "is-pending";
+    var lower = String(status).toLowerCase();
+    if (lower.indexOf("exact") >= 0) cls = "is-exact";
+    else if (lower.indexOf("rounding") >= 0) cls = "is-rounding";
+    else if (lower.indexOf("expected") >= 0) cls = "is-expected";
+    else if (lower.indexOf("unexplained") >= 0) cls = "is-unexplained";
+    else if (lower.indexOf("unavailable") >= 0) cls = "is-unavailable";
+    var short =
+      lower.indexOf("rounding") >= 0 && lower.indexOf("difference") >= 0
+        ? "Rounding"
+        : status;
+    return (
+      '<span class="hcsc-validation-cell" title="' +
+      escapeHtml(status) +
+      '"><span class="hcsc-val-dot ' +
+      cls +
+      '" aria-hidden="true"></span>' +
+      escapeHtml(short) +
+      "</span>"
+    );
+  }
+
+  function calculationBasisText(row) {
+    if (row.calculation_basis) return row.calculation_basis;
+    if (row.display_result_type === "Count") {
+      return row.population_definition_reference || row.definition || "—";
+    }
+    return "—";
   }
 
   function renderCards(rows) {
     var host = $("hcsc-cards");
     if (!host) return;
-    var keys = [
-      "eligible_households",
-      "approved_eligible_households",
-      "convergent_households",
-      "convergence_rate",
-      "completion_validated_eligible_rate",
-    ];
     var tones = ["is-blue", "is-green", "is-purple", "is-amber", "is-teal"];
     var byKey = {};
-    rows.forEach(function (r) {
+    (rows || []).forEach(function (r) {
       byKey[r.indicator_key] = r;
     });
-    host.innerHTML = keys
-      .map(function (k, i) {
-        var r = byKey[k];
-        if (!r) return "";
+    var hasData = CARD_KEYS.some(function (k) { return !!byKey[k]; });
+    host.innerHTML = CARD_KEYS.map(function (k, i) {
+      var r = byKey[k];
+      var title = CARD_TITLES[k] || (r && r.display_name) || k;
+      if (!hasData || !r) {
         return (
           '<article class="hcsc-card ' +
           tones[i] +
-          '">' +
-          "<h3>" +
-          escapeHtml(r.display_name) +
-          "</h3>" +
-          '<p class="hcsc-card-value">' +
-          escapeHtml(r.value_text || "—") +
-          "</p>" +
-          '<p class="muted">' +
-          escapeHtml(r.validation_status || "") +
-          "</p>" +
-          "</article>"
+          ' hcsc-card-placeholder"><h3>' +
+          escapeHtml(title) +
+          '</h3><p class="hcsc-card-value muted">—</p><p class="muted">Awaiting report</p></article>'
         );
-      })
-      .join("");
+      }
+      return (
+        '<article class="hcsc-card ' +
+        tones[i] +
+        '"><h3>' +
+        escapeHtml(title) +
+        '</h3><p class="hcsc-card-value">' +
+        escapeHtml(r.value_text || "—") +
+        "</p>" +
+        (r.calculation_basis
+          ? '<p class="muted hcsc-basis">' + escapeHtml(r.calculation_basis) + "</p>"
+          : "") +
+        '<div class="hcsc-card-meta">' +
+        sourceBadge(r.source_badge, r.source_badge_label) +
+        " " +
+        validationCell(r) +
+        (r.last_updated
+          ? ' <span class="muted">' +
+            escapeHtml(String(r.last_updated).replace("T", " ").slice(0, 19)) +
+            "</span>"
+          : "") +
+        "</div></article>"
+      );
+    }).join("");
+  }
+
+  function categoryMatches(row, category) {
+    if (!category || category === "overview") return true;
+    if (category === "unresolved") return !!row.unresolved || row.display_group === "unresolved";
+    if (category === "eligible_beneficiaries") {
+      return row.display_group === "eligible_beneficiaries" || row.display_group === "overview";
+    }
+    return row.display_group === category;
   }
 
   function filteredRows() {
     var q = (($("hcsc-filter") && $("hcsc-filter").value) || "").trim().toLowerCase();
-    var pctOnly = $("hcsc-pct-only") && $("hcsc-pct-only").checked;
+    var typeF = (($("hcsc-filter-type") && $("hcsc-filter-type").value) || "").trim();
+    var srcF = (($("hcsc-filter-source") && $("hcsc-filter-source").value) || "").trim();
+    var valF = (($("hcsc-filter-validation") && $("hcsc-filter-validation").value) || "").trim();
     return state.results.filter(function (r) {
-      if (pctOnly && r.display_result_type !== "Percentage" && r.display_result_type !== "Ratio") {
-        return false;
-      }
+      if (!categoryMatches(r, state.activeCategory)) return false;
+      if (typeF && r.display_result_type !== typeF) return false;
+      if (srcF && String(r.source_badge || "").toUpperCase() !== srcF.toUpperCase()) return false;
+      if (valF && String(r.validation_status || "Not Yet Validated") !== valF) return false;
       if (!q) return true;
       return (
         (r.display_name || "").toLowerCase().indexOf(q) >= 0 ||
@@ -236,13 +490,61 @@
     });
   }
 
+  function emptyTableHtml(kind) {
+    if (kind === "filtered") {
+      return (
+        '<tr class="hcsc-empty-row"><td colspan="8"><div class="hcsc-empty">' +
+        "<strong>No indicators match the current filters.</strong>" +
+        '<p class="muted">Adjust search or filter dropdowns.</p>' +
+        '<button type="button" class="btn btn-sm" id="hcsc-clear-filters">Clear Filters</button>' +
+        "</div></td></tr>"
+      );
+    }
+    return (
+      '<tr class="hcsc-empty-row"><td colspan="8"><div class="hcsc-empty">' +
+      "<strong>No indicators to display</strong>" +
+      '<p class="muted">Select an organisation unit and generate the report.</p>' +
+      "</div></td></tr>"
+    );
+  }
+
+  function colHidden(name) {
+    return !!hiddenCols[name];
+  }
+
+  function applyColumnVisibility() {
+    var table = $("hcsc-table");
+    if (!table) return;
+    ["basis", "scope", "validation", "updated"].forEach(function (name) {
+      var hide = colHidden(name);
+      table.querySelectorAll('[data-col="' + name + '"]').forEach(function (el) {
+        el.classList.toggle("is-col-hidden", hide);
+      });
+    });
+  }
+
   function renderTable() {
     var tbody = $("hcsc-tbody");
     if (!tbody) return;
+    if (!state.generated || !state.results.length) {
+      tbody.innerHTML = emptyTableHtml("initial");
+      applyColumnVisibility();
+      return;
+    }
     var rows = filteredRows();
     if (!rows.length) {
-      tbody.innerHTML =
-        '<tr><td colspan="7" class="muted">No matching indicators in Central Hub HCSC–RF.</td></tr>';
+      tbody.innerHTML = emptyTableHtml("filtered");
+      var clearBtn = $("hcsc-clear-filters");
+      if (clearBtn) {
+        clearBtn.addEventListener("click", function () {
+          if ($("hcsc-filter")) $("hcsc-filter").value = "";
+          if ($("hcsc-filter-type")) $("hcsc-filter-type").value = "";
+          if ($("hcsc-filter-source")) $("hcsc-filter-source").value = "";
+          if ($("hcsc-filter-validation")) $("hcsc-filter-validation").value = "";
+          renderTable();
+        });
+      }
+      applyColumnVisibility();
       return;
     }
     var sections = state.sections && state.sections.length
@@ -267,70 +569,63 @@
         });
         if (!anyRf && !secRows.length) return;
         html.push(
-          '<tr class="hcsc-section-row hcsc-section-rf"><td colspan="7"><strong>' +
+          '<tr class="hcsc-section-row hcsc-section-rf"><td colspan="8"><strong>' +
             escapeHtml(sec.label || "Results Framework") +
-            "</strong> <span class=\"muted\">(domain groups below)</span></td></tr>"
+            "</strong></td></tr>"
         );
         return;
       }
       if (!secRows.length) return;
       var label = sec.label || sec.id;
-      if (isRfDomain) {
-        label = "↳ " + label;
-      }
+      if (isRfDomain) label = "↳ " + label;
       html.push(
         '<tr class="hcsc-section-row' +
           (isRfDomain ? " hcsc-section-rf-domain" : "") +
-          '"><td colspan="7"><strong>' +
+          '"><td colspan="8"><strong>' +
           escapeHtml(label) +
-          "</strong> <span class=\"muted\">(" +
+          '</strong> <span class="muted">(' +
           secRows.length +
           ")</span></td></tr>"
       );
       secRows.forEach(function (r) {
-        var def = r.definition || r.population_definition_reference || "";
         html.push(
-          "<tr data-key=\"" +
+          '<tr data-key="' +
             escapeHtml(r.indicator_key) +
             '">' +
             "<td><strong>" +
             escapeHtml(r.display_name) +
             "</strong> " +
-            classificationBadge(r) +
-            (r.unresolved
-              ? ' <span class="hcsc-type-pill is-status">Unresolved</span>'
-              : "") +
-            (def
-              ? '<div class="muted hcsc-ind-def">' + escapeHtml(def) + "</div>"
-              : "") +
-            "</td>" +
-            "<td>" +
             typePill(r.display_result_type) +
+            " " +
+            classificationBadge(r) +
             "</td>" +
             "<td>" +
             valueCell(r) +
             "</td>" +
-            "<td><div class=\"hcsc-scope\">" +
+            '<td data-col="basis"><div class="hcsc-basis">' +
+            escapeHtml(calculationBasisText(r)) +
+            "</div></td>" +
+            '<td data-col="scope"><div class="hcsc-scope">' +
             escapeHtml(r.population_scope || "—") +
             "</div></td>" +
             "<td>" +
             sourceBadge(r.source_badge, r.source_badge_label) +
-            ' <span class="muted">' +
-            escapeHtml(r.source_badge_label || r.source_type || "") +
-            "</span></td>" +
+            "</td>" +
             "<td>" +
             uidCell(r) +
             "</td>" +
-            "<td class=\"muted\">" +
+            '<td data-col="validation">' +
+            validationCell(r) +
+            "</td>" +
+            '<td data-col="updated" class="muted">' +
             escapeHtml((r.last_updated || r.freshness || "").replace("T", " ").slice(0, 19)) +
             "</td>" +
             "</tr>"
         );
       });
     });
-    tbody.innerHTML =
-      html.join("") ||
-      '<tr><td colspan="7" class="muted">No matching indicators in Central Hub HCSC–RF.</td></tr>';
+    tbody.innerHTML = html.join("") || emptyTableHtml("filtered");
+    applyColumnVisibility();
   }
 
   function renderMapping() {
@@ -654,8 +949,8 @@
 
   function scopeQuery(force) {
     var env = ($("hcsc-env") && $("hcsc-env").value) || "stage";
-    var period = ($("hcsc-period") && $("hcsc-period").value) || "";
-    var ou = ($("hcsc-ou") && $("hcsc-ou").value) || "";
+    var period = selectedPeriod();
+    var ou = selectedOu();
     var disagg = ($("hcsc-disagg") && $("hcsc-disagg").value) || "none";
     return (
       "?environment=" +
@@ -671,9 +966,8 @@
   }
 
   function loadValidation(force) {
-    var ou = ($("hcsc-ou") && $("hcsc-ou").value) || "";
-    if (!ou) {
-      setStatus("Organisation unit is required for validation.", true);
+    if (!validateForm()) {
+      setStatus("Select a valid quarter and organisation unit before Compare Sources.", true);
       return;
     }
     var url = root.getAttribute("data-validation-url");
@@ -714,13 +1008,13 @@
   }
 
   function saveValidationSnapshot() {
-    var env = ($("hcsc-env") && $("hcsc-env").value) || "stage";
-    var period = ($("hcsc-period") && $("hcsc-period").value) || "";
-    var ou = ($("hcsc-ou") && $("hcsc-ou").value) || "";
-    if (!ou) {
-      setStatus("Organisation unit is required.", true);
+    if (!validateForm()) {
+      setStatus("Select a valid quarter and organisation unit first.", true);
       return;
     }
+    var env = ($("hcsc-env") && $("hcsc-env").value) || "stage";
+    var period = selectedPeriod();
+    var ou = selectedOu();
     fetch("/api/dhis2/hcsc-indicators/validation/snapshot", {
       method: "POST",
       credentials: "same-origin",
@@ -994,20 +1288,20 @@
   }
 
   function loadReport(force) {
-    var env = ($("hcsc-env") && $("hcsc-env").value) || "stage";
-    var period = ($("hcsc-period") && $("hcsc-period").value) || "";
-    var ou = ($("hcsc-ou") && $("hcsc-ou").value) || "";
-    var disagg = ($("hcsc-disagg") && $("hcsc-disagg").value) || "none";
-    if (!ou) {
-      setStatus("Organisation unit is required.", true);
+    if (!validateForm()) {
+      state.statusMode = "error";
+      setStatus("Select a valid quarter and organisation unit.", true);
       return;
     }
-    setStatus(force ? "Refreshing…" : "Generating report…");
-    showShellBanner(force ? "Refreshing report…" : "Generating report…");
+    var env = ($("hcsc-env") && $("hcsc-env").value) || "stage";
+    var period = selectedPeriod();
+    var ou = selectedOu();
+    var started = Date.now();
+    state.statusMode = "loading";
+    updateStatusStrip("Loading", "loading");
+    showShellBanner("");
     var reportUrl = root.getAttribute("data-report-url") || root.getAttribute("data-overview-url");
-    var url =
-      reportUrl +
-      scopeQuery(force);
+    var url = reportUrl + scopeQuery(force);
     fetch(url, { credentials: "same-origin" })
       .then(function (r) {
         return r.json().then(function (body) {
@@ -1017,6 +1311,7 @@
       })
       .then(function (data) {
         if (!data.ok) {
+          state.statusMode = "error";
           setStatus(data.error || "Report failed", true);
           return;
         }
@@ -1025,20 +1320,13 @@
         state.sections = data.sections || [];
         state.retrieval = data.retrieval || data.query || null;
         state.lastPayload = data;
-        var ouLabel = ($("hcsc-ou-label") && $("hcsc-ou-label").textContent) || ou;
-        var sub = $("hcsc-subtitle");
-        if (sub) {
-          sub.textContent =
-            "Central Hub HCSC–RF Report (" +
-            ouLabel +
-            ") · " +
-            period +
-            " · " +
-            env +
-            " — read-only registry + batched adapters (Phase " +
-            ((boot && boot.phase) || "0-2") +
-            ").";
-        }
+        state.generated = true;
+        state.lastRunAt = data.freshness || new Date().toISOString();
+        state.lastRunDurationMs =
+          (data.timings && data.timings.total_ms != null
+            ? data.timings.total_ms
+            : Date.now() - started);
+        state.statusMode = "ready";
         renderCards(state.results);
         renderTable();
         renderMapping();
@@ -1054,24 +1342,12 @@
             });
           openSql.hidden = !showSql;
         }
-        var t = data.timings || {};
-        var cache = data.cache || {};
-        setStatus(
-          "Loaded " +
-            state.results.length +
-            " indicators · " +
-            (t.total_ms != null ? t.total_ms + " ms" : "") +
-            (cache.hit ? " (cache)" : "") +
-            " · HTTP: " +
-            (t.http_requests != null ? t.http_requests : "?") +
-            (data.adapters_used && data.adapters_used.length
-              ? " · adapters: " + data.adapters_used.join(", ")
-              : "")
-        );
+        updateStatusStrip("Ready to generate", "ready");
         var fresh = $("hcsc-freshness");
         if (fresh) fresh.textContent = "Last updated: " + (data.freshness || "");
       })
       .catch(function () {
+        state.statusMode = "error";
         setStatus("Report request failed.", true);
       });
   }
@@ -1082,77 +1358,126 @@
   }
 
   function wireOuSearch() {
-    var input = $("hcsc-ou-search");
-    var list = $("hcsc-ou-results");
-    var hidden = $("hcsc-ou");
-    var label = $("hcsc-ou-label");
-    if (!input || !list || !hidden) return;
-    var timer = null;
-    input.addEventListener("input", function () {
-      clearTimeout(timer);
-      timer = setTimeout(function () {
-        var q = input.value.trim();
-        var env = ($("hcsc-env") && $("hcsc-env").value) || "stage";
-        if (q.length < 2) {
-          list.hidden = true;
-          list.innerHTML = "";
-          return;
+    if (!window.CentralHubOuPicker || !window.CentralHubOuPicker.create) {
+      setStatus("Organisation unit picker failed to load.", true);
+      return;
+    }
+    ouPicker = window.CentralHubOuPicker.create({
+      root: $("hcsc-ou-picker"),
+      hiddenEl: $("hcsc-ou"),
+      pathEl: $("hcsc-ou-path"),
+      chipRow: $("hcsc-ou-chip-row"),
+      chipLabel: $("hcsc-ou-chip-label"),
+      clearBtn: $("hcsc-ou-clear"),
+      retryBtn: $("hcsc-ou-retry"),
+      refreshMetaBtn: $("hcsc-ou-refresh-meta"),
+      errorEl: $("hcsc-ou-error"),
+      syncEl: $("hcsc-ou-sync"),
+      searchEl: $("hcsc-ou-search"),
+      searchResultsEl: $("hcsc-ou-search-results"),
+      apiUrl: root.getAttribute("data-org-units-url") || "",
+      getEnvironment: function () {
+        return ($("hcsc-env") && $("hcsc-env").value) || "stage";
+      },
+      storagePrefix: "centralhub.hcsc.ou.",
+      idPrefix: "hcsc-ou-",
+      onChange: function () {
+        validateForm();
+      },
+      onEnvironmentStatus: function (status) {
+        if (status && status.maintenance) {
+          showShellBanner(
+            status.message ||
+              (window.CentralHubOuPicker &&
+                window.CentralHubOuPicker.MAINTENANCE_MESSAGE) ||
+              "Stage is temporarily unavailable due to maintenance.",
+            false
+          );
         }
-        var url =
-          root.getAttribute("data-org-units-url") +
-          "?environment=" +
-          encodeURIComponent(env) +
-          "&q=" +
-          encodeURIComponent(q) +
-          "&limit=20";
-        fetch(url, { credentials: "same-origin" })
-          .then(function (r) {
-            return r.json();
-          })
-          .then(function (data) {
-            var rows = (data && data.org_units) || [];
-            if (!rows.length) {
-              list.innerHTML = '<li class="muted">No matches</li>';
-              list.hidden = false;
-              return;
-            }
-            list.innerHTML = rows
-              .map(function (ou) {
-                var id = ou.id || "";
-                var name = ou.name || id;
-                return (
-                  '<li><button type="button" data-id="' +
-                  escapeHtml(id) +
-                  '" data-name="' +
-                  escapeHtml(name) +
-                  '">' +
-                  escapeHtml(name) +
-                  " <code>" +
-                  escapeHtml(id) +
-                  "</code></button></li>"
-                );
-              })
-              .join("");
-            list.hidden = false;
-          })
-          .catch(function () {
-            list.hidden = true;
-          });
-      }, 250);
+      },
     });
-    list.addEventListener("click", function (ev) {
-      var btn = ev.target.closest("button[data-id]");
-      if (!btn) return;
-      hidden.value = btn.getAttribute("data-id") || "";
-      if (label) label.textContent = btn.getAttribute("data-name") || "";
-      input.value = btn.getAttribute("data-name") || "";
-      list.hidden = true;
+    // Bootstrap may already know Stage is under maintenance.
+    var envs = (BOOT && BOOT.environments) || [];
+    var stageMeta = envs.filter(function (e) { return e && e.id === "stage"; })[0];
+    var currentEnv = ($("hcsc-env") && $("hcsc-env").value) || "stage";
+    if (currentEnv === "stage" && stageMeta && stageMeta.maintenance) {
+      showShellBanner(
+        stageMeta.message ||
+          "Stage is temporarily unavailable due to maintenance.",
+        false
+      );
+    }
+  }
+
+  function fillDisagg() {
+    var sel = $("hcsc-disagg");
+    if (!sel) return;
+    var opts = (boot.disaggregations || []).filter(function (d) {
+      return d && !d.disabled;
     });
+    if (!opts.length) {
+      sel.innerHTML = '<option value="none">All</option>';
+      return;
+    }
+    sel.innerHTML = opts
+      .map(function (d) {
+        var label = d.id === "none" ? "All" : d.label || d.id;
+        return (
+          '<option value="' +
+          escapeHtml(d.id) +
+          '">' +
+          escapeHtml(label) +
+          "</option>"
+        );
+      })
+      .join("");
+  }
+
+  function exportVisible(kind) {
+    var rows = filteredRows();
+    if (kind === "json") {
+      copyText(JSON.stringify(rows, null, 2));
+      return;
+    }
+    var header = [
+      "Indicator",
+      "Value",
+      "Calculation Basis",
+      "Population / Scope",
+      "Source",
+      "UID",
+      "Validation",
+      "Last Updated",
+    ];
+    var lines = [header.join(",")];
+    rows.forEach(function (r) {
+      lines.push(
+        [
+          r.display_name,
+          r.value_text,
+          calculationBasisText(r),
+          r.population_scope,
+          r.source_badge,
+          r.source_uid,
+          r.validation_status,
+          r.last_updated || r.freshness || "",
+        ]
+          .map(function (v) {
+            return '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
+          })
+          .join(",")
+      );
+    });
+    copyText(lines.join("\n"));
   }
 
   function wire() {
     fillPeriods();
+    fillDisagg();
     wireOuSearch();
+    renderCards([]);
+    renderTable();
+    validateForm();
     var form = $("hcsc-controls");
     if (form) {
       form.addEventListener("submit", function (ev) {
@@ -1162,10 +1487,62 @@
     }
     var refresh = $("hcsc-refresh");
     if (refresh) refresh.addEventListener("click", function () { loadOverview(true); });
+    var periodSel = $("hcsc-period");
+    if (periodSel) {
+      periodSel.addEventListener("change", function () {
+        if (selectedPeriod()) saveRememberedQuarter(selectedPeriod());
+        validateForm();
+      });
+    }
+    var disagg = $("hcsc-disagg");
+    if (disagg) disagg.addEventListener("change", function () { updateStatusStrip(); });
+    var envSel = $("hcsc-env");
+    if (envSel) {
+      envSel.addEventListener("change", function () {
+        fillPeriods();
+        if (ouPicker && ouPicker.onEnvironmentChange) ouPicker.onEnvironmentChange();
+        validateForm();
+        showShellBanner("");
+        var envs = (boot && boot.environments) || [];
+        var meta = envs.filter(function (e) {
+          return e && e.id === envSel.value;
+        })[0];
+        if (meta && meta.maintenance) {
+          showShellBanner(
+            meta.message || "Stage is temporarily unavailable due to maintenance.",
+            false
+          );
+        }
+      });
+    }
     var filter = $("hcsc-filter");
     if (filter) filter.addEventListener("input", renderTable);
-    var pctOnly = $("hcsc-pct-only");
-    if (pctOnly) pctOnly.addEventListener("change", renderTable);
+    ["hcsc-filter-type", "hcsc-filter-source", "hcsc-filter-validation"].forEach(function (id) {
+      var el = $(id);
+      if (el) el.addEventListener("change", renderTable);
+    });
+    document.querySelectorAll(".hcsc-cat").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        document.querySelectorAll(".hcsc-cat").forEach(function (b) {
+          b.classList.toggle("is-active", b === btn);
+        });
+        state.activeCategory = btn.getAttribute("data-category") || "overview";
+        renderTable();
+      });
+    });
+    document.querySelectorAll("#hcsc-export-menu [data-export]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        exportVisible(btn.getAttribute("data-export"));
+        var menu = $("hcsc-export-menu");
+        if (menu) menu.open = false;
+      });
+    });
+    document.querySelectorAll("#hcsc-columns-menu [data-col]").forEach(function (inp) {
+      inp.addEventListener("change", function () {
+        hiddenCols[inp.getAttribute("data-col")] = !inp.checked;
+        applyColumnVisibility();
+      });
+    });
     var valRun = $("hcsc-val-run");
     if (valRun) valRun.addEventListener("click", function () { loadValidation(false); });
     var valSnap = $("hcsc-val-snapshot");

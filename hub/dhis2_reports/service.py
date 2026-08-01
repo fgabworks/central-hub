@@ -27,6 +27,10 @@ from hub.dhis2_reports.cache import (
     RESULT_CACHE,
     result_cache_key,
 )
+from hub.dhis2_reports.maintenance import (
+    STAGE_MAINTENANCE_MESSAGE,
+    environment_availability,
+)
 from hub.dhis2_reports.catalog import get_report, load_report_catalog
 from hub.dhis2_reports.discovery import discover_report_parameters
 from hub.dhis2_reports.models import ReportDefinition, ResolvedRun
@@ -145,6 +149,13 @@ class Dhis2ReportsService:
         CAPABILITY_CACHE.set(f"cap:{env}", caps)
         return {**caps, "cache": "miss"}
 
+    # Cascade leaf for Region→…→Barangay; levels below this are treated as leaves.
+    _OU_CASCADE_LEAF_LEVEL = 5
+    # Lean fields — never request children::size (counts every child and times out on large trees).
+    _OU_CASCADE_FIELDS = "id,displayName,level"
+    _OU_SEARCH_FIELDS = "id,displayName,name,code,path,level"
+    _OU_CHILDREN_FIELDS = "children[id,displayName,level]"
+
     def search_org_units(
         self,
         environment: str,
@@ -152,87 +163,334 @@ class Dhis2ReportsService:
         q: str = "",
         limit: int = 25,
         parent_id: str = "",
+        level: int | None = None,
+        refresh: bool = False,
     ) -> dict[str, Any]:
-        """Search organisation units (name/code/UID) or lazy-load children of parent_id."""
+        """Search organisation units (name/code/UID) or cascade children like Live Processing.
+
+        Cascading mode (LP parity):
+        - no parent + level=2 → regions
+        - parent_id set → direct children (province/municipality/barangay)
+
+        Stage maintenance: serve env-scoped cache (including stale) with synced_at;
+        do not call Stage unless refresh=True (user-initiated, single attempt);
+        never fall back to Live data or mix caches across environments.
+        """
         env = validate_environment(environment)
+        avail = environment_availability(env)
         needle = (q or "").strip()
         parent = validate_org_unit(parent_id, required=False) if parent_id else ""
-        limit_i = max(1, min(int(limit or 25), 50))
-        cache_key = f"ou:{env}:{needle.lower()}:{parent}:{limit_i}"
-        cached = ORG_UNIT_CACHE.get(cache_key)
-        if cached is not None:
-            return {**cached, "cache": "hit"}
-        client = self._client(env)
-        params: dict[str, Any] = {
-            "fields": "id,displayName,name,code,path,level,children::size",
-            "paging": "true",
-            "pageSize": limit_i,
-            "page": 1,
-            "order": "name:asc",
-        }
-        filters: list[str] = []
-        if parent:
-            filters.append(f"parent.id:eq:{parent}")
-        if needle:
-            if len(needle) == 11 and needle.isalnum():
-                filters.append(f"id:eq:{needle}")
-            else:
-                # identifiable covers name/code/id tokens on modern DHIS2.
-                filters.append(f"identifiable:token:{needle}")
-        if filters:
-            # requests encodes repeated filter keys; pass joined for single filter when one.
-            if len(filters) == 1:
-                params["filter"] = filters[0]
-            else:
-                params["filter"] = filters
-        try:
-            data = client._get_json("/api/organisationUnits", params=params)  # noqa: SLF001
-        except Dhis2Error as exc:
-            # Older servers may not support identifiable:token — retry name ilike.
-            if needle and "identifiable" in (params.get("filter") or ""):
-                params["filter"] = f"name:ilike:{needle}"
-                try:
-                    data = client._get_json("/api/organisationUnits", params=params)  # noqa: SLF001
-                except Dhis2Error as exc2:
-                    raise ReportSecurityError(
-                        redact_report_detail(exc2.message),
-                        code="unauthorized" if exc2.status_code in {401, 403} else "unavailable",
-                    ) from exc2
-            else:
+        level_i: int | None = None
+        if level is not None and str(level).strip() != "":
+            try:
+                level_i = int(level)
+            except (TypeError, ValueError) as exc:
                 raise ReportSecurityError(
-                    redact_report_detail(exc.message),
-                    code="unauthorized" if exc.status_code in {401, 403} else "unavailable",
+                    "Organisation unit level must be an integer.",
+                    code="invalid_org_unit",
                 ) from exc
-        rows = []
-        for item in data.get("organisationUnits") or []:
-            if not isinstance(item, dict):
-                continue
-            children = item.get("children")
-            child_count = 0
-            if isinstance(children, int):
-                child_count = children
-            elif isinstance(children, list):
-                child_count = len(children)
-            rows.append(
-                {
-                    "id": item.get("id") or "",
-                    "name": item.get("displayName") or item.get("name") or "",
-                    "code": item.get("code") or "",
-                    "path": item.get("path") or "",
-                    "level": item.get("level"),
-                    "has_children": child_count > 0,
-                }
+            if level_i < 1 or level_i > 8:
+                raise ReportSecurityError(
+                    "Organisation unit level out of range.",
+                    code="invalid_org_unit",
+                )
+        cascade = bool(parent or (level_i is not None and not needle))
+        limit_i = self._org_unit_page_size(
+            limit=limit, cascade=cascade, level=level_i, parent=bool(parent)
+        )
+        cache_key = f"ou:{env}:{needle.lower()}:{parent}:{level_i}:{limit_i}"
+        maintenance = bool(avail.get("maintenance"))
+
+        if refresh:
+            ORG_UNIT_CACHE.delete(cache_key)
+
+        # Prefer env-scoped cache (fresh, or stale during Stage maintenance).
+        entry = ORG_UNIT_CACHE.get_entry(cache_key, allow_stale=maintenance and not refresh)
+        if entry is not None and not refresh:
+            return self._ou_cache_payload(
+                entry["value"],
+                cache="stale" if entry["stale"] else "hit",
+                synced_at=entry["synced_at"],
+                availability=avail,
             )
+
+        # Maintenance with no cache and no user refresh → do not poll Stage.
+        if maintenance and not refresh:
+            raise ReportSecurityError(STAGE_MAINTENANCE_MESSAGE, code="maintenance")
+
+        client = self._client(env)
+        ou_timeout = self._org_unit_timeout(client)
+        try:
+            if parent:
+                rows = self._fetch_ou_children(
+                    client, parent, limit=limit_i, timeout=ou_timeout
+                )
+            elif cascade and level_i is not None:
+                rows = self._fetch_ou_by_level(
+                    client, level=level_i, limit=limit_i, timeout=ou_timeout
+                )
+            else:
+                rows = self._fetch_ou_search(
+                    client, needle=needle, limit=limit_i, timeout=ou_timeout
+                )
+        except Dhis2Error as exc:
+            # User-initiated refresh during maintenance: keep prior Stage cache if any.
+            stale = ORG_UNIT_CACHE.get_entry(cache_key, allow_stale=True)
+            if stale is not None and env == "stage":
+                return self._ou_cache_payload(
+                    stale["value"],
+                    cache="stale",
+                    synced_at=stale["synced_at"],
+                    availability=avail if maintenance else {
+                        **avail,
+                        "status": "degraded",
+                        "message": STAGE_MAINTENANCE_MESSAGE
+                        if maintenance
+                        else redact_report_detail(exc.message),
+                    },
+                )
+            if maintenance:
+                raise ReportSecurityError(STAGE_MAINTENANCE_MESSAGE, code="maintenance") from exc
+            raise ReportSecurityError(
+                redact_report_detail(exc.message),
+                code="unauthorized" if exc.status_code in {401, 403} else "unavailable",
+            ) from exc
+
         payload = {
             "ok": True,
             "environment": env,
             "q": needle,
             "parent_id": parent,
+            "level": level_i,
             "org_units": rows,
+            "orgunits": rows,  # LP-compatible alias
             "count": len(rows),
         }
-        ORG_UNIT_CACHE.set(cache_key, payload)
-        return {**payload, "cache": "miss"}
+        synced_at = ORG_UNIT_CACHE.set(cache_key, payload)
+        payload["synced_at"] = synced_at
+        return self._ou_cache_payload(
+            payload,
+            cache="miss",
+            synced_at=synced_at,
+            availability=environment_availability(env),
+        )
+
+    @staticmethod
+    def _ou_cache_payload(
+        payload: dict[str, Any],
+        *,
+        cache: str,
+        synced_at: str | None,
+        availability: dict[str, Any],
+    ) -> dict[str, Any]:
+        stamp = (synced_at or payload.get("synced_at") or "").strip() or None
+        out = {
+            **payload,
+            "ok": True,
+            "cache": cache,
+            "synced_at": stamp,
+            "environment_status": availability.get("status") or "ok",
+            "maintenance": bool(availability.get("maintenance")),
+            "maintenance_message": availability.get("message")
+            if availability.get("maintenance")
+            else None,
+        }
+        return out
+
+    @staticmethod
+    def _org_unit_page_size(
+        *,
+        limit: int,
+        cascade: bool,
+        level: int | None,
+        parent: bool,
+    ) -> int:
+        """Tight page sizes — regions are few; barangays under one parent rarely need 500."""
+        requested = int(limit or 25)
+        if not cascade:
+            return max(1, min(requested, 50))
+        if parent:
+            return max(1, min(requested or 200, 300))
+        if level == 2:
+            return max(1, min(requested or 50, 80))
+        if level in {3, 4}:
+            return max(1, min(requested or 100, 200))
+        return max(1, min(requested or 100, 200))
+
+    @staticmethod
+    def _org_unit_timeout(client: Any) -> float:
+        """Fail fast for picker UX (~5s) instead of timeout×retries (~30s)."""
+        try:
+            base = float(getattr(getattr(client, "settings", None), "timeout_seconds", 10) or 10)
+            probe = float(
+                getattr(getattr(client, "settings", None), "probe_timeout_seconds", 5) or 5
+            )
+        except (TypeError, ValueError):
+            base, probe = 10.0, 5.0
+        return max(3.0, min(base, probe, 5.0))
+
+    def _fetch_ou_children(
+        self,
+        client: Any,
+        parent_uid: str,
+        *,
+        limit: int,
+        timeout: float,
+    ) -> list[dict[str, Any]]:
+        """Direct children via nested fields — cheaper than list+filter+children::size."""
+        data = client._get_json(  # noqa: SLF001
+            f"/api/organisationUnits/{parent_uid}",
+            params={"fields": self._OU_CHILDREN_FIELDS},
+            timeout=timeout,
+            retry_max=0,
+        )
+        rows = self._map_org_unit_rows(data.get("children") or [])
+        rows.sort(key=lambda r: (r.get("name") or "").lower())
+        return rows[:limit]
+
+    def _fetch_ou_by_level(
+        self,
+        client: Any,
+        *,
+        level: int,
+        limit: int,
+        timeout: float,
+    ) -> list[dict[str, Any]]:
+        """List OUs at a hierarchy level (regions). Prefer nested country→children."""
+        # Country root + nested children is typically much faster than level:eq:2
+        # across a national tree (Live: ~50ms vs ~500ms+ for level filter).
+        if level == 2:
+            root_params = {
+                "fields": f"id,{self._OU_CHILDREN_FIELDS}",
+                "paging": "true",
+                "pageSize": 5,
+                "page": 1,
+                "filter": "level:eq:1",
+            }
+            try:
+                root_data = client._get_json(  # noqa: SLF001
+                    "/api/organisationUnits",
+                    params=root_params,
+                    timeout=timeout,
+                    retry_max=0,
+                )
+                roots = root_data.get("organisationUnits") or []
+                if (
+                    len(roots) == 1
+                    and isinstance(roots[0], dict)
+                    and isinstance(roots[0].get("children"), list)
+                    and roots[0]["children"]
+                ):
+                    rows = self._map_org_unit_rows(roots[0].get("children") or [])
+                    rows.sort(key=lambda r: (r.get("name") or "").lower())
+                    return rows[:limit]
+            except Dhis2Error as exc:
+                # Don't stack a second timeout when Stage/Live is unreachable.
+                msg = (exc.message or str(exc)).lower()
+                if "timed out" in msg or "could not reach" in msg:
+                    raise
+                # Non-timeout errors fall through to level:eq filter.
+
+        params: dict[str, Any] = {
+            "fields": self._OU_CASCADE_FIELDS,
+            "paging": "true",
+            "pageSize": limit,
+            "page": 1,
+            "order": "name:asc",
+            "filter": f"level:eq:{level}",
+        }
+        data = client._get_json(  # noqa: SLF001
+            "/api/organisationUnits",
+            params=params,
+            timeout=timeout,
+            retry_max=0,
+        )
+        return self._map_org_unit_rows(data.get("organisationUnits") or [])
+
+    def _fetch_ou_search(
+        self,
+        client: Any,
+        *,
+        needle: str,
+        limit: int,
+        timeout: float,
+    ) -> list[dict[str, Any]]:
+        """Typeahead search by name/code/UID (no children::size)."""
+        params: dict[str, Any] = {
+            "fields": self._OU_SEARCH_FIELDS,
+            "paging": "true",
+            "pageSize": limit,
+            "page": 1,
+            "order": "name:asc",
+        }
+        if needle:
+            if len(needle) == 11 and needle.isalnum():
+                params["filter"] = f"id:eq:{needle}"
+            else:
+                params["filter"] = f"identifiable:token:{needle}"
+        try:
+            data = client._get_json(  # noqa: SLF001
+                "/api/organisationUnits",
+                params=params,
+                timeout=timeout,
+                retry_max=0,
+            )
+        except Dhis2Error as exc:
+            if needle and "identifiable" in str(params.get("filter") or ""):
+                params["filter"] = f"name:ilike:{needle}"
+                data = client._get_json(  # noqa: SLF001
+                    "/api/organisationUnits",
+                    params=params,
+                    timeout=timeout,
+                    retry_max=0,
+                )
+            else:
+                raise exc
+        return self._map_org_unit_rows(data.get("organisationUnits") or [])
+
+    @classmethod
+    def _map_org_unit_rows(cls, items: list[Any]) -> list[dict[str, Any]]:
+        level_labels = {
+            2: "region",
+            3: "province",
+            4: "municipality_city",
+            5: "barangay",
+        }
+        rows: list[dict[str, Any]] = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            children = item.get("children")
+            child_count: int | None = None
+            if isinstance(children, int):
+                child_count = children
+            elif isinstance(children, list):
+                child_count = len(children)
+            try:
+                level_val = int(item.get("level")) if item.get("level") is not None else None
+            except (TypeError, ValueError):
+                level_val = None
+            if child_count is not None:
+                has_children = child_count > 0
+            elif level_val is None:
+                has_children = True
+            else:
+                # Infer without children::size: cascade continues until barangay.
+                has_children = level_val < cls._OU_CASCADE_LEAF_LEVEL
+            uid = item.get("id") or ""
+            rows.append(
+                {
+                    "id": uid,
+                    "uid": uid,  # LP-compatible
+                    "name": item.get("displayName") or item.get("name") or "",
+                    "code": item.get("code") or "",
+                    "path": item.get("path") or "",
+                    "level": level_val,
+                    "level_label": level_labels.get(level_val or -1, ""),
+                    "has_children": has_children,
+                }
+            )
+        return rows
 
     def list_periods(
         self,

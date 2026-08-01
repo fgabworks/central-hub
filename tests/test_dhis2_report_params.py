@@ -208,7 +208,7 @@ class OrgUnitSearchContractTests(unittest.TestCase):
                 self.env = env
                 self.calls = 0
 
-            def _get_json(self, path, params=None):
+            def _get_json(self, path, params=None, **kwargs):
                 self.calls += 1
                 return {
                     "organisationUnits": [
@@ -218,7 +218,6 @@ class OrgUnitSearchContractTests(unittest.TestCase):
                             "code": "ALP",
                             "path": "/Root/Region/Alpha",
                             "level": 3,
-                            "children": 2,
                         }
                     ]
                 }

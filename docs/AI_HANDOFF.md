@@ -4,11 +4,14 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**HCSC–RF Work sidebar visibility (2026-08-02)**
+**HCSC–RF preview UI refinement (2026-08-02)**
 
-Root cause: HCSC–RF lived only in `_DHIS2_TOOLS` (DHIS2 Overview tools grid), not in Work sidebar `work_nav`. Added sidebar entry below DHIS2 Reports → `/dhis2/hcsc-indicators` (`dhis2_hcsc_indicators`).
+Refined `/dhis2/hcsc-indicators` to match the final HCSC–RF preview: compact filter card,
+Region→Province→Municipality/City→Barangay cascade + searchable OU, status strip, five overview
+cards, category nav + technical tabs, indicator toolbar, result-aware table, empty states, legend
+popover. APIs/registry/batching/validation/evidence/read-only unchanged.
 
-Prior: **DHIS2 Run Report parameter pickers** — searchable Period + OU.
+Prior: **HCSC–RF OU cascade + Stage maintenance handling**.
 
 ### Prior milestone
 

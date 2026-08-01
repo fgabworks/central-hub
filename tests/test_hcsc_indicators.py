@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -683,6 +685,434 @@ class DesignDecodeTests(unittest.TestCase):
         self.assertIn("Number_Convergent_Bgy", decoded.get("unresolved_elements") or [])
 
 
+class CycleQuarterTests(unittest.TestCase):
+    def test_allowlist_and_defaults(self):
+        from datetime import date
+
+        from hub.hcsc_indicators.cache import REGISTRY_CACHE
+        from hub.hcsc_indicators.quarters import (
+            assert_allowed_quarter,
+            cycle_periods_payload,
+            default_allowed_quarter,
+            allowed_quarter_ids,
+        )
+        from hub.hcsc_indicators.registry import load_registry
+        from hub.dhis2_reports.security import ReportSecurityError
+
+        REGISTRY_CACHE.clear()
+        reg = load_registry(force=True)
+        ids = allowed_quarter_ids(reg)
+        self.assertEqual(ids[0], "2025Q3")
+        self.assertEqual(ids[-1], "2027Q4")
+        self.assertEqual(len(ids), 10)
+        self.assertEqual(
+            default_allowed_quarter(ids, as_of=date(2026, 8, 2)),
+            "2026Q3",
+        )
+        self.assertEqual(
+            default_allowed_quarter(ids, remembered="2026Q1", as_of=date(2026, 8, 2)),
+            "2026Q1",
+        )
+        payload = cycle_periods_payload(reg, as_of=date(2026, 5, 1))
+        self.assertEqual(payload["default_period"], "2026Q2")
+        self.assertEqual(payload["quarters"][0]["label"], "2025 Q3")
+        self.assertEqual(payload["quarters"][3]["id"], "2026Q2")
+        self.assertEqual(assert_allowed_quarter("2026Q2", ids), "2026Q2")
+        with self.assertRaises(ReportSecurityError):
+            assert_allowed_quarter("2024Q4", ids)
+        with self.assertRaises(ReportSecurityError):
+            assert_allowed_quarter("2028Q1", ids)
+        with self.assertRaises(ReportSecurityError):
+            assert_allowed_quarter("August 2026", ids)
+
+
+class ParamUiContractTests(unittest.TestCase):
+    def test_param_row_and_ou_picker_assets(self):
+        html = (ROOT / "templates" / "hcsc_indicator_summary.html").read_text(encoding="utf-8")
+        js = (ROOT / "static" / "js" / "hcsc_indicator_summary.js").read_text(encoding="utf-8")
+        picker = (ROOT / "static" / "js" / "dhis2_org_unit_picker.js").read_text(encoding="utf-8")
+        css = (ROOT / "static" / "css" / "style.css").read_text(encoding="utf-8")
+        self.assertIn("hcsc-param-row", html)
+        self.assertIn("Generate Report", html)
+        self.assertIn("dhis2_org_unit_picker.js", html)
+        self.assertIn("hcsc-ou-region", html)
+        self.assertIn("hcsc-ou-province", html)
+        self.assertIn("hcsc-ou-municipality", html)
+        self.assertIn("hcsc-ou-barangay", html)
+        self.assertIn("hcsc-ou-levels", html)
+        self.assertIn("hcsc-ou-retry", html)
+        self.assertIn("hcsc-ou-search", html)
+        self.assertIn("hcsc-ou-refresh-meta", html)
+        self.assertIn("Municipality/City", html)
+        self.assertIn("hcsc-status-strip", html)
+        self.assertIn("hcsc-category-nav", html)
+        self.assertIn("Select an organisation unit to continue", html)
+        self.assertIn("No report generated yet", html)
+        self.assertNotIn("Filter quarters", html)
+        self.assertNotIn('type="month"', html)
+        self.assertNotIn("hcsc-pct-only", html)
+        self.assertIn("CentralHubOuPicker", js)
+        self.assertIn("validateForm", js)
+        self.assertIn("selectedPeriod", js)
+        self.assertIn("onEnvironmentChange", js)
+        self.assertIn("updateStatusStrip", js)
+        self.assertIn("Ready to generate", js)
+        self.assertIn("hcsc-filter-validation", html)
+        self.assertIn("OU_LEVELS", picker)
+        self.assertIn("Municipality/City", picker)
+        self.assertIn("limit:", picker)
+        self.assertIn("AbortController", picker)
+        self.assertIn("ensureRoots", picker)
+        self.assertIn("lazyRoots", picker)
+        self.assertIn("refreshMetadata", picker)
+        self.assertIn("Recent / frequent", picker)
+        self.assertIn("resolveHierarchyFromPath", picker)
+        self.assertIn("Stage is temporarily unavailable due to maintenance.", picker)
+        self.assertIn("parent_id", picker)
+        self.assertIn("Region", picker)
+        self.assertIn("Barangay", picker)
+        self.assertIn("hcsc-param-row", css)
+        self.assertIn("hcsc-ou-levels", css)
+        self.assertIn("hcsc-ou-search-results", css)
+        self.assertIn("hcsc-status-strip", css)
+        self.assertIn("hcsc-category-nav", css)
+        self.assertIn("has-ad-dock", css)
+        self.assertIn("is-wc-open", css)
+
+
+class OrgUnitApiReuseTests(unittest.TestCase):
+    def test_hub_org_unit_search_name_code_uid_path_and_env_cache(self):
+        from unittest import mock
+
+        from hub.dhis2_reports.cache import ORG_UNIT_CACHE
+        from hub.dhis2_reports.service import Dhis2ReportsService
+        from hub.dhis2_reports.security import ReportSecurityError, validate_org_unit
+
+        ORG_UNIT_CACHE.clear()
+        with mock.patch.dict(os.environ, {"DHIS2_STAGE_MAINTENANCE": "false"}, clear=False):
+            self._run_org_unit_reuse(ORG_UNIT_CACHE, Dhis2ReportsService, ReportSecurityError, validate_org_unit, mock)
+
+    def _run_org_unit_reuse(self, ORG_UNIT_CACHE, Dhis2ReportsService, ReportSecurityError, validate_org_unit, mock):
+        class FakeClient:
+            def __init__(self, env):
+                self.env = env
+                self.calls = []
+
+            def _get_json(self, path, params=None, timeout=None, retry_max=None):
+                self.calls.append(
+                    {
+                        "path": path,
+                        "params": params or {},
+                        "timeout": timeout,
+                        "retry_max": retry_max,
+                    }
+                )
+                if path.startswith("/api/organisationUnits/") and path != "/api/organisationUnits":
+                    return {
+                        "children": [
+                            {
+                                "id": "OuUid000002",
+                                "displayName": "Beta Province",
+                                "level": 3,
+                            }
+                        ]
+                    }
+                filt = str((params or {}).get("filter") or "")
+                fields = str((params or {}).get("fields") or "")
+                if "level:eq:1" in filt and "children[" in fields:
+                    return {
+                        "organisationUnits": [
+                            {
+                                "id": "OuUidCountry1",
+                                "displayName": "Philippines",
+                                "children": [
+                                    {
+                                        "id": "OuUidRegion1",
+                                        "displayName": "Region VII",
+                                        "level": 2,
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                rows = [
+                    {
+                        "id": "OuUid000001",
+                        "displayName": "Alpha District",
+                        "code": "ALP",
+                        "path": "/Root/Region/Alpha",
+                        "level": 3,
+                    }
+                ]
+                if "id:eq:" in filt and "OuUid000001" not in filt:
+                    rows = []
+                if "level:eq:2" in filt:
+                    rows = [
+                        {"id": "OuUidRegion1", "displayName": "Region VII", "level": 2}
+                    ]
+                return {"organisationUnits": rows}
+
+        clients = {"stage": FakeClient("stage"), "live": FakeClient("live")}
+        svc = Dhis2ReportsService(store=mock.Mock(), client_factory=lambda env: clients[env])
+
+        by_name = svc.search_org_units("stage", q="Alpha")
+        self.assertEqual(by_name["org_units"][0]["name"], "Alpha District")
+        self.assertEqual(by_name["org_units"][0]["path"], "/Root/Region/Alpha")
+        self.assertTrue(by_name["org_units"][0]["has_children"])  # level 3 < 5
+        self.assertIn("identifiable:token:Alpha", str(clients["stage"].calls[0]["params"].get("filter")))
+        self.assertNotIn("children::size", str(clients["stage"].calls[0]["params"].get("fields")))
+        self.assertEqual(clients["stage"].calls[0]["retry_max"], 0)
+
+        by_code = svc.search_org_units("stage", q="ALP")
+        self.assertEqual(by_code["cache"], "miss")
+        self.assertEqual(by_code["org_units"][0]["code"], "ALP")
+
+        by_uid = svc.search_org_units("stage", q="OuUid000001")
+        self.assertEqual(by_uid["org_units"][0]["id"], "OuUid000001")
+        self.assertEqual(by_uid["org_units"][0]["uid"], "OuUid000001")
+        self.assertIn("id:eq:OuUid000001", str(clients["stage"].calls[-1]["params"].get("filter")))
+
+        regions = svc.search_org_units("stage", level=2, limit=100)
+        self.assertEqual(regions["level"], 2)
+        self.assertEqual(regions["org_units"][0]["id"], "OuUidRegion1")
+        self.assertLessEqual(regions["count"], 80)
+        # Prefer country→children nested fetch for regions.
+        region_call = next(
+            c for c in clients["stage"].calls if "level:eq:1" in str(c["params"].get("filter"))
+        )
+        self.assertIn("children[", str(region_call["params"].get("fields")))
+        self.assertEqual(region_call["retry_max"], 0)
+        self.assertLessEqual(float(region_call["timeout"]), 5.0)
+        self.assertNotIn("children::size", str(region_call["params"].get("fields")))
+
+        children = svc.search_org_units("stage", parent_id="OuUid000001", limit=100)
+        self.assertIn("/api/organisationUnits/OuUid000001", children and clients["stage"].calls[-1]["path"])
+        self.assertEqual(children["org_units"][0]["id"], "OuUid000002")
+        self.assertTrue(children["org_units"][0]["has_children"])
+        self.assertIn("children[", str(clients["stage"].calls[-1]["params"].get("fields")))
+
+        again = svc.search_org_units("stage", q="Alpha")
+        self.assertEqual(again["cache"], "hit")
+        self.assertTrue(again.get("synced_at"))
+        live = svc.search_org_units("live", q="Alpha")
+        self.assertEqual(live["cache"], "miss")
+        self.assertEqual(len(clients["live"].calls), 1)
+        # Stage/Live isolation: Live miss must not read Stage rows.
+        self.assertEqual(live["environment"], "live")
+
+        with self.assertRaises(ReportSecurityError):
+            validate_org_unit("Central Visayas", required=True)
+        self.assertEqual(validate_org_unit("OuUid000001"), "OuUid000001")
+
+
+class StageMaintenanceOuTests(unittest.TestCase):
+    """Stage maintenance: clear message, retain Stage cache, never bleed Live."""
+
+    def tearDown(self):
+        from hub.dhis2_reports.cache import ORG_UNIT_CACHE
+
+        ORG_UNIT_CACHE.clear()
+
+    def test_maintenance_blocks_stage_network_without_cache(self):
+        from hub.dhis2_reports.cache import ORG_UNIT_CACHE
+        from hub.dhis2_reports.maintenance import STAGE_MAINTENANCE_MESSAGE
+        from hub.dhis2_reports.security import ReportSecurityError
+        from hub.dhis2_reports.service import Dhis2ReportsService
+
+        ORG_UNIT_CACHE.clear()
+        client = mock.Mock()
+        svc = Dhis2ReportsService(store=mock.Mock(), client_factory=lambda env: client)
+        with mock.patch.dict(os.environ, {"DHIS2_STAGE_MAINTENANCE": "true"}, clear=False):
+            with self.assertRaises(ReportSecurityError) as ctx:
+                svc.search_org_units("stage", level=2, limit=50)
+        self.assertEqual(ctx.exception.code, "maintenance")
+        self.assertEqual(str(ctx.exception), STAGE_MAINTENANCE_MESSAGE)
+        client._get_json.assert_not_called()
+
+    def test_maintenance_serves_stale_stage_cache_with_synced_at(self):
+        from hub.dhis2_reports.cache import ORG_UNIT_CACHE
+        from hub.dhis2_reports.service import Dhis2ReportsService
+
+        ORG_UNIT_CACHE.clear()
+
+        class FakeClient:
+            def __init__(self):
+                self.calls = 0
+
+            def _get_json(self, path, params=None, timeout=None, retry_max=None):
+                self.calls += 1
+                return {
+                    "organisationUnits": [
+                        {
+                            "id": "OuUidCountry1",
+                            "displayName": "Philippines",
+                            "children": [
+                                {"id": "OuUidRegion1", "displayName": "Region VII", "level": 2}
+                            ],
+                        }
+                    ]
+                }
+
+        fake = FakeClient()
+        svc = Dhis2ReportsService(store=mock.Mock(), client_factory=lambda env: fake)
+        with mock.patch.dict(os.environ, {"DHIS2_STAGE_MAINTENANCE": "false"}, clear=False):
+            seeded = svc.search_org_units("stage", level=2, limit=50)
+        self.assertEqual(seeded["cache"], "miss")
+        self.assertTrue(seeded["synced_at"])
+        synced = seeded["synced_at"]
+        calls_after_seed = fake.calls
+
+        for key, (exp, stamp, value) in list(ORG_UNIT_CACHE._data.items()):
+            if key.startswith("ou:stage:"):
+                ORG_UNIT_CACHE._data[key] = (0.0, stamp, value)
+
+        with mock.patch.dict(os.environ, {"DHIS2_STAGE_MAINTENANCE": "true"}, clear=False):
+            stale = svc.search_org_units("stage", level=2, limit=50)
+        self.assertEqual(stale["cache"], "stale")
+        self.assertEqual(stale["synced_at"], synced)
+        self.assertTrue(stale["maintenance"])
+        self.assertEqual(
+            stale["maintenance_message"],
+            "Stage is temporarily unavailable due to maintenance.",
+        )
+        self.assertEqual(fake.calls, calls_after_seed)
+
+    def test_maintenance_does_not_use_live_cache_for_stage(self):
+        from hub.dhis2_reports.cache import ORG_UNIT_CACHE
+        from hub.dhis2_reports.security import ReportSecurityError
+        from hub.dhis2_reports.service import Dhis2ReportsService
+
+        ORG_UNIT_CACHE.clear()
+
+        class FakeClient:
+            def __init__(self, env):
+                self.env = env
+
+            def _get_json(self, path, params=None, timeout=None, retry_max=None):
+                return {
+                    "organisationUnits": [
+                        {
+                            "id": "OuUidLiveRg1",
+                            "displayName": "Live Only Region",
+                            "children": [
+                                {
+                                    "id": "OuUidLiveRg1",
+                                    "displayName": "Live Only Region",
+                                    "level": 2,
+                                }
+                            ],
+                        }
+                    ]
+                }
+
+        svc = Dhis2ReportsService(
+            store=mock.Mock(),
+            client_factory=lambda env: FakeClient(env),
+        )
+        with mock.patch.dict(os.environ, {"DHIS2_STAGE_MAINTENANCE": "false"}, clear=False):
+            live = svc.search_org_units("live", level=2, limit=50)
+        self.assertEqual(live["org_units"][0]["id"], "OuUidLiveRg1")
+
+        with mock.patch.dict(os.environ, {"DHIS2_STAGE_MAINTENANCE": "true"}, clear=False):
+            with self.assertRaises(ReportSecurityError) as ctx:
+                svc.search_org_units("stage", level=2, limit=50)
+        self.assertEqual(ctx.exception.code, "maintenance")
+
+    def test_live_still_works_during_stage_maintenance(self):
+        from hub.dhis2_reports.cache import ORG_UNIT_CACHE
+        from hub.dhis2_reports.service import Dhis2ReportsService
+
+        ORG_UNIT_CACHE.clear()
+
+        class FakeClient:
+            def _get_json(self, path, params=None, timeout=None, retry_max=None):
+                return {
+                    "organisationUnits": [
+                        {
+                            "id": "OuUidCountry1",
+                            "children": [
+                                {"id": "OuUidRegion1", "displayName": "Region VII", "level": 2}
+                            ],
+                        }
+                    ]
+                }
+
+        svc = Dhis2ReportsService(store=mock.Mock(), client_factory=lambda env: FakeClient())
+        with mock.patch.dict(os.environ, {"DHIS2_STAGE_MAINTENANCE": "true"}, clear=False):
+            live = svc.search_org_units("live", level=2, limit=50)
+        self.assertTrue(live["ok"])
+        self.assertEqual(live["environment_status"], "ok")
+        self.assertFalse(live["maintenance"])
+        self.assertEqual(live["org_units"][0]["id"], "OuUidRegion1")
+
+
+@unittest.skipUnless(
+    os.environ.get("HCSC_LIVE_OU_INTEGRATION") == "1",
+    "Optional Live read-only OU integration (set HCSC_LIVE_OU_INTEGRATION=1)",
+)
+class LiveOuIntegrationTests(unittest.TestCase):
+    """Safe GET-only Live checks — never writes; never uses Stage."""
+
+    def test_live_regions_read_only(self):
+        from hub.dhis2_reports.cache import ORG_UNIT_CACHE
+        from app import create_app
+
+        ORG_UNIT_CACHE.clear()
+        app = create_app()
+        svc = app.config["DHIS2_REPORTS"]
+        data = svc.search_org_units("live", level=2, limit=50)
+        self.assertTrue(data["ok"])
+        self.assertGreater(data["count"], 0)
+        self.assertTrue(data.get("synced_at"))
+        self.assertEqual(data["environment"], "live")
+
+
+@unittest.skip(
+    "Stage integration blocked: DHIS2 Stage is under scheduled maintenance "
+    "(environment unavailable — not an application defect)."
+)
+class StageOuIntegrationBlockedTests(unittest.TestCase):
+    def test_stage_regions_skipped(self):
+        self.fail("unreachable while Stage maintenance skip is active")
+
+
+class OverviewServicePeriodGateTests(unittest.TestCase):
+    def setUp(self):
+        OVERVIEW_CACHE.clear()
+        REPORT_CACHE.clear()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.reg_path = Path(self.tmp.name) / "reg.yaml"
+        sample = SAMPLE_YAML + "\nreporting_cycle:\n  quarter_start: 2025Q3\n  quarter_end: 2027Q4\n"
+        self.reg_path.write_text(sample, encoding="utf-8")
+        self.clients = {}
+
+        def factory(env: str):
+            if env not in self.clients:
+                self.clients[env] = FakeAnalyticsClient(
+                    {"fxmvSiKfEpn": 100, "qzjKcfO9J2w": 50, "LOMZy9q1euI": 40, "BSqDSIpHhoT": 80},
+                    environment=env,
+                )
+            return self.clients[env]
+
+        self.svc = HcscIndicatorService(client_factory=factory, registry_path=self.reg_path)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+        OVERVIEW_CACHE.clear()
+        REPORT_CACHE.clear()
+
+    def test_rejects_out_of_cycle_period(self):
+        from hub.dhis2_reports.security import ReportSecurityError
+
+        with self.assertRaises(ReportSecurityError):
+            self.svc.overview(environment="stage", period="2024Q1", org_unit="OuUid000001")
+        boot = self.svc.bootstrap()
+        ids = [q["id"] for q in boot["periods"]["quarters"]]
+        self.assertEqual(ids[0], "2025Q3")
+        self.assertEqual(ids[-1], "2027Q4")
+        self.assertEqual(boot["boundaries"]["org_unit_source"], "hub_dhis2_reports_org_units")
+
+
 class UiContractTests(unittest.TestCase):
     def test_result_type_aware_display_and_uid_drawer_hooks(self):
         html = (ROOT / "templates" / "hcsc_indicator_summary.html").read_text(encoding="utf-8")
@@ -700,8 +1130,18 @@ class UiContractTests(unittest.TestCase):
         self.assertIn("hcsc-bootstrap", js)
         self.assertIn("loadValidation", js)
         self.assertIn("hcsc-section-row", js)
-        self.assertIn("Compare Sources", html)
-        self.assertIn("HCSC–RF", html)
+        self.assertIn("Generate Report", html)
+        self.assertIn("dhis2_org_unit_picker.js", html)
+        self.assertIn("hcsc-param-row", html)
+        self.assertIn("hcsc-status-strip", html)
+        self.assertIn("hcsc-category-nav", html)
+        self.assertIn("hcsc-indicator-toolbar", html)
+        self.assertIn("No indicators to display", html)
+        self.assertIn("Calculation Basis", html)
+        self.assertNotIn("hcsc-pct-only", html)
+        self.assertNotIn("hcsc-legend muted", html)
+        self.assertIn("reporting_cycle", yaml_text)
+        self.assertIn("quarter_start: 2025Q3", yaml_text)
         self.assertIn("page_subtitle", html)  # rendered from bootstrap
         self.assertIn("Review Differences", html)
         self.assertIn("DHIS2 Analytics Result", html)

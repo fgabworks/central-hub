@@ -6,6 +6,14 @@
 
 npmo_report_uid: qTQD08sNuzZ
 npmo_report_name: HCSC Summary Tables (NPMO)
+
+# Reporting cycle bounds — extend here for future cycles (UI reads this list).
+reporting_cycle:
+  id: 1
+  label: Cycle 1
+  quarter_start: 2025Q3
+  quarter_end: 2027Q4
+
 indicators:
 - key: eligible_households
   display_name: Eligible Households

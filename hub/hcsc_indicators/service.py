@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 from hub.dhis2.client import Dhis2Client, Dhis2Error
-from hub.dhis2_reports.periods import default_completed_quarter, periods_payload
-from hub.dhis2_reports.security import ReportSecurityError, validate_environment, validate_org_unit, validate_period
+from hub.dhis2_reports.maintenance import environment_availability
+from hub.dhis2_reports.security import ReportSecurityError, validate_environment, validate_org_unit
 from hub.hcsc_indicators.adapters import (
     ADAPTER_CAPABILITY,
     ADAPTER_DHIS2,
@@ -39,6 +39,11 @@ from hub.hcsc_indicators.cache import (
 from hub.hcsc_indicators.design_decode import decode_npmo_design
 from hub.hcsc_indicators.presentation import enrich_result_row
 from hub.hcsc_indicators.query_display import build_retrieval_panel
+from hub.hcsc_indicators.quarters import (
+    allowed_quarter_ids,
+    assert_allowed_quarter,
+    cycle_periods_payload,
+)
 from hub.hcsc_indicators.registry import SECTION_LABELS, SECTIONS, load_registry
 from hub.hcsc_indicators.validation import validate_row
 
@@ -66,7 +71,7 @@ class HcscIndicatorService:
     def bootstrap(self) -> dict[str, Any]:
         reg = self.registry()
         design = self.design_bindings()
-        periods = periods_payload(remembered=default_completed_quarter())
+        periods = cycle_periods_payload(reg)
         return {
             "ok": True,
             "page_title": PAGE_TITLE,
@@ -92,6 +97,7 @@ class HcscIndicatorService:
                 "environment": design.get("environment"),
             },
             "periods": periods,
+            "reporting_cycle": (periods.get("cycle") or {}),
             "disaggregations": [
                 {"id": "none", "label": "None (aggregate)"},
                 {
@@ -102,8 +108,22 @@ class HcscIndicatorService:
                 },
             ],
             "environments": [
-                {"id": "stage", "label": "Stage"},
-                {"id": "live", "label": "Live"},
+                {
+                    "id": "stage",
+                    "label": "Stage",
+                    **{
+                        k: environment_availability("stage")[k]
+                        for k in ("status", "message", "maintenance")
+                    },
+                },
+                {
+                    "id": "live",
+                    "label": "Live",
+                    **{
+                        k: environment_availability("live")[k]
+                        for k in ("status", "message", "maintenance")
+                    },
+                },
             ],
             "retrieval_methods": [
                 "DHIS2 Analytics",
@@ -116,6 +136,8 @@ class HcscIndicatorService:
                 "no_formula_engine": True,
                 "no_html_scrape": True,
                 "dhis2_writes": False,
+                "no_dhis2_writes": True,
+                "org_unit_source": "hub_dhis2_reports_org_units",
             },
         }
 
@@ -241,7 +263,7 @@ class HcscIndicatorService:
         section: str | None,
     ) -> dict[str, Any]:
         env = validate_environment(environment)
-        pe = validate_period(period, required=True)
+        pe = assert_allowed_quarter(period, allowed_quarter_ids(self.registry()))
         ou = validate_org_unit(org_unit, required=True)
         disagg = (disaggregation or "none").strip().lower() or "none"
         if disagg not in {"none"}:
