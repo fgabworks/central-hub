@@ -80,6 +80,13 @@
     });
     if (open && !minimized) ensureTab(prefs.tab);
     else stopPolling();
+    // Pause xterm rendering when console hidden/minimized; PTY keeps running.
+    if (window.WCTerminal && window.WCTerminal.setRenderingPaused) {
+      window.WCTerminal.setRenderingPaused(!open || minimized || prefs.tab !== "terminal" || document.hidden);
+    }
+    if (open && !minimized && prefs.tab === "terminal" && window.WCTerminal && window.WCTerminal.fit) {
+      setTimeout(function () { window.WCTerminal.fit(); }, 30);
+    }
   }
 
   function persist(immediate) {
@@ -95,6 +102,8 @@
           maximized: prefs.maximized,
           height: prefs.height,
           tab: prefs.tab,
+          terminal_session_id: prefs.terminal_session_id || "",
+          terminal_split: !!prefs.terminal_split,
         }),
       }).catch(function () {});
     };
@@ -257,18 +266,30 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         terminalCatalog = data;
-        var repoSel = document.getElementById("wc-term-repo");
-        if (!repoSel) return;
-        var repos = (data && data.repositories) || [];
-        repoSel.innerHTML = repos
-          .map(function (repo) {
-            return '<option value="' + escapeAttr(repo.id) + '">' + escapeHtml(repo.name || repo.id) + "</option>";
-          })
-          .join("") || '<option value="">No local repositories</option>';
-        fillProfiles();
-        var out = document.getElementById("wc-terminal-out");
-        if (out) out.textContent = (data && data.message) || "Controlled terminal ready.";
-        loaded.terminal = true;
+        var initTerm = window.WCTerminal
+          ? window.WCTerminal.init({
+              activeId: prefs.terminal_session_id || "",
+              split: !!prefs.terminal_split,
+            })
+          : Promise.resolve();
+        return initTerm.then(function () {
+          if (window.WCTerminal && window.WCTerminal.fillCatalog) {
+            window.WCTerminal.fillCatalog(data);
+          }
+          if (window.WCTerminal) {
+            window.WCTerminal.onSessionChange = function (id, meta) {
+              prefs.terminal_session_id = id || "";
+              if (meta && typeof meta.split === "boolean") prefs.terminal_split = meta.split;
+              persist(false);
+            };
+          }
+          var out = document.getElementById("wc-terminal-out");
+          if (out) {
+            out.hidden = false;
+            out.textContent = (data && data.message) || "Interactive repository terminal ready.";
+          }
+          loaded.terminal = true;
+        });
       })
       .catch(function () {})
       .then(function () { release("terminal"); });
@@ -340,13 +361,25 @@
           el.innerHTML = '<p class="muted">No listening ports detected for connected repositories.</p>';
         } else {
           el.innerHTML =
-            '<table class="wc-table"><thead><tr><th>Port</th><th>PID</th><th>Process</th><th>Repository</th><th>Health</th><th>State</th><th></th></tr></thead><tbody>' +
+            '<table class="wc-table"><thead><tr><th>Port</th><th>PID</th><th>Process</th><th>Repository</th><th>Terminal</th><th>Health</th><th>State</th><th></th></tr></thead><tbody>' +
             rows
               .map(function (row) {
                 var state = row.managed_by_hub ? "managed" : "external";
+                if (row.terminal_owned) state += " · terminal";
+                var termCell = row.terminal_session_id
+                  ? escapeHtml(String(row.terminal_session_id).slice(0, 8))
+                  : "—";
                 var actions = "";
                 if (row.open_url) {
-                  actions += '<a class="btn btn-sm" href="' + escapeAttr(row.open_url) + '" target="_blank" rel="noopener">Open</a> ';
+                  actions += '<a class="btn btn-sm" href="' + escapeAttr(row.open_url) + '" target="_blank" rel="noopener">Open URL</a> ';
+                }
+                if (row.run_id) {
+                  actions +=
+                    '<button type="button" class="btn btn-sm" data-wc-view-logs data-run="' +
+                    escapeAttr(row.run_id) +
+                    '" data-repo="' +
+                    escapeAttr(row.repository_id || "") +
+                    '">View Logs</button> ';
                 }
                 if (row.can_stop) {
                   actions +=
@@ -358,7 +391,7 @@
                     'data-port="' + escapeAttr(row.port || "") + '" ' +
                     'data-managed="' + (row.managed_by_hub ? "1" : "0") + '" ' +
                     'data-typed="' + (row.requires_typed_confirm ? "1" : "0") + '" ' +
-                    'data-phrase="' + escapeAttr(row.typed_confirm_phrase || "") + '">Stop</button>';
+                    'data-phrase="' + escapeAttr(row.typed_confirm_phrase || "") + '">Stop Process</button>';
                 } else {
                   actions += '<span class="muted">view-only</span>';
                 }
@@ -371,6 +404,8 @@
                   escapeHtml(row.process || "") +
                   "</td><td>" +
                   escapeHtml(row.repository_name || row.repository_id || "") +
+                  "</td><td>" +
+                  termCell +
                   "</td><td>" +
                   escapeHtml(row.health || row.confidence || "") +
                   "</td><td>" +
@@ -507,12 +542,22 @@
   host.addEventListener("click", function (event) {
     var btn = event.target.closest("[data-wc-stop]");
     if (btn) stopPort(btn);
+    var logs = event.target.closest("[data-wc-view-logs]");
+    if (logs) {
+      prefs.tab = "output";
+      loaded.output = false;
+      applyChrome();
+    }
   });
 
   document.addEventListener("keydown", function (event) {
     if ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === "j") {
       var tag = (event.target && event.target.tagName) || "";
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (event.target && event.target.isContentEditable)) {
+      // Allow Ctrl+J from page chrome; skip when typing in inputs (xterm uses textarea).
+      if (tag === "INPUT" || tag === "SELECT" || (event.target && event.target.isContentEditable)) {
+        return;
+      }
+      if (tag === "TEXTAREA" && !(event.target.classList && event.target.classList.contains("xterm-helper-textarea"))) {
         return;
       }
       event.preventDefault();
@@ -521,8 +566,15 @@
   });
 
   document.addEventListener("visibilitychange", function () {
-    if (document.hidden) stopPolling();
-    else startPollingIfNeeded();
+    if (document.hidden) {
+      stopPolling();
+      if (window.WCTerminal && window.WCTerminal.setRenderingPaused) {
+        window.WCTerminal.setRenderingPaused(true);
+      }
+    } else {
+      startPollingIfNeeded();
+      applyChrome();
+    }
   });
 
   window.addEventListener("resize", function () {

@@ -52,7 +52,7 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 | Enrichment raw metadata | Not bulk-stored; live GET only when detail `?tab=raw&raw=1` |
 | SQL Workspace | Implemented — SELECT/WITH/EXPLAIN only; Live warning; never auto-run |
 | AI Assistant Center | Implemented — isolated Aira/Okarun profiles; full-height persistent dock + fixed composer; Codex CLI real provider (Okarun, read-only `codex exec --json`); provider switching; Find/Ask/Plan/Review; context preview; streaming/cancel/retry/history; scoped read-only tools; no write/execution; no voice |
-| Workspace Console | Implemented — bottom VS Code-style panel under main content (Problems/Output/Debug/Terminal/Ports); collapsed by default; resize/minimize/maximize; per-workspace prefs; lazy loads; pauses when hidden; controlled terminal; does not compress the AI dock |
+| Workspace Console | Implemented — bottom VS Code-style panel (Problems/Output/Debug/**interactive PTY Terminal**/Ports); xterm.js + ConPTY/`pty` + WebSocket; repo path jail; collapsed by default; resize/minimize/maximize; per-workspace prefs (session id, not commands); lazy loads; pauses UI when hidden (PTY keeps running); controlled profile launcher retained; verified process stops only |
 | Activity Rail / VS Code shell | Implemented — far-right activity rail; AI dock via topbar; Assistant Center history layout; notepad from rail (no floating pill); compact dashboard summary tiles |
 | Email Center | Implemented — `gmail.readonly` only; encrypted tokens; no send/modify/mark-read; opt-in assistant metadata search forced to active workspace |
 | Calendar Center | Implemented — FullCalendar grid + agenda/upcoming; readonly; sanitized descriptions; no create/RSVP/drag; opt-in assistant lookup forced to active workspace |

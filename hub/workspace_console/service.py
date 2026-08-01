@@ -281,17 +281,25 @@ class WorkspaceConsoleService:
         }
 
     def terminal_catalog(self) -> dict[str, Any]:
-        """Approved run/test profiles only — never a free shell."""
+        """Connected local repositories + optional approved run profiles.
+
+        Interactive PTY shells are created via TerminalSessionManager and jailed to
+        each repository's configured local path — never an arbitrary free shell.
+        """
+        import os
+
         repos: list[dict[str, Any]] = []
-        if self.registry is None or self.repo_workspace is None:
-            return {"ok": True, "repositories": [], "free_shell": False}
+        if self.registry is None:
+            return {"ok": True, "repositories": [], "free_shell": False, "interactive_pty": True}
         for repo in self.registry.enabled_repositories():
             if not (repo.local_path or repo.working_directory):
                 continue
-            try:
-                profiles = self.repo_workspace.list_profiles(repo)
-            except Exception:
-                profiles = []
+            profiles: list[dict[str, Any]] = []
+            if self.repo_workspace is not None:
+                try:
+                    profiles = self.repo_workspace.list_profiles(repo)
+                except Exception:
+                    profiles = []
             repos.append(
                 {
                     "id": repo.id,
@@ -313,7 +321,19 @@ class WorkspaceConsoleService:
             "ok": True,
             "repositories": repos,
             "free_shell": False,
-            "message": "Select an approved repository run/test profile. Unrestricted shell is not available.",
+            "interactive_pty": True,
+            "shells": (
+                [{"id": "powershell", "label": "PowerShell"}, {"id": "cmd", "label": "CMD"}]
+                if os.name == "nt"
+                else [
+                    {"id": "bash", "label": "bash"},
+                    {"id": "sh", "label": "sh"},
+                ]
+            ),
+            "message": (
+                "Open an interactive terminal inside a connected repository path, "
+                "or start an approved run profile. AI cannot execute terminal commands."
+            ),
         }
 
     def ports(self) -> dict[str, Any]:

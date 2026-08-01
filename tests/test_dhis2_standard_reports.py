@@ -9,11 +9,14 @@ from pathlib import Path
 from unittest import mock
 
 from hub.dhis2.client import Dhis2Client, Dhis2Error
+from hub.dhis2_reports.cache import RESULT_CACHE
 from hub.dhis2_reports.db import ReportsDatabase
 from hub.dhis2_reports.security import (
     ReportSecurityError,
+    build_hub_standard_render_path,
     build_standard_report_data_url,
     period_to_dhis2_date,
+    prepare_credentialed_report_html,
     scrub_parameters,
 )
 from hub.dhis2_reports.service import Dhis2ReportsService
@@ -245,7 +248,13 @@ class SyncStoreTests(unittest.TestCase):
             )
             self.assertEqual(viewer["kind"], "standard_embed")
             self.assertTrue(viewer["prefer_embed"])
-            self.assertIn("Open in DHIS2", viewer["fallback_hint"])
+            self.assertTrue(viewer["uses_env_credentials"])
+            self.assertIn("/dhis2/reports/standard/stage/", viewer["embed_url"])
+            self.assertIn("/rendered", viewer["embed_url"])
+            self.assertNotIn("password", viewer["embed_url"].lower())
+            self.assertNotIn("secret", viewer["embed_url"].lower())
+            self.assertIn("data.html", viewer["external_embed_url"])
+            self.assertIn(".env", viewer["fallback_hint"])
 
             # Cached design content
             src = self.svc.fetch_standard_html_source("stage", html.uid)
@@ -281,6 +290,16 @@ class SyncStoreTests(unittest.TestCase):
         self.assertIn("Abcdefghijk", args[0])
         self.assertEqual((kwargs.get("params") or {}).get("date"), "2026-01-01")
 
+        RESULT_CACHE.clear()
+        self.svc._clients.clear()
+        rendered = self.svc.render_standard_html(
+            "stage", "Abcdefghijk", period="202601"
+        )
+        self.assertIn("Rendered", rendered["html"])
+        self.assertTrue(rendered["uses_env_credentials"])
+        self.assertNotIn("secret-password", rendered["html"])
+        self.assertNotIn("password=", rendered["html"].lower())
+
         client.get_text.return_value = "<html>password=leak</html>"
         with self.assertRaises(ReportSecurityError) as ctx:
             self.svc.download_standard_html("stage", "Abcdefghijk", period="202601")
@@ -288,6 +307,74 @@ class SyncStoreTests(unittest.TestCase):
 
         cleaned = scrub_parameters({"period": "2026", "token": "x", "password": "y"})
         self.assertEqual(cleaned, {"period": "2026"})
+
+    def test_hub_render_path_and_live_confirm(self) -> None:
+        path = build_hub_standard_render_path(
+            environment="stage",
+            uid="Abcdefghijk",
+            period="202601",
+            org_unit="OrgUnitUid1",
+        )
+        self.assertEqual(
+            path,
+            "/dhis2/reports/standard/stage/Abcdefghijk/rendered?period=202601&org_unit=OrgUnitUid1",
+        )
+        self.assertNotIn("password", path.lower())
+
+        live = build_hub_standard_render_path(
+            environment="live",
+            uid="Abcdefghijk",
+            period="202601",
+            confirm_live=True,
+        )
+        self.assertIn("confirm_live=1", live)
+
+        prepared = prepare_credentialed_report_html(
+            "<html><head></head><body>R</body></html>",
+            base_url="https://stage.example.org",
+        )
+        self.assertIn('<base href="https://stage.example.org/">', prepared)
+
+        client = self._mock_client_pages()
+        client.get_text.return_value = "<html><body>LiveOK</body></html>"
+
+        def factory(env: str) -> Dhis2Client:
+            return client
+
+        self.svc.client_factory = factory
+        self.svc.get_dhis2_base_url = lambda env: (
+            "https://live.example.org" if env == "live" else "https://stage.example.org"
+        )
+        live_report = normalize_report_payload(
+            {
+                "id": "Abcdefghijk",
+                "name": "Alpha Report",
+                "type": "HTML",
+                "designContent": "<p>hi</p>",
+                "reportParams": {"paramReportingMonth": True},
+                "relativePeriods": {"thisMonth": True},
+            },
+            environment="live",
+            dhis2_version="2.40.0",
+            last_synced_at="2026-01-01T00:00:00+00:00",
+            cache_design=True,
+        )
+        self.store.upsert_synced_report(live_report, design_content="<p>hi</p>")
+
+        with self.assertRaises(ReportSecurityError) as ctx:
+            self.svc.standard_viewer_payload("live", "Abcdefghijk", period="202601")
+        self.assertEqual(ctx.exception.code, "confirm_required")
+
+        with mock.patch.dict(
+            os.environ,
+            {"LIVE_DHIS2_URL": "https://live.example.org"},
+            clear=False,
+        ):
+            viewer = self.svc.standard_viewer_payload(
+                "live", "Abcdefghijk", period="202601", confirm_live=True
+            )
+        self.assertIn("confirm_live=1", viewer["embed_url"])
+        self.assertTrue(viewer["uses_env_credentials"])
 
     def test_cache_refresh_prunes_stale(self) -> None:
         client = self._mock_client_pages()
@@ -368,6 +455,66 @@ class CapabilityAndRouteTests(unittest.TestCase):
             wbody = work.get_data(as_text=True)
             self.assertIn("dhis2/reports", wbody)
             self.assertTrue("Reports" in wbody or "Report" in wbody)
+
+    def test_rendered_route_uses_env_credentials_not_browser_login(self) -> None:
+        from app import create_app
+
+        app = create_app()
+        store: ReportsStore = app.config["DHIS2_REPORTS"].store
+        report = normalize_report_payload(
+            {
+                "id": "Abcdefghijk",
+                "name": "Alpha Report",
+                "type": "HTML",
+                "designContent": "<p>hi</p>",
+                "reportParams": {"paramReportingMonth": True},
+                "relativePeriods": {"thisMonth": True},
+            },
+            environment="stage",
+            dhis2_version="2.40.0",
+            last_synced_at="2026-01-01T00:00:00+00:00",
+            cache_design=True,
+        )
+        store.upsert_synced_report(report, design_content="<p>hi</p>")
+
+        mock_client = mock.MagicMock(spec=Dhis2Client)
+        mock_client.settings = _settings()
+        mock_client.get_text.return_value = (
+            "<html><head></head><body><h1>Chosen Report</h1></body></html>"
+        )
+
+        app.config["DHIS2_REPORTS"].client_factory = lambda env: mock_client
+        app.config["DHIS2_REPORTS"].get_dhis2_base_url = (
+            lambda env: "https://stage.example.org"
+        )
+
+        client = app.test_client()
+        with mock.patch.dict(
+            os.environ,
+            {"STAGE_DHIS2_URL": "https://stage.example.org"},
+            clear=False,
+        ):
+            view = client.get(
+                "/dhis2/reports/standard/stage/Abcdefghijk/view?period=202601"
+            )
+            self.assertEqual(view.status_code, 200)
+            vhtml = view.get_data(as_text=True)
+            self.assertIn("/dhis2/reports/standard/stage/Abcdefghijk/rendered", vhtml)
+            self.assertIn("hub credentials", vhtml.lower())
+            self.assertNotIn("https://stage.example.org/api/reports/", vhtml)
+            self.assertNotIn("secret-password", vhtml)
+
+            rendered = client.get(
+                "/dhis2/reports/standard/stage/Abcdefghijk/rendered?period=202601"
+            )
+        self.assertEqual(rendered.status_code, 200)
+        body = rendered.get_data(as_text=True)
+        self.assertIn("Chosen Report", body)
+        self.assertNotIn("secret-password", body)
+        self.assertNotIn("password=", body.lower())
+        mock_client.get_text.assert_called()
+        path_arg = mock_client.get_text.call_args[0][0]
+        self.assertIn("/api/reports/Abcdefghijk/data.html", path_arg)
 
 
 if __name__ == "__main__":

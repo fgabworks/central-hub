@@ -4,40 +4,61 @@
 <section class="page-header page-header-compact">
   <div>
     <h1>{{ page_title }}</h1>
-    <p class="muted">Preview resolved parameters, then generate or open. Live requires confirmation.</p>
+    <p class="muted">Generate &amp; View populated HTML inside Central Hub using server-side DHIS2 credentials. Live requires one confirmation per run.</p>
   </div>
 </section>
 {% include "partials/dhis2_reports_tabs.html" %}
 
-<section class="panel" style="margin-top:0.85rem" id="dr-run"
-         data-preview-url="{{ url_for('api_dhis2_report_preview') }}"
-         data-generate-url="{{ url_for('api_dhis2_report_generate') }}"
+<section class="panel dr-run-panel" style="margin-top:0.85rem" id="dr-run"
+         data-catalog-url="{{ url_for('api_dhis2_report_run_catalog') }}"
+         data-generate-view-url="{{ url_for('api_dhis2_report_generate_and_view') }}"
+         data-org-units-url="{{ url_for('api_dhis2_report_org_units') }}"
          data-preset-url="{{ url_for('api_dhis2_report_preset_save') }}"
-         data-preferred-env="{{ dhis2_instance or '' }}">
+         data-preferred-env="{{ preferred_env or dhis2_instance or 'stage' }}"
+         data-selected-report="{{ selected_report_id or '' }}"
+         data-preset-period="{{ preset.period if preset else '' }}"
+         data-preset-ou="{{ preset.org_unit if preset else '' }}">
   <div class="panel-body rw-connect-edit-grid">
-    <label>Report
-      <select id="dr-report">
-        <option value="">Select…</option>
-        {% for r in reports %}
-          <option value="{{ r.id }}" {% if selected and selected.id==r.id %}selected{% endif %}>{{ r.name }} ({{ r.type }})</option>
-        {% endfor %}
-      </select>
-    </label>
     <label>Environment
       <select id="dr-env">
-        <option value="stage" {% if (preset and preset.environment=='stage') or (not preset and dhis2_instance!='live') %}selected{% endif %}>Stage</option>
-        <option value="live" {% if (preset and preset.environment=='live') or (not preset and dhis2_instance=='live') %}selected{% endif %}>Live</option>
+        <option value="stage">Stage</option>
+        <option value="live">Live</option>
+      </select>
+    </label>
+    <label>Report
+      <select id="dr-report">
+        <option value="">Loading reports…</option>
       </select>
     </label>
     <label>Period
-      <input type="text" id="dr-period" placeholder="202601 or 2026Q1" value="{{ preset.period if preset else '' }}">
+      <div class="dr-period-row">
+        <select id="dr-period-type" aria-label="Period type">
+          <option value="monthly">Monthly</option>
+          <option value="quarterly">Quarterly</option>
+          <option value="yearly">Yearly</option>
+          <option value="custom">Custom</option>
+        </select>
+        <input type="month" id="dr-period-month" aria-label="Month">
+        <select id="dr-period-quarter" hidden aria-label="Quarter">
+          <option value="1">Q1</option><option value="2">Q2</option><option value="3">Q3</option><option value="4">Q4</option>
+        </select>
+        <input type="number" id="dr-period-year" min="2000" max="2100" hidden aria-label="Year">
+        <input type="text" id="dr-period" placeholder="202601 / 2026Q1" hidden>
+      </div>
     </label>
-    <label>Organisation unit UID
-      <input type="text" id="dr-ou" placeholder="11-char UID" value="{{ preset.org_unit if preset else '' }}">
+    <label>Organisation unit
+      <div class="dr-ou-row">
+        <input type="search" id="dr-ou-search" placeholder="Search organisation units…" autocomplete="off">
+        <input type="hidden" id="dr-ou" value="">
+        <div class="dr-ou-selected muted" id="dr-ou-label">None selected</div>
+        <ul class="dr-ou-results" id="dr-ou-results" hidden></ul>
+      </div>
     </label>
     <label>Output format
       <select id="dr-format">
         <option value="html">html</option>
+        <option value="pdf">pdf (download)</option>
+        <option value="xls">excel (download)</option>
       </select>
     </label>
   </div>
@@ -45,20 +66,30 @@
     <label class="rw-connect-confirm" id="dr-live-box" hidden>
       <input type="checkbox" id="dr-confirm-live"> I confirm running this report against Live
     </label>
-    <div class="rw-preview-box" style="margin-top:0.75rem">
-      <div class="nav-label">Resolved preview</div>
-      <pre class="mono" id="dr-preview">Select a report and click Preview.</pre>
-    </div>
-    <div class="btn-row" style="margin-top:0.85rem">
-      <button type="button" class="btn" id="dr-preview-btn">Preview</button>
-      <button type="button" class="btn btn-primary" id="dr-generate">Generate</button>
-      <a class="btn" id="dr-open" href="#" target="_blank" rel="noopener" hidden>Open Report</a>
+    <p class="muted" id="dr-report-hint"></p>
+    <div class="btn-row" style="margin-top:0.55rem">
+      <button type="button" class="btn btn-primary" id="dr-generate-view" disabled>Generate &amp; View</button>
+      <button type="button" class="btn" id="dr-refresh" hidden>Refresh</button>
+      <a class="btn" id="dr-view" href="#" target="_blank" rel="noopener" hidden>View Report</a>
       <a class="btn" id="dr-open-dhis2" href="#" target="_blank" rel="noopener" hidden>Open in DHIS2</a>
       <a class="btn" id="dr-download" href="#" hidden>Download</a>
+      <button type="button" class="btn" id="dr-fullscreen" hidden>Full screen</button>
+      <button type="button" class="btn" id="dr-print" hidden>Print</button>
       <button type="button" class="btn" id="dr-save-preset">Save Preset</button>
     </div>
     <p class="muted" id="dr-status"></p>
+
+    <div class="dr-viewer-wrap" id="dr-viewer-wrap">
+      <div class="dr-viewer-skeleton" id="dr-viewer-skeleton" hidden>Loading report…</div>
+      <iframe class="dr-viewer" id="dr-viewer" title="DHIS2 Report Viewer" sandbox="allow-same-origin allow-scripts allow-popups" hidden></iframe>
+      <div class="dr-viewer-empty muted" id="dr-viewer-empty">Select a Native Standard Report, set parameters, then Generate &amp; View.</div>
+    </div>
+
+    <details class="dr-diagnostics" id="dr-diagnostics">
+      <summary>Diagnostics</summary>
+      <pre class="mono" id="dr-preview">Resolved URL, parameters, timings, and cache state appear here after a run.</pre>
+    </details>
   </div>
 </section>
-<script src="{{ url_for('static', filename='js/dhis2_reports_run.js') }}"></script>
+<script src="{{ url_for('static', filename='js/dhis2_reports_run.js') }}?v=render-bridge-1"></script>
 {% endblock %}

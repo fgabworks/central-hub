@@ -45,6 +45,8 @@ def default_console_state(workspace: str) -> dict[str, Any]:
         "max_height": MAX_HEIGHT,
         "tab": "problems",
         "tabs": list(TABS),
+        "terminal_session_id": "",
+        "terminal_split": False,
     }
 
 
@@ -69,6 +71,10 @@ def load_console_prefs(db: Any, workspace: str) -> dict[str, Any]:
         state["height"] = clamp_height(data.get("height"))
     if "tab" in data:
         state["tab"] = normalize_tab(data.get("tab"))
+    if "terminal_session_id" in data:
+        state["terminal_session_id"] = str(data.get("terminal_session_id") or "")[:64]
+    if "terminal_split" in data:
+        state["terminal_split"] = bool(data.get("terminal_split"))
     return state
 
 
@@ -85,6 +91,11 @@ def save_console_prefs(db: Any, workspace: str, payload: dict[str, Any] | None) 
         current["height"] = clamp_height(data.get("height"))
     if "tab" in data:
         current["tab"] = normalize_tab(data.get("tab"))
+    if "terminal_session_id" in data:
+        # Remember selected session id only — never command text or scrollback.
+        current["terminal_session_id"] = str(data.get("terminal_session_id") or "")[:64]
+    if "terminal_split" in data:
+        current["terminal_split"] = bool(data.get("terminal_split"))
     if current["maximized"]:
         current["minimized"] = False
     if current["minimized"]:
@@ -99,6 +110,8 @@ def save_console_prefs(db: Any, workspace: str, payload: dict[str, Any] | None) 
                 "maximized": current["maximized"],
                 "height": current["height"],
                 "tab": current["tab"],
+                "terminal_session_id": current.get("terminal_session_id") or "",
+                "terminal_split": bool(current.get("terminal_split")),
             }
         ),
     )
@@ -119,6 +132,8 @@ def console_shell_bootstrap(db: Any, *, workspace: str) -> dict[str, Any]:
             "min_height": prefs["min_height"],
             "max_height": prefs["max_height"],
             "tab": prefs["tab"],
+            "terminal_session_id": prefs.get("terminal_session_id") or "",
+            "terminal_split": bool(prefs.get("terminal_split")),
         },
         "tabs": list(TABS),
         "prefs_url": "/api/workspace-console/prefs",
@@ -127,10 +142,16 @@ def console_shell_bootstrap(db: Any, *, workspace: str) -> dict[str, Any]:
         "output_url": "/api/workspace-console/output",
         "debug_url": "/api/workspace-console/debug",
         "terminal_url": "/api/workspace-console/terminal",
+        "terminal_sessions_url": "/api/workspace-console/terminal/sessions",
         "ports_url": "/api/workspace-console/ports",
+        "interactive_terminal": True,
         "safety": {
             "controlled_terminal": True,
+            "interactive_pty": True,
             "free_shell": False,
-            "message": "Terminal runs approved repository profiles only. No unrestricted shell.",
+            "message": (
+                "Interactive terminal is jailed to connected repository paths. "
+                "AI assistants cannot execute commands."
+            ),
         },
     }

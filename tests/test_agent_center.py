@@ -399,7 +399,7 @@ class AgentCenterTests(unittest.TestCase):
         client = app.test_client()
         page = client.get("/agents")
         self.assertEqual(page.status_code, 200)
-        self.assertIn(b"Prompting", page.data)
+        self.assertIn(b"Assistant Center", page.data)
         self.assertIn(b"Not yet available", page.data)
 
         agents = client.get("/api/agents")

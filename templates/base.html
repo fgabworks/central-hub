@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=shell-dock-3">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=shell-term-1">
   {% block head_extra %}{% endblock %}
 </head>
 <body class="theme-{{ workspace|default('work') }}">
@@ -205,7 +205,8 @@
   <script src="{{ url_for('static', filename='js/assistant_dock.js') }}?v=shell-dock-2"></script>
   {% endif %}
   {% if workspace_console %}
-  <script src="{{ url_for('static', filename='js/workspace_console.js') }}?v=shell-vscode-1"></script>
+  <script src="{{ url_for('static', filename='js/wc_terminal.js') }}?v=shell-term-1"></script>
+  <script src="{{ url_for('static', filename='js/workspace_console.js') }}?v=shell-term-1"></script>
   {% endif %}
 </body>
 </html>

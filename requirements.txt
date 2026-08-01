@@ -5,3 +5,6 @@ requests>=2.31,<3
 sqlglot>=25,<28
 psycopg[binary]>=3.1,<4
 cryptography>=42,<46
+flask-sock>=0.7,<1
+simple-websocket>=1.0,<2
+pywinpty>=2.0,<3; sys_platform == "win32"

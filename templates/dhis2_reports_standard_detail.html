@@ -65,7 +65,7 @@
   <div class="panel-header"><h2>Actions</h2></div>
   <div class="btn-row" style="display:flex; gap:0.5rem; flex-wrap:wrap">
     {% if urls %}
-      <a class="btn btn-sm btn-primary" href="{{ url_for('dhis2_reports_standard_view', environment=report.environment, uid=report.uid, period=form.period, org_unit=form.org_unit) }}">View Report</a>
+      <a class="btn btn-sm btn-primary" id="dr-view-report" href="{{ url_for('dhis2_reports_standard_view', environment=report.environment, uid=report.uid, period=form.period, org_unit=form.org_unit) }}">View Report</a>
       <a class="btn btn-sm" href="{{ urls.open_url }}" target="_blank" rel="noopener">Open in DHIS2</a>
     {% else %}
       <button class="btn btn-sm" type="button" disabled>View Report (set parameters)</button>
@@ -82,9 +82,27 @@
     {% endif %}
     <span class="muted" id="dr-action-status"></span>
   </div>
-  <p class="muted" style="margin-top:0.5rem">Credentials and tokens are never placed in URLs or the page. Embedding prefers DHIS2’s own <code>/data.html</code> renderer; use Open in DHIS2 if the iframe is blocked.</p>
+  <p class="muted" style="margin-top:0.5rem">View Report fetches HTML with hub <code>.env</code> credentials (no browser login). Credentials are never placed in URLs. Use Open in DHIS2 only for the full DHIS2 Reports app.</p>
 </section>
 <script>
+(function () {
+  var viewBtn = document.getElementById("dr-view-report");
+  var live = {{ 'true' if report.environment == 'live' else 'false' }};
+  if (viewBtn && live) {
+    viewBtn.addEventListener("click", function (ev) {
+      var box = document.getElementById("dr-live-confirm");
+      if (!box || !box.checked) {
+        ev.preventDefault();
+        var status = document.getElementById("dr-action-status");
+        if (status) status.textContent = "Confirm Live first to view with .env credentials.";
+        return;
+      }
+      var url = new URL(viewBtn.href, window.location.origin);
+      url.searchParams.set("confirm_live", "1");
+      viewBtn.href = url.pathname + url.search;
+    });
+  }
+})();
 document.getElementById("dr-refresh-meta").onclick = function () {
   var status = document.getElementById("dr-action-status");
   var live = {{ 'true' if report.environment == 'live' else 'false' }};

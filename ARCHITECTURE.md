@@ -90,9 +90,16 @@ Browser ──HTTP──> Flask app (app.py, create_app)
   Tabs: Overview / Files / Changes / Run / Logs / Settings. Connect Local Workspace
   (`connect_scan.py` / `connect.py`) scans a user-selected folder read-only, queues
   untrusted suggestions into the profile store (never overwrites approved), then
-  saves the path only after confirm. No unrestricted terminal. Agents reuse
-  workspace file search/read; agent file edits and command execution stay disabled.
+  saves the path only after confirm. Agents reuse workspace file search/read; agent
+  file edits and command execution stay disabled.
 
+- **`hub/workspace_console/`** — VS Code-style bottom console (Problems / Output /
+  Debug / Terminal / Ports). Interactive Terminal uses `hub/workspace_console/terminal/`
+  (PTY session manager + ConPTY/`pty` + `flask-sock` WebSocket + xterm.js). Approved
+  run-profile launch remains available as a secondary action. Ports annotates
+  terminal-owned PIDs and reuses verified stop paths. Console prefs persist height /
+  visibility / selected session id (never command text). Active PTYs keep running when
+  the console is collapsed; UI rendering pauses and shows a badge.
 - **`hub/jobs/`** — SQLite job store, daemon worker, allowlisted command/API executors,
   upload/result helpers, optional owner token. Capabilities declared in
   `config/repositories.yaml` only.

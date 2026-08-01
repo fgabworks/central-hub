@@ -6,7 +6,7 @@ import os
 import re
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse, parse_qsl, urlunparse
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from hub.repository_workspace.security import (
     WorkspaceSecurityError,
@@ -304,6 +304,68 @@ def iframe_sandbox_flags(*, allow_scripts: bool = False) -> str:
         flags.append("allow-scripts")
     # Never allow-top-navigation / allow-popups / allow-forms by default
     return " ".join(flags)
+
+
+def prepare_credentialed_report_html(html: str, *, base_url: str) -> str:
+    """
+    Prepare DHIS2 data.html for hub iframe display.
+
+    Injects a <base href> so relative asset URLs resolve against the DHIS2 host.
+    Credentials are never injected into the document.
+    """
+    body = str(html or "")
+    base = (base_url or "").strip().rstrip("/")
+    if not base:
+        return body
+    # Escape attribute context
+    safe_base = (
+        base.replace("&", "&amp;")
+        .replace('"', "&quot;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+    base_tag = f'<base href="{safe_base}/">'
+    lower = body.lower()
+    if "<base " in lower:
+        return body
+    head_idx = lower.find("<head")
+    if head_idx >= 0:
+        gt = body.find(">", head_idx)
+        if gt >= 0:
+            return body[: gt + 1] + base_tag + body[gt + 1 :]
+    if "<html" in lower:
+        gt = body.find(">", lower.find("<html"))
+        if gt >= 0:
+            return body[: gt + 1] + f"<head>{base_tag}</head>" + body[gt + 1 :]
+    return (
+        "<!DOCTYPE html><html><head>"
+        f"{base_tag}<meta charset=\"utf-8\"></head><body>{body}</body></html>"
+    )
+
+
+def build_hub_standard_render_path(
+    *,
+    environment: str,
+    uid: str,
+    period: str = "",
+    org_unit: str = "",
+    confirm_live: bool = False,
+) -> str:
+    """Relative hub path that serves data.html via server-side .env credentials."""
+    env = validate_environment(environment)
+    if not re.match(r"^[A-Za-z][A-Za-z0-9]{10}$", uid or ""):
+        raise ReportSecurityError("Invalid report UID.", code="invalid_uid")
+    query: dict[str, str] = {}
+    period_v = validate_period(period, required=False)
+    ou_v = validate_org_unit(org_unit, required=False)
+    if period_v:
+        query["period"] = period_v
+    if ou_v:
+        query["org_unit"] = ou_v
+    if env == "live" and confirm_live:
+        query["confirm_live"] = "1"
+    suffix = ("?" + urlencode(query)) if query else ""
+    return f"/dhis2/reports/standard/{env}/{uid}/rendered{suffix}"
 
 
 def redact_report_detail(text: str, *, limit: int = 400) -> str:

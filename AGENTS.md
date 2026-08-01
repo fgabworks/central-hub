@@ -52,7 +52,9 @@ becomes a second implementation of any connected system.
 - Importing connected repositories' Python packages for business logic.
 - Real DHIS2 **writes**, or copying live credentials into the repo. Read-only DHIS2
   access is allowed only via `.env` configuration (see [docs/DHIS2_SAFETY.md](docs/DHIS2_SAFETY.md)).
-- Free-form shell execution from UI or config; `shell=True` anywhere.
+- Free-form shell execution from UI or config outside the path-jailed interactive
+  repository terminal; `shell=True` anywhere. (Interactive Terminal uses ConPTY/native
+  PTY with allowlisted shell binaries and repository path jail — see SECURITY.md.)
 - Hardcoding or committing secrets, tokens, or real hostnames/credentials.
 - Adding heavy frontend frameworks or dependencies beyond `requirements.txt` needs.
 - Creating provider-specific AI instruction files.

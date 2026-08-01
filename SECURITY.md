@@ -84,12 +84,26 @@ Scope: personal, local-first tool. Canonical agent rules: [AGENTS.md](AGENTS.md)
     occupied and never auto-kill occupants; Find available port is disabled for
     fixed/none. `shell=False`; new process group/session; stop/restart only
     hub-tracked fingerprints (stale PID / PID-reuse refused). No auto-restart on
-    file edits; no unrestricted terminal. Env values stay server-side (UI shows names).
+    file edits. Env values stay server-side (UI shows names).
     Live / write-capable live profiles require `REPO_WS_ALLOW_LIVE_RUNS` plus
     explicit confirmation. Duplicate repo/profile/port runs blocked. Logs under
     `REPO_WS_RUN_LOG_DIR` with size/retention caps + redaction. Audit:
     `REPO_WS_PROFILE_CREATE` / `UPDATE` / `DUPLICATE` / `ENABLE` / `DISABLE` /
     `DELETE` / `TEST` (field names only; paths/env values redacted).
+  - **Interactive repository terminal (Workspace Console → Terminal):** real PTY
+    (Windows ConPTY via `pywinpty`; Linux/macOS native `pty`) streamed over
+    authenticated WebSocket (`flask-sock`) to vendored xterm.js. Creation only for
+    enabled connected repositories; cwd jailed with `safe_join` (no traversal,
+    absolute paths, symlink/junction escape, or arbitrary roots). Shells are
+    allowlisted ids → resolved system binaries (PowerShell default on Windows;
+    CMD only when `WC_TERMINAL_ALLOW_CMD=true`). Requires `CENTRAL_HUB_HOST` loopback,
+    owner auth, Origin/Host checks, and short-lived WS tickets. Terminal output is
+    **not** written to application logs or Audit by default. Audit metadata only:
+    `WC_TERMINAL_START` / `STOP` / `INSERT_SUGGESTION` (session id, repo, shell, PID,
+    exit code — never raw commands). AI cannot execute; Insert into Terminal fills
+    the prompt without Enter. Closing an active session requires confirm and kills
+    only that session’s process tree (`taskkill /T` / killpg). Sessions are not
+    restored after hub restart. Stop only verified PIDs — never “kill all Python/Node”.
   - **Repository Processes:** OS inventory + hub state (`process_detect.py`). Match
     hub-tracked, cwd-in-repo, command path/entry, profile port — never generic
     runtime names alone. Stop only a verified PID (+ tree); Medium external needs
@@ -104,8 +118,11 @@ Scope: personal, local-first tool. Canonical agent rules: [AGENTS.md](AGENTS.md)
     approved profiles (`REPO_WS_CONNECT_SCAN` / `PREVIEW` / `SAVE`).
 - **DHIS2 Reports / Standard Report Manager:** Stage/Live connections from `.env` only.
   - Sync caches metadata (+ optional `designContent`) in SQLite; never credentials/tokens.
-  - View embeds allowlisted DHIS2 `/api/reports/{uid}/data.html` URLs (no secrets in URL);
-    fallback is Open in DHIS2 (browser session). Live sync/view/download requires confirm.
+  - View embeds hub-proxied `/api/reports/{uid}/data.html` HTML using Stage/Live
+    credentials from `.env` (never sent to the browser). App shells
+    (`/dhis-web-reports/index.html`) are browser-only shortcuts, not report UIDs.
+    Asset/API proxy: `/dhis2/reports/proxy/<env>` with SSRF path allowlist.
+    Live sync/view/download/generate requires confirm (once per run for Generate & View).
   - Catalog YAML shortcuts remain for repository/static HTML; DHIS2-owned reports are
     discovered from the API, not hand-maintained as the source of truth.
   - No DHIS2 writes, no direct database access, no report replacement in Phase 1.
@@ -148,13 +165,18 @@ Scope: personal, local-first tool. Canonical agent rules: [AGENTS.md](AGENTS.md)
   `REPO_WS_PROFILE_CREATE` / `UPDATE` / `DUPLICATE` / `ENABLE` / `DISABLE` /
   `DELETE` / `TEST`,
   `REPO_WS_PROCESS_SCAN` / `STOP` / `FORCE_STOP` / `STOP_BLOCKED`,
+  `WC_TERMINAL_START` / `WC_TERMINAL_STOP` / `WC_TERMINAL_INSERT_SUGGESTION`
+  (session/repo/shell/PID/exit only — never raw commands or scrollback),
   `DHIS2_REPORT_VIEW` / `VIEW_HTML` / `PREVIEW` / `GENERATE` / `FAIL` / `FAVORITE` /
   `PRESET_SAVE` / `PRESET_DELETE` / `DOWNLOAD`
   (paths and commands redacted; no secret values / unredacted argv).
 
 ## Known gaps
 
-- No CSRF tokens yet (localhost personal use).
-- Flask debug may be on locally — disable if exposed.
+- Flask debug may be on locally — disable if exposed beyond loopback.
 - Owner token is shared-secret, not full multi-user RBAC.
 - Gmail / Calendar push not implemented; cache is TTL + manual refresh only.
+- Interactive terminal CSRF uses Origin/Host + owner session + WS tickets (no
+  classic form CSRF token). Keep `CENTRAL_HUB_HOST=127.0.0.1`.
+- Full descendant PID→port matching for terminals is best-effort (root PID +
+  repository association); prefer Open URL / Stop Process on verified rows.

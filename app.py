@@ -120,6 +120,7 @@ from hub.agent_center.service import AgentCenterService
 from hub.agent_center.store import AgentCenterStore
 from hub.workspace_console import WorkspaceConsoleService, console_shell_bootstrap
 from hub.workspace_console.routes import register_workspace_console_routes
+from hub.workspace_console.terminal import TerminalSessionManager, load_terminal_settings
 from hub.repository_workspace import load_workspace_settings
 from hub.repository_workspace.routes import register_repository_workspace_routes
 from hub.dhis2_reports.routes import register_dhis2_reports_routes
@@ -327,7 +328,36 @@ def create_app() -> Flask:
         agent_center=app.config.get("AGENT_CENTER"),
         adapters=app.config.get("ADAPTERS"),
     )
+
+    def _wc_terminal_audit(action: str, detail: dict | None = None, **kwargs) -> None:
+        payload = detail if isinstance(detail, dict) else {}
+        if not payload and kwargs:
+            payload = {k: v for k, v in kwargs.items() if k != "action"}
+        app.config["AUDIT"].append(
+            action=action,
+            actor=current_actor(),
+            detail=payload or {},
+        )
+
+    app.config["WC_TERMINALS"] = TerminalSessionManager(
+        registry=app.config.get("REGISTRY"),
+        settings=load_terminal_settings(),
+        audit=_wc_terminal_audit,
+        hub_host=settings.host,
+    )
     register_workspace_console_routes(app)
+
+    import atexit
+
+    def _shutdown_terminals() -> None:
+        mgr = app.config.get("WC_TERMINALS")
+        if mgr is not None:
+            try:
+                mgr.shutdown_all()
+            except Exception:
+                pass
+
+    atexit.register(_shutdown_terminals)
 
     def _reports_audit(action: str, target: str, detail: str, ok: bool = True) -> None:
         app.config["AUDIT"].append(

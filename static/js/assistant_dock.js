@@ -321,9 +321,29 @@
         });
     }
 
+    function extractCodeBlocks(text) {
+      var blocks = [];
+      var re = /```(?:[a-zA-Z0-9_-]+)?\n([\s\S]*?)```/g;
+      var m;
+      while ((m = re.exec(String(text || ""))) !== null) {
+        if (m[1] && m[1].trim()) blocks.push(m[1].replace(/\s+$/, ""));
+      }
+      return blocks;
+    }
+
     function renderRun(run) {
       var answer = run.answer || run.error || "No answer yet.";
       var sourceBits = ((run.context || {}).included_sources || []).join(", ");
+      var codeBlocks = extractCodeBlocks(answer);
+      var insertBtns = codeBlocks
+        .map(function (code, idx) {
+          return (
+            '<button type="button" class="btn btn-sm ad-insert-term" data-ad-insert-idx="' +
+            idx +
+            '" title="Fill terminal prompt only — does not execute">Insert into Terminal</button>'
+          );
+        })
+        .join(" ");
       appendMessage(
         "assistant",
         '<div class="ad-thought">Thought for run ' +
@@ -331,12 +351,34 @@
           "</div><div>" +
           escapeHtml(answer).replace(/\n/g, "<br>") +
           "</div>" +
+          (insertBtns
+            ? '<div class="ad-insert-row muted">Suggestion only — you must press Enter in the terminal to run. ' +
+              insertBtns +
+              "</div>"
+            : "") +
           (sourceBits
             ? '<div class="ad-source">Source: ' +
               escapeHtml(sourceBits) +
               " (read-only)</div>"
             : "")
       );
+      if (messages) {
+        messages.querySelectorAll(".ad-insert-term").forEach(function (btn) {
+          if (btn._bound) return;
+          btn._bound = true;
+          btn.addEventListener("click", function () {
+            var idx = Number(btn.getAttribute("data-ad-insert-idx") || 0);
+            var text = codeBlocks[idx] || "";
+            if (!text) return;
+            if (window.WCTerminal && window.WCTerminal.insertText) {
+              // Never auto-execute: insertText strips trailing newlines.
+              window.WCTerminal.insertText(text, true);
+            } else {
+              window.alert("Open Workspace Console → Terminal first.");
+            }
+          });
+        });
+      }
       if (output) {
         output.innerHTML =
           '<pre class="ad-context-body">' +

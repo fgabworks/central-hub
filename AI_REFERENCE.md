@@ -38,7 +38,7 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Google Connections | System page to connect/assign/enable Gmail+Calendar scopes |
 | SQL Workspace | Read-only query library/runner (`/sql`); sqlglot allowlist; Live warning |
 | AI Assistant Center | Aira at `/personal/aira`; Okarun at `/work/okarun` (history/management); full-height right dock + fixed composer via topbar + activity rail (`hub/agent_center/dock.py`); Find/Ask/Plan/Review; Codex CLI (Okarun MVP), Claude Code, Cursor, Grok, OpenAI |
-| Workspace Console | Bottom panel under main content only (`hub/workspace_console/`); Problems/Output/Debug/Terminal/Ports; Ctrl+J; collapsed by default; does not compress the AI dock |
+| Workspace Console | Bottom panel under main content (`hub/workspace_console/`); Problems/Output/Debug/**interactive PTY Terminal**/Ports; Ctrl+J; collapsed by default; does not compress the AI dock |
 | Activity Rail | Far-right icons for AI Assistant, Quick Notepad, Workspace Console (future utilities placeholders) |
 | AI Connections | `/system/ai-connections`; Installed/Authenticated/Version/Last Checked + connect/test/capabilities/disconnect; Codex never stores tokens |
 | DHIS2 | GET client, discovery, UID mapping, preview builder |
@@ -236,8 +236,8 @@ No LP apply/write proxies. No import of LP Python packages for business logic.
 
 ## Next
 
-**Assistant / IDE phase is checkpointed** (full-height dock, collapsed console, rail notepad,
-compact tiles, persistence, focused QA). See [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
+**Interactive repository terminal is implemented** (PTY + WebSocket + xterm.js).
+See [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md) and [SECURITY.md](SECURITY.md).
 
 Next development target: **DHIS2 Standard Reports** (credentialed HTML viewer / library polish).
 DHIS2 Standard Report Manager Phase 2+ (replacement / design write-back) is **not** started.

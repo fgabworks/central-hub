@@ -25,9 +25,9 @@ reports:
     allow_scripts: false
 
   - id: dhis2-standard-reports-app
-    name: DHIS2 Reports app
+    name: DHIS2 Reports app (browser shell)
     type: dhis2_standard
-    description: "Open the standard DHIS2 Reports application (host allowlisted)."
+    description: "Opens the DHIS2 Reports application shell only — not an individual report. Prefer Native Standard Reports on the Run tab for hub-rendered HTML."
     source: "DHIS2"
     environments: ["stage", "live"]
     url_template: "/dhis-web-reports/index.html"

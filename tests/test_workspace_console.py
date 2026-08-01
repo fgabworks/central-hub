@@ -63,6 +63,7 @@ class ConsolePrefsTests(unittest.TestCase):
         self.assertNotIn("problems", payload)
         self.assertFalse(payload["safety"]["free_shell"])
         self.assertTrue(payload["safety"]["controlled_terminal"])
+        self.assertTrue(payload["safety"].get("interactive_pty"))
 
 
 class ConsoleServiceTests(unittest.TestCase):
@@ -111,6 +112,7 @@ class ConsoleServiceTests(unittest.TestCase):
         svc = WorkspaceConsoleService(registry=Registry(), repo_workspace=object())
         catalog = svc.terminal_catalog()
         self.assertFalse(catalog["free_shell"])
+        self.assertTrue(catalog.get("interactive_pty"))
 
     def test_ports_reuses_summarize_and_marks_ownership(self):
         class Registry:

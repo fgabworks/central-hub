@@ -43,6 +43,12 @@ def register_dhis2_reports_routes(app: Flask) -> None:
             "dhis2_unconfigured": 400,
             "invalid_period": 400,
             "invalid_org_unit": 400,
+            "ssrf_blocked": 403,
+            "proxy_path_blocked": 403,
+            "path_traversal": 403,
+            "invalid_proxy_path": 400,
+            "environment_mismatch": 400,
+            "invalid_report_id": 400,
         }.get(code, 400)
         return jsonify({"ok": False, "error": str(exc), "code": code}), http
 
@@ -149,9 +155,14 @@ def register_dhis2_reports_routes(app: Flask) -> None:
     def dhis2_reports_standard_view(environment: str, uid: str):
         period = (request.args.get("period") or "").strip()
         org_unit = (request.args.get("org_unit") or request.args.get("ou") or "").strip()
+        confirm_live = request.args.get("confirm_live") in {"1", "true", "yes"}
         try:
             viewer = _svc().standard_viewer_payload(
-                environment, uid, period=period, org_unit=org_unit
+                environment,
+                uid,
+                period=period,
+                org_unit=org_unit,
+                confirm_live=confirm_live,
             )
             return render_template(
                 "dhis2_reports_standard_viewer.html",
@@ -159,7 +170,54 @@ def register_dhis2_reports_routes(app: Flask) -> None:
                 **_ctx("library"),
             )
         except ReportSecurityError as exc:
+            if getattr(exc, "code", "") == "confirm_required":
+                return render_template(
+                    "dhis2_reports_standard_viewer.html",
+                    viewer=None,
+                    confirm_required=True,
+                    environment=environment,
+                    uid=uid,
+                    period=period,
+                    org_unit=org_unit,
+                    **_ctx("library"),
+                ), 400
             abort(400 if getattr(exc, "code", "") != "not_found" else 404)
+
+    @app.get("/dhis2/reports/standard/<environment>/<uid>/rendered")
+    def dhis2_reports_standard_rendered(environment: str, uid: str):
+        """Serve data.html fetched with .env DHIS2 credentials (never expose secrets)."""
+        confirm_live = request.args.get("confirm_live") in {"1", "true", "yes"}
+        period = (request.args.get("period") or "").strip()
+        org_unit = (request.args.get("org_unit") or request.args.get("ou") or "").strip()
+        try:
+            data = _svc().render_standard_html(
+                environment,
+                uid,
+                period=period,
+                org_unit=org_unit,
+                confirm_live=confirm_live,
+            )
+        except ReportSecurityError as exc:
+            code = getattr(exc, "code", "")
+            if code == "confirm_required":
+                abort(400)
+            if code in {"not_found", "missing_output"}:
+                abort(404)
+            if code == "unauthorized":
+                abort(401)
+            abort(400)
+        resp = Response(data["html"], mimetype="text/html; charset=utf-8")
+        resp.headers["Content-Security-Policy"] = (
+            "default-src 'none'; img-src data: blob: https: http: 'self'; "
+            "style-src 'unsafe-inline' https: http: 'self'; "
+            "script-src 'unsafe-inline' 'unsafe-eval' https: http: 'self'; "
+            "font-src https: http: data: 'self'; "
+            "connect-src 'none'; base-uri https: http:; form-action 'none'; "
+            "frame-ancestors 'self'"
+        )
+        resp.headers["X-Content-Type-Options"] = "nosniff"
+        resp.headers["Cache-Control"] = "private, no-store"
+        return resp
 
     @app.get("/dhis2/reports/standard/<environment>/<uid>/html")
     def dhis2_reports_standard_html_source(environment: str, uid: str):
@@ -189,19 +247,47 @@ def register_dhis2_reports_routes(app: Flask) -> None:
     def dhis2_reports_run():
         report_id = (request.args.get("report") or "").strip()
         preset_id = (request.args.get("preset") or "").strip()
-        reports = _svc().list_library()
+        env = (request.args.get("environment") or "").strip().lower()
+        preferred = env if env in {"stage", "live"} else None
         preset = _svc().store.get_preset(preset_id) if preset_id else None
-        selected = get_report(report_id) or (
-            get_report(preset["report_id"]) if preset else None
-        )
+        if preferred is None and preset:
+            preferred = str(preset.get("environment") or "") or None
+        if preferred is None:
+            preferred = "stage"
+        catalog = _svc().list_run_catalog(preferred)
         _audit(audit_actions.DHIS2_REPORT_VIEW, target="run", detail=f"report={report_id}")
         return render_template(
             "dhis2_reports_run.html",
-            reports=reports,
-            selected=selected.to_public() if selected else None,
+            run_catalog=catalog,
+            selected_report_id=report_id or (preset.get("report_id") if preset else ""),
             preset=preset,
+            preferred_env=preferred,
             **_ctx("run"),
         )
+
+    @app.get("/dhis2/reports/proxy/<environment>")
+    def dhis2_reports_proxy(environment: str):
+        """Credentialed asset/API proxy — browser never sees DHIS2 auth."""
+        confirm_live = request.args.get("confirm_live") in {"1", "true", "yes"}
+        path = request.args.get("path") or ""
+        try:
+            data = _svc().proxy_dhis2_asset(
+                environment, path, confirm_live=confirm_live
+            )
+        except ReportSecurityError as exc:
+            code = getattr(exc, "code", "")
+            if code == "confirm_required":
+                abort(400)
+            if code in {"ssrf_blocked", "proxy_path_blocked", "path_traversal"}:
+                abort(403)
+            if code == "unauthorized":
+                abort(401)
+            abort(400)
+        resp = Response(data["content"], mimetype=data["content_type"])
+        resp.headers["X-Content-Type-Options"] = "nosniff"
+        resp.headers["Cache-Control"] = "private, max-age=60"
+        resp.headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
+        return resp
 
     @app.get("/dhis2/reports/presets")
     def dhis2_reports_presets():
@@ -415,6 +501,48 @@ def register_dhis2_reports_routes(app: Flask) -> None:
                 job_store=app.config.get("JOB_STORE"),
             )
             return jsonify({"ok": True, "run": run})
+        except ReportSecurityError as exc:
+            return _json_error(exc)
+
+    @app.get("/api/dhis2/reports/run-catalog")
+    def api_dhis2_report_run_catalog():
+        env = (request.args.get("environment") or "stage").strip()
+        try:
+            return jsonify(_svc().list_run_catalog(env))
+        except ReportSecurityError as exc:
+            return _json_error(exc)
+
+    @app.get("/api/dhis2/reports/capabilities")
+    def api_dhis2_report_capabilities():
+        env = (request.args.get("environment") or "stage").strip()
+        try:
+            return jsonify(_svc().detect_capabilities(env))
+        except ReportSecurityError as exc:
+            return _json_error(exc)
+
+    @app.get("/api/dhis2/reports/org-units")
+    def api_dhis2_report_org_units():
+        env = (request.args.get("environment") or "stage").strip()
+        q = (request.args.get("q") or "").strip()
+        limit = request.args.get("limit", 25, type=int) or 25
+        try:
+            return jsonify(_svc().search_org_units(env, q=q, limit=limit))
+        except ReportSecurityError as exc:
+            return _json_error(exc)
+
+    @app.post("/api/dhis2/reports/generate-and-view")
+    def api_dhis2_report_generate_and_view():
+        payload = request.get_json(silent=True) or {}
+        try:
+            data = _svc().generate_and_view(
+                str(payload.get("report_id") or "").strip(),
+                environment=str(payload.get("environment") or "stage"),
+                period=str(payload.get("period") or ""),
+                org_unit=str(payload.get("org_unit") or payload.get("orgUnit") or ""),
+                output_format=str(payload.get("output_format") or "html"),
+                confirm_live=bool(payload.get("confirm_live")),
+            )
+            return jsonify(data)
         except ReportSecurityError as exc:
             return _json_error(exc)
 

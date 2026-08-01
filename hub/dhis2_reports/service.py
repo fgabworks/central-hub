@@ -9,16 +9,34 @@ from typing import Any, Callable
 
 from hub.dhis2.client import Dhis2Client, Dhis2Error
 from hub.dhis2_reports.db import utcnow
+from hub.dhis2_reports.bridge import (
+    build_run_catalog,
+    classify_catalog_entry,
+    content_fingerprint,
+    is_app_shell_template,
+    parse_run_report_id,
+    rewrite_report_html,
+    validate_proxy_path,
+)
+from hub.dhis2_reports.cache import (
+    CATALOG_CACHE,
+    CAPABILITY_CACHE,
+    ORG_UNIT_CACHE,
+    RESULT_CACHE,
+    result_cache_key,
+)
 from hub.dhis2_reports.catalog import get_report, load_report_catalog
 from hub.dhis2_reports.models import ReportDefinition, ResolvedRun
 from hub.dhis2_reports.security import (
     ReportSecurityError,
     build_dhis2_report_url,
+    build_hub_standard_render_path,
     build_standard_report_data_url,
     build_standard_report_open_url,
     configured_output_roots,
     iframe_sandbox_flags,
     period_to_dhis2_date,
+    prepare_credentialed_report_html,
     redact_report_detail,
     resolve_report_html,
     scrub_parameters,
@@ -70,6 +88,102 @@ class Dhis2ReportsService:
             if client_factory
             else None
         )
+        self._clients: dict[str, Dhis2Client] = {}
+        self._inflight: dict[str, float] = {}
+
+    def _client(self, environment: str) -> Dhis2Client:
+        env = validate_environment(environment)
+        if not self.client_factory:
+            raise ReportSecurityError("DHIS2 client factory unavailable.", code="unavailable")
+        client = self._clients.get(env)
+        if client is None:
+            client = self.client_factory(env)
+            self._clients[env] = client
+        return client
+
+    def invalidate_report_caches(self, *, environment: str | None = None) -> None:
+        if environment:
+            env = validate_environment(environment)
+            CATALOG_CACHE.invalidate_prefix(f"catalog:{env}")
+            RESULT_CACHE.invalidate_prefix(f"result|{env}|")
+            ORG_UNIT_CACHE.invalidate_prefix(f"ou:{env}:")
+            CAPABILITY_CACHE.invalidate_prefix(f"cap:{env}")
+            self._clients.pop(env, None)
+        else:
+            CATALOG_CACHE.clear()
+            RESULT_CACHE.clear()
+            ORG_UNIT_CACHE.clear()
+            CAPABILITY_CACHE.clear()
+            self._clients.clear()
+
+    def list_run_catalog(self, environment: str) -> dict[str, Any]:
+        return build_run_catalog(
+            store=self.store,
+            environment=environment,
+            favorites=set(self.store.list_favorites()),
+        )
+
+    def detect_capabilities(self, environment: str) -> dict[str, Any]:
+        env = validate_environment(environment)
+        cached = CAPABILITY_CACHE.get(f"cap:{env}")
+        if cached is not None:
+            return {**cached, "cache": "hit"}
+        from hub.dhis2_reports.standard_sync import detect_report_capabilities
+
+        try:
+            caps = detect_report_capabilities(self._client(env))
+        except ReportSecurityError as exc:
+            caps = {"ok": False, "detail": str(exc)}
+        CAPABILITY_CACHE.set(f"cap:{env}", caps)
+        return {**caps, "cache": "miss"}
+
+    def search_org_units(
+        self,
+        environment: str,
+        *,
+        q: str = "",
+        limit: int = 25,
+    ) -> dict[str, Any]:
+        env = validate_environment(environment)
+        needle = (q or "").strip()
+        limit_i = max(1, min(int(limit or 25), 50))
+        cache_key = f"ou:{env}:{needle.lower()}:{limit_i}"
+        cached = ORG_UNIT_CACHE.get(cache_key)
+        if cached is not None:
+            return {**cached, "cache": "hit"}
+        client = self._client(env)
+        params: dict[str, Any] = {
+            "fields": "id,displayName,name,path,level",
+            "paging": "true",
+            "pageSize": limit_i,
+            "page": 1,
+            "order": "name:asc",
+        }
+        if needle:
+            # Prefer identifiable token search when available; fall back to name filter.
+            params["filter"] = f"name:ilike:{needle}"
+        try:
+            data = client._get_json("/api/organisationUnits", params=params)  # noqa: SLF001
+        except Dhis2Error as exc:
+            raise ReportSecurityError(
+                redact_report_detail(exc.message),
+                code="unauthorized" if exc.status_code in {401, 403} else "unavailable",
+            ) from exc
+        rows = []
+        for item in data.get("organisationUnits") or []:
+            if not isinstance(item, dict):
+                continue
+            rows.append(
+                {
+                    "id": item.get("id") or "",
+                    "name": item.get("displayName") or item.get("name") or "",
+                    "path": item.get("path") or "",
+                    "level": item.get("level"),
+                }
+            )
+        payload = {"ok": True, "environment": env, "q": needle, "org_units": rows, "count": len(rows)}
+        ORG_UNIT_CACHE.set(cache_key, payload)
+        return {**payload, "cache": "miss"}
 
     def _audit(self, action: str, target: str, detail: str, ok: bool = True) -> None:
         if self.audit:
@@ -201,11 +315,13 @@ class Dhis2ReportsService:
                 "Standard report sync is not configured.",
                 code="unavailable",
             )
-        return self.standard_sync.sync_environment(
+        result = self.standard_sync.sync_environment(
             environment,
             confirm_live=confirm_live,
             cache_design_content=cache_design_content,
         )
+        self.invalidate_report_caches(environment=environment)
+        return result
 
     def refresh_standard_metadata(
         self,
@@ -225,6 +341,7 @@ class Dhis2ReportsService:
             confirm_live=confirm_live,
             cache_design_content=True,
         )
+        self.invalidate_report_caches(environment=environment)
         return report.to_public()
 
     def get_standard_report(self, environment: str, uid: str) -> SyncedStandardReport:
@@ -262,6 +379,7 @@ class Dhis2ReportsService:
                 code="invalid_org_unit",
             )
         open_url = build_standard_report_open_url(base_url=base, uid=report.uid)
+        # External DHIS2 data.html (browser must already be logged in).
         embed_url = build_standard_report_data_url(
             base_url=base,
             uid=report.uid,
@@ -277,8 +395,8 @@ class Dhis2ReportsService:
             "date": period_to_dhis2_date(period_v),
             "prefer_embed": report.render_supported,
             "fallback_hint": (
-                "If the embedded view is blank (CSP, auth, or iframe restrictions), "
-                "use Open in DHIS2 — your browser must already be logged into that instance."
+                "Hub fetches the report HTML with your configured DHIS2 credentials "
+                "(.env). Open in DHIS2 only if you need the full DHIS2 Reports app UI."
             ),
         }
 
@@ -290,20 +408,40 @@ class Dhis2ReportsService:
         period: str = "",
         org_unit: str = "",
         mode: str = "embed",
+        confirm_live: bool = False,
     ) -> dict[str, Any]:
+        env = validate_environment(environment)
+        # Confirm Live before any external URL / host checks so the gate is explicit.
+        if env == "live" and not confirm_live:
+            # Ensure the report exists first for a clearer 404 vs confirm UX.
+            self.get_standard_report(env, uid)
+            raise ReportSecurityError(
+                "Live report view requires explicit confirmation.",
+                code="confirm_required",
+            )
         urls = self.standard_urls(environment, uid, period=period, org_unit=org_unit)
         report = urls["report"]
+        hub_embed_url = build_hub_standard_render_path(
+            environment=env,
+            uid=report["uid"],
+            period=urls.get("period") or "",
+            org_unit=urls.get("org_unit") or "",
+            confirm_live=bool(confirm_live) if env == "live" else False,
+        )
         self._audit(
             "DHIS2_REPORT_VIEW",
             report["id"],
-            f"mode={mode} pe={urls.get('period')} ou={urls.get('org_unit')}",
+            f"mode={mode} pe={urls.get('period')} ou={urls.get('org_unit')} via=hub_credentials",
             True,
         )
         return {
             "kind": "standard_embed" if mode != "open" else "external",
             "report": report,
             "report_name": report["name"],
-            "embed_url": urls["embed_url"],
+            # Prefer hub-proxied HTML (Basic Auth from .env) so the browser never logs in.
+            "embed_url": hub_embed_url,
+            "hub_embed_url": hub_embed_url,
+            "external_embed_url": urls["embed_url"],
             "open_url": urls["open_url"],
             "url": urls["open_url"],
             "period": urls["period"],
@@ -314,7 +452,317 @@ class Dhis2ReportsService:
             "prefer_embed": urls["prefer_embed"],
             "fallback_hint": urls["fallback_hint"],
             "credentials_in_url": False,
+            "uses_env_credentials": True,
         }
+
+    def render_standard_html(
+        self,
+        environment: str,
+        uid: str,
+        *,
+        period: str = "",
+        org_unit: str = "",
+        confirm_live: bool = False,
+        use_cache: bool = True,
+    ) -> dict[str, Any]:
+        """Fetch data.html with .env credentials and prepare it for iframe display."""
+        env = validate_environment(environment)
+        cache_key = result_cache_key(
+            environment=env,
+            report_id=uid,
+            period=period or "",
+            org_unit=org_unit or "",
+            output_format="html",
+        )
+        if use_cache:
+            cached = RESULT_CACHE.get(cache_key)
+            if cached is not None:
+                return {**cached, "cache": "hit"}
+
+        data = self.download_standard_html(
+            environment,
+            uid,
+            period=period,
+            org_unit=org_unit,
+            confirm_live=confirm_live,
+        )
+        base = self.get_dhis2_base_url(env) or ""
+        prepared = rewrite_report_html(
+            data["html"],
+            environment=env,
+            dhis2_base=base,
+            confirm_live=bool(confirm_live) if env == "live" else False,
+        )
+        payload = {
+            **data,
+            "html": prepared,
+            "base_url": base,
+            "uses_env_credentials": True,
+            "fingerprint": content_fingerprint(prepared),
+            "cache": "miss",
+        }
+        # Do not store secrets — HTML only.
+        RESULT_CACHE.set(
+            cache_key,
+            {
+                "filename": payload["filename"],
+                "html": prepared,
+                "report": payload["report"],
+                "period": payload["period"],
+                "org_unit": payload["org_unit"],
+                "base_url": base,
+                "uses_env_credentials": True,
+                "fingerprint": payload["fingerprint"],
+            },
+        )
+        return payload
+
+    def generate_and_view(
+        self,
+        report_id: str,
+        *,
+        environment: str,
+        period: str = "",
+        org_unit: str = "",
+        output_format: str = "html",
+        confirm_live: bool = False,
+    ) -> dict[str, Any]:
+        """Primary Run action: validate → render → return hub viewer URL + diagnostics."""
+        import time
+
+        started = time.perf_counter()
+        env = validate_environment(environment)
+        kind, id_env, token = parse_run_report_id(report_id)
+        if kind == "catalog":
+            report = get_report(token)
+            if report is None:
+                raise ReportSecurityError("Report not found.", code="not_found")
+            if classify_catalog_entry(report) == "dhis2_app_shell" or is_app_shell_template(
+                report.url_template
+            ):
+                base = self.get_dhis2_base_url(env) or ""
+                open_url = build_dhis2_report_url(
+                    base_url=base,
+                    url_template=report.url_template or "",
+                    parameters=scrub_parameters(
+                        {"period": period, "orgUnit": org_unit, "format": output_format}
+                    ),
+                )
+                return {
+                    "ok": True,
+                    "browser_only": True,
+                    "source_type": "dhis2_app_shell",
+                    "message": (
+                        "This catalog entry is the DHIS2 Reports/Pivot application shell, "
+                        "not an individual report. Open it in DHIS2, or pick a Native Standard Report."
+                    ),
+                    "open_url": open_url,
+                    "viewer_url": "",
+                    "diagnostics": {
+                        "elapsed_ms": int((time.perf_counter() - started) * 1000),
+                        "source_type": "dhis2_app_shell",
+                        "resolved_url": open_url,
+                    },
+                }
+            # Repository / static: fall back to generate()
+            gen = self.generate(
+                token,
+                environment=env,
+                period=period,
+                org_unit=org_unit,
+                output_format=output_format,
+                confirm_live=confirm_live,
+            )
+            viewer = ""
+            if gen.get("output_path"):
+                viewer = f"/dhis2/reports/file?run_id={gen.get('id')}"
+            elif gen.get("output_url"):
+                viewer = str(gen.get("output_url") or "")
+            return {
+                "ok": True,
+                "browser_only": False,
+                "source_type": classify_catalog_entry(report),
+                "viewer_url": viewer,
+                "open_url": viewer,
+                "download_url": f"/api/dhis2/reports/runs/{gen.get('id')}/download" if gen.get("id") else "",
+                "run": gen,
+                "diagnostics": {
+                    "elapsed_ms": int((time.perf_counter() - started) * 1000),
+                    "source_type": classify_catalog_entry(report),
+                },
+            }
+
+        if kind == "native":
+            if id_env != env:
+                raise ReportSecurityError(
+                    "Report environment does not match the selected environment.",
+                    code="environment_mismatch",
+                )
+            uid = token
+        else:
+            uid = token
+
+        report = self.get_standard_report(env, uid)
+        if not report.render_supported:
+            open_url = build_standard_report_open_url(
+                base_url=self.get_dhis2_base_url(env) or "", uid=uid
+            )
+            return {
+                "ok": True,
+                "browser_only": True,
+                "source_type": "native_standard_unsupported",
+                "message": "This report type is not supported for hub HTML rendering. Open in DHIS2.",
+                "open_url": open_url,
+                "viewer_url": "",
+                "report": report.to_public(),
+                "diagnostics": {
+                    "elapsed_ms": int((time.perf_counter() - started) * 1000),
+                    "report_type": report.report_type,
+                },
+            }
+
+        # Deduplicate concurrent identical requests.
+        dedupe = result_cache_key(
+            environment=env, report_id=uid, period=period, org_unit=org_unit, output_format="html"
+        )
+        if dedupe in self._inflight:
+            cached = RESULT_CACHE.get(dedupe)
+            if cached is not None:
+                viewer = build_hub_standard_render_path(
+                    environment=env,
+                    uid=uid,
+                    period=period,
+                    org_unit=org_unit,
+                    confirm_live=confirm_live if env == "live" else False,
+                )
+                return {
+                    "ok": True,
+                    "browser_only": False,
+                    "source_type": "native_standard",
+                    "viewer_url": viewer,
+                    "open_url": build_standard_report_open_url(
+                        base_url=self.get_dhis2_base_url(env) or "", uid=uid
+                    ),
+                    "download_url": f"/api/dhis2/reports/standard/{env}/{uid}/html?download=1&rendered=1"
+                    + (f"&period={period}" if period else "")
+                    + (f"&org_unit={org_unit}" if org_unit else "")
+                    + ("&confirm_live=1" if env == "live" and confirm_live else ""),
+                    "report": cached.get("report"),
+                    "cache": "hit",
+                    "diagnostics": {
+                        "elapsed_ms": int((time.perf_counter() - started) * 1000),
+                        "cache": "hit",
+                        "endpoint": f"/api/reports/{uid}/data.html",
+                    },
+                }
+
+        self._inflight[dedupe] = time.time()
+        try:
+            rendered = self.render_standard_html(
+                env,
+                uid,
+                period=period,
+                org_unit=org_unit,
+                confirm_live=confirm_live,
+                use_cache=True,
+            )
+        finally:
+            self._inflight.pop(dedupe, None)
+
+        viewer = build_hub_standard_render_path(
+            environment=env,
+            uid=uid,
+            period=period,
+            org_unit=org_unit,
+            confirm_live=confirm_live if env == "live" else False,
+        )
+        elapsed = int((time.perf_counter() - started) * 1000)
+        self._audit(
+            "DHIS2_REPORT_GENERATE",
+            report.id,
+            f"generate_and_view pe={period} ou={org_unit} ms={elapsed} cache={rendered.get('cache')}",
+            True,
+        )
+        return {
+            "ok": True,
+            "browser_only": False,
+            "source_type": "native_standard",
+            "viewer_url": viewer,
+            "open_url": build_standard_report_open_url(
+                base_url=self.get_dhis2_base_url(env) or "", uid=uid
+            ),
+            "download_url": (
+                f"/api/dhis2/reports/standard/{env}/{uid}/html?download=1&rendered=1"
+                + (f"&period={period}" if period else "")
+                + (f"&org_unit={org_unit}" if org_unit else "")
+                + ("&confirm_live=1" if env == "live" and confirm_live else "")
+            ),
+            "report": rendered.get("report"),
+            "cache": rendered.get("cache"),
+            "fingerprint": rendered.get("fingerprint"),
+            "diagnostics": {
+                "elapsed_ms": elapsed,
+                "cache": rendered.get("cache"),
+                "endpoint": f"/api/reports/{uid}/data.html",
+                "period": rendered.get("period"),
+                "org_unit": rendered.get("org_unit"),
+                "fingerprint": rendered.get("fingerprint"),
+                "warnings": [],
+            },
+        }
+
+    def proxy_dhis2_asset(
+        self,
+        environment: str,
+        path: str,
+        *,
+        confirm_live: bool = False,
+    ) -> dict[str, Any]:
+        """Credentialed GET of an allowlisted DHIS2 path (never expose auth to browser)."""
+        env = validate_environment(environment)
+        if env == "live" and not confirm_live:
+            # Assets for a Live view that already confirmed can pass confirm_live=1 on query.
+            # For safety, allow proxy only when confirm was given OR when Stage.
+            raise ReportSecurityError(
+                "Live asset proxy requires confirmation.",
+                code="confirm_required",
+            )
+        safe = validate_proxy_path(path)
+        client = self._client(env)
+        try:
+            # Split query for requests params
+            from urllib.parse import parse_qsl, urlparse
+
+            parsed = urlparse(safe)
+            params = dict(parse_qsl(parsed.query, keep_blank_values=True))
+            raw = client._get_bytes(  # noqa: SLF001
+                parsed.path,
+                params=params or None,
+                accept="*/*",
+                max_bytes=8_000_000,
+            )
+        except Dhis2Error as exc:
+            raise ReportSecurityError(
+                redact_report_detail(exc.message),
+                code="unauthorized" if exc.status_code in {401, 403} else "unavailable",
+            ) from exc
+        # Guess content type lightly
+        lower = parsed.path.lower()
+        if lower.endswith(".css"):
+            ctype = "text/css; charset=utf-8"
+        elif lower.endswith(".js"):
+            ctype = "application/javascript; charset=utf-8"
+        elif lower.endswith(".png"):
+            ctype = "image/png"
+        elif lower.endswith((".jpg", ".jpeg")):
+            ctype = "image/jpeg"
+        elif lower.endswith(".svg"):
+            ctype = "image/svg+xml"
+        elif lower.endswith((".html", ".htm")):
+            ctype = "text/html; charset=utf-8"
+        else:
+            ctype = "application/octet-stream"
+        return {"content": raw, "content_type": ctype, "path": safe}
 
     def fetch_standard_html_source(
         self,
@@ -396,7 +844,7 @@ class Dhis2ReportsService:
             params["date"] = date
         if ou_v:
             params["ou"] = ou_v
-        client = self.client_factory(env)
+        client = self._client(env)
         try:
             html = client.get_text(
                 f"/api/reports/{uid}/data.html",

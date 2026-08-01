@@ -1,31 +1,45 @@
 {% extends "base.html" %}
-{% block title %}{{ viewer.report_name or 'Report' }} · {{ page_title }} · {{ app_name }}{% endblock %}
+{% block title %}{% if viewer %}{{ viewer.report_name or 'Report' }}{% else %}Confirm Live{% endif %} · {{ page_title }} · {{ app_name }}{% endblock %}
 {% block content %}
 <section class="page-header page-header-compact">
   <div>
-    <h1>{{ viewer.report_name or 'Standard report' }}</h1>
+    <h1>{% if viewer %}{{ viewer.report_name or 'Standard report' }}{% else %}Live report confirmation{% endif %}</h1>
+    {% if viewer %}
     <p class="muted">
-      Isolated viewer · {{ viewer.report.environment|title }} · <code>{{ viewer.report.uid }}</code>
+      Credentialed viewer · {{ viewer.report.environment|title }} · <code>{{ viewer.report.uid }}</code>
       {% if viewer.period %} · period {{ viewer.period }}{% endif %}
       {% if viewer.org_unit %} · OU {{ viewer.org_unit }}{% endif %}
     </p>
+    {% else %}
+    <p class="muted">Live DHIS2 HTML requires an explicit confirmation before the hub fetches it with .env credentials.</p>
+    {% endif %}
   </div>
   <div class="page-meta">
+    {% if viewer %}
     <a class="btn btn-sm" href="{{ url_for('dhis2_reports_standard_detail', environment=viewer.report.environment, uid=viewer.report.uid, period=viewer.period, org_unit=viewer.org_unit) }}">Details</a>
-    <a class="btn btn-sm btn-primary" href="{{ viewer.open_url }}" target="_blank" rel="noopener">Open in DHIS2</a>
+    <a class="btn btn-sm" href="{{ viewer.open_url }}" target="_blank" rel="noopener">Open in DHIS2</a>
+    {% else %}
+    <a class="btn btn-sm" href="{{ url_for('dhis2_reports_library') }}">Library</a>
+    {% endif %}
   </div>
 </section>
 {% include "partials/dhis2_reports_tabs.html" %}
 
+{% if confirm_required %}
+<div class="banner banner-error" style="margin-top:0.85rem">
+  Live report HTML is fetched with your configured .env credentials and requires confirmation.
+  <a class="btn btn-sm btn-primary" href="{{ url_for('dhis2_reports_standard_view', environment=environment, uid=uid, period=period, org_unit=org_unit, confirm_live=1) }}">Confirm and view</a>
+</div>
+{% elif viewer %}
 <div class="banner" style="margin-top:0.85rem" id="dr-embed-hint">
   {{ viewer.fallback_hint }}
-  Prefer DHIS2’s own rendering so report JavaScript context can work. If this frame stays blank (CSP, authentication, or iframe restrictions), use <strong>Open in DHIS2</strong>.
+  This frame loads HTML via the hub (Basic Auth from <code>.env</code>) — you do not need to log into DHIS2 in the browser.
 </div>
 
 <section class="panel" style="margin-top:0.85rem">
   <div class="panel-header">
     <h2>{{ viewer.report.name }}</h2>
-    <span class="muted">embed · scripts allowed · no hub credentials in URL</span>
+    <span class="muted">hub credentials · no secrets in URL · sandbox</span>
   </div>
   {% if viewer.prefer_embed and viewer.embed_url %}
   <iframe
@@ -42,4 +56,7 @@
   </div>
   {% endif %}
 </section>
+{% else %}
+<div class="banner banner-error" style="margin-top:0.85rem">Unable to load report.</div>
+{% endif %}
 {% endblock %}

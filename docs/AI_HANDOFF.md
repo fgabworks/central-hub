@@ -4,42 +4,50 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**Assistant / IDE phase — checkpoint (2026-08-02)**
+**DHIS2 Reports — Authenticated Report Rendering Bridge (2026-08-02)**
 
-Stabilization complete (no major new features):
+### Report source discovered
 
-- Aira/Okarun **full-height** right dock (`bottom: 0`); composer fixed at bottom; conversation scrolls
-- Workspace Console **under main content only** (does not compress Okarun); **collapsed by default**; `Ctrl+J`
-- Quick Notepad on **activity rail** (no floating pill); docks beside Okarun
-- Compact Work Dashboard summary tiles; prefs persist width/height/visibility/tabs
-- Personal↔Aira / Work↔Okarun isolation; read-only; lazy providers; paused polling when hidden
+| Source | What it is | Hub action |
+|---|---|---|
+| **Native Standard Reports** | Individual entries from `GET /api/reports` | Render via `GET /api/reports/{uid}/data.html` with `.env` credentials |
+| **DHIS2 Reports / Pivot app shells** | `/dhis-web-reports/index.html`, visualizer | Browser-only — **not** individual reports |
+| Repository / static HTML | YAML catalog | Existing generate/view paths |
 
-### Remaining Assistant limitations
+The previous Run tab treated the Reports **application shell** as a report; Generate could not show populated HTML. Run now lists synced native reports first.
 
-- No Claude / Cursor Agent / Grok as first-class live providers beyond detection stubs
-- No voice input/output; no autonomous write/execute actions
-- Terminal remains allowlisted repository profiles only (no free-form shell)
-- Codex live smoke depends on local `codex` install + login; unit/safety tests cover the adapter path
-- Activity-rail SQL/Calendar/Audit icons are placeholders
+### Endpoints / routes
 
-### Next phase (do not start unless asked)
+| Route | Purpose |
+|---|---|
+| `GET /dhis2/reports/run` | Generate & View UI |
+| `POST /api/dhis2/reports/generate-and-view` | Validate → render → viewer URL |
+| `GET /dhis2/reports/standard/<env>/<uid>/rendered` | Credentialed HTML iframe body |
+| `GET /dhis2/reports/proxy/<env>?path=` | Allowlisted asset/API proxy (SSRF-safe) |
+| `GET /api/dhis2/reports/run-catalog` | Native + shell + other catalog |
+| `GET /api/dhis2/reports/org-units` | Searchable org-unit picker |
 
-**Standard Reports** — DHIS2 report library/viewer work (credentialed HTML view may already be in the working tree; review there).
+Credentials never reach the browser. Live still requires one confirm per run.
 
-## Focused verification
+### Remaining limitations
+
+- Custom apps beyond `/api/reports` are not fully reverse-engineered; app shells stay browser-only
+- Jasper JDBC reports may still need Open in DHIS2
+- Relative assets outside allowlisted prefixes are not proxied
+- No HTML edit / replacement / upload / DB compare (deferred)
+
+## Verify
 
 ```powershell
-.\.venv\Scripts\python.exe -m unittest tests.test_assistant_dock tests.test_workspace_console tests.test_perf_navigation tests.test_dashboard_notebook tests.test_codex_cli -v
+.\.venv\Scripts\python.exe -m unittest tests.test_dhis2_reports_bridge tests.test_dhis2_standard_reports tests.test_dhis2_reports -v
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-## Verify manually
-
-1. Hard-refresh (`?v=shell-dock-3`)
-2. Open Okarun — panel fills the right edge to the bottom; no blank gap under the composer
-3. Open Console (`Ctrl+J`) — console sits under main content only; Okarun stays full height
-4. Open Notepad from the rail — left of Okarun, not over the composer
-5. Switch Personal / Work — Aira vs Okarun; histories stay isolated
+1. Sync Stage reports from Library
+2. Run Report → pick a **Native Standard Report** (not “Reports app shell”)
+3. Set period + org unit → Generate & View → HTML appears in iframe
+4. Confirm Diagnostics is collapsed; Live confirm once per run
 
 ## Do not implement unless asked
 
-Free-form terminal · auto-kill ports · SPA rewrite · DHIS2 writeback · voice · new AI providers
+DHIS2 writes · report replacement · design upload · version restore · DB comparison

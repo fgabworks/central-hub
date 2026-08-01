@@ -25,10 +25,16 @@ job engine (SQLite), safe command/API capabilities, uploads/results, owner role.
 
 - DHIS2 create/update/delete/import (writes stay off)
 - PMNP / Live Processing / report calculation domain logic inside the hub
-- Free-form shell / unrestricted terminal execution
+- Free-form / unrestricted shell outside connected repository paths
+- Arbitrary working directories, symlink/junction escapes, or user-supplied shell binaries
+- AI auto-execution of terminal commands (Aira/Okarun may suggest; user must insert + Enter)
 - Multi-user auth beyond a single local owner token
-- Assistant file edits, commands, SQL execution, email/calendar actions, DHIS2
-  writes, repository runs, voice input, and text-to-speech
+- Assistant file edits, SQL execution, email/calendar actions, DHIS2
+  writes, voice input, and text-to-speech
+
+Interactive **repository terminals** (Workspace Console → Terminal) use a real PTY
+(Windows ConPTY via pywinpty; Unix native PTY) over an authenticated localhost
+WebSocket with xterm.js. Sessions start only inside enabled connected repo paths.
 
 ## AI Assistant Center
 
@@ -69,8 +75,15 @@ python samples/sample-api/app.py
 python -m unittest discover -s tests -v
 ```
 
-Focused assistant suite: `python -m pytest tests/test_ai_connections.py
-tests/test_agent_center.py tests/test_openai_agent.py tests/test_ai_assistant_center.py -q`
+Focused terminal suite:
+
+```powershell
+python -m unittest tests.test_wc_terminal tests.test_workspace_console -v
+```
+
+On Windows with Python 3.14+, install `pywinpty` with:
+`$env:PYO3_USE_ABI3_FORWARD_COMPATIBILITY='1'; pip install pywinpty`
+
 
 ## Docs for agents
 

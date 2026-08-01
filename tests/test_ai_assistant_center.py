@@ -167,10 +167,11 @@ class AssistantCenterIsolationTests(unittest.TestCase):
         work = client.get("/work/okarun")
         self.assertEqual(personal.status_code, 200)
         self.assertIn(b">Aira<", personal.data)
-        self.assertNotIn(b"SQL Workspace", personal.data)
+        # Personal nav must not link to SQL Workspace (activity-rail placeholder may mention it).
+        self.assertNotIn(b'href="/sql"', personal.data)
         self.assertEqual(work.status_code, 200)
         self.assertIn(b">Okarun<", work.data)
-        self.assertIn(b"SQL Workspace", work.data)
+        self.assertIn(b'href="/sql"', work.data)
 
         audit = AuditStore(Path(self.temp.name) / "audit.jsonl")
         audit.append(action="TEST", detail="API_KEY=super-secret")
