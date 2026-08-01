@@ -51,6 +51,7 @@
   }
   load(true);
   setInterval(function () {
+    if (document.visibilityState === "hidden") return;
     if (follow.checked) load(false);
   }, 2000);
 })();

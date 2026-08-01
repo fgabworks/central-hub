@@ -40,19 +40,26 @@ def register_agent_center_routes(app: Flask) -> None:
             safety=data["safety"],
             profile=data["profile"],
             conversations=data["conversations"],
-            # Full Assistant Center page keeps advanced UI; skip dock to avoid double chrome.
-            skip_assistant_dock=True,
         )
 
     @app.get("/system/ai-connections")
     def ai_connections():
-        connections = _svc().connections.list()
-        _audit("AI_CONNECTIONS_VIEW", detail={"providers": len(connections)})
+        # Instant cached/placeholder status; JS refreshes providers in the background.
+        connections = _svc().connections.list(probe=False)
+        _audit("AI_CONNECTIONS_VIEW", detail={"providers": len(connections), "cached": True})
         return render_template("ai_connections.html", connections=connections)
 
     @app.get("/api/ai-connections")
     def api_ai_connections():
-        return jsonify({"connections": _svc().connections.list(refresh=request.args.get("refresh") == "1")})
+        refresh = request.args.get("refresh") == "1"
+        return jsonify(
+            {
+                "connections": _svc().connections.list(
+                    refresh=refresh,
+                    probe=True if refresh else request.args.get("probe", "0") == "1",
+                )
+            }
+        )
 
     @app.post("/api/ai-connections/<agent_id>/<action>")
     @require_owner
@@ -113,7 +120,10 @@ def register_agent_center_routes(app: Flask) -> None:
         except ValueError:
             return jsonify({"error": "Unknown assistant profile"}), 404
         mode = request.args.get("mode")
-        return jsonify({"agents": _svc().list_agents(mode=mode)})
+        refresh = request.args.get("refresh") == "1"
+        # Default: serve cache/placeholder; refresh=1 probes providers.
+        probe = refresh or request.args.get("probe", "0") == "1"
+        return jsonify({"agents": _svc().list_agents(mode=mode, probe=probe)})
 
     @app.get("/api/agents/<agent_id>/models")
     @app.get("/api/assistants/<profile_id>/agents/<agent_id>/models")

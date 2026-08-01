@@ -92,7 +92,7 @@ class AgentCenterService:
             rows.append({"id": m, "label": mode_label(m), "enabled": False, "note": "Not yet available"})
         return rows
 
-    def list_agents(self, *, mode: str | None = None) -> list[dict[str, Any]]:
+    def list_agents(self, *, mode: str | None = None, probe: bool = True) -> list[dict[str, Any]]:
         mode_n = normalize_mode(mode) if mode else None
         out: list[dict[str, Any]] = []
         for adapter in self.adapters:
@@ -101,7 +101,7 @@ class AgentCenterService:
                 row = public_availability(av)
                 row["connection_state"] = "connected"
             else:
-                connection = self.connections.get(adapter.descriptor.id)
+                connection = self.connections.get(adapter.descriptor.id, probe=probe)
                 models = []
                 source = "none"
                 row = {
@@ -118,6 +118,8 @@ class AgentCenterService:
                     "supports_streaming": True,
                     "runnable": connection["state"] == "connected",
                     "capabilities": connection["capabilities"],
+                    "from_cache": bool(connection.get("from_cache")),
+                    "pending_refresh": bool(connection.get("pending_refresh")),
                 }
             row["is_api"] = bool(getattr(adapter, "is_api_adapter", False))
             if mode_n and mode_n not in row["modes"]:
@@ -523,7 +525,8 @@ class AgentCenterService:
             "profile": profile.public(),
             "profiles": [item.public() for item in PROFILES.values()],
             "modes": self.list_modes(),
-            "agents": self.list_agents(),
+            # Never probe providers on full-page render — use cached/placeholder status.
+            "agents": self.list_agents(probe=False),
             "repositories": self.repositories(profile.id),
             "prompts": self.store.list_prompts(profile_id=profile.id),
             "history": self.history(limit=30, profile_id=profile.id),

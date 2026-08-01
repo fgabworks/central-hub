@@ -117,6 +117,7 @@ class CalendarService:
         time_zone: str = "",
         force_refresh: bool = False,
         anchor: str | None = None,
+        cache_only: bool = False,
     ) -> dict[str, Any]:
         acct = self._require_calendar_account(account_id)
         view_n = normalize_calendar_view(view)
@@ -150,6 +151,23 @@ class CalendarService:
             cached = self.store.get_calendar_list_cache(cache_key)
             if cached is not None:
                 return {**cached, "account": acct, "from_cache": True}
+        if cache_only:
+            return {
+                "ok": True,
+                "view": view_n,
+                "q": q,
+                "calendar_id": calendar_id,
+                "time_zone": tz_name,
+                "time_min": time_min,
+                "time_max": time_max,
+                "anchor": anchor_date.isoformat(),
+                "calendars": calendars,
+                "events": [],
+                "next_page_token": "",
+                "from_cache": False,
+                "cache_only": True,
+                "account": acct,
+            }
 
         access = self._access_token(account_id)
         events: list[dict[str, Any]] = []
@@ -313,7 +331,7 @@ class CalendarService:
         return {"ok": True, "account": acct, "event": event, "from_cache": False}
 
     def upcoming_for_workspace(
-        self, workspace: str, *, limit: int = UPCOMING_LIMIT
+        self, workspace: str, *, limit: int = UPCOMING_LIMIT, cache_only: bool = False
     ) -> list[dict[str, Any]]:
         """Upcoming events across calendar-enabled accounts in a workspace (best-effort)."""
         ws = normalize_workspace(workspace)
@@ -326,6 +344,7 @@ class CalendarService:
                     acct["id"],
                     view="upcoming",
                     page_size=limit,
+                    cache_only=cache_only,
                 )
             except CalendarServiceError:
                 continue

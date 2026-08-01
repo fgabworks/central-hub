@@ -136,6 +136,7 @@ from hub.registry.grouping import (
     linked_api_repositories,
 )
 from hub.settings import ROOT_DIR, load_settings
+from hub.perf import register_perf_middleware, timed
 
 settings = load_settings()
 
@@ -163,6 +164,7 @@ def create_app() -> Flask:
     )
     app.config["SETTINGS"] = settings
     app.secret_key = settings.secret_key
+    register_perf_middleware(app)
 
     try:
         registry_path = _resolve_config_path(settings.repositories_config)
@@ -571,7 +573,9 @@ def create_app() -> Flask:
 
         # Floating Quick Notepad is available on all main pages via base.html
         # (pages with an embedded panel set skip_global_notepad).
-        notepad = QuickNotepadStore(notebook.db, scope=workspace).get()
+        notepad = QuickNotepadStore(notebook.db, scope=workspace).get(
+            include_revisions=False
+        )
         # Lightweight Aira/Okarun dock bootstrap — no provider probing.
         assistant_dock = dock_shell_bootstrap(
             notebook.db,
@@ -686,29 +690,39 @@ def create_app() -> Flask:
             ]
             live_repos: list = []
             dhis2_tools_local: list = []
+            # Calendar is loaded asynchronously after shell render (never blocks navigation).
             upcoming_events: list = []
-            try:
-                cal: CalendarService = app.config["CALENDAR"]
-                upcoming_events = cal.upcoming_for_workspace("personal", limit=5)
-            except Exception:  # noqa: BLE001
-                upcoming_events = []
             cards.insert(
                 2,
                 {
                     "kind": "default",
                     "label": "Upcoming Events",
-                    "value": str(len(upcoming_events)),
+                    "value": "…",
                     "sub": "Personal Google Calendar",
                     "icon": "📅",
                     "href": url_for("personal_calendar", view="upcoming"),
                     "link_label": "Open calendar →",
+                    "async_id": "card-upcoming-count",
                 },
             )
         else:
-            health_results = adapters.check_all(enabled_only=False) if adapters else []
-            live_repos = _repos_from_health(registry, health_results)
+            # Never probe repositories during dashboard navigation — use cache only.
+            health_results: list = []
+            health_meta = {"cached": False, "fresh": False, "stale": False}
+            if adapters is not None:
+                health_results, health_meta = adapters.cached_results(
+                    enabled_only=False, allow_stale=True
+                )
+            live_repos = (
+                _repos_from_health(registry, health_results) if health_results else []
+            )
             healthy = sum(1 for item in health_results if item.get("ok"))
             enabled = sum(1 for item in health_results if item.get("enabled"))
+            repo_sub = (
+                f"{enabled} enabled · {healthy} healthy"
+                if health_meta.get("cached")
+                else "Status loading…"
+            )
             dhis2_cfg = app.config["DHIS2"].public_config()
             last_dhis2 = app.config.get("DHIS2_LAST_STATUS")
             dhis2_instance = app.config.get("DHIS2_INSTANCE")
@@ -727,10 +741,11 @@ def create_app() -> Flask:
                     "kind": "default",
                     "label": "Repositories",
                     "value": str(len(registry.repositories) if registry else 0),
-                    "sub": f"{enabled} enabled · {healthy} healthy",
+                    "sub": repo_sub,
                     "icon": "▣",
                     "href": url_for("repositories"),
                     "link_label": "View all →",
+                    "async_id": "card-repo-health",
                 },
                 {
                     "kind": "open_tasks",
@@ -787,35 +802,38 @@ def create_app() -> Flask:
             upcoming_events = []
 
         persist_workspace(notebook.db, scope_n)
-        html = render_template(
-            "dashboard.html",
-            last_updated="live",
-            summary_cards=cards,
-            live_repos=live_repos,
-            work_queue=work_queue,
-            activity_rows=activity_rows,
-            notepad=notepad,
-            show_notepad=show_notepad,
-            show_repos=scope_n == "work",
-            show_dhis2=scope_n == "work",
-            upcoming_events=upcoming_events,
-            note_scope=scope_n,
-            scope_label=SCOPE_LABELS.get(scope_n, scope_n),
-            notebook_endpoint=notebook_ep,
-            dashboard_endpoint=dash_ep,
-            queue_title=(
-                "Personal Task Queue" if scope_n == "personal" else "Notebook Work Queue"
-            ),
-            page_title=(
-                "Personal Dashboard" if scope_n == "personal" else "Work Dashboard"
-            ),
-            page_sub=(
-                "Personal notes, tasks, calendar, and Quick Notepad."
-                if scope_n == "personal"
-                else "Repositories, work notebook tasks, DHIS2 and system status."
-            ),
-            dhis2_tools=dhis2_tools_local,
-        )
+        with timed("template_dashboard"):
+            html = render_template(
+                "dashboard.html",
+                last_updated="live",
+                summary_cards=cards,
+                live_repos=live_repos,
+                work_queue=work_queue,
+                activity_rows=activity_rows,
+                notepad=notepad,
+                show_notepad=show_notepad,
+                show_repos=scope_n == "work",
+                show_dhis2=scope_n == "work",
+                upcoming_events=upcoming_events,
+                note_scope=scope_n,
+                scope_label=SCOPE_LABELS.get(scope_n, scope_n),
+                notebook_endpoint=notebook_ep,
+                dashboard_endpoint=dash_ep,
+                health_async=scope_n == "work",
+                calendar_async=scope_n == "personal",
+                queue_title=(
+                    "Personal Task Queue" if scope_n == "personal" else "Notebook Work Queue"
+                ),
+                page_title=(
+                    "Personal Dashboard" if scope_n == "personal" else "Work Dashboard"
+                ),
+                page_sub=(
+                    "Personal notes, tasks, calendar, and Quick Notepad."
+                    if scope_n == "personal"
+                    else "Repositories, work notebook tasks, DHIS2 and system status."
+                ),
+                dhis2_tools=dhis2_tools_local,
+            )
         resp = app.make_response(html)
         return apply_workspace_cookie(resp, scope_n)
 
@@ -925,7 +943,12 @@ def create_app() -> Flask:
     def repositories():
         registry = app.config["REGISTRY"]
         adapters: AdapterManager | None = app.config["ADAPTERS"]
-        health_results = adapters.check_all(enabled_only=False) if adapters else []
+        # Cached/stale only — probes run via /api/health after shell paints.
+        health_results: list = []
+        if adapters is not None:
+            health_results, _meta = adapters.cached_results(
+                enabled_only=False, allow_stale=True
+            )
         rows = _build_registry_rows(registry, health_results)
         return render_template(
             "repositories.html",
@@ -933,6 +956,7 @@ def create_app() -> Flask:
             flash=request.args.get("notice"),
             error=request.args.get("error") or app.config.get("REGISTRY_ERROR"),
             defaults=registry.defaults if registry else None,
+            health_async=True,
         )
 
     @app.route("/repositories/new", methods=["GET", "POST"])
@@ -1121,9 +1145,14 @@ def create_app() -> Flask:
     @app.get("/health")
     def health():
         adapters: AdapterManager | None = app.config["ADAPTERS"]
-        results = (
-            adapters.check_all(enabled_only=False, force=True) if adapters else []
-        )
+        force = request.args.get("fresh", "").strip().lower() in {"1", "true", "yes"}
+        # Default GET uses cache only so navigation stays fast; ?fresh=1 re-probes.
+        if adapters is None:
+            results: list = []
+        elif force:
+            results = adapters.check_all(enabled_only=False, force=True)
+        else:
+            results, _meta = adapters.cached_results(enabled_only=False, allow_stale=True)
         healthy = sum(1 for item in results if item.get("ok"))
         disabled = sum(
             1
@@ -1131,16 +1160,8 @@ def create_app() -> Flask:
             if (not item.get("enabled")) or item.get("status") == "skipped"
         )
         offline = max(len(results) - healthy - disabled, 0)
+        # Process inventory is expensive (PowerShell) — never block page shell.
         local_processes: list[dict] = []
-        registry = app.config.get("REGISTRY")
-        workspace = app.config.get("REPO_WORKSPACE")
-        if registry is not None and workspace is not None:
-            try:
-                local_processes = workspace.summarize_local_processes(
-                    list(registry.repositories)
-                )
-            except Exception:  # noqa: BLE001
-                local_processes = []
         return render_template(
             "health.html",
             results=results,
@@ -1149,6 +1170,8 @@ def create_app() -> Flask:
             disabled_count=disabled,
             total_count=len(results),
             local_processes=local_processes,
+            processes_async=True,
+            health_async=not force,
         )
 
     @app.get("/api/health/local-processes")

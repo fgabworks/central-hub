@@ -300,7 +300,8 @@
 
   function startPoll(runId) {
     stopPoll();
-    pollTimer = setInterval(function () {
+    function tick() {
+      if (document.visibilityState === "hidden") return;
       fetch(apiBase + "/runs/" + encodeURIComponent(runId))
         .then(function (r) {
           return r.json();
@@ -309,7 +310,9 @@
           if (data.run) showRun(data.run);
         })
         .catch(function () {});
-    }, 1000);
+    }
+    pollTimer = setInterval(tick, 1000);
+    tick();
   }
 
   function stopPoll() {

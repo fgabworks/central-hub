@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=ad-dock-1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=ad-dock-3">
   {% block head_extra %}{% endblock %}
 </head>
 <body class="theme-{{ workspace|default('work') }}">
   {% from "macros.html" import brand_icon %}
-  <div class="app-shell{% if assistant_dock and assistant_dock.prefs.open %} is-ad-open{% endif %}{% if assistant_dock and assistant_dock.prefs.minimized %} is-ad-minimized{% endif %}"
+  <div class="app-shell{% if assistant_dock and not skip_assistant_dock|default(false) %} has-ad-rail{% endif %}{% if assistant_dock and assistant_dock.prefs.open and not assistant_dock.prefs.minimized %} is-ad-open{% elif assistant_dock and assistant_dock.prefs.minimized %} is-ad-open is-ad-minimized{% endif %}"
        {% if assistant_dock %}style="--ad-width: {{ assistant_dock.prefs.width }}px"{% endif %}>
     <aside class="sidebar">
       <div class="sidebar-brand">
@@ -106,17 +106,19 @@
          data-ad-bootstrap='{{ assistant_dock|tojson }}'>
       {% include "partials/assistant_dock_panel.html" %}
     </div>
+    <aside class="ad-rail" aria-label="{{ assistant_dock.profile.name }} dock">
+      <button type="button"
+              class="ad-rail-btn"
+              id="ad-toggle"
+              aria-controls="ad-panel"
+              aria-expanded="{{ 'true' if assistant_dock.prefs.open and not assistant_dock.prefs.minimized else 'false' }}"
+              title="{{ 'Hide' if assistant_dock.prefs.open and not assistant_dock.prefs.minimized else 'Show' }} {{ assistant_dock.profile.name }}">
+        <span class="ad-rail-label">{{ assistant_dock.profile.name }}</span>
+      </button>
+    </aside>
     {% endif %}
   </div>
   {% if assistant_dock and not skip_assistant_dock|default(false) %}
-  <button type="button"
-          class="ad-open-btn btn btn-sm btn-primary"
-          id="ad-open-btn"
-          aria-controls="ad-panel"
-          aria-expanded="{{ 'true' if assistant_dock.prefs.open and not assistant_dock.prefs.minimized else 'false' }}"
-          {% if assistant_dock.prefs.open and not assistant_dock.prefs.minimized %}hidden{% endif %}>
-    {{ assistant_dock.profile.name }}
-  </button>
   <div class="ad-backdrop" id="ad-backdrop" hidden></div>
   {% endif %}
   {% if notepad and not skip_global_notepad|default(false) %}
@@ -140,7 +142,8 @@
   <script src="{{ url_for('static', filename='js/quick_notepad.js') }}?v=qn-save-1"></script>
   {% endif %}
   {% if assistant_dock and not skip_assistant_dock|default(false) %}
-  <script src="{{ url_for('static', filename='js/assistant_dock.js') }}?v=ad-dock-1"></script>
+  <script src="{{ url_for('static', filename='js/hub_perf.js') }}?v=perf-1"></script>
+  <script src="{{ url_for('static', filename='js/assistant_dock.js') }}?v=ad-dock-3"></script>
   {% endif %}
 </body>
 </html>

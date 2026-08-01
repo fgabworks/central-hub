@@ -13,7 +13,7 @@
     <span>{{ offline_count }} offline</span>
     <span>·</span>
     <span>{{ disabled_count }} disabled</span>
-    <a class="btn btn-sm" href="{{ url_for('health') }}">Re-check</a>
+    <a class="btn btn-sm" href="{{ url_for('health', fresh=1) }}">Re-check</a>
   </div>
 </section>
 
@@ -35,7 +35,7 @@
   </article>
 </section>
 
-<section class="panel">
+<section class="panel"{% if health_async|default(false) %} data-health-async="1"{% endif %}>
   <div class="panel-header">
     <h2>Repository checks</h2>
     <a class="quiet" href="{{ url_for('api_health_all') }}">JSON</a>
@@ -52,7 +52,7 @@
           <th>Detail</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="health-results-body">
         {% for item in results %}
           <tr>
             <td>
@@ -85,7 +85,7 @@
   </div>
 </section>
 
-<section class="panel">
+<section class="panel"{% if processes_async|default(false) %} data-processes-async="1"{% endif %}>
   <div class="panel-header">
     <h2>Local Process Monitor</h2>
     <a class="quiet" href="{{ url_for('api_health_local_processes') }}">JSON</a>
@@ -105,7 +105,7 @@
           <th>Command</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="health-processes-body">
         {% for p in local_processes %}
           <tr>
             <td>
@@ -121,10 +121,14 @@
             <td class="muted mono" style="max-width:22rem;word-break:break-word">{{ p.command_redacted }}</td>
           </tr>
         {% else %}
-          <tr class="empty-row"><td colspan="8">No repository-related processes detected.</td></tr>
+          <tr class="empty-row"><td colspan="8">{% if processes_async|default(false) %}Scanning local processes…{% else %}No repository-related processes detected.{% endif %}</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </section>
+{% if health_async|default(false) or processes_async|default(false) %}
+<script src="{{ url_for('static', filename='js/hub_perf.js') }}?v=perf-1"></script>
+<script src="{{ url_for('static', filename='js/nav_async.js') }}?v=perf-1"></script>
+{% endif %}
 {% endblock %}

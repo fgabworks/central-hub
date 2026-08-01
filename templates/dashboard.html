@@ -64,7 +64,7 @@
         <span class="stat-link">{{ card.link_label }}</span>
       </a>
     {% else %}
-      <article class="stat-card">
+      <article class="stat-card"{% if card.async_id %} data-async-id="{{ card.async_id }}"{% endif %}>
         <div class="stat-top">
           <span class="stat-label">{{ card.label }}</span>
           <span class="stat-ico" aria-hidden="true">{{ card.icon }}</span>
@@ -80,13 +80,15 @@
 <section class="dash-grid{% if note_scope == 'personal' %} dash-grid-personal{% endif %}">
   <div class="stack dash-main-stack">
     {% if note_scope == 'personal' %}
-    <section class="panel panel-upcoming{% if not upcoming_events %} is-empty{% endif %}">
+    <section class="panel panel-upcoming{% if not upcoming_events %} is-empty{% endif %}"
+             {% if calendar_async|default(false) %}data-calendar-async="1"{% endif %}>
       <div class="panel-header">
         <h2>Upcoming Personal Events</h2>
         <div class="panel-actions">
           <a class="quiet" href="{{ url_for('personal_calendar', view='upcoming') }}">Open Calendar</a>
         </div>
       </div>
+      <div id="dash-upcoming-list">
       {% if upcoming_events %}
       <ul class="cal-upcoming-list">
         {% for ev in upcoming_events %}
@@ -107,13 +109,14 @@
         <a class="quiet" href="{{ url_for('google_connections') }}">Connect Calendar</a>
       </div>
       {% endif %}
+      </div>
     </section>
     {% endif %}
 
     {% include "partials/dashboard_notebook_queue.html" %}
 
     {% if show_repos %}
-    <section class="panel">
+    <section class="panel"{% if health_async|default(false) %} data-health-async="1"{% endif %}>
       <div class="panel-header">
         <h2>Connected Repositories</h2>
         <a class="quiet" href="{{ url_for('repositories') }}">View all</a>
@@ -130,7 +133,7 @@
               <th>Action</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody id="dash-repos-body">
             {% for row in live_repos %}
               <tr>
                 <td>
@@ -277,5 +280,9 @@
 <script src="{{ url_for('static', filename='js/quick_notepad.js') }}?v=qn-save-1"></script>
 {% else %}
 </div>
+{% endif %}
+{% if health_async|default(false) or calendar_async|default(false) %}
+<script src="{{ url_for('static', filename='js/hub_perf.js') }}?v=perf-1"></script>
+<script src="{{ url_for('static', filename='js/nav_async.js') }}?v=perf-1"></script>
 {% endif %}
 {% endblock %}

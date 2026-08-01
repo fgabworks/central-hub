@@ -90,8 +90,8 @@ class NotebookStore:
             LIMIT ?
         """
         with self.db.connect() as conn:
-            rows = conn.execute(sql, tuple(params)).fetchall()
-            return [self._hydrate_note(dict(row), conn, light=True) for row in rows]
+            rows = [dict(row) for row in conn.execute(sql, tuple(params)).fetchall()]
+            return self._hydrate_notes_batch(rows, conn, light=True)
 
     def search(
         self,
@@ -415,6 +415,68 @@ class NotebookStore:
             "exported_at": utcnow(),
             "note": note,
         }
+
+    def _hydrate_notes_batch(
+        self, rows: list[dict[str, Any]], conn, *, light: bool
+    ) -> list[dict[str, Any]]:
+        """Hydrate many notes with two bulk queries instead of N+1."""
+        if not rows:
+            return []
+        if not light:
+            return [self._hydrate_note(row, conn, light=False) for row in rows]
+        note_ids = [str(row["id"]) for row in rows]
+        placeholders = ",".join("?" for _ in note_ids)
+        repos_by_note: dict[str, list[dict[str, Any]]] = {nid: [] for nid in note_ids}
+        for r in conn.execute(
+            f"""
+            SELECT note_id, repository_id, repository_label, role, sort_order
+            FROM note_repositories
+            WHERE note_id IN ({placeholders})
+            ORDER BY sort_order, repository_id
+            """,
+            tuple(note_ids),
+        ).fetchall():
+            repos_by_note[str(r["note_id"])].append(dict(r))
+        stats_by_note: dict[str, tuple[int, int]] = {nid: (0, 0) for nid in note_ids}
+        for r in conn.execute(
+            f"""
+            SELECT note_id,
+                   COUNT(*) AS total,
+                   COALESCE(SUM(CASE WHEN done = 1 THEN 1 ELSE 0 END), 0) AS done_count
+            FROM note_checklist
+            WHERE note_id IN ({placeholders})
+            GROUP BY note_id
+            """,
+            tuple(note_ids),
+        ).fetchall():
+            stats_by_note[str(r["note_id"])] = (int(r["total"] or 0), int(r["done_count"] or 0))
+
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            note = dict(row)
+            note["pinned"] = bool(note.get("pinned"))
+            note["scope"] = normalize_scope(note.get("scope"))
+            try:
+                note["tags"] = json.loads(note.get("tags_json") or "[]")
+            except json.JSONDecodeError:
+                note["tags"] = []
+            repos = repos_by_note.get(str(note["id"]), [])
+            note["repositories"] = repos
+            note["repository_labels"] = [
+                r["repository_label"] or r["repository_id"] for r in repos
+            ]
+            note["primary_repository"] = (
+                note["repository_labels"][0] if note["repository_labels"] else "—"
+            )
+            total, done_count = stats_by_note.get(str(note["id"]), (0, 0))
+            note["checklist_total"] = total
+            note["checklist_done"] = done_count
+            note["checklist_progress"] = f"{done_count}/{total}" if total else "0/0"
+            note["checklist"] = []
+            note["links"] = []
+            note["activity"] = []
+            out.append(note)
+        return out
 
     def _hydrate_note(
         self, row: dict[str, Any], conn, *, light: bool

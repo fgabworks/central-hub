@@ -182,6 +182,12 @@ _MIGRATIONS: list[tuple[str, str]] = [
             OR lower(panel_size) NOT IN ('normal', 'expanded', 'maximized');
         """,
     ),
+    (
+        "007_perf_indexes",
+        """
+        CREATE INDEX IF NOT EXISTS idx_notes_scope_status ON notes(scope, status);
+        """,
+    ),
 ]
 
 

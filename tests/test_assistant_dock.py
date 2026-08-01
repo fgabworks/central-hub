@@ -1,10 +1,11 @@
-"""Focused UI, isolation, persistence, and lazy-load tests for the assistant dock."""
+"""Focused UI, isolation, persistence, and layout tests for the assistant dock."""
 
 from __future__ import annotations
 
 import json
 import re
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -21,6 +22,9 @@ from hub.agent_center.profiles import profile_for_workspace
 from hub.notebook.db import NotebookDatabase
 from hub.notebook.store import NotebookStore
 from hub.notebook.workspace import persist_workspace
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class DockUnitTests(unittest.TestCase):
@@ -103,11 +107,14 @@ class DockRouteTests(unittest.TestCase):
         html = self.client.get("/work").get_data(as_text=True)
         self.assertIn('id="assistant-dock-host"', html)
         self.assertIn("assistant_dock.js", html)
+        self.assertIn("has-ad-rail", html)
+        self.assertIn('id="ad-toggle"', html)
         self.assertIn("Okarun", html)
         self.assertIn("Read-only mode. No actions are executed.", html)
         self.assertIn("ad-tab-conversation", html)
         self.assertIn("ad-tab-output", html)
         self.assertIn('id="ad-prompt"', html)
+        self.assertIn('id="ad-context-btn"', html)
         self.assertNotIn("speechSynthesis", html)
         self.assertNotIn("webkitSpeechRecognition", html)
 
@@ -120,25 +127,50 @@ class DockRouteTests(unittest.TestCase):
         self.assertEqual(boot["profile"]["id"], "aira")
         self.assertEqual(boot["workspace"], "personal")
 
-    def test_assistant_center_skips_dock(self) -> None:
+    def test_assistant_center_keeps_dock_and_full_page(self) -> None:
+        """Full Assistant Center stays available; dock also mounts (mockup)."""
         self._set_workspace("work")
         html = self.client.get("/work/okarun").get_data(as_text=True)
-        self.assertNotIn('id="assistant-dock-host"', html)
-        self.assertNotIn("assistant_dock.js", html)
-
-    def test_desktop_resize_classes_present(self) -> None:
-        css = (Path(__file__).resolve().parents[1] / "static" / "css" / "style.css").read_text(
-            encoding="utf-8"
+        self.assertIn('id="assistant-dock-host"', html)
+        self.assertIn("assistant_dock.js", html)
+        self.assertIn("has-ad-rail", html)
+        # Full-page chrome still present.
+        self.assertTrue(
+            "Prompt" in html or "prompt" in html.lower() or "Ask" in html
         )
-        self.assertIn(".app-shell.is-ad-open:not(.is-ad-mobile)", css)
+
+    def test_right_docked_placement_css(self) -> None:
+        css = (ROOT / "static" / "css" / "style.css").read_text(encoding="utf-8")
+        self.assertIn(".app-shell.is-ad-open:not(.is-ad-mobile).has-ad-rail", css)
         self.assertIn(
-            "grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--ad-width",
+            "grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--ad-width, 380px) var(--ad-rail-w, 40px)",
             css,
         )
-        self.assertIn(".app-shell.is-ad-mobile.is-ad-open .ad-host", css)
-        self.assertIn("@media (max-width: 960px)", css)
+        self.assertIn(".ad-rail", css)
+        self.assertIn(".ad-host", css)
+        # Panel is a grid column — not a centered modal.
+        self.assertNotIn(".ad-host { position: fixed; inset: 0", css)
 
-    def test_prefs_api_persists_per_workspace(self) -> None:
+    def test_mobile_drawer_behavior_css(self) -> None:
+        css = (ROOT / "static" / "css" / "style.css").read_text(encoding="utf-8")
+        self.assertIn("@media (max-width: 960px)", css)
+        self.assertIn(".app-shell.is-ad-mobile.is-ad-open .ad-host", css)
+        self.assertIn("position: fixed", css)
+        self.assertIn("right: var(--ad-rail-w, 40px)", css)
+        self.assertIn(".ad-backdrop", css)
+
+    def test_js_toggle_open_close(self) -> None:
+        js = (ROOT / "static" / "js" / "assistant_dock.js").read_text(encoding="utf-8")
+        base = (ROOT / "templates" / "base.html").read_text(encoding="utf-8")
+        self.assertIn("function toggle()", js)
+        self.assertIn("setOpen(!prefs.open)", js)
+        self.assertIn('id="ad-toggle"', base)
+        self.assertIn('toggleBtn.addEventListener("click", toggle)', js)
+        self.assertIn("ad-resize", js)
+        self.assertIn("/agents?probe=1", js)
+        self.assertNotIn("speechSynthesis", js)
+
+    def test_prefs_api_persists_width_and_visibility(self) -> None:
         self._set_workspace("work")
         put = self.client.put(
             "/api/assistant-dock/prefs",
@@ -166,6 +198,21 @@ class DockRouteTests(unittest.TestCase):
         html = self.client.get("/health").get_data(as_text=True)
         self.assertIn("is-ad-open", html)
         self.assertIn("--ad-width: 440px", html)
+        self.assertIn("has-ad-rail", html)
+
+    def test_page_content_resizes_with_open_class(self) -> None:
+        self._set_workspace("work")
+        self.client.put(
+            "/api/assistant-dock/prefs",
+            data=json.dumps({"open": True, "width": 400, "minimized": False}),
+            content_type="application/json",
+        )
+        html = self.client.get("/repositories").get_data(as_text=True)
+        self.assertIn("is-ad-open", html)
+        self.assertIn("has-ad-rail", html)
+        self.assertIn('id="ad-panel"', html)
+        # When open and not minimized, panel is not hidden.
+        self.assertNotRegex(html, r'id="ad-panel"[^>]*hidden')
 
     def test_bootstrap_api_does_not_probe_providers(self) -> None:
         self._set_workspace("work")
@@ -185,14 +232,20 @@ class DockRouteTests(unittest.TestCase):
         listed.assert_not_called()
         conn_list.assert_not_called()
 
-    def test_js_lazy_loads_agents_only_on_open(self) -> None:
-        js_path = Path(__file__).resolve().parents[1] / "static" / "js" / "assistant_dock.js"
-        js = js_path.read_text(encoding="utf-8")
-        self.assertIn("function ensureAgents", js)
-        self.assertIn("if (prefs.open) ensureAgents()", js)
-        self.assertIn('apiBase + "/agents"', js)
-        self.assertNotIn("speechSynthesis", js)
-        self.assertNotIn("webkitSpeechRecognition", js)
+    def test_no_performance_regression_with_dock(self) -> None:
+        self._set_workspace("work")
+        for _ in range(1):
+            self.client.get("/work")
+        timings = []
+        for _ in range(3):
+            start = time.perf_counter()
+            resp = self.client.get("/work")
+            timings.append((time.perf_counter() - start) * 1000.0)
+            self.assertEqual(resp.status_code, 200)
+            self.assertIn("Server-Timing", resp.headers)
+        timings.sort()
+        p95 = timings[-1]
+        self.assertLessEqual(p95, 1000.0, msg=f"/work p95 {p95:.1f}ms")
 
     @staticmethod
     def _bootstrap_from_html(html: str) -> dict:

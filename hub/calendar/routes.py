@@ -145,6 +145,28 @@ def register_calendar_routes(app: Flask) -> None:
     def work_calendar():
         return _render_calendar("work")
 
+    @app.get("/api/calendar/upcoming")
+    def calendar_upcoming_api():
+        """Dashboard async panel — optional network when refresh=1."""
+        notebook = app.config["NOTEBOOK"]
+        workspace = normalize_workspace(
+            request.args.get("workspace") or read_workspace(request, notebook.db)
+        )
+        limit = max(1, min(int(request.args.get("limit") or 5), 20))
+        refresh = request.args.get("refresh") in {"1", "true", "yes"}
+        try:
+            events = _calendar().upcoming_for_workspace(
+                workspace, limit=limit, cache_only=not refresh
+            )
+            if refresh is False and not events:
+                # Soft refresh once when cache empty so the panel can populate.
+                events = _calendar().upcoming_for_workspace(
+                    workspace, limit=limit, cache_only=False
+                )
+        except CalendarServiceError as exc:
+            return jsonify({"ok": False, "error": str(exc), "events": []}), 400
+        return jsonify({"ok": True, "workspace": workspace, "events": events})
+
     @app.get("/api/calendar/accounts/<account_id>/events")
     def calendar_events_api(account_id: str):
         """JSON event feed for FullCalendar (reuses CalendarService cache)."""

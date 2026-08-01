@@ -20,7 +20,7 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 | Repository Notebook (scoped personal\|work notes) | `/personal/notebook`, `/work/notebook`, `hub/notebook/` |
 | SQL Workspace (read-only query library/runner) | `/sql`, `hub/sql_workspace/`, `data/sql_workspace.db` |
 | AI Assistant Center (read-only) | `/personal/aira`, `/work/okarun`, dock on all pages via `templates/partials/assistant_dock_panel.html` + `static/js/assistant_dock.js`, `hub/agent_center/`, `config/agents.yaml`, `data/agent_center.db` |
-| AI Connections | `/system/ai-connections` — provider-neutral status/auth/test/dynamic-model/capability/disconnect registry |
+| AI Connections | `/system/ai-connections` — cached status on page load; background refresh; provider-neutral status/auth/test/dynamic-model/capability/disconnect registry |
 | Email Center (Gmail readonly OAuth) | `/personal/email`, `/work/email`, `hub/email/`, `data/email.db` |
 | Calendar Center (Calendar readonly) | `/personal/calendar`, `/work/calendar`, `hub/calendar/` |
 | Google Connections | `/system/google-connections` — shared accounts + incremental scopes |

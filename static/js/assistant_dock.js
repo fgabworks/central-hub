@@ -1,5 +1,5 @@
 /**
- * Persistent Aira/Okarun assistant dock.
+ * Persistent Aira/Okarun assistant dock (VS Code / Cursor-style right rail).
  * Lazy-loads providers only after open; never blocks navigation.
  */
 (function () {
@@ -35,7 +35,7 @@
     var selectedModel = "";
     var shell = document.querySelector(".app-shell");
     var panel = $("ad-panel");
-    var openBtn = $("ad-open-btn");
+    var toggleBtn = $("ad-toggle");
     var backdrop = $("ad-backdrop");
     var promptEl = $("ad-prompt");
     var agentSel = $("ad-agent");
@@ -43,11 +43,17 @@
     var messages = $("ad-messages");
     var output = $("ad-output");
     var contextBody = $("ad-context-body");
+    var contextDrawer = $("ad-context-drawer");
+    var contextBtn = $("ad-context-btn");
     var saveTimer = null;
     var pollTimer = null;
 
     function isMobile() {
       return window.matchMedia(MOBILE_MQ).matches;
+    }
+
+    function expanded() {
+      return !!prefs.open && !prefs.minimized;
     }
 
     function applyChrome() {
@@ -60,16 +66,20 @@
         "--ad-width",
         Math.max(prefs.min_width, Math.min(prefs.max_width, prefs.width)) + "px"
       );
-      if (openBtn) {
-        var expanded = visible && !prefs.minimized;
-        openBtn.setAttribute("aria-expanded", expanded ? "true" : "false");
-        openBtn.hidden = expanded;
+      if (panel) panel.hidden = !expanded();
+      if (toggleBtn) {
+        toggleBtn.setAttribute("aria-expanded", expanded() ? "true" : "false");
+        toggleBtn.title =
+          (expanded() ? "Hide " : "Show ") + (profile.name || "Assistant");
       }
       if (backdrop) {
-        backdrop.hidden = !(isMobile() && visible && !prefs.minimized);
+        backdrop.hidden = !(isMobile() && expanded());
       }
       var pin = $("ad-pin");
-      if (pin) pin.setAttribute("aria-pressed", prefs.pinned ? "true" : "false");
+      if (pin) {
+        pin.setAttribute("aria-pressed", prefs.pinned ? "true" : "false");
+        pin.classList.toggle("is-active", !!prefs.pinned);
+      }
     }
 
     function persistPrefs(immediate) {
@@ -100,8 +110,16 @@
       if (prefs.open) prefs.minimized = false;
       else prefs.minimized = false;
       applyChrome();
-      persistPrefs();
+      persistPrefs(true);
       if (prefs.open) ensureAgents();
+    }
+
+    function toggle() {
+      if (prefs.minimized) {
+        setMinimized(false);
+        return;
+      }
+      setOpen(!prefs.open);
     }
 
     function setMinimized(min) {
@@ -109,6 +127,12 @@
       if (prefs.minimized) prefs.open = true;
       applyChrome();
       persistPrefs(true);
+    }
+
+    function setContextOpen(open) {
+      if (!contextDrawer || !contextBtn) return;
+      contextDrawer.hidden = !open;
+      contextBtn.setAttribute("aria-expanded", open ? "true" : "false");
     }
 
     function switchTab(name) {
@@ -144,7 +168,12 @@
     function ensureAgents() {
       if (agentsLoaded || agentsLoading || !agentSel) return;
       agentsLoading = true;
-      fetch(apiBase + "/agents", { credentials: "same-origin" })
+      var url = apiBase + "/agents?probe=1";
+      var req =
+        window.HubPerf && window.HubPerf.dedupeFetch
+          ? window.HubPerf.dedupeFetch(url, { credentials: "same-origin" })
+          : fetch(url, { credentials: "same-origin" });
+      req
         .then(function (r) {
           return r.json();
         })
@@ -192,7 +221,8 @@
           }
           models.forEach(function (model, idx) {
             var id = typeof model === "string" ? model : model.id || model.name;
-            var label = typeof model === "string" ? model : model.label || model.name || id;
+            var label =
+              typeof model === "string" ? model : model.label || model.name || id;
             var opt = document.createElement("option");
             opt.value = id;
             opt.textContent = label;
@@ -256,37 +286,48 @@
           escapeHtml(answer).replace(/\n/g, "<br>") +
           "</div>" +
           (sourceBits
-            ? '<div class="ad-source">Source: ' + escapeHtml(sourceBits) + " (read-only)</div>"
+            ? '<div class="ad-source">Source: ' +
+              escapeHtml(sourceBits) +
+              " (read-only)</div>"
             : "")
       );
       if (output) {
         output.innerHTML =
-          "<pre class=\"ad-context-body\">" +
+          '<pre class="ad-context-body">' +
           escapeHtml(run.logs || "") +
           "</pre>" +
           (run.tool_activity && run.tool_activity.length
-            ? "<p class=\"muted\">Tool activity: " + run.tool_activity.length + "</p>"
+            ? '<p class="muted">Tool activity: ' + run.tool_activity.length + "</p>"
             : "");
       }
     }
 
     function pollRun(runId) {
       if (pollTimer) clearInterval(pollTimer);
-      pollTimer = setInterval(function () {
-        fetch(apiBase + "/runs/" + encodeURIComponent(runId), { credentials: "same-origin" })
+      function tick() {
+        if (document.visibilityState === "hidden") return;
+        fetch(apiBase + "/runs/" + encodeURIComponent(runId), {
+          credentials: "same-origin",
+        })
           .then(function (r) {
             return r.json();
           })
           .then(function (run) {
-            if (!run || run.error && !run.id) return;
-            if (run.status === "succeeded" || run.status === "failed" || run.status === "cancelled") {
+            if (!run || (run.error && !run.id)) return;
+            if (
+              run.status === "succeeded" ||
+              run.status === "failed" ||
+              run.status === "cancelled"
+            ) {
               clearInterval(pollTimer);
               pollTimer = null;
               renderRun(run);
             }
           })
           .catch(function () {});
-      }, 1200);
+      }
+      pollTimer = setInterval(tick, 1200);
+      tick();
     }
 
     function sendPrompt(text) {
@@ -295,11 +336,16 @@
       appendMessage("user", escapeHtml(prompt));
       if (promptEl) promptEl.value = "";
       if (!selectedAgent) {
-        appendMessage("assistant", "Select a provider first (lazy-loaded when the panel opens).");
+        appendMessage(
+          "assistant",
+          "Select a provider first (lazy-loaded when the panel opens)."
+        );
         ensureAgents();
         return;
       }
-      previewContext(prompt);
+      previewContext(prompt).then(function () {
+        setContextOpen(false);
+      });
       fetch(apiBase + "/runs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -322,7 +368,9 @@
           if (!res.ok) {
             appendMessage(
               "assistant",
-              escapeHtml((res.body && (res.body.error || res.body.message)) || "Run failed.")
+              escapeHtml(
+                (res.body && (res.body.error || res.body.message)) || "Run failed."
+              )
             );
             return;
           }
@@ -335,12 +383,15 @@
           }
         })
         .catch(function () {
-          appendMessage("assistant", "Could not start run. Check owner auth / provider connection.");
+          appendMessage(
+            "assistant",
+            "Could not start run. Check owner auth / provider connection."
+          );
         });
     }
 
     function bind() {
-      if (openBtn) openBtn.addEventListener("click", function () { setOpen(true); });
+      if (toggleBtn) toggleBtn.addEventListener("click", toggle);
       var closeBtn = $("ad-close");
       if (closeBtn) closeBtn.addEventListener("click", function () { setOpen(false); });
       if (backdrop) backdrop.addEventListener("click", function () { setOpen(false); });
@@ -358,6 +409,19 @@
           persistPrefs(true);
         });
       }
+      if (contextBtn) {
+        contextBtn.addEventListener("click", function () {
+          var open = contextDrawer && contextDrawer.hidden;
+          setContextOpen(!!open);
+          if (open && promptEl && promptEl.value.trim()) previewContext(promptEl.value);
+        });
+      }
+      var contextClose = $("ad-context-close");
+      if (contextClose) {
+        contextClose.addEventListener("click", function () {
+          setContextOpen(false);
+        });
+      }
       document.querySelectorAll(".ad-tab").forEach(function (tab) {
         tab.addEventListener("click", function () {
           switchTab(tab.getAttribute("data-ad-tab"));
@@ -369,7 +433,11 @@
         });
       });
       var sendBtn = $("ad-send");
-      if (sendBtn) sendBtn.addEventListener("click", function () { sendPrompt(promptEl && promptEl.value); });
+      if (sendBtn) {
+        sendBtn.addEventListener("click", function () {
+          sendPrompt(promptEl && promptEl.value);
+        });
+      }
       if (promptEl) {
         promptEl.addEventListener("keydown", function (ev) {
           if (ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) {
@@ -391,15 +459,11 @@
       }
       var settings = $("ad-settings");
       var history = $("ad-history");
-      var center = $("ad-open-center");
       function goCenter() {
         window.location.href = boot.center_url || "/work/okarun";
       }
       if (settings) settings.addEventListener("click", goCenter);
       if (history) history.addEventListener("click", goCenter);
-      if (center) center.addEventListener("click", function (ev) {
-        /* normal navigation */
-      });
 
       var handle = $("ad-resize");
       if (handle && shell) {
@@ -407,18 +471,22 @@
         handle.addEventListener("mousedown", function (ev) {
           if (isMobile()) return;
           dragging = true;
+          document.body.style.userSelect = "none";
           ev.preventDefault();
         });
         window.addEventListener("mousemove", function (ev) {
           if (!dragging) return;
+          var rail = document.querySelector(".ad-rail");
+          var railW = rail ? rail.getBoundingClientRect().width : 40;
           var rect = shell.getBoundingClientRect();
-          var width = Math.round(rect.right - ev.clientX);
+          var width = Math.round(rect.right - railW - ev.clientX);
           prefs.width = Math.max(prefs.min_width, Math.min(prefs.max_width, width));
           applyChrome();
         });
         window.addEventListener("mouseup", function () {
           if (!dragging) return;
           dragging = false;
+          document.body.style.userSelect = "";
           persistPrefs(true);
         });
       }
@@ -430,10 +498,11 @@
 
     bind();
     applyChrome();
-    if (prefs.open && !prefs.minimized) ensureAgents();
+    if (expanded()) ensureAgents();
     return {
       prefs: prefs,
       setOpen: setOpen,
+      toggle: toggle,
       ensureAgents: ensureAgents,
       applyChrome: applyChrome,
     };

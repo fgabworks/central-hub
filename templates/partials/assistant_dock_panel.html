@@ -1,4 +1,4 @@
-<aside class="ad-panel" id="ad-panel" aria-label="{{ assistant_dock.profile.name }} assistant">
+<aside class="ad-panel" id="ad-panel" aria-label="{{ assistant_dock.profile.name }} assistant" {% if not assistant_dock.prefs.open or assistant_dock.prefs.minimized %}hidden{% endif %}>
   <div class="ad-resize" id="ad-resize" role="separator" aria-orientation="vertical" aria-label="Resize assistant panel" tabindex="0"></div>
 
   <header class="ad-header">
@@ -8,7 +8,7 @@
     </div>
     <div class="ad-header-actions" role="toolbar" aria-label="Assistant panel controls">
       <a class="btn btn-sm ad-icon-btn" id="ad-open-center" href="{{ assistant_dock.center_url }}" title="Open full Assistant Center">⋯</a>
-      <button type="button" class="btn btn-sm ad-icon-btn" id="ad-pin" title="Pin panel" aria-pressed="{{ 'true' if assistant_dock.prefs.pinned else 'false' }}">📌</button>
+      <button type="button" class="btn btn-sm ad-icon-btn{% if assistant_dock.prefs.pinned %} is-active{% endif %}" id="ad-pin" title="Pin panel" aria-pressed="{{ 'true' if assistant_dock.prefs.pinned else 'false' }}">📌</button>
       <button type="button" class="btn btn-sm ad-icon-btn" id="ad-minimize" title="Minimize panel">—</button>
       <button type="button" class="btn btn-sm ad-icon-btn" id="ad-close" title="Close panel" aria-label="Close assistant">×</button>
     </div>
@@ -35,10 +35,6 @@
           </div>
         </div>
       </div>
-      <details class="ad-context" id="ad-context">
-        <summary>Context preview</summary>
-        <pre class="ad-context-body muted" id="ad-context-body">No context packed yet.</pre>
-      </details>
     </div>
 
     <div class="ad-pane" id="ad-pane-output" role="tabpanel" aria-labelledby="ad-tab-output" hidden>
@@ -48,22 +44,34 @@
     </div>
   </div>
 
+  <div class="ad-context-drawer" id="ad-context-drawer" hidden>
+    <div class="ad-context-drawer-head">
+      <strong>Context preview</strong>
+      <button type="button" class="btn btn-sm ad-icon-btn" id="ad-context-close" title="Close context preview">×</button>
+    </div>
+    <pre class="ad-context-body muted" id="ad-context-body">No context packed yet.</pre>
+  </div>
+
   <footer class="ad-composer">
-    <textarea id="ad-prompt" class="ad-prompt" rows="3" placeholder="Ask {{ assistant_dock.profile.name }} a read-only question…" aria-label="Assistant prompt"></textarea>
+    <div class="ad-prompt-row">
+      <textarea id="ad-prompt" class="ad-prompt" rows="2" placeholder="Ask {{ assistant_dock.profile.name }} a read-only question…" aria-label="Assistant prompt"></textarea>
+      <button type="button" class="btn btn-primary ad-send" id="ad-send" title="Send" aria-label="Send">➤</button>
+    </div>
     <div class="ad-composer-row">
       <div class="ad-composer-tools">
-        <button type="button" class="btn btn-sm ad-icon-btn" id="ad-history" title="Recent runs">◷</button>
+        <button type="button" class="btn btn-sm ad-icon-btn" id="ad-attach" title="Add context source" disabled aria-disabled="true">+</button>
+        <button type="button" class="btn btn-sm ad-icon-btn" id="ad-history" title="Recent runs / Assistant Center">◷</button>
+        <button type="button" class="btn btn-sm ad-icon-btn" id="ad-context-btn" title="Context preview" aria-expanded="false" aria-controls="ad-context-drawer">⧉</button>
         <button type="button" class="btn btn-sm ad-icon-btn" id="ad-settings" title="Open full Assistant Center settings">⚙</button>
         <label class="ad-model-wrap">
-          <span class="sr-only">Agent / model</span>
+          <span class="sr-only">Agent</span>
           <select id="ad-agent" aria-label="Agent provider">
-            <option value="">Loading providers…</option>
+            <option value="">Loading…</option>
           </select>
         </label>
         <select id="ad-model" aria-label="Model" hidden></select>
       </div>
-      <button type="button" class="btn btn-primary ad-send" id="ad-send" title="Send" aria-label="Send">➤</button>
     </div>
-    <p class="ad-safety muted">{{ assistant_dock.safety.message }}</p>
+    <p class="ad-safety muted">🔒 {{ assistant_dock.safety.message }}</p>
   </footer>
 </aside>

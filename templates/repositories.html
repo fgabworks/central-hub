@@ -17,7 +17,7 @@
 {% if flash %}<div class="banner" style="background:var(--success-soft);border-color:rgba(34,197,94,.35)">{{ flash }}</div>{% endif %}
 {% if error %}<div class="banner banner-error">{{ error }}</div>{% endif %}
 
-<section class="panel">
+<section class="panel"{% if health_async|default(false) %} data-health-async="1"{% endif %}>
   <div class="panel-header">
     <h2>Registry</h2>
     <span class="quiet">Grouped by repository_group_id · Workspace / Application / API statuses are independent</span>
@@ -116,4 +116,8 @@
     </table>
   </div>
 </section>
+{% if health_async|default(false) %}
+<script src="{{ url_for('static', filename='js/hub_perf.js') }}?v=perf-1"></script>
+<script src="{{ url_for('static', filename='js/nav_async.js') }}?v=perf-1"></script>
+{% endif %}
 {% endblock %}

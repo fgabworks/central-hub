@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-01 (persistent Aira/Okarun assistant dock + AI Connections registry).
+Last verified: 2026-08-02 (navigation performance — deferred probes + Server-Timing).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -10,6 +10,7 @@ Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](doc
 + Email Center (Gmail readonly) + Calendar Center (Calendar readonly, shared Google accounts)
 + AI Assistant Center (read-only Aira/Okarun profiles, including OpenAI Responses API)
 + persistent VS Code-style assistant dock across pages
++ navigation performance (async secondary panels; cached AI connection status)
 + Repository Workspace Phases 1–2 + Connect Local Workspace
 + DHIS2 Reports — Standard Report Manager Phase 1 (sync/view) + catalog shortcuts.**
 Hub coordinates repos via registry/adapters; DHIS2 stays GET-only; jobs run
@@ -47,7 +48,7 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | API exec (Phase 4) | GET/HEAD only from YAML `http_path` |
 | Files (Phase 5) | Uploads/results under `data/{uploads,results}/{job_id}/` |
 | Safeguards (Phase 6) | Dry-run default, confirm for apply, max concurrent, owner token |
-| Tests | `tests/` — includes `test_ai_assistant_center.py`, `test_openai_catalog.py`, `test_openai_agent.py`, `test_agent_center.py` |
+| Tests | `tests/` — includes `test_perf_navigation.py`, `test_ai_assistant_center.py`, `test_openai_catalog.py`, `test_openai_agent.py`, `test_agent_center.py` |
 | DHIS2 writes | **Disabled** |
 | Gmail writes | **Disabled** (no send/reply/delete/label/mark-read) |
 | Calendar writes | **Disabled** (no create/update/delete/RSVP) |

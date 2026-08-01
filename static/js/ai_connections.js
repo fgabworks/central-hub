@@ -1,6 +1,8 @@
 (function () {
   "use strict";
 
+  var fetchFn = (window.HubPerf && window.HubPerf.dedupeFetch) || fetch;
+
   function render(row, connection, result) {
     var status = row.querySelector(".connection-status");
     var detail = row.querySelector(".connection-detail");
@@ -18,6 +20,18 @@
       connect.setAttribute("data-action", connection.state === "connected" ? "reconnect" : "connect");
       connect.textContent = connection.state === "connected" ? "Reconnect" : "Connect";
     }
+  }
+
+  function refreshAll() {
+    return fetchFn("/api/ai-connections?refresh=1", { credentials: "same-origin" })
+      .then(function (response) { return response.json(); })
+      .then(function (data) {
+        (data.connections || []).forEach(function (connection) {
+          var row = document.querySelector('[data-provider-id="' + connection.id + '"]');
+          if (row) render(row, connection, connection);
+        });
+      })
+      .catch(function () {});
   }
 
   document.querySelectorAll("[data-provider-id]").forEach(function (row) {
@@ -44,4 +58,8 @@
         .then(function () { button.disabled = false; });
     });
   });
+
+  // Show cached SSR status immediately; refresh providers in the background.
+  if (window.HubPerf && window.HubPerf.whenVisible) window.HubPerf.whenVisible(refreshAll);
+  else refreshAll();
 })();

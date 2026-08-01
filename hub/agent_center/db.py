@@ -94,6 +94,13 @@ _MIGRATIONS: list[tuple[str, str]] = [
         );
         """,
     ),
+    (
+        "005_perf_indexes",
+        """
+        CREATE INDEX IF NOT EXISTS idx_agent_prompts_profile_updated
+            ON agent_prompts(profile_id, updated_at DESC);
+        """,
+    ),
 ]
 
 
