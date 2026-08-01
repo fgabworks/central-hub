@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 PAGE_TITLE = "Central Hub HCSC–RF"
-PAGE_SUBTITLE = "Indicators, Sources, and Validation"
+PAGE_SUBTITLE = (
+    "Indicators, Sources, and Validation — "
+    "Household Convergence Scorecard and Results Framework."
+)
 PAGE_MEANING = "Household Convergence Scorecard and Results Framework"
 NAV_LABEL = "HCSC–RF"
 MODULE_SHORT = "HCSC–RF"

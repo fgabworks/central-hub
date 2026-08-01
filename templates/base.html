@@ -4,14 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=shell-term-1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=shell-sidebar-1">
   {% block head_extra %}{% endblock %}
 </head>
 <body class="theme-{{ workspace|default('work') }}">
   {% from "macros.html" import brand_icon %}
   <div class="app-shell has-activity-rail{% if assistant_dock and not skip_assistant_dock|default(false) %} has-ad-dock{% endif %}{% if assistant_dock and assistant_dock.prefs.open and not assistant_dock.prefs.minimized %} is-ad-open{% elif assistant_dock and assistant_dock.prefs.minimized %} is-ad-open is-ad-minimized{% endif %}{% if workspace_console and workspace_console.prefs.open and not workspace_console.prefs.minimized %} is-wc-open{% elif workspace_console and workspace_console.prefs.minimized %} is-wc-open is-wc-minimized{% endif %}{% if workspace_console and workspace_console.prefs.maximized %} is-wc-maximized{% endif %}"
        style="{% if assistant_dock %}--ad-width: {{ assistant_dock.prefs.width }}px;{% endif %}{% if workspace_console %}--wc-height: {{ workspace_console.prefs.height }}px;{% endif %}">
-    <aside class="sidebar">
+    <aside class="sidebar" id="hub-sidebar" aria-label="Primary navigation">
       <div class="sidebar-brand">
         <div class="brand-mark">{{ brand_icon() }}</div>
         <div class="brand-text">
@@ -26,26 +26,63 @@
             class="workspace-btn{% if workspace == ws %} is-active{% endif %}"
             href="{{ url_for('switch_workspace', workspace_name=ws) }}"
             {% if workspace == ws %}aria-current="true"{% endif %}
-          >{{ workspace_labels[ws] }}</a>
+            title="{{ workspace_labels[ws] }}"
+          ><span class="workspace-btn-label">{{ workspace_labels[ws] }}</span></a>
         {% endfor %}
       </div>
 
       <nav class="sidebar-nav" aria-label="Primary">
         {% for section in nav_sections %}
           {% if section.entries %}
-            <div class="nav-label">{{ section.label }}</div>
-            {% for item in section.entries %}
-              <a
-                href="{{ url_for(item.endpoint) }}{% if item.anchor %}#{{ item.anchor }}{% endif %}"
-                class="nav-link{% if request.endpoint == item.endpoint or (item.active_prefix and request.endpoint and request.endpoint.startswith(item.active_prefix)) %} is-active{% endif %}"
-              >
-                <span class="nav-ico" aria-hidden="true">{{ item.icon }}</span>
-                <span>{{ item.label }}</span>
-                {% if item.badge %}
-                  <span class="nav-new">{{ item.badge }}</span>
-                {% endif %}
-              </a>
-            {% endfor %}
+            {% set ep = request.endpoint or '' %}
+            {% set section_expanded = section.expandable and section.expand_prefix and ep.startswith(section.expand_prefix) %}
+            {% if section.expandable %}
+              <div class="nav-group{% if section_expanded %} is-expanded{% endif %}" data-nav-group="{{ section.id }}">
+                <button type="button"
+                        class="nav-group-toggle{% if section_expanded %} is-active-group{% endif %}"
+                        aria-expanded="{{ 'true' if section_expanded else 'false' }}"
+                        data-nav-toggle="{{ section.id }}"
+                        title="{{ section.label }}">
+                  <span class="nav-ico" aria-hidden="true">{{ section.icon or '▸' }}</span>
+                  <span class="nav-link-label">{{ section.label }}</span>
+                  <span class="nav-chevron" aria-hidden="true">▾</span>
+                </button>
+                <div class="nav-group-children" {% if not section_expanded %}hidden{% endif %}>
+                  {% for item in section.entries %}
+                    {% set item_active = request.endpoint == item.endpoint or (item.active_prefix and ep.startswith(item.active_prefix)) %}
+                    <a
+                      href="{{ url_for(item.endpoint) }}{% if item.anchor %}#{{ item.anchor }}{% endif %}"
+                      class="nav-link nav-link-child{% if item_active %} is-active{% endif %}"
+                      title="{{ item.label }}"
+                      {% if item_active %}aria-current="page"{% endif %}
+                    >
+                      <span class="nav-ico" aria-hidden="true">{{ item.icon }}</span>
+                      <span class="nav-link-label">{{ item.label }}</span>
+                      {% if item.badge %}
+                        <span class="nav-new">{{ item.badge }}</span>
+                      {% endif %}
+                    </a>
+                  {% endfor %}
+                </div>
+              </div>
+            {% else %}
+              <div class="nav-label">{{ section.label }}</div>
+              {% for item in section.entries %}
+                {% set item_active = request.endpoint == item.endpoint or (item.active_prefix and ep.startswith(item.active_prefix)) %}
+                <a
+                  href="{{ url_for(item.endpoint) }}{% if item.anchor %}#{{ item.anchor }}{% endif %}"
+                  class="nav-link{% if item_active %} is-active{% endif %}"
+                  title="{{ item.label }}"
+                  {% if item_active %}aria-current="page"{% endif %}
+                >
+                  <span class="nav-ico" aria-hidden="true">{{ item.icon }}</span>
+                  <span class="nav-link-label">{{ item.label }}</span>
+                  {% if item.badge %}
+                    <span class="nav-new">{{ item.badge }}</span>
+                  {% endif %}
+                </a>
+              {% endfor %}
+            {% endif %}
           {% endif %}
         {% endfor %}
       </nav>
@@ -54,7 +91,7 @@
         <div class="nav-label">Quick Actions</div>
         {% for action in quick_actions %}
           {% if action.available %}
-            <a class="action-link" href="{{ url_for(action.endpoint) }}">{{ action.label }}</a>
+            <a class="action-link" href="{{ url_for(action.endpoint) }}" title="{{ action.label }}">{{ action.label }}</a>
           {% else %}
             <span class="action-link is-disabled" title="{{ action.phase or 'Coming soon' }}">{{ action.label }}</span>
           {% endif %}
@@ -62,8 +99,19 @@
       </div>
 
       <div class="sidebar-footer">
-        <strong>Central Hub v{{ hub_version }}</strong>
-        <span>{{ workspace_labels[workspace] }} workspace</span>
+        <button type="button"
+                class="sidebar-collapse-btn"
+                id="sidebar-collapse-btn"
+                aria-controls="hub-sidebar"
+                aria-expanded="true"
+                title="Collapse sidebar">
+          <span class="sidebar-collapse-ico" aria-hidden="true">«</span>
+          <span class="sidebar-collapse-label">Collapse</span>
+        </button>
+        <div class="sidebar-footer-meta">
+          <strong>Central Hub v{{ hub_version }}</strong>
+          <span>{{ workspace_labels[workspace] }} workspace</span>
+        </div>
       </div>
     </aside>
 
@@ -197,6 +245,7 @@
   {% endif %}
 
   {% block scripts %}{% endblock %}
+  <script src="{{ url_for('static', filename='js/sidebar.js') }}?v=sidebar-compact-1"></script>
   {% if notepad and not skip_global_notepad|default(false) %}
   <script src="{{ url_for('static', filename='js/quick_notepad.js') }}?v=qn-rail-2"></script>
   {% endif %}

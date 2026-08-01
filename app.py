@@ -491,7 +491,7 @@ def create_app() -> Flask:
                 "active_prefix": "personal_calendar",
             },
         ]
-        work_nav = [
+        work_core_nav = [
             {
                 "endpoint": "work_dashboard",
                 "label": "Work Dashboard",
@@ -517,6 +517,40 @@ def create_app() -> Flask:
                 "active_prefix": "sql_workspace",
             },
             {
+                "endpoint": "jobs",
+                "label": "Jobs",
+                "icon": "▶",
+                "active_prefix": None,
+            },
+            {
+                "endpoint": "health",
+                "label": "Health",
+                "icon": "♡",
+                "active_prefix": None,
+            },
+        ]
+        dhis2_nav = [
+            {
+                "endpoint": "dhis2",
+                "label": "Overview",
+                "icon": "⬡",
+                "active_prefix": None,
+            },
+            {
+                "endpoint": "dhis2_reports_library",
+                "label": "DHIS2 Reports",
+                "icon": "▤",
+                "active_prefix": "dhis2_reports",
+            },
+            {
+                "endpoint": "dhis2_hcsc_indicators",
+                "label": "HCSC–RF",
+                "icon": "▣",
+                "active_prefix": "dhis2_hcsc",
+            },
+        ]
+        ai_nav = [
+            {
                 "endpoint": "work_okarun",
                 "label": "Okarun",
                 "icon": "AI",
@@ -533,37 +567,6 @@ def create_app() -> Flask:
                 "label": "Work Calendar",
                 "icon": "📅",
                 "active_prefix": "work_calendar",
-            },
-            {
-                "endpoint": "dhis2",
-                "label": "DHIS2",
-                "icon": "⬡",
-                "badge": None,
-                "active_prefix": "dhis2",
-            },
-            {
-                "endpoint": "dhis2_reports_library",
-                "label": "DHIS2 Reports",
-                "icon": "▤",
-                "active_prefix": "dhis2_reports",
-            },
-            {
-                "endpoint": "dhis2_hcsc_indicators",
-                "label": "HCSC–RF",
-                "icon": "▣",
-                "active_prefix": "dhis2_hcsc",
-            },
-            {
-                "endpoint": "jobs",
-                "label": "Jobs",
-                "icon": "▶",
-                "active_prefix": None,
-            },
-            {
-                "endpoint": "health",
-                "label": "Health",
-                "icon": "♡",
-                "active_prefix": None,
             },
         ]
         system_nav = [
@@ -592,19 +595,29 @@ def create_app() -> Flask:
                 "active_prefix": None,
             },
         ]
-        nav_sections = [
-            {
-                "id": "personal",
-                "label": "Personal",
-                "entries": personal_nav if workspace == "personal" else [],
-            },
-            {
-                "id": "work",
-                "label": "Work",
-                "entries": work_nav if workspace == "work" else [],
-            },
-            {"id": "system", "label": "System", "entries": system_nav},
-        ]
+        if workspace == "work":
+            nav_sections = [
+                {"id": "work", "label": "Work", "entries": work_core_nav},
+                {
+                    "id": "dhis2",
+                    "label": "DHIS2",
+                    "icon": "⬡",
+                    "expandable": True,
+                    "expand_prefix": "dhis2",
+                    "entries": dhis2_nav,
+                },
+                {"id": "ai", "label": "AI", "entries": ai_nav},
+                {"id": "system", "label": "System", "entries": system_nav},
+            ]
+        else:
+            nav_sections = [
+                {
+                    "id": "personal",
+                    "label": "Personal",
+                    "entries": personal_nav,
+                },
+                {"id": "system", "label": "System", "entries": system_nav},
+            ]
         nav_items = [item for section in nav_sections for item in section["entries"]]
 
         work_actions = [

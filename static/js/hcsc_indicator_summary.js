@@ -33,6 +33,7 @@
     activeCategory: "overview",
     lastRunAt: null,
     lastRunDurationMs: null,
+    lastRunOk: null,
     statusMode: "need_ou",
     generated: false,
   };
@@ -168,8 +169,8 @@
 
   function selectedDisaggLabel() {
     var sel = $("hcsc-disagg");
-    if (!sel || !sel.selectedOptions || !sel.selectedOptions[0]) return "All";
-    return sel.selectedOptions[0].textContent || "All";
+    if (!sel || !sel.selectedOptions || !sel.selectedOptions[0]) return "None";
+    return sel.selectedOptions[0].textContent || "None";
   }
 
   function selectedOuPath() {
@@ -184,6 +185,7 @@
 
   function updateStatusStrip(explicitMsg, mode) {
     var el = $("hcsc-status");
+    var badge = $("hcsc-status-badge");
     var pe = selectedPeriod();
     var ou = selectedOu();
     var resolved =
@@ -202,18 +204,42 @@
     var msg =
       explicitMsg ||
       (resolved === "loading"
+        ? "Loading report…"
+        : resolved === "error"
+          ? "Error"
+          : resolved === "ready"
+            ? "All required parameters are selected."
+            : "Select an organisation unit to continue");
+    var badgeText =
+      resolved === "loading"
         ? "Loading"
         : resolved === "error"
           ? "Error"
           : resolved === "ready"
             ? "Ready to generate"
-            : "Select an organisation unit to continue");
+            : "Awaiting selection";
     if (el) {
       el.textContent = msg;
       el.classList.toggle("is-error", resolved === "error");
       el.classList.toggle("is-loading", resolved === "loading");
       el.classList.toggle("is-ready", resolved === "ready");
     }
+    if (badge) {
+      badge.textContent = badgeText;
+      badge.className =
+        "hcsc-status-badge" +
+        (resolved === "ready"
+          ? " is-ready"
+          : resolved === "error"
+            ? " is-error"
+            : resolved === "loading"
+              ? " is-loading"
+              : "");
+    }
+    var readyMark = $("hcsc-ou-ready");
+    if (readyMark) readyMark.hidden = !ou;
+    var emptyOu = $("hcsc-ou-empty");
+    if (emptyOu) emptyOu.hidden = !!ou;
     var chips = $("hcsc-param-chips");
     if (chips) {
       var envRaw = (($("hcsc-env") && $("hcsc-env").value) || "stage").toLowerCase();
@@ -227,26 +253,31 @@
       var path = selectedOuPath() || "—";
       var disagg = selectedDisaggLabel();
       chips.innerHTML =
-        '<span class="hcsc-param-chip">' +
+        '<span class="hcsc-param-chip"><span class="hcsc-chip-k">Environment</span> ' +
         escapeHtml(envRaw === "live" ? "Live" : "Stage") +
         "</span>" +
-        '<span class="hcsc-param-chip">' +
+        '<span class="hcsc-param-chip"><span class="hcsc-chip-k">Quarter</span> ' +
         escapeHtml(peLabel) +
         "</span>" +
         '<span class="hcsc-param-chip" title="' +
         escapeHtml(path) +
-        '">' +
+        '"><span class="hcsc-chip-k">Organisation Unit</span> ' +
         escapeHtml(path) +
         "</span>" +
-        '<span class="hcsc-param-chip">' +
+        '<span class="hcsc-param-chip"><span class="hcsc-chip-k">Disaggregation</span> ' +
         escapeHtml(disagg) +
         "</span>";
     }
     var last = $("hcsc-last-run");
+    var runBadge = $("hcsc-run-badge");
     if (last) {
       if (!state.lastRunAt) {
         last.textContent = "No report generated yet";
         last.classList.add("muted");
+        if (runBadge) {
+          runBadge.hidden = true;
+          runBadge.textContent = "";
+        }
       } else {
         last.classList.remove("muted");
         last.textContent =
@@ -254,6 +285,12 @@
           (state.lastRunDurationMs != null
             ? " · " + formatDuration(state.lastRunDurationMs)
             : "");
+        if (runBadge) {
+          runBadge.hidden = false;
+          runBadge.textContent = state.lastRunOk === false ? "Error" : "Success";
+          runBadge.className =
+            "hcsc-run-badge" + (state.lastRunOk === false ? " is-error" : " is-success");
+        }
       }
     }
   }
@@ -435,9 +472,9 @@
         return (
           '<article class="hcsc-card ' +
           tones[i] +
-          ' hcsc-card-placeholder"><h3>' +
+          ' hcsc-card-placeholder is-skeleton"><h3>' +
           escapeHtml(title) +
-          '</h3><p class="hcsc-card-value muted">—</p><p class="muted">Awaiting report</p></article>'
+          '</h3><p class="hcsc-card-value hcsc-skel">&nbsp;</p><p class="hcsc-skel hcsc-skel-line">&nbsp;</p></article>'
         );
       }
       return (
@@ -1316,6 +1353,7 @@
       .then(function (data) {
         if (!data.ok) {
           state.statusMode = "error";
+          state.lastRunOk = false;
           setStatus(data.error || "Report failed", true);
           return;
         }
@@ -1330,6 +1368,7 @@
           (data.timings && data.timings.total_ms != null
             ? data.timings.total_ms
             : Date.now() - started);
+        state.lastRunOk = true;
         state.statusMode = "ready";
         renderCards(state.results);
         renderTable();
@@ -1352,6 +1391,7 @@
       })
       .catch(function () {
         state.statusMode = "error";
+        state.lastRunOk = false;
         setStatus("Report request failed.", true);
       });
   }
@@ -1420,12 +1460,12 @@
       return d && !d.disabled;
     });
     if (!opts.length) {
-      sel.innerHTML = '<option value="none">All</option>';
+      sel.innerHTML = '<option value="none">None</option>';
       return;
     }
     sel.innerHTML = opts
       .map(function (d) {
-        var label = d.id === "none" ? "All" : d.label || d.id;
+        var label = d.id === "none" ? "None" : d.label || d.id;
         return (
           '<option value="' +
           escapeHtml(d.id) +

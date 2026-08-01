@@ -737,7 +737,11 @@ class ParamUiContractTests(unittest.TestCase):
         js = (ROOT / "static" / "js" / "hcsc_indicator_summary.js").read_text(encoding="utf-8")
         picker = (ROOT / "static" / "js" / "dhis2_org_unit_picker.js").read_text(encoding="utf-8")
         css = (ROOT / "static" / "css" / "style.css").read_text(encoding="utf-8")
+        base = (ROOT / "templates" / "base.html").read_text(encoding="utf-8")
+        sidebar_js = (ROOT / "static" / "js" / "sidebar.js").read_text(encoding="utf-8")
         self.assertIn("hcsc-param-row", html)
+        self.assertIn("hcsc-filter-row-primary", html)
+        self.assertIn("hcsc-filter-row-secondary", html)
         self.assertIn("Generate Report", html)
         self.assertIn("dhis2_org_unit_picker.js", html)
         self.assertIn("hcsc-ou-region", html)
@@ -751,9 +755,12 @@ class ParamUiContractTests(unittest.TestCase):
         self.assertIn("hcsc-ou-refresh-meta", html)
         self.assertIn("Municipality/City", html)
         self.assertIn("hcsc-status-strip", html)
+        self.assertIn("hcsc-status-badge", html)
         self.assertIn("hcsc-category-nav", html)
         self.assertIn("Select an organisation unit to continue", html)
         self.assertIn("No report generated yet", html)
+        self.assertIn("is-skeleton", html)
+        self.assertIn("Clear Filters", js)
         self.assertNotIn("Filter quarters", html)
         self.assertNotIn('type="month"', html)
         self.assertNotIn("hcsc-pct-only", html)
@@ -779,12 +786,42 @@ class ParamUiContractTests(unittest.TestCase):
         self.assertIn("Region", picker)
         self.assertIn("Barangay", picker)
         self.assertIn("hcsc-param-row", css)
+        self.assertIn("hcsc-filter-row-primary", css)
         self.assertIn("hcsc-ou-levels", css)
         self.assertIn("hcsc-ou-search-results", css)
         self.assertIn("hcsc-status-strip", css)
+        self.assertIn("hcsc-status-badge", css)
+        self.assertIn("hcsc-skel", css)
         self.assertIn("hcsc-category-nav", css)
         self.assertIn("has-ad-dock", css)
         self.assertIn("is-wc-open", css)
+        # Compact permanent sidebar + collapse
+        self.assertIn("hub-sidebar", base)
+        self.assertIn("sidebar-collapse-btn", base)
+        self.assertIn("nav-group", base)
+        self.assertIn("data-nav-toggle", base)
+        self.assertIn("is-sidebar-collapsed", css)
+        self.assertIn("--sidebar-w: 216px", css)
+        self.assertIn("position: fixed", css)
+        self.assertIn("centralhub.sidebar.collapsed", sidebar_js)
+        self.assertIn("is-sidebar-collapsed", sidebar_js)
+
+
+class SidebarShellContractTests(unittest.TestCase):
+    def test_sidebar_collapse_and_dhis2_expand_markup(self):
+        base = (ROOT / "templates" / "base.html").read_text(encoding="utf-8")
+        css = (ROOT / "static" / "css" / "style.css").read_text(encoding="utf-8")
+        app_src = (ROOT / "app.py").read_text(encoding="utf-8")
+        self.assertIn('id="hub-sidebar"', base)
+        self.assertIn("sidebar-collapse-btn", base)
+        self.assertIn("nav-group-toggle", base)
+        self.assertIn("expandable", app_src)
+        self.assertIn('"expand_prefix": "dhis2"', app_src)
+        self.assertIn("is-sidebar-collapsed", css)
+        self.assertIn("--sidebar-collapsed-w", css)
+        self.assertIn("margin-left: var(--sidebar-w", css)
+        # Workspace Console tracks sidebar width (no overlap).
+        self.assertIn("left: var(--sidebar-w", css)
 
 
 class OrgUnitApiReuseTests(unittest.TestCase):
@@ -1399,12 +1436,11 @@ class UiContractTests(unittest.TestCase):
         # Tools grid + Work sidebar — same endpoint, no duplicate route registration.
         self.assertEqual(app_src.count('"endpoint": "dhis2_hcsc_indicators"'), 2)
         self.assertIn('"label": "HCSC–RF"', app_src)
-        # Sidebar entry is immediately after DHIS2 Reports in work_nav.
+        # DHIS2 Reports precedes HCSC–RF inside the expandable DHIS2 group.
         reports_idx = app_src.index('"label": "DHIS2 Reports"')
         hcsc_nav_idx = app_src.index('"label": "HCSC–RF"', reports_idx)
-        jobs_idx = app_src.index('"label": "Jobs"', hcsc_nav_idx)
         self.assertLess(reports_idx, hcsc_nav_idx)
-        self.assertLess(hcsc_nav_idx, jobs_idx)
+        self.assertIn('"expand_prefix": "dhis2"', app_src)
         self.assertNotIn("HCSC Indicators", app_src)
         service = (ROOT / "hub" / "hcsc_indicators" / "service.py").read_text(encoding="utf-8")
         self.assertIn("no_formula_engine", service)
@@ -1433,7 +1469,10 @@ class RouteSmokeTests(unittest.TestCase):
         boot_json = boot.get_json()
         self.assertEqual(boot_json.get("phase"), "0-3")
         self.assertEqual(boot_json.get("page_title"), "Central Hub HCSC–RF")
-        self.assertEqual(boot_json.get("page_subtitle"), "Indicators, Sources, and Validation")
+        self.assertEqual(boot_json.get("page_subtitle"), (
+            "Indicators, Sources, and Validation — "
+            "Household Convergence Scorecard and Results Framework."
+        ))
         self.assertEqual(boot_json.get("nav_label"), "HCSC–RF")
         self.assertEqual(len(boot_json.get("unresolved_classifications") or []), 5)
         reg = self.client.get("/api/dhis2/hcsc-indicators/registry")
@@ -1484,8 +1523,13 @@ class RouteSmokeTests(unittest.TestCase):
         self.assertIn('href="/dhis2/hcsc-indicators"', page_html)
         self.assertRegex(
             page_html,
-            r'href="/dhis2/hcsc-indicators"\s+class="nav-link is-active"',
+            r'href="/dhis2/hcsc-indicators"[^>]*class="nav-link[^"]*is-active"',
         )
+        self.assertIn("nav-group is-expanded", page_html)
+        self.assertIn("sidebar-collapse-btn", page_html)
+        self.assertIn("is-skeleton", page_html)
+        self.assertIn("hcsc-filter-row-primary", page_html)
+        self.assertIn("hcsc-status-badge", page_html)
         # Page still renders shell even when analytics would fail (bootstrap present).
         self.assertIn("hcsc-bootstrap", page_html)
         self.assertIn("Central Hub HCSC", page_html)

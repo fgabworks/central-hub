@@ -4,14 +4,14 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**HCSC–RF OU SQLite cache + quarter cap (2026-07-30)**
+**HCSC–RF preview UI + compact sidebar (2026-07-30)**
 
-Reporting cycle capped to **2025Q3–2026Q4** (config-driven; invalid remembered quarters reset).
-Organisation units served cache-first from env-isolated SQLite (`data/dhis2_org_units.db`) with
-background DHIS2 refresh, manual **Refresh Organisation Units**, Stage/Live isolation, and Stage
-maintenance messaging. Cascade/search/UID/APIs/registry/read-only unchanged.
+Matched the attached HCSC–RF preview: compact filter card (two rows), status strip badges,
+skeleton overview cards, category + technical tabs, toolbar/table/empty states. Left sidebar is
+fixed (~216px), collapsible icon-only with remembered state, expandable DHIS2 group (expanded when
+HCSC–RF is active). OU SQLite cache + 2025Q3–2026Q4 quarters unchanged; no API/registry rebuild.
 
-Prior: **HCSC–RF preview UI refinement** + OU cascade + Stage maintenance handling.
+Prior: **HCSC–RF OU SQLite cache + quarter cap**.
 
 ### Prior milestone
 

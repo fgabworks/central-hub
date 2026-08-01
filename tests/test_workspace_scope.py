@@ -123,6 +123,8 @@ class WorkspaceNavRouteTests(unittest.TestCase):
         self.assertIn("HCSC–RF", work_html)
         self.assertIn("/dhis2/hcsc-indicators", work_html)
         self.assertLess(work_html.index("DHIS2 Reports"), work_html.index("HCSC–RF"))
+        self.assertIn("nav-group", work_html)
+        self.assertIn("sidebar-collapse-btn", work_html)
         self.assertIn(">System<", work_html)
         self.assertIn("Audit", work_html)
         self.assertNotIn("Personal Notebook", work_html)
