@@ -4635,7 +4635,8 @@ body.qn-maximized .qn-history[open] {
   position: fixed;
   top: 0;
   right: var(--activity-rail-w, 48px);
-  bottom: var(--wc-open-inset, 0px);
+  /* Full viewport height ? console stays under main content only and must not compress Okarun/Aira. */
+  bottom: 0;
   width: var(--ad-width, 400px);
   z-index: 69;
   box-shadow: -6px 0 20px rgba(0, 0, 0, 0.28);

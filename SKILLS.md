@@ -51,9 +51,9 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 | UID conflict resolve | Conflicts skipped by default; no per-UID take/keep form yet |
 | Enrichment raw metadata | Not bulk-stored; live GET only when detail `?tab=raw&raw=1` |
 | SQL Workspace | Implemented — SELECT/WITH/EXPLAIN only; Live warning; never auto-run |
-| AI Assistant Center | Implemented — isolated Aira/Okarun profiles; persistent dock; Codex CLI real provider (Okarun, read-only `codex exec --json`); provider switching; Find/Ask/Plan/Review; context preview; streaming/cancel/retry/history; scoped read-only tools; no write/execution; no voice |
-| Workspace Console | Implemented — bottom VS Code-style panel (Problems/Output/Debug/Terminal/Ports); resize/minimize/maximize; per-workspace prefs; lazy loads; pauses when hidden; controlled terminal + verified process stops; coexists with right AI dock |
-| Activity Rail / VS Code shell | Implemented — far-right activity rail; AI dock via topbar (no Okarun vertical rail); Assistant Center history layout; notepad from rail |
+| AI Assistant Center | Implemented — isolated Aira/Okarun profiles; full-height persistent dock + fixed composer; Codex CLI real provider (Okarun, read-only `codex exec --json`); provider switching; Find/Ask/Plan/Review; context preview; streaming/cancel/retry/history; scoped read-only tools; no write/execution; no voice |
+| Workspace Console | Implemented — bottom VS Code-style panel under main content (Problems/Output/Debug/Terminal/Ports); collapsed by default; resize/minimize/maximize; per-workspace prefs; lazy loads; pauses when hidden; controlled terminal; does not compress the AI dock |
+| Activity Rail / VS Code shell | Implemented — far-right activity rail; AI dock via topbar; Assistant Center history layout; notepad from rail (no floating pill); compact dashboard summary tiles |
 | Email Center | Implemented — `gmail.readonly` only; encrypted tokens; no send/modify/mark-read; opt-in assistant metadata search forced to active workspace |
 | Calendar Center | Implemented — FullCalendar grid + agenda/upcoming; readonly; sanitized descriptions; no create/RSVP/drag; opt-in assistant lookup forced to active workspace |
 | Repository Notebook | Manual notes with `personal`\|`work` scope + separate Quick Notepads; profile-scoped assistant lookup is read-only |

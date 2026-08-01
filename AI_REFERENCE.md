@@ -37,8 +37,8 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Calendar Center | Shared Calendar service + FullCalendar grid (month/week/day) + agenda/upcoming |
 | Google Connections | System page to connect/assign/enable Gmail+Calendar scopes |
 | SQL Workspace | Read-only query library/runner (`/sql`); sqlglot allowlist; Live warning |
-| AI Assistant Center | Aira at `/personal/aira`; Okarun at `/work/okarun` (history/management); persistent right dock via topbar + activity rail (`hub/agent_center/dock.py`); Find/Ask/Plan/Review; Codex CLI (Okarun MVP), Claude Code, Cursor, Grok, OpenAI |
-| Workspace Console | Bottom panel (`hub/workspace_console/`); Problems/Output/Debug/Terminal/Ports; Ctrl+J; coexists with right AI dock + activity rail |
+| AI Assistant Center | Aira at `/personal/aira`; Okarun at `/work/okarun` (history/management); full-height right dock + fixed composer via topbar + activity rail (`hub/agent_center/dock.py`); Find/Ask/Plan/Review; Codex CLI (Okarun MVP), Claude Code, Cursor, Grok, OpenAI |
+| Workspace Console | Bottom panel under main content only (`hub/workspace_console/`); Problems/Output/Debug/Terminal/Ports; Ctrl+J; collapsed by default; does not compress the AI dock |
 | Activity Rail | Far-right icons for AI Assistant, Quick Notepad, Workspace Console (future utilities placeholders) |
 | AI Connections | `/system/ai-connections`; Installed/Authenticated/Version/Last Checked + connect/test/capabilities/disconnect; Codex never stores tokens |
 | DHIS2 | GET client, discovery, UID mapping, preview builder |
@@ -95,7 +95,7 @@ Notebook content; selected lookup tools search the active profile scope.
 
 | Route | Purpose |
 |---|---|
-| Persistent dock | Aira/Okarun panel on all pages except full Assistant Center; prefs `/api/assistant-dock/prefs`; lazy agents |
+| Persistent dock | Aira/Okarun full-height panel on all pages; prefs `/api/assistant-dock/prefs`; lazy agents; composer fixed at bottom |
 | `/personal/aira` | Personal UI; no repository/SQL/DHIS2/jobs/logs/Audit access |
 | `/work/okarun` | Work UI; selected repositories and Work read-only services |
 | `/api/assistants/<profile>/agents` | Profile-bound adapter availability |
@@ -236,6 +236,10 @@ No LP apply/write proxies. No import of LP Python packages for business logic.
 
 ## Next
 
+**Assistant / IDE phase is checkpointed** (full-height dock, collapsed console, rail notepad,
+compact tiles, persistence, focused QA). See [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
+
+Next development target: **DHIS2 Standard Reports** (credentialed HTML viewer / library polish).
 DHIS2 Standard Report Manager Phase 2+ (replacement / design write-back) is **not** started.
 Optional: more GET-only LP capabilities via YAML; enrichment Phase A completeness.
 Repository Workspace Phase 3+ (commit/push/pull UI, agent-driven edits) stays deferred.

@@ -269,7 +269,7 @@ class DockRouteTests(unittest.TestCase):
         self.assertIn('id="ad-close"', html)
         self.assertIn('id="ad-cancel"', html)
         self.assertIn('id="ad-retry"', html)
-        self.assertIn('class="ad-composer-selects"', html)
+        self.assertIn("ad-composer-selects", html)
         self.assertIn('id="ad-agent"', html)
         self.assertIn('id="ad-model"', html)
         # Composer follows the scroll body in markup (footer after body).
@@ -283,7 +283,15 @@ class DockRouteTests(unittest.TestCase):
 
         css = (ROOT / "static" / "css" / "style.css").read_text(encoding="utf-8")
         self.assertIn(".ad-host {", css)
-        self.assertIn("bottom: var(--wc-open-inset, 0px)", css)
+        # Full-height dock: bottom anchors to viewport, not console inset.
+        self.assertRegex(
+            css,
+            r"\.ad-host\s*\{[^}]*bottom:\s*0",
+        )
+        self.assertNotRegex(
+            css,
+            r"\.ad-host\s*\{[^}]*bottom:\s*var\(--wc-open-inset",
+        )
         self.assertRegex(css, r"\.ad-panel\s*\{[^}]*flex:\s*1\s+1\s+auto")
         self.assertRegex(css, r"\.ad-panel\s*\{[^}]*height:\s*100%")
         self.assertRegex(css, r"\.ad-body\s*\{[^}]*flex:\s*1\s+1\s+auto")
@@ -293,7 +301,11 @@ class DockRouteTests(unittest.TestCase):
         self.assertIn("grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)", css)
         self.assertIn("text-overflow: ellipsis", css)
         self.assertIn("max-width: none", css)
-
+        # Console sits under main content only (left of dock when open).
+        self.assertIn(
+            "right: calc(var(--activity-rail-w, 48px) + var(--ad-width, 400px))",
+            css,
+        )
         js = (ROOT / "static" / "js" / "assistant_dock.js").read_text(encoding="utf-8")
         self.assertIn("function setRunControls", js)
         self.assertIn("cancelActiveRun", js)

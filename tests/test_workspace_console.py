@@ -55,9 +55,14 @@ class ConsolePrefsTests(unittest.TestCase):
         payload = console_shell_bootstrap(self.db, workspace="work")
         self.assertIn("prefs", payload)
         self.assertIn("tabs", payload)
+        # Collapsed by default until the user opens it (Ctrl+J / rail).
+        self.assertFalse(payload["prefs"]["open"])
+        self.assertFalse(payload["prefs"]["minimized"])
+        self.assertEqual(payload["prefs"]["tab"], "problems")
         self.assertNotIn("ports", payload)
         self.assertNotIn("problems", payload)
         self.assertFalse(payload["safety"]["free_shell"])
+        self.assertTrue(payload["safety"]["controlled_terminal"])
 
 
 class ConsoleServiceTests(unittest.TestCase):
