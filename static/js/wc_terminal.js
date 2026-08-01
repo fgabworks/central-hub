@@ -10,6 +10,13 @@
     insert: "/api/workspace-console/terminal/insert",
   };
 
+  var SHELL_LABELS = {
+    powershell: "PowerShell",
+    cmd: "CMD",
+    bash: "bash",
+    sh: "sh",
+  };
+
   var state = {
     sessions: [],
     activeId: "",
@@ -20,6 +27,7 @@
     pendingInsert: null,
     hiddenActivity: 0,
     renderingPaused: false,
+    initialized: false,
   };
 
   function $(id) {
@@ -101,8 +109,6 @@
     term.attachCustomKeyEventHandler(function () {
       return true;
     });
-    // Multiline paste warning
-    term.onData; // keep
     var origPaste = term.paste ? term.paste.bind(term) : null;
     if (origPaste) {
       term.paste = function (data) {
@@ -178,6 +184,7 @@
             fitView(view);
           } else if (msg.type === "exit") {
             view.term.writeln("\r\n\x1b[33m[process exited " + (msg.exit_code == null ? "" : msg.exit_code) + "]\x1b[0m");
+            refreshSessions();
           } else if (msg.type === "error") {
             view.term.writeln("\r\n\x1b[31m" + (msg.error || "error") + "\x1b[0m");
           }
@@ -231,6 +238,48 @@
     }
   }
 
+  function shellLabel(shell) {
+    return SHELL_LABELS[shell] || shell || "Terminal";
+  }
+
+  function tabLabel(s) {
+    if (s.name && String(s.name).indexOf(" — ") >= 0) return s.name;
+    return shellLabel(s.shell) + " — " + (s.repository_name || s.repository_id || "repo");
+  }
+
+  function updateEmptyState() {
+    var empty = $("wc-term-empty");
+    var stage = $("wc-term-stage");
+    var has = state.sessions.length > 0 && !!state.activeId;
+    if (empty) empty.hidden = has;
+    if (stage) stage.hidden = !has;
+  }
+
+  function updateActionButtons() {
+    var has = !!state.activeId;
+    var active = state.sessions.find(function (s) {
+      return s.id === state.activeId;
+    });
+    var running = !!(active && (active.alive || active.status === "running" || active.has_active_process));
+    var split = $("wc-term-split");
+    var restart = $("wc-term-restart");
+    var kill = $("wc-term-kill");
+    if (split) split.disabled = !has;
+    if (restart) restart.disabled = !has;
+    if (kill) {
+      kill.disabled = !has;
+      kill.classList.toggle("btn-danger", true);
+      kill.title = running
+        ? "Kill session and terminate its process tree"
+        : "Close terminal session";
+    }
+    var dot = $("wc-term-repo-dot");
+    if (dot) {
+      dot.classList.toggle("is-ready", has && running);
+      dot.classList.toggle("is-empty", !has);
+    }
+  }
+
   function renderSessionTabs() {
     var host = $("wc-term-session-tabs");
     if (!host) return;
@@ -240,15 +289,25 @@
       btn.type = "button";
       btn.className = "wc-term-tab" + (s.id === state.activeId ? " is-active" : "");
       btn.setAttribute("data-session-id", s.id);
-      btn.title = (s.repository_name || s.repository_id) + " · " + s.shell + " · PID " + (s.pid || "—");
+      btn.setAttribute("role", "tab");
+      btn.setAttribute("aria-selected", s.id === state.activeId ? "true" : "false");
+      btn.title =
+        tabLabel(s) +
+        " · " +
+        (s.cwd || "") +
+        " · PID " +
+        (s.pid || "—") +
+        " · " +
+        (s.environment || "development");
+      var alive = s.alive || s.status === "running";
       btn.innerHTML =
         '<span class="wc-term-tab-label">' +
-        escapeHtml(s.name || s.id) +
+        escapeHtml(tabLabel(s)) +
         "</span>" +
-        (s.alive ? '<span class="wc-term-dot" title="running"></span>' : "") +
+        (alive ? '<span class="wc-term-dot" title="running" aria-hidden="true"></span>' : "") +
         '<span class="wc-term-tab-close" data-close="' +
         s.id +
-        '" title="Close">×</span>';
+        '" title="Close" role="button">×</span>';
       btn.addEventListener("click", function (ev) {
         var closeId = ev.target && ev.target.getAttribute && ev.target.getAttribute("data-close");
         if (closeId) {
@@ -259,7 +318,7 @@
         selectSession(s.id);
       });
       btn.addEventListener("dblclick", function () {
-        var next = window.prompt("Rename terminal", s.name || "");
+        var next = window.prompt("Rename terminal", s.name || tabLabel(s));
         if (next == null) return;
         jsonFetch(API.sessions + "/" + s.id, {
           method: "PATCH",
@@ -268,7 +327,8 @@
       });
       host.appendChild(btn);
     });
-    updateMeta();
+    updateEmptyState();
+    updateActionButtons();
     updateBadges();
   }
 
@@ -279,42 +339,30 @@
       .replace(/>/g, "&gt;");
   }
 
-  function updateMeta() {
-    var el = $("wc-term-meta");
-    if (!el) return;
-    var s = state.sessions.find(function (x) {
-      return x.id === state.activeId;
-    });
-    if (!s) {
-      el.textContent = "No session";
-      return;
-    }
-    el.textContent =
-      (s.repository_name || s.repository_id) +
-      " · " +
-      s.cwd +
-      " · " +
-      s.shell +
-      " · PID " +
-      (s.pid || "—") +
-      " · " +
-      (s.environment || "development") +
-      " · " +
-      s.status;
-  }
-
   function selectSession(id) {
-    state.activeId = id;
+    state.activeId = id || "";
     state.hiddenActivity = 0;
     renderSessionTabs();
+    if (!id) {
+      disconnectView(state.views.a);
+      updateEmptyState();
+      updateActionButtons();
+      notifySessionChange("");
+      return;
+    }
     var view = state.views.a;
     attachSession(view, id).then(function () {
       if (state.splitEnabled && state.splitId) {
         attachSession(state.views.b, state.splitId);
       }
+      fitView(view);
     });
+    notifySessionChange(id);
+  }
+
+  function notifySessionChange(id) {
     if (global.WCTerminal && global.WCTerminal.onSessionChange) {
-      global.WCTerminal.onSessionChange(id);
+      global.WCTerminal.onSessionChange(id, { split: state.splitEnabled });
     }
   }
 
@@ -326,7 +374,17 @@
         state.activeId = state.sessions[0] ? state.sessions[0].id : "";
       }
       renderSessionTabs();
-      if (state.activeId) attachSession(state.views.a, state.activeId);
+      if (state.activeId) {
+        attachSession(state.views.a, state.activeId);
+        if (state.splitEnabled && state.splitId) {
+          attachSession(state.views.b, state.splitId);
+        }
+      } else {
+        disconnectView(state.views.a);
+        disconnectView(state.views.b);
+      }
+      updateEmptyState();
+      updateActionButtons();
       return state.sessions;
     });
   }
@@ -337,13 +395,23 @@
     var shellSel = $("wc-term-shell");
     var profileSel = $("wc-term-profile");
     if (!repoSel || !shellSel) return;
+    var prevRepo = repoSel.value;
+    var prevShell = shellSel.value;
     repoSel.innerHTML = "";
     (catalog.repositories || []).forEach(function (r) {
       var opt = document.createElement("option");
       opt.value = r.id;
-      opt.textContent = r.name + " (" + r.id + ")";
+      opt.textContent = r.name || r.id;
+      opt.title = (r.name || r.id) + (r.path ? " — " + r.path : "");
       repoSel.appendChild(opt);
     });
+    if (!repoSel.options.length) {
+      var empty = document.createElement("option");
+      empty.value = "";
+      empty.textContent = "No local repositories";
+      repoSel.appendChild(empty);
+    }
+    if (prevRepo) repoSel.value = prevRepo;
     shellSel.innerHTML = "";
     var shells = catalog.shells || [{ id: "powershell", label: "PowerShell" }];
     shells.forEach(function (sh) {
@@ -352,6 +420,7 @@
       opt.textContent = sh.label || sh.id;
       shellSel.appendChild(opt);
     });
+    if (prevShell) shellSel.value = prevShell;
     function fillProfiles() {
       if (!profileSel) return;
       profileSel.innerHTML = "";
@@ -364,9 +433,16 @@
         opt.textContent = p.label || p.id;
         profileSel.appendChild(opt);
       });
+      if (!profileSel.options.length) {
+        var none = document.createElement("option");
+        none.value = "";
+        none.textContent = "No approved profiles";
+        profileSel.appendChild(none);
+      }
     }
     repoSel.onchange = fillProfiles;
     fillProfiles();
+    updateActionButtons();
   }
 
   function newTerminal() {
@@ -389,7 +465,9 @@
         return;
       }
       state.activeId = body.session.id;
-      refreshSessions();
+      refreshSessions().then(function () {
+        selectSession(state.activeId);
+      });
     });
   }
 
@@ -397,7 +475,7 @@
     var s = state.sessions.find(function (x) {
       return x.id === id;
     });
-    if (s && (s.alive || s.status === "running")) {
+    if (s && (s.alive || s.status === "running" || s.has_active_process)) {
       if (!window.confirm("Close terminal and terminate its process tree?")) return;
     }
     jsonFetch(API.sessions + "/" + id + "?confirm=1", {
@@ -405,14 +483,27 @@
       body: JSON.stringify({ confirm: true }),
     }).then(function () {
       if (state.activeId === id) state.activeId = "";
-      if (state.splitId === id) state.splitId = "";
+      if (state.splitId === id) {
+        state.splitId = "";
+        state.splitEnabled = false;
+        var stage = $("wc-term-stage");
+        var viewB = $("wc-term-view-b");
+        if (stage) stage.setAttribute("data-split", "0");
+        if (viewB) viewB.hidden = true;
+        disconnectView(state.views.b);
+      }
       refreshSessions();
     });
   }
 
   function restartActive() {
     if (!state.activeId) return;
-    if (!window.confirm("Restart terminal and terminate the current process tree?")) return;
+    var s = state.sessions.find(function (x) {
+      return x.id === state.activeId;
+    });
+    if (s && (s.alive || s.status === "running" || s.has_active_process)) {
+      if (!window.confirm("Restart terminal and terminate the current process tree?")) return;
+    }
     jsonFetch(API.sessions + "/" + state.activeId + "/restart", {
       method: "POST",
       body: JSON.stringify({ confirm: true }),
@@ -424,10 +515,28 @@
 
   function killActive() {
     if (!state.activeId) return;
-    closeSession(state.activeId);
+    var s = state.sessions.find(function (x) {
+      return x.id === state.activeId;
+    });
+    var running = !!(s && (s.alive || s.status === "running" || s.has_active_process));
+    if (running) {
+      if (!window.confirm("Kill this terminal and terminate its process tree?\n\nThis cannot be undone.")) {
+        return;
+      }
+    }
+    jsonFetch(API.sessions + "/" + state.activeId + "?confirm=1", {
+      method: "DELETE",
+      body: JSON.stringify({ confirm: true }),
+    }).then(function () {
+      var id = state.activeId;
+      state.activeId = "";
+      if (state.splitId === id) state.splitId = "";
+      refreshSessions();
+    });
   }
 
   function toggleSplit() {
+    if (!state.activeId) return;
     state.splitEnabled = !state.splitEnabled;
     var stage = $("wc-term-stage");
     var viewB = $("wc-term-view-b");
@@ -435,8 +544,6 @@
     if (viewB) viewB.hidden = !state.splitEnabled;
     if (state.splitEnabled) {
       if (!state.splitId) {
-        // Duplicate active into split
-        if (!state.activeId) return;
         jsonFetch(API.sessions + "/" + state.activeId + "/duplicate", { method: "POST", body: "{}" }).then(
           function (body) {
             if (body.ok) {
@@ -455,9 +562,7 @@
     } else {
       disconnectView(state.views.b);
     }
-    if (global.WCTerminal && global.WCTerminal.onSessionChange) {
-      global.WCTerminal.onSessionChange(state.activeId, { split: state.splitEnabled });
-    }
+    notifySessionChange(state.activeId);
   }
 
   /**
@@ -473,7 +578,6 @@
       }
       return false;
     }
-    // Strip final newlines so Enter is never auto-sent.
     while (cleaned.endsWith("\n") || cleaned.endsWith("\r")) {
       cleaned = cleaned.slice(0, -1);
     }
@@ -499,6 +603,21 @@
     }
   }
 
+  function wireButtons() {
+    var btnNew = $("wc-term-new");
+    var btnAdd = $("wc-term-add");
+    var btnEmpty = $("wc-term-empty-new");
+    var btnSplit = $("wc-term-split");
+    var btnRestart = $("wc-term-restart");
+    var btnKill = $("wc-term-kill");
+    if (btnNew) btnNew.onclick = newTerminal;
+    if (btnAdd) btnAdd.onclick = newTerminal;
+    if (btnEmpty) btnEmpty.onclick = newTerminal;
+    if (btnSplit) btnSplit.onclick = toggleSplit;
+    if (btnRestart) btnRestart.onclick = restartActive;
+    if (btnKill) btnKill.onclick = killActive;
+  }
+
   function init(opts) {
     opts = opts || {};
     if (opts.activeId) state.activeId = opts.activeId;
@@ -508,22 +627,20 @@
       var b = $("wc-xterm-b");
       if (a && !state.views.a) state.views.a = createView("a", a);
       if (b && !state.views.b) state.views.b = createView("b", b);
-      var btnNew = $("wc-term-new");
-      var btnSplit = $("wc-term-split");
-      var btnRestart = $("wc-term-restart");
-      var btnKill = $("wc-term-kill");
-      if (btnNew) btnNew.onclick = newTerminal;
-      if (btnSplit) btnSplit.onclick = toggleSplit;
-      if (btnRestart) btnRestart.onclick = restartActive;
-      if (btnKill) btnKill.onclick = killActive;
-      window.addEventListener("resize", function () {
-        fitView(state.views.a);
-        if (state.splitEnabled) fitView(state.views.b);
-      });
+      if (!state.initialized) {
+        wireButtons();
+        window.addEventListener("resize", function () {
+          fitView(state.views.a);
+          if (state.splitEnabled) fitView(state.views.b);
+        });
+        state.initialized = true;
+      }
       var stage = $("wc-term-stage");
       var viewB = $("wc-term-view-b");
       if (stage) stage.setAttribute("data-split", state.splitEnabled ? "1" : "0");
       if (viewB) viewB.hidden = !state.splitEnabled;
+      updateEmptyState();
+      updateActionButtons();
       return refreshSessions();
     });
   }

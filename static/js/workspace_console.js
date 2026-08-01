@@ -366,12 +366,17 @@
               .map(function (row) {
                 var state = row.managed_by_hub ? "managed" : "external";
                 if (row.terminal_owned) state += " · terminal";
-                var termCell = row.terminal_session_id
-                  ? escapeHtml(String(row.terminal_session_id).slice(0, 8))
-                  : "—";
+                var termCell = row.terminal_name
+                  ? escapeHtml(row.terminal_name)
+                  : row.terminal_session_id
+                    ? escapeHtml(String(row.terminal_session_id).slice(0, 8))
+                    : "—";
                 var actions = "";
                 if (row.open_url) {
-                  actions += '<a class="btn btn-sm" href="' + escapeAttr(row.open_url) + '" target="_blank" rel="noopener">Open URL</a> ';
+                  actions +=
+                    '<a class="btn btn-sm wc-control-btn" href="' +
+                    escapeAttr(row.open_url) +
+                    '" target="_blank" rel="noopener">Open URL</a> ';
                 }
                 if (row.run_id) {
                   actions +=

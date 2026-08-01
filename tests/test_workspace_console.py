@@ -114,6 +114,28 @@ class ConsoleServiceTests(unittest.TestCase):
         self.assertFalse(catalog["free_shell"])
         self.assertTrue(catalog.get("interactive_pty"))
 
+    def test_terminal_catalog_hides_cmd_unless_allowed(self):
+        import os
+        from unittest import mock
+
+        class Registry:
+            def enabled_repositories(self):
+                return []
+
+        svc = WorkspaceConsoleService(registry=Registry(), repo_workspace=object())
+        with mock.patch.dict(os.environ, {"WC_TERMINAL_ALLOW_CMD": "false"}, clear=False):
+            catalog = svc.terminal_catalog()
+        if os.name == "nt":
+            ids = [s["id"] for s in catalog["shells"]]
+            self.assertIn("powershell", ids)
+            self.assertNotIn("cmd", ids)
+            self.assertFalse(catalog.get("allow_cmd"))
+        with mock.patch.dict(os.environ, {"WC_TERMINAL_ALLOW_CMD": "true"}, clear=False):
+            catalog_on = svc.terminal_catalog()
+        if os.name == "nt":
+            self.assertIn("cmd", [s["id"] for s in catalog_on["shells"]])
+            self.assertTrue(catalog_on.get("allow_cmd"))
+
     def test_ports_reuses_summarize_and_marks_ownership(self):
         class Registry:
             repositories = []
@@ -161,6 +183,8 @@ class ConsoleRouteTests(unittest.TestCase):
         self.assertIn("Terminal", html)
         self.assertIn("Ports", html)
         self.assertIn("Ctrl+J", html)
+        self.assertIn("wc-header-title-row", html)
+        self.assertIn("wc-header-tabs-row", html)
         self.assertIn('id="ar-console"', html)
         self.assertIn("activity-rail", html)
         css = (ROOT / "static" / "css" / "style.css").read_text(encoding="utf-8")
@@ -185,6 +209,23 @@ class ConsoleRouteTests(unittest.TestCase):
         self.assertTrue(get["prefs"]["open"])
         self.assertEqual(get["prefs"]["height"], 360)
         self.assertEqual(get["prefs"]["tab"], "ports")
+
+    def test_prefs_persist_terminal_session_and_split(self):
+        put = self.client.put(
+            "/api/workspace-console/prefs",
+            json={
+                "open": True,
+                "height": 300,
+                "tab": "terminal",
+                "terminal_session_id": "abc123",
+                "terminal_split": True,
+            },
+        )
+        self.assertEqual(put.status_code, 200)
+        get = self.client.get("/api/workspace-console/prefs").get_json()
+        self.assertEqual(get["prefs"]["tab"], "terminal")
+        self.assertEqual(get["prefs"]["terminal_session_id"], "abc123")
+        self.assertTrue(get["prefs"]["terminal_split"])
 
     def test_bootstrap_does_not_scan_ports(self):
         with mock.patch.object(

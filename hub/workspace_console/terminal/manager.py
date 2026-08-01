@@ -194,15 +194,26 @@ class TerminalSessionManager:
         cols_i = int(cols or self.settings.default_cols)
         rows_i = int(rows or self.settings.default_rows)
         session_id = uuid.uuid4().hex[:12]
-        label = (name or "").strip() or f"{getattr(repo, 'name', repository_id)} · {shell_id}"
-        if duplicate_of:
+        repo_name = getattr(repo, "name", repository_id) or repository_id
+        label = (name or "").strip() or self._default_session_name(
+            shell_id=shell_id,
+            repository_id=repository_id,
+            repository_name=repo_name,
+        )
+        if duplicate_of and (name or "").strip():
             label = f"{label} (copy)"
+        elif duplicate_of and not (name or "").strip():
+            label = self._default_session_name(
+                shell_id=shell_id,
+                repository_id=repository_id,
+                repository_name=repo_name,
+            )
 
         sess = TerminalSession(
             id=session_id,
             name=label[:80],
             repository_id=repository_id,
-            repository_name=getattr(repo, "name", repository_id),
+            repository_name=repo_name,
             cwd=str(cwd),
             shell=shell_id,
             env_label=env_label or "development",
@@ -269,13 +280,13 @@ class TerminalSessionManager:
         return self.create(
             repository_id=sess.repository_id,
             shell=sess.shell,
-            name=sess.name,
+            name=None,
             workspace=sess.workspace,
             actor=actor,
             cols=sess.cols,
             rows=sess.rows,
             env_label=sess.env_label,
-            split_group=sess.split_group,
+            split_group=sess.split_group or sess.id,
             duplicate_of=session_id,
         )
 
@@ -391,9 +402,11 @@ class TerminalSessionManager:
         Full tree walk is best-effort: we match exact PID or note repository_id overlap.
         """
         by_pid = self.sessions_by_pid()
+        by_id: dict[str, TerminalSession] = {}
         by_repo: dict[str, list[str]] = {}
         with self._lock:
             for sess in self._sessions.values():
+                by_id[sess.id] = sess
                 if sess.status == "running":
                     by_repo.setdefault(sess.repository_id, []).append(sess.id)
         for row in ports:
@@ -402,14 +415,44 @@ class TerminalSessionManager:
             if sid:
                 row["terminal_session_id"] = sid
                 row["terminal_owned"] = True
+                sess = by_id.get(sid)
+                if sess:
+                    row["terminal_name"] = sess.name
+                    row["terminal_shell"] = sess.shell
+                    row["terminal_pid"] = sess.pid
             else:
                 repo_id = row.get("repository_id") or ""
                 candidates = by_repo.get(repo_id) or []
                 if candidates and row.get("managed_by_hub") is False:
                     # Soft association for long-running servers started from a repo terminal.
                     row["terminal_session_candidates"] = candidates
+                    names = [by_id[c].name for c in candidates if c in by_id]
+                    if names:
+                        row["terminal_name"] = names[0]
                 row.setdefault("terminal_owned", False)
         return ports
+
+    def _default_session_name(
+        self,
+        *,
+        shell_id: str,
+        repository_id: str,
+        repository_name: str,
+    ) -> str:
+        labels = {
+            "powershell": "PowerShell",
+            "cmd": "CMD",
+            "bash": "bash",
+            "sh": "sh",
+        }
+        shell_label = labels.get(shell_id, shell_id or "Terminal")
+        with self._lock:
+            n = 1 + sum(
+                1
+                for s in self._sessions.values()
+                if s.repository_id == repository_id and s.shell == shell_id
+            )
+        return f"{shell_label} {n} — {repository_name}"
 
     def shutdown_all(self) -> None:
         with self._lock:

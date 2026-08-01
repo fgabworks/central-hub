@@ -171,11 +171,35 @@ class TerminalSessionLifecycleTests(unittest.TestCase):
         listed = self.mgr.list_sessions()
         self.assertGreaterEqual(len(listed), 2)
 
+    def test_default_tab_name_uses_shell_ordinal(self):
+        shell = "powershell" if os.name == "nt" else "bash"
+        a = self.mgr.create(repository_id="demo", shell=shell)
+        b = self.mgr.create(repository_id="demo", shell=shell)
+        label = "PowerShell" if shell == "powershell" else "bash"
+        self.assertTrue(a["name"].startswith(f"{label} 1 — "))
+        self.assertIn("Demo", a["name"])
+        self.assertTrue(b["name"].startswith(f"{label} 2 — "))
+        self.mgr.close(a["id"], confirm=True)
+        self.mgr.close(b["id"], confirm=True)
+
     def test_confirm_required_before_close_active(self):
         sess = self.mgr.create(repository_id="demo")
         with self.assertRaises(TerminalSecurityError) as ctx:
             self.mgr.close(sess["id"], confirm=False)
         self.assertEqual(ctx.exception.code, "confirm_required")
+        self.mgr.close(sess["id"], confirm=True)
+
+    def test_path_jail_enforced_on_create_cwd(self):
+        with self.assertRaises(TerminalSecurityError):
+            self.mgr.create(repository_id="demo", relative_cwd="../outside")
+
+    def test_ports_annotation_includes_terminal_name(self):
+        sess = self.mgr.create(repository_id="demo")
+        ports = [{"pid": sess["pid"], "repository_id": "demo", "port": 9000}]
+        annotated = self.mgr.annotate_ports(ports)
+        self.assertTrue(annotated[0].get("terminal_owned"))
+        self.assertEqual(annotated[0].get("terminal_session_id"), sess["id"])
+        self.assertEqual(annotated[0].get("terminal_name"), sess["name"])
         self.mgr.close(sess["id"], confirm=True)
 
     def test_rejects_unknown_repo_and_non_local_bind(self):
@@ -188,14 +212,6 @@ class TerminalSessionLifecycleTests(unittest.TestCase):
         )
         with self.assertRaises(TerminalSecurityError):
             bad.create(repository_id="demo")
-
-    def test_ports_annotation_by_pid(self):
-        sess = self.mgr.create(repository_id="demo")
-        ports = [{"pid": sess["pid"], "repository_id": "demo", "port": 9000}]
-        annotated = self.mgr.annotate_ports(ports)
-        self.assertTrue(annotated[0].get("terminal_owned"))
-        self.assertEqual(annotated[0].get("terminal_session_id"), sess["id"])
-        self.mgr.close(sess["id"], confirm=True)
 
 
 class TerminalRouteTests(unittest.TestCase):
@@ -299,6 +315,42 @@ class TerminalRouteTests(unittest.TestCase):
         # Ensure insert strips trailing newlines (no auto Enter).
         self.assertIn("endsWith", term_js)
         self.assertIn("Paste multiline", term_js)
+
+    def test_terminal_ide_chrome_layout_and_sizing(self):
+        panel = (ROOT / "templates" / "partials" / "workspace_console_panel.html").read_text(encoding="utf-8")
+        css = (ROOT / "static" / "css" / "style.css").read_text(encoding="utf-8")
+        term_js = (ROOT / "static" / "js" / "wc_terminal.js").read_text(encoding="utf-8")
+        wc_js = (ROOT / "static" / "js" / "workspace_console.js").read_text(encoding="utf-8")
+
+        # Two header rows: title/actions then Problems|Output|Debug|Terminal|Ports
+        self.assertIn("wc-header-title-row", panel)
+        self.assertIn("wc-header-tabs-row", panel)
+        self.assertIn('data-wc-tab="problems"', panel)
+        self.assertIn('data-wc-tab="ports"', panel)
+        self.assertIn("+ New Terminal", panel)
+        self.assertIn("wc-term-empty", panel)
+        self.assertIn('id="wc-term-kill"', panel)
+        self.assertIn("btn-danger", panel)
+        self.assertIn("disabled", panel)
+
+        # Compact control sizing (~12–13px text, ~32px height)
+        self.assertIn("font-size: 12px", css)
+        self.assertIn("font-size: 11px", css)
+        self.assertIn("height: 32px", css)
+        self.assertIn(".wc-control", css)
+        self.assertIn(".wc-field-label", css)
+        self.assertIn("white-space: nowrap", css)
+        self.assertIn("text-overflow: ellipsis", css)
+        self.assertIn("max-width: 18rem", css)
+
+        # Behavior hooks
+        self.assertIn("updateActionButtons", term_js)
+        self.assertIn("updateEmptyState", term_js)
+        self.assertIn("Kill this terminal", term_js)
+        self.assertIn("setRenderingPaused", term_js)
+        self.assertIn("terminal_session_id", wc_js)
+        self.assertIn("Open URL", wc_js)
+        self.assertIn("terminal_name", wc_js)
 
 
 class TerminalConsoleRegressionTests(unittest.TestCase):

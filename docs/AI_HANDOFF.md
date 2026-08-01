@@ -4,50 +4,38 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**DHIS2 Reports — Authenticated Report Rendering Bridge (2026-08-02)**
+**Workspace Console → Terminal IDE UI (2026-08-02)**
 
-### Report source discovered
+Refine the bottom dock Terminal into a VS Code-style interactive PTY console matching the target layout.
 
-| Source | What it is | Hub action |
-|---|---|---|
-| **Native Standard Reports** | Individual entries from `GET /api/reports` | Render via `GET /api/reports/{uid}/data.html` with `.env` credentials |
-| **DHIS2 Reports / Pivot app shells** | `/dhis-web-reports/index.html`, visualizer | Browser-only — **not** individual reports |
-| Repository / static HTML | YAML catalog | Existing generate/view paths |
+### Layout
 
-The previous Run tab treated the Reports **application shell** as a report; Generate could not show populated HTML. Run now lists synced native reports first.
+1. **Title row** — Workspace Console + Ctrl+J + minimize / maximize / close  
+2. **Tabs row** — Problems | Output | Debug Console | Terminal | Ports  
+3. **Terminal toolbar** — Repository · Shell · `+ New Terminal` · session tabs · Split / Restart / Kill  
+4. **xterm.js stage** under the toolbar (empty state when no session)
 
-### Endpoints / routes
+### Behavior (implemented)
 
-| Route | Purpose |
-|---|---|
-| `GET /dhis2/reports/run` | Generate & View UI |
-| `POST /api/dhis2/reports/generate-and-view` | Validate → render → viewer URL |
-| `GET /dhis2/reports/standard/<env>/<uid>/rendered` | Credentialed HTML iframe body |
-| `GET /dhis2/reports/proxy/<env>?path=` | Allowlisted asset/API proxy (SSRF-safe) |
-| `GET /api/dhis2/reports/run-catalog` | Native + shell + other catalog |
-| `GET /api/dhis2/reports/org-units` | Searchable org-unit picker |
+- Interactive ConPTY/`pty` sessions via WebSocket; path-jailed to connected repo local paths  
+- Session tabs named like `PowerShell 1 — <repo>` (rename on double-click)  
+- Split / Restart / Kill disabled until a session is active; Kill is destructive + confirm when processes are alive  
+- Console collapse (`Ctrl+J`) pauses xterm rendering; PTY keeps running  
+- Prefs persist height, tab, `terminal_session_id`, split  
+- Ports annotates terminal-owned PIDs with session name + Open URL  
+- Aira/Okarun **Insert into Terminal** fills text only (no Enter / no auto-exec)
 
-Credentials never reach the browser. Live still requires one confirm per run.
-
-### Remaining limitations
-
-- Custom apps beyond `/api/reports` are not fully reverse-engineered; app shells stay browser-only
-- Jasper JDBC reports may still need Open in DHIS2
-- Relative assets outside allowlisted prefixes are not proxied
-- No HTML edit / replacement / upload / DB compare (deferred)
-
-## Verify
+### Verify
 
 ```powershell
-.\.venv\Scripts\python.exe -m unittest tests.test_dhis2_reports_bridge tests.test_dhis2_standard_reports tests.test_dhis2_reports -v
-.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe -m unittest tests.test_wc_terminal tests.test_workspace_console -v
 ```
 
-1. Sync Stage reports from Library
-2. Run Report → pick a **Native Standard Report** (not “Reports app shell”)
-3. Set period + org unit → Generate & View → HTML appears in iframe
-4. Confirm Diagnostics is collapsed; Live confirm once per run
+1. Ctrl+J → Terminal → pick repo/shell → **+ New Terminal**  
+2. Confirm tab label, ANSI colors, Ctrl+C, resize, second tab, Kill confirm  
+3. Collapse console while a process runs → reopen → session still live  
+4. Ports shows terminal association / Open URL when a server listens
 
-## Do not implement unless asked
+### Do not implement unless asked
 
-DHIS2 writes · report replacement · design upload · version restore · DB comparison
+Free-form shell · AI auto-exec · remote (non-localhost) PTY · restoring sessions after hub restart

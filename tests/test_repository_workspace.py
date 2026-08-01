@@ -203,6 +203,8 @@ class WorkspaceRouteTests(unittest.TestCase):
 
         os.environ["CENTRAL_HUB_AUDIT_LOG"] = str(root / "audit.jsonl")
         os.environ["CENTRAL_HUB_DATABASE"] = str(root / "hub.db")
+        # Prevent File Explorer from opening temp checkouts (spammy missing-folder dialogs).
+        os.environ["CENTRAL_HUB_TESTING"] = "1"
         for key in ("DHIS2_BASE_URL", "DHIS2_USERNAME", "DHIS2_PASSWORD"):
             os.environ.pop(key, None)
 
@@ -253,6 +255,8 @@ repositories:
     @classmethod
     def tearDownClass(cls) -> None:
         cls._tmp.cleanup()
+        os.environ.pop("CENTRAL_HUB_TESTING", None)
+        os.environ.pop("CENTRAL_HUB_REPOSITORIES_CONFIG", None)
 
     def test_unavailable_without_local_path(self) -> None:
         r = self.client.get("/repositories/ws-remote-only/files")
@@ -346,8 +350,13 @@ repositories:
             data=json.dumps({"target": "explorer", "path": "hello.py"}),
             content_type="application/json",
         )
-        # May fail if explorer missing in CI — still must not 500 on validation
+        # May fail if explorer missing in CI — still must not 500 on validation.
+        # Under CENTRAL_HUB_TESTING, open is a dry-run (no real Explorer window).
         self.assertIn(open_resp.status_code, {200, 400})
+        if open_resp.status_code == 200:
+            body = open_resp.get_json()
+            self.assertTrue(body.get("ok"))
+            self.assertTrue(body.get("dry_run"))
 
     def test_service_scope_isolation_message(self) -> None:
         svc = RepositoryWorkspaceService()

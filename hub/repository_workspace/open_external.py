@@ -29,6 +29,13 @@ class ExternalOpener:
                 raise WorkspaceSecurityError("Path not found.", code="not_found")
         else:
             path = self.root
+            if not path.exists():
+                raise WorkspaceSecurityError("Path not found.", code="not_found")
+
+        # Never spawn File Explorer / editors during automated tests — leftover
+        # Explorer windows on TemporaryDirectory paths spam "Location is not available".
+        if os.environ.get("CENTRAL_HUB_TESTING", "").strip().lower() in {"1", "true", "yes", "on"}:
+            return {"ok": True, "target": kind, "path": str(path), "dry_run": True}
 
         if kind == "explorer":
             return self._open_explorer(path)

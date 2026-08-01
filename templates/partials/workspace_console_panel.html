@@ -1,31 +1,38 @@
 <div class="wc-panel" id="wc-panel" role="region" aria-label="Workspace Console">
   <div class="wc-resize" id="wc-resize" title="Drag to resize"></div>
   <header class="wc-header">
-    <div class="wc-tabs" role="tablist" aria-label="Console tabs">
-      <strong class="wc-title">Workspace Console</strong>
-      <span class="wc-shortcut muted">Ctrl+J</span>
-      <button type="button" class="wc-tab" data-wc-tab="problems" role="tab">Problems <span class="wc-badge" id="wc-badge-problems" hidden>0</span></button>
-      <button type="button" class="wc-tab" data-wc-tab="output" role="tab">Output</button>
-      <button type="button" class="wc-tab" data-wc-tab="debug" role="tab">Debug Console</button>
-      <button type="button" class="wc-tab" data-wc-tab="terminal" role="tab">Terminal <span class="wc-badge" id="wc-badge-terminal" hidden>0</span></button>
-      <button type="button" class="wc-tab" data-wc-tab="ports" role="tab">Ports <span class="wc-badge" id="wc-badge-ports" hidden>0</span></button>
+    <div class="wc-header-row wc-header-title-row">
+      <div class="wc-title-group">
+        <strong class="wc-title">Workspace Console</strong>
+        <span class="wc-shortcut muted">Ctrl+J</span>
+      </div>
+      <div class="wc-actions">
+        <button type="button" class="wc-icon-btn" id="wc-minimize" title="Minimize" aria-label="Minimize">▁</button>
+        <button type="button" class="wc-icon-btn" id="wc-maximize" title="Maximize" aria-label="Maximize">▢</button>
+        <button type="button" class="wc-icon-btn" id="wc-close" title="Close" aria-label="Close">✕</button>
+      </div>
     </div>
-    <div class="wc-actions">
-      <button type="button" class="wc-icon-btn" id="wc-minimize" title="Minimize" aria-label="Minimize">▁</button>
-      <button type="button" class="wc-icon-btn" id="wc-maximize" title="Maximize" aria-label="Maximize">▢</button>
-      <button type="button" class="wc-icon-btn" id="wc-close" title="Close" aria-label="Close">✕</button>
+    <div class="wc-header-row wc-header-tabs-row">
+      <div class="wc-tabs" role="tablist" aria-label="Console tabs">
+        <button type="button" class="wc-tab" data-wc-tab="problems" role="tab">Problems <span class="wc-badge" id="wc-badge-problems" hidden>0</span></button>
+        <button type="button" class="wc-tab" data-wc-tab="output" role="tab">Output</button>
+        <button type="button" class="wc-tab" data-wc-tab="debug" role="tab">Debug Console</button>
+        <button type="button" class="wc-tab" data-wc-tab="terminal" role="tab">Terminal <span class="wc-badge" id="wc-badge-terminal" hidden>0</span></button>
+        <button type="button" class="wc-tab" data-wc-tab="ports" role="tab">Ports <span class="wc-badge" id="wc-badge-ports" hidden>0</span></button>
+      </div>
     </div>
   </header>
   <div class="wc-body">
     <section class="wc-pane" data-wc-pane="problems" role="tabpanel">
       <div class="wc-toolbar"><span class="muted">Configuration, validation, provider, repository, SQL, DHIS2, and job errors</span>
-        <button type="button" class="btn btn-sm" data-wc-refresh="problems">Refresh</button></div>
+        <button type="button" class="btn btn-sm wc-control-btn" data-wc-refresh="problems">Refresh</button></div>
       <div class="wc-scroll" id="wc-problems"></div>
     </section>
     <section class="wc-pane" data-wc-pane="output" role="tabpanel" hidden>
       <div class="wc-toolbar">
-        <label class="wc-filter">Source
-          <select id="wc-output-source">
+        <label class="wc-filter wc-field">
+          <span class="wc-field-label">Source</span>
+          <select id="wc-output-source" class="wc-control">
             <option value="all">All</option>
             <option value="repository">Repository runs</option>
             <option value="jobs">Jobs</option>
@@ -33,27 +40,43 @@
             <option value="service">Service / audit</option>
           </select>
         </label>
-        <button type="button" class="btn btn-sm" data-wc-refresh="output">Refresh</button>
+        <button type="button" class="btn btn-sm wc-control-btn" data-wc-refresh="output">Refresh</button>
       </div>
       <pre class="wc-log" id="wc-output"></pre>
     </section>
     <section class="wc-pane" data-wc-pane="debug" role="tabpanel" hidden>
       <div class="wc-toolbar"><span class="muted">Structured diagnostics, timing, agent/audit events</span>
-        <button type="button" class="btn btn-sm" data-wc-refresh="debug">Refresh</button></div>
+        <button type="button" class="btn btn-sm wc-control-btn" data-wc-refresh="debug">Refresh</button></div>
       <pre class="wc-log" id="wc-debug"></pre>
     </section>
     <section class="wc-pane wc-pane-terminal" data-wc-pane="terminal" role="tabpanel" hidden>
       <div class="wc-toolbar wc-term-toolbar">
-        <label>Repository <select id="wc-term-repo"></select></label>
-        <label>Shell <select id="wc-term-shell"></select></label>
-        <button type="button" class="btn btn-sm btn-primary" id="wc-term-new" title="New interactive terminal">New Terminal</button>
-        <button type="button" class="btn btn-sm" id="wc-term-split" title="Split view">Split</button>
-        <button type="button" class="btn btn-sm" id="wc-term-restart" title="Restart session">Restart</button>
-        <button type="button" class="btn btn-sm" id="wc-term-kill" title="Kill session process tree">Kill</button>
-        <span class="wc-term-meta muted" id="wc-term-meta">No session</span>
+        <label class="wc-field wc-term-field">
+          <span class="wc-field-label">Repository</span>
+          <span class="wc-term-select-wrap">
+            <span class="wc-term-status-dot" id="wc-term-repo-dot" aria-hidden="true"></span>
+            <select id="wc-term-repo" class="wc-control wc-term-repo-select" aria-label="Repository"></select>
+          </span>
+        </label>
+        <label class="wc-field wc-term-field">
+          <span class="wc-field-label">Shell</span>
+          <select id="wc-term-shell" class="wc-control wc-term-shell-select" aria-label="Shell"></select>
+        </label>
+        <button type="button" class="btn btn-sm btn-primary wc-control-btn" id="wc-term-new" title="New interactive terminal">+ New Terminal</button>
+        <div class="wc-term-session-tabs" id="wc-term-session-tabs" role="tablist" aria-label="Terminal sessions"></div>
+        <button type="button" class="btn btn-sm wc-control-btn wc-term-quick-add" id="wc-term-add" title="New terminal" aria-label="New terminal">+</button>
+        <div class="wc-term-actions">
+          <button type="button" class="btn btn-sm wc-control-btn" id="wc-term-split" title="Split view" disabled>Split</button>
+          <button type="button" class="btn btn-sm wc-control-btn" id="wc-term-restart" title="Restart session" disabled>Restart</button>
+          <button type="button" class="btn btn-sm wc-control-btn btn-danger" id="wc-term-kill" title="Kill session process tree" disabled>Kill</button>
+        </div>
       </div>
-      <div class="wc-term-session-tabs" id="wc-term-session-tabs" role="tablist" aria-label="Terminal sessions"></div>
-      <div class="wc-term-stage" id="wc-term-stage" data-split="0">
+      <div class="wc-term-empty" id="wc-term-empty">
+        <p class="wc-term-empty-title">No terminal sessions</p>
+        <p class="muted wc-term-empty-copy">Start an interactive shell inside a connected repository path. AI may insert commands but never executes them.</p>
+        <button type="button" class="btn btn-sm btn-primary wc-control-btn" id="wc-term-empty-new">+ New Terminal</button>
+      </div>
+      <div class="wc-term-stage" id="wc-term-stage" data-split="0" hidden>
         <div class="wc-term-view is-active" id="wc-term-view-a" data-slot="a">
           <div class="wc-xterm" id="wc-xterm-a"></div>
         </div>
@@ -64,22 +87,26 @@
       <details class="wc-term-profiles">
         <summary>Approved run profiles (optional)</summary>
         <div class="wc-terminal-form">
-          <label>Profile <select id="wc-term-profile"></select></label>
-          <label>Environment
-            <select id="wc-term-env">
+          <label class="wc-field">
+            <span class="wc-field-label">Profile</span>
+            <select id="wc-term-profile" class="wc-control"></select>
+          </label>
+          <label class="wc-field">
+            <span class="wc-field-label">Environment</span>
+            <select id="wc-term-env" class="wc-control">
               <option value="development">development</option>
               <option value="staging">staging</option>
               <option value="live">live</option>
             </select>
           </label>
-          <button type="button" class="btn btn-sm" id="wc-term-start">Start profile</button>
+          <button type="button" class="btn btn-sm wc-control-btn" id="wc-term-start">Start profile</button>
         </div>
         <pre class="wc-log wc-term-profile-out" id="wc-terminal-out" hidden></pre>
       </details>
     </section>
     <section class="wc-pane" data-wc-pane="ports" role="tabpanel" hidden>
       <div class="wc-toolbar"><span class="muted">Port · PID · process · repository · terminal · health · managed/external</span>
-        <button type="button" class="btn btn-sm" data-wc-refresh="ports">Refresh</button></div>
+        <button type="button" class="btn btn-sm wc-control-btn" data-wc-refresh="ports">Refresh</button></div>
       <div class="wc-scroll" id="wc-ports"></div>
     </section>
   </div>

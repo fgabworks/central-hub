@@ -288,6 +288,9 @@ class WorkspaceConsoleService:
         """
         import os
 
+        from hub.workspace_console.terminal.settings import load_terminal_settings
+
+        term_settings = load_terminal_settings()
         repos: list[dict[str, Any]] = []
         if self.registry is None:
             return {"ok": True, "repositories": [], "free_shell": False, "interactive_pty": True}
@@ -317,19 +320,22 @@ class WorkspaceConsoleService:
                     ],
                 }
             )
+        if os.name == "nt":
+            shells = [{"id": "powershell", "label": "PowerShell"}]
+            if term_settings.allow_cmd:
+                shells.append({"id": "cmd", "label": "CMD"})
+        else:
+            shells = [
+                {"id": "bash", "label": "bash"},
+                {"id": "sh", "label": "sh"},
+            ]
         return {
             "ok": True,
             "repositories": repos,
             "free_shell": False,
             "interactive_pty": True,
-            "shells": (
-                [{"id": "powershell", "label": "PowerShell"}, {"id": "cmd", "label": "CMD"}]
-                if os.name == "nt"
-                else [
-                    {"id": "bash", "label": "bash"},
-                    {"id": "sh", "label": "sh"},
-                ]
-            ),
+            "allow_cmd": bool(term_settings.allow_cmd),
+            "shells": shells,
             "message": (
                 "Open an interactive terminal inside a connected repository path, "
                 "or start an approved run profile. AI cannot execute terminal commands."
