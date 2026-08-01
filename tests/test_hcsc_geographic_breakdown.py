@@ -590,40 +590,35 @@ class GeographicBreakdownApiRouteTests(unittest.TestCase):
 
         app = create_app()
         client = app.test_client()
-        # Invalid without OU / period may 400; exercise estimate route shape.
-        with mock.patch(
-            "hub.hcsc_indicators.routes._svc"
-        ) as svc_factory:
-            svc = mock.Mock()
-            svc.breakdown_estimate.return_value = {
-                "ok": True,
-                "child_count": 17,
-                "estimate_label": "17 provinces",
-                "requires_confirmation": False,
-            }
-            svc_factory.return_value = svc
-            resp = client.get(
-                "/api/dhis2/hcsc-indicators/breakdown-estimate"
-                "?environment=stage&orgUnit=OuUidRgn003&geographicBreakdown=province"
-            )
-            self.assertEqual(resp.status_code, 200)
-            body = resp.get_json()
-            self.assertEqual(body["estimate_label"], "17 provinces")
+        svc = mock.Mock()
+        svc.breakdown_estimate.return_value = {
+            "ok": True,
+            "child_count": 17,
+            "estimate_label": "17 provinces",
+            "requires_confirmation": False,
+        }
+        svc.report.side_effect = ReportSecurityError(
+            "Geographic breakdown must be below the selected organisation unit level.",
+            code="invalid_geographic_breakdown",
+        )
+        app.config["HCSC_INDICATORS"] = svc
 
-        with mock.patch("hub.hcsc_indicators.routes._svc") as svc_factory:
-            svc = mock.Mock()
-            svc.report.side_effect = ReportSecurityError(
-                "Geographic breakdown must be below the selected organisation unit level.",
-                code="invalid_geographic_breakdown",
-            )
-            svc_factory.return_value = svc
-            resp = client.get(
-                "/api/dhis2/hcsc-indicators/report"
-                "?environment=stage&period=2026Q1&orgUnit=OuUidRgn003"
-                "&geographicBreakdown=region"
-            )
-            self.assertEqual(resp.status_code, 400)
-            self.assertFalse(resp.get_json().get("ok", True))
+        resp = client.get(
+            "/api/dhis2/hcsc-indicators/breakdown-estimate"
+            "?environment=stage&orgUnit=OuUidRgn003&geographicBreakdown=province"
+        )
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertEqual(body["estimate_label"], "17 provinces")
+
+        resp = client.get(
+            "/api/dhis2/hcsc-indicators/report"
+            "?environment=stage&period=2026Q1&orgUnit=OuUidRgn003"
+            "&geographicBreakdown=region"
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertFalse(resp.get_json().get("ok", True))
+        self.assertEqual(resp.get_json().get("code"), "invalid_geographic_breakdown")
 
 
 if __name__ == "__main__":

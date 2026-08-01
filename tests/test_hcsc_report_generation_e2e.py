@@ -80,11 +80,11 @@ class ReportGenerationPageContractTests(unittest.TestCase):
         self.assertIn('id="hcsc-ou"', html)
         self.assertIn('type="hidden"', html)
         self.assertIn("data-report-url", html)
-        self.assertIn("hcsc-report-e2e-1", html)
+        self.assertIn("hcsc-geo-breakdown-1", html)
         self.assertIn("ou-sync-immediate-1", html)
 
         self.assertIn("function loadReport(force)", js)
-        self.assertIn("function scopeQuery(force)", js)
+        self.assertIn("function scopeQuery(force", js)
         self.assertIn('"?environment="', js)
         self.assertIn("encodeURIComponent(env)", js)
         self.assertIn("encodeURIComponent(period)", js)

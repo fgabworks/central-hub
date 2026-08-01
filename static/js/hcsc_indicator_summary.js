@@ -2396,7 +2396,7 @@
     if (!wantGeo || wantGeo === "none") {
       fetchJson(reportUrl + scopeQuery(force, "none"))
         .then(function (data) {
-          if (state.activeRequestId !== requestId) return;
+          if (state.activeRequestId !== requestId) return; // late / superseded
           if (!data.ok) {
             failWhole(data.error || "Report failed");
             return;
@@ -2410,7 +2410,7 @@
     // Two-phase: parent summary first, then breakdown while parent stays visible.
     fetchJson(reportUrl + scopeQuery(force, "none"))
       .then(function (parentData) {
-        if (state.activeRequestId !== requestId) return null;
+        if (state.activeRequestId !== requestId) return; // late / superseded
         if (!parentData.ok) {
           failWhole(parentData.error || "Report failed");
           return null;
@@ -2434,7 +2434,7 @@
       })
       .then(function (data) {
         if (data == null) return;
-        if (state.activeRequestId !== requestId) return;
+        if (state.activeRequestId !== requestId) return; // late / superseded
         if (!data.ok) {
           failBreakdownOnly(data.error || "Breakdown generation failed");
           return;

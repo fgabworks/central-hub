@@ -4,7 +4,18 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**HCSC–RF report generation E2E (2026-08-02)**
+**HCSC–RF geographic breakdown (2026-08-02)**
+
+Optional child-OU breakdown on the same HCSC–RF page (one Generate Report). Renamed
+Disaggregation → **Population Filter** (`All Households` only). Added **Geographic
+Breakdown** (None / By Region|Province|Municipality/City|Barangay) scoped strictly below
+the selected OU level. Parent **Selected Area Summary** stays visible; breakdown panel
+loads in a second client phase. Server batches multi-OU `GET /api/analytics.json` (chunked),
+caches by env/quarter/OU/population/breakdown, dedupes in-flight, rejects invalid levels.
+Large-breakdown estimate + confirm (`HCSC_BREAKDOWN_*` env thresholds). Focused tests:
+`tests/test_hcsc_geographic_breakdown.py`.
+
+Prior: **HCSC–RF report generation E2E (2026-08-02)**
 
 Root cause (client): cascade `onLevelChange` deferred `syncSelection` until child OU
 options finished loading, so the hidden OU UID / Generate enablement lagged selection.

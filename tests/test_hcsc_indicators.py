@@ -1611,7 +1611,7 @@ class GenStateMachineContractTests(unittest.TestCase):
         self.assertIn("#hcsc-cards.is-stale .hcsc-skel", css)
         self.assertIn("animation: none !important", css)
         self.assertIn("@keyframes hcsc-spin", css)
-        self.assertIn("hcsc-report-e2e-1", html)
+        self.assertIn("hcsc-geo-breakdown-1", html)
         self.assertIn("ou-sync-immediate-1", html)
 
 
@@ -1647,7 +1647,7 @@ class StatusStripCopyTests(unittest.TestCase):
         self.assertIn("min-height: 5.75rem", css)
         self.assertIn("min-height: 4.5rem", css)
         self.assertIn("hcsc-status-actions-spacer", js)
-        self.assertIn("hcsc-report-e2e-1", html)
+        self.assertIn("hcsc-geo-breakdown-1", html)
         # Initial HTML already has distinct badge + helper
         self.assertIn(">Awaiting selection</span>", html)
         self.assertIn(">Select an organisation unit to continue.</p>", html)
@@ -1701,7 +1701,11 @@ class UiContractTests(unittest.TestCase):
         self.assertIn("is-drawer-open", css)
         self.assertIn("jkgkU9EiJ5k", yaml_text)
         self.assertIn("unresolved: true", yaml_text)
-        self.assertNotIn(">Numerator</th>", html)
+        # Main indicator table is result-type aware (no dedicated Numerator column).
+        # Geographic breakdown table may show Numerator/Denominator for child OUs.
+        main_table = html.split('id="hcsc-table"', 1)[1].split("</table>", 1)[0]
+        self.assertNotIn(">Numerator</th>", main_table)
+        self.assertIn(">Numerator</th>", html)  # breakdown panel
         self.assertNotIn("This Report", html)
         self.assertNotIn("This Report", js)
         overview = (ROOT / "templates" / "dhis2_overview.html").read_text(encoding="utf-8")
