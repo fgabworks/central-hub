@@ -36,6 +36,7 @@
     var shell = document.querySelector(".app-shell");
     var panel = $("ad-panel");
     var toggleBtn = $("ad-toggle");
+    var topbarBtn = $("ad-topbar-toggle");
     var backdrop = $("ad-backdrop");
     var promptEl = $("ad-prompt");
     var agentSel = $("ad-agent");
@@ -67,11 +68,15 @@
         Math.max(prefs.min_width, Math.min(prefs.max_width, prefs.width)) + "px"
       );
       if (panel) panel.hidden = !expanded();
-      if (toggleBtn) {
-        toggleBtn.setAttribute("aria-expanded", expanded() ? "true" : "false");
-        toggleBtn.title =
-          (expanded() ? "Hide " : "Show ") + (profile.name || "Assistant");
+      function syncToggle(btn) {
+        if (!btn) return;
+        btn.setAttribute("aria-expanded", expanded() ? "true" : "false");
+        btn.title =
+          (expanded() ? "Hide " : "Open ") + (profile.name || "Assistant");
+        btn.classList.toggle("is-active", expanded());
       }
+      syncToggle(toggleBtn);
+      syncToggle(topbarBtn);
       if (backdrop) {
         backdrop.hidden = !(isMobile() && expanded());
       }
@@ -392,6 +397,7 @@
 
     function bind() {
       if (toggleBtn) toggleBtn.addEventListener("click", toggle);
+      if (topbarBtn) topbarBtn.addEventListener("click", toggle);
       var closeBtn = $("ad-close");
       if (closeBtn) closeBtn.addEventListener("click", function () { setOpen(false); });
       if (backdrop) backdrop.addEventListener("click", function () { setOpen(false); });
@@ -477,9 +483,8 @@
         window.addEventListener("mousemove", function (ev) {
           if (!dragging) return;
           var rail = document.querySelector(".ad-rail");
-          var railW = rail ? rail.getBoundingClientRect().width : 40;
-          var rect = shell.getBoundingClientRect();
-          var width = Math.round(rect.right - railW - ev.clientX);
+          var railW = rail ? rail.getBoundingClientRect().width : 48;
+          var width = Math.round(window.innerWidth - railW - ev.clientX);
           prefs.width = Math.max(prefs.min_width, Math.min(prefs.max_width, width));
           applyChrome();
         });

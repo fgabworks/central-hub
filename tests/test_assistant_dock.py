@@ -109,6 +109,7 @@ class DockRouteTests(unittest.TestCase):
         self.assertIn("assistant_dock.js", html)
         self.assertIn("has-ad-rail", html)
         self.assertIn('id="ad-toggle"', html)
+        self.assertIn('id="ad-topbar-toggle"', html)
         self.assertIn("Okarun", html)
         self.assertIn("Read-only mode. No actions are executed.", html)
         self.assertIn("ad-tab-conversation", html)
@@ -141,22 +142,21 @@ class DockRouteTests(unittest.TestCase):
 
     def test_right_docked_placement_css(self) -> None:
         css = (ROOT / "static" / "css" / "style.css").read_text(encoding="utf-8")
-        self.assertIn(".app-shell.is-ad-open:not(.is-ad-mobile).has-ad-rail", css)
+        self.assertIn(".ad-rail", css)
+        self.assertIn("position: fixed", css)
+        self.assertIn("z-index: 70", css)
+        self.assertIn("padding-right: var(--ad-rail-w, 48px)", css)
         self.assertIn(
-            "grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--ad-width, 380px) var(--ad-rail-w, 40px)",
+            "padding-right: calc(var(--ad-rail-w, 48px) + var(--ad-width, 380px))",
             css,
         )
-        self.assertIn(".ad-rail", css)
         self.assertIn(".ad-host", css)
-        # Panel is a grid column — not a centered modal.
-        self.assertNotIn(".ad-host { position: fixed; inset: 0", css)
 
     def test_mobile_drawer_behavior_css(self) -> None:
         css = (ROOT / "static" / "css" / "style.css").read_text(encoding="utf-8")
         self.assertIn("@media (max-width: 960px)", css)
         self.assertIn(".app-shell.is-ad-mobile.is-ad-open .ad-host", css)
-        self.assertIn("position: fixed", css)
-        self.assertIn("right: var(--ad-rail-w, 40px)", css)
+        self.assertIn("right: var(--ad-rail-w, 48px)", css)
         self.assertIn(".ad-backdrop", css)
 
     def test_js_toggle_open_close(self) -> None:

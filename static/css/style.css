@@ -77,20 +77,16 @@ code, .mono { font-family: var(--mono); font-size: 12px; }
   grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
   min-height: 100vh;
 }
+/* Reserve space for the fixed right assistant rail (and open panel). */
 .app-shell.has-ad-rail {
-  grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--ad-rail-w, 40px);
+  padding-right: var(--ad-rail-w, 48px);
+  box-sizing: border-box;
 }
 .app-shell.is-ad-open:not(.is-ad-mobile).has-ad-rail {
-  grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--ad-width, 380px) var(--ad-rail-w, 40px);
+  padding-right: calc(var(--ad-rail-w, 48px) + var(--ad-width, 380px));
 }
 .app-shell.is-ad-open.is-ad-minimized:not(.is-ad-mobile).has-ad-rail {
-  grid-template-columns: var(--sidebar-w) minmax(0, 1fr) 48px var(--ad-rail-w, 40px);
-}
-.app-shell.is-ad-open:not(.is-ad-mobile):not(.has-ad-rail) {
-  grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--ad-width, 380px);
-}
-.app-shell.is-ad-open.is-ad-minimized:not(.is-ad-mobile):not(.has-ad-rail) {
-  grid-template-columns: var(--sidebar-w) minmax(0, 1fr) 48px;
+  padding-right: calc(var(--ad-rail-w, 48px) + 48px);
 }
 
 /* Sidebar */
@@ -339,6 +335,23 @@ code, .mono { font-family: var(--mono); font-size: 12px; }
   margin-left: 0.25rem;
   color: var(--cool);
   font-size: 13px;
+}
+
+.ad-topbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 700;
+  min-height: 2rem;
+  padding: 0.28rem 0.75rem;
+  border-radius: 8px;
+}
+.ad-topbar-btn.is-active {
+  box-shadow: 0 0 0 1px var(--accent-ring);
+}
+.ad-topbar-ico {
+  font-size: 0.95rem;
+  line-height: 1;
 }
 
 .avatar {
@@ -4255,59 +4268,74 @@ body.qn-maximized .qn-history[open] {
   background: #fff;
 }
 
-/* ===== Assistant dock (Aira / Okarun) ? VS Code-style right panel ===== */
+/* ===== Assistant dock (Aira / Okarun) - VS Code-style right panel ===== */
 :root {
   --ad-width: 380px;
-  --ad-rail-w: 40px;
+  --ad-rail-w: 48px;
 }
 .ad-rail {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--ad-rail-w, 48px);
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  background: #15191f;
+  background: #12161c;
   border-left: 1px solid var(--border);
-  min-height: 100vh;
-  position: sticky;
-  top: 0;
-  z-index: 40;
+  z-index: 70;
+  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.25);
 }
 .ad-rail-btn {
   flex: 1;
-  min-height: 8rem;
+  width: 100%;
+  min-height: 10rem;
   border: 0;
-  background: transparent;
-  color: var(--cool);
+  border-left: 3px solid transparent;
+  background: #1a222c;
+  color: #e8eef3;
   cursor: pointer;
-  padding: 0.75rem 0.2rem;
+  padding: 1rem 0.15rem;
   font: inherit;
   writing-mode: vertical-rl;
   transform: rotate(180deg);
-  letter-spacing: 0.04em;
-  font-size: 0.78rem;
-  font-weight: 600;
+  letter-spacing: 0.08em;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
 }
-.ad-rail-btn:hover,
-.app-shell.is-ad-open:not(.is-ad-minimized) .ad-rail-btn {
-  color: var(--text);
+.ad-rail-btn:hover {
   background: var(--accent-soft);
+  color: #fff;
+  border-left-color: var(--crimson);
 }
 .app-shell.is-ad-open:not(.is-ad-minimized) .ad-rail-btn {
-  border-left: 2px solid var(--crimson);
+  background: var(--accent-soft-strong);
+  color: #fff;
+  border-left-color: var(--crimson);
 }
+.ad-rail-label { display: inline-block; }
 .ad-host {
   display: none;
   min-width: 0;
   background: #1a1e24;
   border-left: 1px solid var(--border);
-  position: relative;
-  order: 0;
+  position: fixed;
+  top: 0;
+  right: var(--ad-rail-w, 48px);
+  bottom: 0;
+  width: var(--ad-width, 380px);
+  z-index: 69;
+  box-shadow: -6px 0 20px rgba(0, 0, 0, 0.28);
 }
 .app-shell.is-ad-open .ad-host {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
 }
-.app-shell.is-ad-minimized .ad-host { width: 48px; max-width: 48px; }
+.app-shell.is-ad-minimized .ad-host {
+  width: 48px;
+}
 .ad-panel {
   display: flex;
   flex-direction: column;
@@ -4322,7 +4350,7 @@ body.qn-maximized .qn-history[open] {
   left: 0;
   top: 0;
   bottom: 0;
-  width: 5px;
+  width: 6px;
   cursor: col-resize;
   z-index: 2;
 }
@@ -4548,30 +4576,19 @@ body.qn-maximized .qn-history[open] {
   .app-shell.has-ad-rail,
   .app-shell.is-ad-open:not(.is-ad-mobile).has-ad-rail,
   .app-shell.is-ad-open.is-ad-minimized:not(.is-ad-mobile).has-ad-rail {
-    grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--ad-rail-w, 40px);
+    padding-right: var(--ad-rail-w, 48px);
   }
   .app-shell.is-ad-mobile.is-ad-open .ad-host {
-    position: fixed;
-    top: 0;
-    right: var(--ad-rail-w, 40px);
-    bottom: 0;
-    width: min(100vw - var(--ad-rail-w, 40px), 420px);
-    z-index: 60;
-    box-shadow: -8px 0 24px rgba(0,0,0,0.35);
+    width: min(100vw - var(--ad-rail-w, 48px), 420px);
+    right: var(--ad-rail-w, 48px);
+    z-index: 69;
     display: flex;
-  }
-  .app-shell.is-ad-mobile .ad-rail {
-    position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 61;
   }
   .app-shell.is-ad-mobile.is-ad-open .ad-backdrop {
     display: block;
   }
   .app-shell.is-ad-mobile.is-ad-minimized .ad-host {
     width: 48px;
-    right: var(--ad-rail-w, 40px);
+    right: var(--ad-rail-w, 48px);
   }
 }

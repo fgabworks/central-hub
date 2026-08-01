@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=ad-dock-3">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=ad-dock-5">
   {% block head_extra %}{% endblock %}
 </head>
 <body class="theme-{{ workspace|default('work') }}">
@@ -74,6 +74,17 @@
           <span class="badge {{ topbar_dhis2.class }} badge-dot">{{ topbar_dhis2.label }}</span>
         </div>
         <div class="topbar-right">
+          {% if assistant_dock and not skip_assistant_dock|default(false) %}
+          <button type="button"
+                  class="btn btn-sm btn-primary ad-topbar-btn"
+                  id="ad-topbar-toggle"
+                  aria-controls="ad-panel"
+                  aria-expanded="{{ 'true' if assistant_dock.prefs.open and not assistant_dock.prefs.minimized else 'false' }}"
+                  title="{{ 'Hide' if assistant_dock.prefs.open and not assistant_dock.prefs.minimized else 'Open' }} {{ assistant_dock.profile.name }}">
+            <span class="ad-topbar-ico" aria-hidden="true">✦</span>
+            <span>{{ assistant_dock.profile.name }}</span>
+          </button>
+          {% endif %}
           <span class="icon-btn" title="Theme" aria-label="Theme">☾</span>
           <span class="icon-btn" title="Notifications" aria-label="Notifications">
             🔔
@@ -143,7 +154,7 @@
   {% endif %}
   {% if assistant_dock and not skip_assistant_dock|default(false) %}
   <script src="{{ url_for('static', filename='js/hub_perf.js') }}?v=perf-1"></script>
-  <script src="{{ url_for('static', filename='js/assistant_dock.js') }}?v=ad-dock-3"></script>
+  <script src="{{ url_for('static', filename='js/assistant_dock.js') }}?v=ad-dock-5"></script>
   {% endif %}
 </body>
 </html>
