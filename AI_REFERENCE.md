@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-01 (AI Connections and provider-neutral Assistant Center registry).
+Last verified: 2026-08-01 (persistent Aira/Okarun assistant dock + AI Connections registry).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -9,6 +9,7 @@ Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](doc
 + Personal/Work workspace switcher + registry Add/Edit/Disable + SQL Workspace (read-only)
 + Email Center (Gmail readonly) + Calendar Center (Calendar readonly, shared Google accounts)
 + AI Assistant Center (read-only Aira/Okarun profiles, including OpenAI Responses API)
++ persistent VS Code-style assistant dock across pages
 + Repository Workspace Phases 1–2 + Connect Local Workspace
 + DHIS2 Reports — Standard Report Manager Phase 1 (sync/view) + catalog shortcuts.**
 Hub coordinates repos via registry/adapters; DHIS2 stays GET-only; jobs run
@@ -35,7 +36,7 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Calendar Center | Shared Calendar service + FullCalendar grid (month/week/day) + agenda/upcoming |
 | Google Connections | System page to connect/assign/enable Gmail+Calendar scopes |
 | SQL Workspace | Read-only query library/runner (`/sql`); sqlglot allowlist; Live warning |
-| AI Assistant Center | Aira at `/personal/aira`; Okarun at `/work/okarun`; isolated histories/summaries/context/tools; Find/Ask/Plan/Review; dynamic Codex, Claude Code, Cursor, Grok, and OpenAI API providers |
+| AI Assistant Center | Aira at `/personal/aira`; Okarun at `/work/okarun`; persistent right-dock panel on other pages (`hub/agent_center/dock.py`); isolated histories/summaries/context/tools; Find/Ask/Plan/Review; dynamic Codex, Claude Code, Cursor, Grok, and OpenAI API providers |
 | AI Connections | `/system/ai-connections`; connect/test/model refresh/capabilities/disconnect through one provider-neutral registry |
 | DHIS2 | GET client, discovery, UID mapping, preview builder |
 | UID index admin | LP-style controlled update: dry-run → preview → typed confirm → archive/versions/restore |
@@ -91,6 +92,7 @@ Notebook content; selected lookup tools search the active profile scope.
 
 | Route | Purpose |
 |---|---|
+| Persistent dock | Aira/Okarun panel on all pages except full Assistant Center; prefs `/api/assistant-dock/prefs`; lazy agents |
 | `/personal/aira` | Personal UI; no repository/SQL/DHIS2/jobs/logs/Audit access |
 | `/work/okarun` | Work UI; selected repositories and Work read-only services |
 | `/api/assistants/<profile>/agents` | Profile-bound adapter availability |
@@ -102,7 +104,8 @@ Notebook content; selected lookup tools search the active profile scope.
 | `/api/assistants/<profile>/runs/<id>/retry` | Retry in the same scoped conversation |
 | `/api/assistants/<profile>/prompts` | Isolated saved prompt library |
 
-Implementation: `hub/agent_center/`, `config/agents.yaml`, SQLite `data/agent_center.db`.
+Implementation: `hub/agent_center/` (incl. `dock.py`), `config/agents.yaml`, SQLite `data/agent_center.db`,
+`templates/partials/assistant_dock_panel.html`, `static/js/assistant_dock.js`.
 Modes: Find / Ask / Plan / Review. Edit / Test labeled **Not yet available**.
 Adapters: Hub Simulator (demo), **OpenAI API** and **Grok/xAI** Responses APIs,
 plus Claude Code / Cursor Agent / Codex CLIs. Provider accounts are managed at

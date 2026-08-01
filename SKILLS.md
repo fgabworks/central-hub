@@ -19,7 +19,7 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 | Personal Dashboard + Tasks + Quick Notepad | `/personal`, `/personal/tasks` |
 | Repository Notebook (scoped personal\|work notes) | `/personal/notebook`, `/work/notebook`, `hub/notebook/` |
 | SQL Workspace (read-only query library/runner) | `/sql`, `hub/sql_workspace/`, `data/sql_workspace.db` |
-| AI Assistant Center (read-only) | `/personal/aira`, `/work/okarun`, `hub/agent_center/`, `config/agents.yaml`, `data/agent_center.db` |
+| AI Assistant Center (read-only) | `/personal/aira`, `/work/okarun`, dock on all pages via `templates/partials/assistant_dock_panel.html` + `static/js/assistant_dock.js`, `hub/agent_center/`, `config/agents.yaml`, `data/agent_center.db` |
 | AI Connections | `/system/ai-connections` — provider-neutral status/auth/test/dynamic-model/capability/disconnect registry |
 | Email Center (Gmail readonly OAuth) | `/personal/email`, `/work/email`, `hub/email/`, `data/email.db` |
 | Calendar Center (Calendar readonly) | `/personal/calendar`, `/work/calendar`, `hub/calendar/` |
@@ -50,7 +50,7 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 | UID conflict resolve | Conflicts skipped by default; no per-UID take/keep form yet |
 | Enrichment raw metadata | Not bulk-stored; live GET only when detail `?tab=raw&raw=1` |
 | SQL Workspace | Implemented — SELECT/WITH/EXPLAIN only; Live warning; never auto-run |
-| AI Assistant Center | Implemented — isolated Aira/Okarun profiles; provider switching; Find/Ask/Plan/Review; dynamic adapter models; context preview; streaming/cancel/retry/history; scoped read-only tools; no write/execution |
+| AI Assistant Center | Implemented — isolated Aira/Okarun profiles; persistent dock (resize/pin/minimize; per-workspace prefs; lazy providers); provider switching; Find/Ask/Plan/Review; dynamic adapter models; context preview; streaming/cancel/retry/history; scoped read-only tools; no write/execution; no voice |
 | Email Center | Implemented — `gmail.readonly` only; encrypted tokens; no send/modify/mark-read; opt-in assistant metadata search forced to active workspace |
 | Calendar Center | Implemented — FullCalendar grid + agenda/upcoming; readonly; sanitized descriptions; no create/RSVP/drag; opt-in assistant lookup forced to active workspace |
 | Repository Notebook | Manual notes with `personal`\|`work` scope + separate Quick Notepads; profile-scoped assistant lookup is read-only |

@@ -113,6 +113,7 @@ from hub.email.store import EmailStore
 from hub.calendar.routes import register_calendar_routes
 from hub.calendar.service import CalendarService
 from hub.agent_center.db import AgentCenterDb
+from hub.agent_center.dock import dock_shell_bootstrap
 from hub.agent_center.openai_settings import load_openai_settings
 from hub.agent_center.routes import register_agent_center_routes
 from hub.agent_center.service import AgentCenterService
@@ -571,6 +572,12 @@ def create_app() -> Flask:
         # Floating Quick Notepad is available on all main pages via base.html
         # (pages with an embedded panel set skip_global_notepad).
         notepad = QuickNotepadStore(notebook.db, scope=workspace).get()
+        # Lightweight Aira/Okarun dock bootstrap — no provider probing.
+        assistant_dock = dock_shell_bootstrap(
+            notebook.db,
+            workspace=workspace,
+            endpoint=ep,
+        )
 
         return {
             "app_name": settings.app_name,
@@ -589,6 +596,7 @@ def create_app() -> Flask:
             "quick_actions": personal_actions if workspace == "personal" else work_actions,
             "notepad": notepad,
             "note_scope": workspace,
+            "assistant_dock": assistant_dock,
         }
 
     def _set_workspace_and_redirect(workspace: str, next_url: str | None = None):

@@ -1,0 +1,69 @@
+<aside class="ad-panel" id="ad-panel" aria-label="{{ assistant_dock.profile.name }} assistant">
+  <div class="ad-resize" id="ad-resize" role="separator" aria-orientation="vertical" aria-label="Resize assistant panel" tabindex="0"></div>
+
+  <header class="ad-header">
+    <div class="ad-header-main">
+      <strong class="ad-title" id="ad-title">{{ assistant_dock.profile.name }}</strong>
+      <span class="ad-status" id="ad-status"><span class="ad-status-dot" aria-hidden="true"></span> Assistant online</span>
+    </div>
+    <div class="ad-header-actions" role="toolbar" aria-label="Assistant panel controls">
+      <a class="btn btn-sm ad-icon-btn" id="ad-open-center" href="{{ assistant_dock.center_url }}" title="Open full Assistant Center">⋯</a>
+      <button type="button" class="btn btn-sm ad-icon-btn" id="ad-pin" title="Pin panel" aria-pressed="{{ 'true' if assistant_dock.prefs.pinned else 'false' }}">📌</button>
+      <button type="button" class="btn btn-sm ad-icon-btn" id="ad-minimize" title="Minimize panel">—</button>
+      <button type="button" class="btn btn-sm ad-icon-btn" id="ad-close" title="Close panel" aria-label="Close assistant">×</button>
+    </div>
+  </header>
+
+  <div class="ad-tabs" role="tablist" aria-label="Assistant views">
+    <button type="button" class="ad-tab is-active" role="tab" id="ad-tab-conversation" aria-selected="true" data-ad-tab="conversation">Conversation</button>
+    <button type="button" class="ad-tab" role="tab" id="ad-tab-output" aria-selected="false" data-ad-tab="output">Output</button>
+  </div>
+
+  <div class="ad-body">
+    <div class="ad-pane is-active" id="ad-pane-conversation" role="tabpanel" aria-labelledby="ad-tab-conversation">
+      <div class="ad-messages" id="ad-messages" aria-live="polite">
+        <div class="ad-msg ad-msg-assistant">
+          <p class="ad-intro" id="ad-intro">
+            {{ assistant_dock.profile.name }} — {{ assistant_dock.profile.title }}.
+            {{ assistant_dock.profile.tone }}
+            Read-only tools only; secrets stay out of context.
+          </p>
+          <div class="ad-suggestions" id="ad-suggestions">
+            {% for item in assistant_dock.suggestions %}
+            <button type="button" class="ad-suggestion" data-ad-suggestion="{{ item.label }}">{{ item.label }}</button>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <details class="ad-context" id="ad-context">
+        <summary>Context preview</summary>
+        <pre class="ad-context-body muted" id="ad-context-body">No context packed yet.</pre>
+      </details>
+    </div>
+
+    <div class="ad-pane" id="ad-pane-output" role="tabpanel" aria-labelledby="ad-tab-output" hidden>
+      <div class="ad-output" id="ad-output">
+        <p class="muted">Run output, logs, and tool activity appear here.</p>
+      </div>
+    </div>
+  </div>
+
+  <footer class="ad-composer">
+    <textarea id="ad-prompt" class="ad-prompt" rows="3" placeholder="Ask {{ assistant_dock.profile.name }} a read-only question…" aria-label="Assistant prompt"></textarea>
+    <div class="ad-composer-row">
+      <div class="ad-composer-tools">
+        <button type="button" class="btn btn-sm ad-icon-btn" id="ad-history" title="Recent runs">◷</button>
+        <button type="button" class="btn btn-sm ad-icon-btn" id="ad-settings" title="Open full Assistant Center settings">⚙</button>
+        <label class="ad-model-wrap">
+          <span class="sr-only">Agent / model</span>
+          <select id="ad-agent" aria-label="Agent provider">
+            <option value="">Loading providers…</option>
+          </select>
+        </label>
+        <select id="ad-model" aria-label="Model" hidden></select>
+      </div>
+      <button type="button" class="btn btn-primary ad-send" id="ad-send" title="Send" aria-label="Send">➤</button>
+    </div>
+    <p class="ad-safety muted">{{ assistant_dock.safety.message }}</p>
+  </footer>
+</aside>

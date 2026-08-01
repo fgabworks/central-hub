@@ -84,6 +84,13 @@ def get_profile(profile_id: str | None) -> AssistantProfile:
     return profile
 
 
+def profile_for_workspace(workspace: str | None) -> AssistantProfile:
+    ws = (workspace or "").strip().lower()
+    if ws == "personal":
+        return PROFILES["aira"]
+    return PROFILES["okarun"]
+
+
 def normalize_tools(profile: AssistantProfile, requested: list[str] | None) -> list[str]:
     selected = requested if requested is not None else list(profile.default_tools)
     allowed = set(profile.allowed_tools)

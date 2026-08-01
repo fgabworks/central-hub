@@ -7,7 +7,9 @@ from typing import Any
 from flask import Flask, jsonify, redirect, render_template, request, url_for
 
 from hub.agent_center.service import AgentCenterError, AgentCenterService
+from hub.agent_center.dock import dock_shell_bootstrap, load_dock_prefs, save_dock_prefs
 from hub.jobs.auth import require_owner
+from hub.notebook.workspace import read_workspace
 
 
 def register_agent_center_routes(app: Flask) -> None:
@@ -38,6 +40,8 @@ def register_agent_center_routes(app: Flask) -> None:
             safety=data["safety"],
             profile=data["profile"],
             conversations=data["conversations"],
+            # Full Assistant Center page keeps advanced UI; skip dock to avoid double chrome.
+            skip_assistant_dock=True,
         )
 
     @app.get("/system/ai-connections")
@@ -72,6 +76,34 @@ def register_agent_center_routes(app: Flask) -> None:
     @app.get("/prompting")
     def agent_center():
         return _page("okarun")
+
+    @app.get("/api/assistant-dock/bootstrap")
+    def api_assistant_dock_bootstrap():
+        """Lightweight dock bootstrap — never probes providers."""
+        notebook = app.config["NOTEBOOK"]
+        workspace = read_workspace(request, notebook.db)
+        return jsonify(
+            dock_shell_bootstrap(
+                notebook.db,
+                workspace=workspace,
+                endpoint=request.args.get("endpoint") or request.headers.get("X-Hub-Endpoint"),
+            )
+        )
+
+    @app.get("/api/assistant-dock/prefs")
+    def api_assistant_dock_prefs_get():
+        notebook = app.config["NOTEBOOK"]
+        workspace = read_workspace(request, notebook.db)
+        prefs = load_dock_prefs(notebook.db, workspace)
+        return jsonify({"ok": True, "prefs": prefs})
+
+    @app.put("/api/assistant-dock/prefs")
+    def api_assistant_dock_prefs_put():
+        notebook = app.config["NOTEBOOK"]
+        workspace = read_workspace(request, notebook.db)
+        payload = request.get_json(silent=True) or {}
+        prefs = save_dock_prefs(notebook.db, workspace, payload)
+        return jsonify({"ok": True, "prefs": prefs})
 
     @app.get("/api/agents")
     @app.get("/api/assistants/<profile_id>/agents")

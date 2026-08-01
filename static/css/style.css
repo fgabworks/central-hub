@@ -74,8 +74,14 @@ code, .mono { font-family: var(--mono); font-size: 12px; }
 
 .app-shell {
   display: grid;
-  grid-template-columns: var(--sidebar-w) 1fr;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
   min-height: 100vh;
+}
+.app-shell.is-ad-open:not(.is-ad-mobile) {
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--ad-width, 380px);
+}
+.app-shell.is-ad-open.is-ad-minimized:not(.is-ad-mobile) {
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr) 48px;
 }
 
 /* Sidebar */
@@ -865,7 +871,7 @@ a.stat-card-tasks .stat-link {
 }
 
 .dash-main-stack > .panel-queue {
-  /* Fixed 5-row viewport — do not grow to fill the dashboard column. */
+  /* Fixed 5-row viewport ? do not grow to fill the dashboard column. */
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
@@ -1672,7 +1678,7 @@ button.btn:disabled {
   border: 1px solid rgba(220, 38, 38, 0.35);
 }
 
-/* Find Missing UIDs — selection + compact scan layout */
+/* Find Missing UIDs ? selection + compact scan layout */
 .fm-steps {
   display: flex;
   flex-wrap: wrap;
@@ -1840,11 +1846,11 @@ button.btn:disabled {
 }
 .fm-summary-toggle h2 { margin: 0; }
 .fm-summary-toggle::after {
-  content: "▾";
+  content: "?";
   color: var(--cool);
   font-size: 0.85rem;
 }
-.fm-summary-card:not([open]) .fm-summary-toggle::after { content: "▸"; }
+.fm-summary-card:not([open]) .fm-summary-toggle::after { content: "?"; }
 @media (max-width: 1100px) {
   .fm-layout { grid-template-columns: 1fr; }
   .fm-side { order: 2; }
@@ -2082,7 +2088,7 @@ button.btn:disabled {
   flex-direction: column;
   gap: 0.45rem;
   padding: 0.75rem 0.75rem 0.75rem 1rem;
-  /* Opaque surface — floating drawer must fully cover content behind it. */
+  /* Opaque surface ? floating drawer must fully cover content behind it. */
   background: var(--panel);
   border: 1px solid var(--border);
   color: var(--text);
@@ -3294,7 +3300,7 @@ body.qn-maximized .qn-history[open] {
   font-size: 12px;
 }
 /*
- * Multi-day bars must NOT get max-width/overflow on the event root — that clips
+ * Multi-day bars must NOT get max-width/overflow on the event root ? that clips
  * week-boundary segments into junk like a lone "PR" chip. Keep rows contained instead.
  */
 .cal-grid .fc .fc-daygrid-body,
@@ -4239,4 +4245,257 @@ body.qn-maximized .qn-history[open] {
   border-top: 1px solid var(--border);
   background: #fff;
 }
+
+/* ===== Assistant dock (Aira / Okarun) -  VS Code-style right panel ===== */
+:root { --ad-width: 380px; }
+.ad-host {
+  display: none;
+  min-width: 0;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  position: relative;
+}
+.app-shell.is-ad-open .ad-host { display: flex; flex-direction: column; min-height: 100vh; }
+.app-shell.is-ad-minimized .ad-host { width: 48px; }
+.ad-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+  background: #1a1e24;
+}
+.ad-resize {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize;
+  z-index: 2;
+}
+.ad-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.ad-header-main { min-width: 0; }
+.ad-title { display: block; font-size: 0.95rem; }
+.ad-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  color: var(--cool);
+}
+.ad-status-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--success);
+  display: inline-block;
+}
+.ad-header-actions { display: flex; gap: 0.25rem; flex-shrink: 0; }
+.ad-icon-btn {
+  min-width: 1.85rem;
+  padding: 0.15rem 0.35rem;
+  line-height: 1.2;
+}
+.ad-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.ad-tab {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--cool);
+  padding: 0.55rem 0.75rem;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+}
+.ad-tab.is-active {
+  color: var(--text);
+  border-bottom-color: var(--crimson);
+}
+.ad-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.ad-pane {
+  display: none;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+.ad-pane.is-active { display: flex; }
+.ad-messages, .ad-output {
+  flex: 1;
+  overflow: auto;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.ad-msg {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.7rem 0.8rem;
+  background: var(--panel-2);
+  font-size: 0.86rem;
+}
+.ad-msg-user {
+  align-self: flex-end;
+  max-width: 92%;
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+}
+.ad-msg-assistant { max-width: 100%; }
+.ad-intro { margin: 0 0 0.65rem; color: var(--cool); }
+.ad-suggestions { display: flex; flex-direction: column; gap: 0.35rem; }
+.ad-suggestion {
+  text-align: left;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 0.45rem 0.55rem;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+}
+.ad-suggestion:hover { border-color: var(--accent-border); background: var(--accent-soft); }
+.ad-context {
+  border-top: 1px solid var(--border);
+  padding: 0.45rem 0.75rem 0.65rem;
+  flex-shrink: 0;
+}
+.ad-context summary { cursor: pointer; font-size: 0.8rem; color: var(--cool); }
+.ad-context-body {
+  margin: 0.45rem 0 0;
+  max-height: 8rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-size: 0.72rem;
+}
+.ad-composer {
+  border-top: 1px solid var(--border);
+  padding: 0.65rem 0.75rem 0.75rem;
+  flex-shrink: 0;
+  background: #15191f;
+}
+.ad-prompt {
+  width: 100%;
+  resize: vertical;
+  min-height: 4rem;
+  max-height: 10rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  padding: 0.55rem 0.65rem;
+  font: inherit;
+  margin-bottom: 0.5rem;
+}
+.ad-composer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.ad-composer-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+  flex: 1;
+}
+.ad-model-wrap { min-width: 0; flex: 1; }
+.ad-model-wrap select,
+#ad-model {
+  width: 100%;
+  max-width: 11rem;
+  padding: 0.28rem 0.4rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+}
+.ad-send {
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 999px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.ad-safety { margin: 0.45rem 0 0; font-size: 0.72rem; }
+.ad-open-btn {
+  display: inline-flex;
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 55;
+}
+.ad-open-btn[hidden] { display: none !important; }
+.app-shell.is-ad-minimized .ad-panel > :not(.ad-header) { display: none; }
+.app-shell.is-ad-minimized .ad-header-main,
+.app-shell.is-ad-minimized #ad-open-center,
+.app-shell.is-ad-minimized #ad-pin { display: none; }
+.ad-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 58;
+}
+.ad-backdrop:not([hidden]) { display: block; }
+.ad-thought {
+  font-size: 0.75rem;
+  color: var(--cool);
+  margin-bottom: 0.35rem;
+}
+.ad-source {
+  margin-top: 0.45rem;
+  font-size: 0.72rem;
+  color: var(--cool);
+}
+.ad-table-wrap { overflow: auto; margin-top: 0.35rem; }
+.ad-table-wrap table.data { font-size: 0.75rem; }
+
+@media (max-width: 960px) {
+  .app-shell.is-ad-open:not(.is-ad-mobile),
+  .app-shell.is-ad-open.is-ad-minimized:not(.is-ad-mobile) {
+    grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  }
+  .app-shell.is-ad-mobile.is-ad-open .ad-host {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(100vw, 420px);
+    z-index: 60;
+    box-shadow: -8px 0 24px rgba(0,0,0,0.35);
+  }
+  .app-shell.is-ad-mobile.is-ad-open .ad-backdrop {
+    display: block;
+  }
+  .app-shell.is-ad-mobile.is-ad-minimized .ad-host {
+    width: 48px;
+  }
 }
