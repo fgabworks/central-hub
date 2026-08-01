@@ -154,10 +154,27 @@ def primary_value_display(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def classification_badge(classification: str | None, *, unresolved: bool = False) -> dict[str, str]:
+    raw = (classification or "").strip()
+    if unresolved or raw.lower() == "unresolved" or not raw:
+        return {"code": "unresolved", "label": "Unresolved"}
+    if raw == "HCSC + RF":
+        return {"code": "hcsc-rf", "label": "HCSC + RF"}
+    if raw == "HCSC":
+        return {"code": "hcsc", "label": "HCSC"}
+    if raw == "RF":
+        return {"code": "rf", "label": "RF"}
+    return {"code": "unresolved", "label": "Unresolved"}
+
+
 def enrich_result_row(row: dict[str, Any]) -> dict[str, Any]:
     """Attach display-only fields for the Indicator Summary table."""
     out = dict(row)
     badge = source_badge(out.get("source_type"), source_owner=out.get("source_owner"))
+    class_badge = classification_badge(
+        out.get("classification"),
+        unresolved=bool(out.get("classification_unresolved") or out.get("unresolved")),
+    )
     display = primary_value_display(out)
     out["display_result_type"] = display["display_result_type"]
     out["value_text"] = display["value_text"]
@@ -165,6 +182,8 @@ def enrich_result_row(row: dict[str, Any]) -> dict[str, Any]:
     out["calculation_basis"] = display["calculation_basis"]
     out["source_badge"] = badge["code"]
     out["source_badge_label"] = badge["label"]
+    out["classification_badge"] = class_badge["code"]
+    out["classification_badge_label"] = class_badge["label"]
     out["population_scope"] = out.get("population_definition_reference") or "—"
     if out.get("age_range"):
         out["population_scope"] = f"{out['population_scope']} · Age: {out['age_range']}"
@@ -178,5 +197,6 @@ def enrich_result_row(row: dict[str, Any]) -> dict[str, Any]:
         "source_owner": out.get("source_owner"),
         "source_object": out.get("source_table_view_reference"),
         "definition": out.get("population_definition_reference") or out.get("notes"),
+        "classification": out.get("classification_badge_label"),
     }
     return out

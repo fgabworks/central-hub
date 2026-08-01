@@ -149,7 +149,7 @@ settings = load_settings()
 _DHIS2_TOOLS = [
     {"label": "Instance Details", "icon": "◎", "endpoint": "dhis2_instance"},
     {"label": "Reports", "icon": "▤", "endpoint": "dhis2_reports_library"},
-    {"label": "HCSC Indicators", "icon": "▣", "endpoint": "dhis2_hcsc_indicators"},
+    {"label": "HCSC–RF", "icon": "▣", "endpoint": "dhis2_hcsc_indicators"},
     {"label": "Metadata Catalog", "icon": "▦", "endpoint": "dhis2_catalog"},
     {"label": "Authorities", "icon": "☰", "endpoint": "dhis2_authorities"},
     {"label": "Metadata Lookup", "icon": "⌕", "endpoint": "dhis2_lookup"},

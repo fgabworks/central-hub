@@ -18,6 +18,15 @@ from hub.hcsc_indicators.adapters import (
     get_adapters,
     select_adapter,
 )
+from hub.hcsc_indicators.branding import (
+    COMPARE_SOURCES,
+    NAV_LABEL,
+    PAGE_MEANING,
+    PAGE_SUBTITLE,
+    PAGE_TITLE,
+    REVIEW_DIFFERENCES,
+    export_package_meta,
+)
 from hub.hcsc_indicators.cache import (
     CATEGORY_CACHE,
     INFLIGHT,
@@ -60,15 +69,21 @@ class HcscIndicatorService:
         periods = periods_payload(remembered=default_completed_quarter())
         return {
             "ok": True,
-            "page_title": "HCSC Indicator Summary & Data Lineage — NPMO",
+            "page_title": PAGE_TITLE,
+            "page_subtitle": PAGE_SUBTITLE,
+            "page_meaning": PAGE_MEANING,
+            "nav_label": NAV_LABEL,
             "phase": "0-3",
             "npmo_report_uid": reg.get("npmo_report_uid"),
             "npmo_report_name": reg.get("npmo_report_name"),
             "indicators": reg.get("indicators") or [],
             "overview_keys": [r["key"] for r in reg.get("overview_indicators") or []],
             "unresolved_keys": reg.get("unresolved_keys") or [],
+            "unresolved_classifications": reg.get("unresolved_classifications") or [],
             "sections": reg.get("sections") or [],
             "phase2_keys": reg.get("phase2_keys") or [],
+            "compare_sources_label": COMPARE_SOURCES,
+            "review_differences_label": REVIEW_DIFFERENCES,
             "design": {
                 "ok": design.get("ok"),
                 "dx_to_element": design.get("dx_to_element") or {},
@@ -180,6 +195,8 @@ class HcscIndicatorService:
         force_refresh: bool = False,
     ) -> dict[str, Any]:
         sid = (section or "").strip().lower()
+        if sid == "convergence":
+            sid = "hcsc"
         if sid not in SECTION_LABELS:
             raise ReportSecurityError(f"Unknown section: {section}", code="invalid_section")
         return self._cached_fetch(
@@ -328,6 +345,10 @@ class HcscIndicatorService:
             "category": ind["category"],
             "section": ind.get("section"),
             "section_label": ind.get("section_label") or SECTION_LABELS.get(ind.get("section") or "", ""),
+            "display_group": ind.get("display_group"),
+            "display_group_label": ind.get("display_group_label"),
+            "classification": ind.get("classification"),
+            "classification_unresolved": ind.get("classification_unresolved"),
             "phase": ind.get("phase"),
             "adapter": adapter_name,
             "retrieval_method": retrieval_method,
@@ -555,19 +576,29 @@ class HcscIndicatorService:
                 source_mapping_rows=mapping_rows,
             )
 
-        by_section: dict[str, list[dict[str, Any]]] = {s: [] for s in SECTIONS}
+        by_section: dict[str, list[dict[str, Any]]] = {}
+        by_group: dict[str, list[dict[str, Any]]] = {}
         for row in results:
             by_section.setdefault(row.get("section") or "eligible_beneficiaries", []).append(row)
-        sections_out = [
-            {
-                "id": sid,
-                "label": SECTION_LABELS[sid],
-                "results": by_section.get(sid) or [],
-                "count": len(by_section.get(sid) or []),
-            }
-            for sid in SECTIONS
-            if by_section.get(sid)
-        ]
+            by_group.setdefault(row.get("display_group") or row.get("section") or "unresolved", []).append(row)
+        from hub.hcsc_indicators.branding import DISPLAY_GROUP_LABELS, DISPLAY_GROUPS, RF_DOMAIN_GROUPS
+
+        sections_out = []
+        for gid in DISPLAY_GROUPS:
+            rows = by_group.get(gid) or []
+            if not rows and not (
+                gid == "results_framework" and any(by_group.get(d) for d in RF_DOMAIN_GROUPS)
+            ):
+                continue
+            sections_out.append(
+                {
+                    "id": gid,
+                    "label": DISPLAY_GROUP_LABELS.get(gid, gid),
+                    "results": rows,
+                    "count": len(rows),
+                    "rf_domain": gid in RF_DOMAIN_GROUPS,
+                }
+            )
 
         # Fix http_requests: one batched analytics call when dx present.
         dx_list = (
@@ -580,6 +611,19 @@ class HcscIndicatorService:
         http_requests = 1 if dx_list else 0
 
         total_ms = int((time.perf_counter() - started) * 1000)
+        package = export_package_meta(
+            kind="report",
+            environment=env,
+            period=pe,
+            org_unit=ou,
+            generated_at=freshness,
+            source_versions={
+                "registry": "config/hcsc_indicators.yaml",
+                "npmo_report_uid": reg.get("npmo_report_uid"),
+                "adapters": sorted(adapter_payloads.keys()),
+                "dx_count": len(dx_list),
+            },
+        )
         return {
             "ok": True,
             "scope": scope,
@@ -589,6 +633,7 @@ class HcscIndicatorService:
             "org_unit": ou,
             "disaggregation": disagg,
             "freshness": freshness,
+            "package": package,
             "results": results,
             "sections": sections_out,
             "adapters_used": sorted(adapter_payloads.keys()),
@@ -721,17 +766,42 @@ class HcscIndicatorService:
 
         summary = summarize_comparisons(comparisons)
         total_ms = int((time.perf_counter() - started) * 1000)
+        package = export_package_meta(
+            kind="validation",
+            environment=scope["environment"],
+            period=scope["period"],
+            org_unit=scope["org_unit"],
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            source_versions={
+                "registry": "config/hcsc_indicators.yaml",
+                "npmo_report_uid": self.registry().get("npmo_report_uid"),
+                "adapters": report.get("adapters_used") or [],
+            },
+        )
         return {
             "ok": True,
             "scope": scope,
+            "package": package,
+            "compare_sources_label": COMPARE_SOURCES,
+            "review_differences_label": REVIEW_DIFFERENCES,
             "summary": summary,
             "comparisons": comparisons,
             "filters": {
                 "categories": sorted(
-                    {c.get("section_label") or c.get("section") for c in comparisons if c.get("section")}
+                    {
+                        c.get("display_group_label") or c.get("section_label") or c.get("section")
+                        for c in comparisons
+                        if c.get("display_group_label") or c.get("section")
+                    }
                 ),
                 "statuses": sorted({c.get("validation_status") for c in comparisons if c.get("validation_status")}),
-                "sources": sorted({c.get("comparison_source") for c in comparisons if c.get("comparison_source")}),
+                "sources": sorted(
+                    {
+                        c.get("comparison_source_label") or c.get("comparison_source")
+                        for c in comparisons
+                        if c.get("comparison_source_label") or c.get("comparison_source")
+                    }
+                ),
             },
             "timings": {
                 "total_ms": total_ms,
@@ -775,11 +845,20 @@ class HcscIndicatorService:
             org_unit=workspace["scope"]["org_unit"],
             disaggregation=disaggregation or "none",
             comparisons=workspace.get("comparisons") or [],
-            report_meta={"timings": workspace.get("timings"), "summary": workspace.get("summary")},
+            report_meta={
+                "timings": workspace.get("timings"),
+                "summary": workspace.get("summary"),
+                "package": workspace.get("package"),
+            },
             note=note,
             path=evidence_path,
         )
-        return {"ok": True, "snapshot": saved, "summary": workspace.get("summary")}
+        return {
+            "ok": True,
+            "snapshot": saved,
+            "summary": workspace.get("summary"),
+            "package": workspace.get("package"),
+        }
 
     def add_validation_note(
         self,

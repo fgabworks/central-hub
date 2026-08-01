@@ -55,7 +55,7 @@ def register_hcsc_indicator_routes(app: Flask) -> None:
         _audit(
             getattr(audit_actions, "HCSC_INDICATOR_VIEW", "HCSC_INDICATOR_VIEW"),
             target="hcsc-indicator-summary",
-            detail="Opened HCSC Indicator Summary Overview",
+            detail="Opened Central Hub HCSC–RF",
         )
         return render_template(
             "hcsc_indicator_summary.html",

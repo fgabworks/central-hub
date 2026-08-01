@@ -1,5 +1,5 @@
 /**
- * HCSC Indicator Summary & Data Lineage — NPMO UI
+ * Central Hub HCSC–RF UI
  * Read-only presentation of registry + batched analytics. No formula engine.
  */
 (function () {
@@ -108,6 +108,20 @@
       escapeHtml(label || code) +
       '">' +
       escapeHtml(code || "PI") +
+      "</span>"
+    );
+  }
+
+  function classificationBadge(row) {
+    var code = row.classification_badge || "unresolved";
+    var label = row.classification_badge_label || row.classification || "Unresolved";
+    return (
+      '<span class="hcsc-badge is-' +
+      escapeHtml(code) +
+      '" title="Classification: ' +
+      escapeHtml(label) +
+      '">' +
+      escapeHtml(label) +
       "</span>"
     );
   }
@@ -227,21 +241,48 @@
     if (!tbody) return;
     var rows = filteredRows();
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="muted">No matching indicators.</td></tr>';
+      tbody.innerHTML =
+        '<tr><td colspan="7" class="muted">No matching indicators in Central Hub HCSC–RF.</td></tr>';
       return;
     }
     var sections = state.sections && state.sections.length
       ? state.sections
       : [{ id: "_all", label: "Indicators", results: rows }];
+    var rfDomains = {
+      maternal_health: true,
+      child_nutrition_health: true,
+      household_wash_sbc: true,
+      food_security: true,
+    };
     var html = [];
     sections.forEach(function (sec) {
       var secRows = rows.filter(function (r) {
-        return !sec.id || sec.id === "_all" || r.section === sec.id;
+        return !sec.id || sec.id === "_all" || r.display_group === sec.id;
       });
+      var isRfParent = sec.id === "results_framework";
+      var isRfDomain = !!sec.rf_domain || !!rfDomains[sec.id];
+      if (isRfParent) {
+        var anyRf = rows.some(function (r) {
+          return rfDomains[r.display_group];
+        });
+        if (!anyRf && !secRows.length) return;
+        html.push(
+          '<tr class="hcsc-section-row hcsc-section-rf"><td colspan="7"><strong>' +
+            escapeHtml(sec.label || "Results Framework") +
+            "</strong> <span class=\"muted\">(domain groups below)</span></td></tr>"
+        );
+        return;
+      }
       if (!secRows.length) return;
+      var label = sec.label || sec.id;
+      if (isRfDomain) {
+        label = "↳ " + label;
+      }
       html.push(
-        '<tr class="hcsc-section-row"><td colspan="7"><strong>' +
-          escapeHtml(sec.label || sec.id) +
+        '<tr class="hcsc-section-row' +
+          (isRfDomain ? " hcsc-section-rf-domain" : "") +
+          '"><td colspan="7"><strong>' +
+          escapeHtml(label) +
           "</strong> <span class=\"muted\">(" +
           secRows.length +
           ")</span></td></tr>"
@@ -254,7 +295,8 @@
             '">' +
             "<td><strong>" +
             escapeHtml(r.display_name) +
-            "</strong>" +
+            "</strong> " +
+            classificationBadge(r) +
             (r.unresolved
               ? ' <span class="hcsc-type-pill is-status">Unresolved</span>'
               : "") +
@@ -286,7 +328,9 @@
         );
       });
     });
-    tbody.innerHTML = html.join("") || '<tr><td colspan="7" class="muted">No matching indicators.</td></tr>';
+    tbody.innerHTML =
+      html.join("") ||
+      '<tr><td colspan="7" class="muted">No matching indicators in Central Hub HCSC–RF.</td></tr>';
   }
 
   function renderMapping() {
@@ -417,9 +461,11 @@
     var st = ($("hcsc-val-status") && $("hcsc-val-status").value) || "";
     var src = ($("hcsc-val-source") && $("hcsc-val-source").value) || "";
     return rows.filter(function (r) {
-      if (cat && (r.section_label || r.section) !== cat) return false;
+      var catLabel = r.display_group_label || r.section_label || r.section || "";
+      var srcLabel = r.comparison_source_label || r.comparison_source || "";
+      if (cat && catLabel !== cat) return false;
       if (st && r.validation_status !== st) return false;
-      if (src && r.comparison_source !== src) return false;
+      if (src && srcLabel !== src && r.comparison_source !== src) return false;
       return true;
     });
   }
@@ -454,7 +500,7 @@
     if (!tbody) return;
     if (!state.validation) {
       tbody.innerHTML =
-        '<tr><td colspan="7" class="muted">Generate a report, then Run Validation.</td></tr>';
+        '<tr><td colspan="7" class="muted">Generate a report, then Review Differences. Comparisons are read-only.</td></tr>';
       return;
     }
     renderValidationCards(state.validation.summary);
@@ -481,17 +527,17 @@
           "<td><strong>" +
           escapeHtml(r.display_name) +
           "</strong><div class=\"muted\">" +
-          escapeHtml(r.section_label || "") +
+          escapeHtml(r.display_group_label || r.section_label || "") +
           "</div></td>" +
           "<td>" +
           fmtNum(r.primary_value) +
           '<div class="muted">' +
-          escapeHtml(r.primary_source || "") +
+          escapeHtml(r.primary_source_label || r.primary_source || "DHIS2 Analytics Result") +
           "</div></td>" +
           "<td>" +
           fmtNum(r.comparison_value) +
           '<div class="muted">' +
-          escapeHtml(r.comparison_source || "") +
+          escapeHtml(r.comparison_source_label || r.comparison_source || "") +
           "</div></td>" +
           "<td>" +
           escapeHtml(delta) +
@@ -533,15 +579,15 @@
         "<div><dt>Status</dt><dd>" +
         escapeHtml(row.validation_status || "") +
         "</dd></div>" +
-        "<div><dt>Primary</dt><dd>" +
+        "<div><dt>DHIS2 Analytics Result</dt><dd>" +
         escapeHtml(String(row.primary_value)) +
         " · " +
-        escapeHtml(row.primary_source || "") +
+        escapeHtml(row.primary_source_label || row.primary_source || "") +
         "</dd></div>" +
-        "<div><dt>Comparison</dt><dd>" +
+        "<div><dt>Comparison Source</dt><dd>" +
         escapeHtml(String(row.comparison_value)) +
         " · " +
-        escapeHtml(row.comparison_source || "") +
+        escapeHtml(row.comparison_source_label || row.comparison_source || "") +
         "</dd></div>" +
         "<div><dt>Numerator</dt><dd>" +
         fmtNum(row.numerator) +
@@ -632,7 +678,7 @@
     }
     var url = root.getAttribute("data-validation-url");
     if (!url) {
-      setStatus("Validation API not available.", true);
+      setStatus("Compare Sources API not available.", true);
       return;
     }
     showShellBanner("Running validation…");
@@ -646,7 +692,7 @@
       })
       .then(function (data) {
         if (!data.ok) {
-          setStatus(data.error || "Validation failed", true);
+          setStatus(data.error || "Compare Sources failed", true);
           return;
         }
         state.validation = data;
@@ -654,7 +700,7 @@
         setTab("validation");
         showShellBanner("");
         setStatus(
-          "Validation complete · " +
+          "Compare Sources complete · " +
             ((data.summary && data.summary.total) || 0) +
             " comparisons · " +
             ((data.timings && data.timings.total_ms) || "?") +
@@ -663,7 +709,7 @@
         );
       })
       .catch(function () {
-        setStatus("Validation request failed.", true);
+        setStatus("Compare Sources request failed.", true);
       });
   }
 
@@ -684,7 +730,7 @@
         period: period,
         orgUnit: ou,
         disaggregation: ($("hcsc-disagg") && $("hcsc-disagg").value) || "none",
-        note: "Manual evidence snapshot from HCSC Validation tab",
+        note: "Manual Central Hub HCSC–RF Evidence Package from Compare Sources",
       }),
     })
       .then(function (r) {
@@ -695,7 +741,10 @@
           setStatus(data.error || "Snapshot failed", true);
           return;
         }
-        setStatus("Evidence snapshot saved: " + ((data.snapshot && data.snapshot.id) || ""));
+        setStatus(
+          "Central Hub HCSC–RF Evidence Package saved: " +
+            ((data.snapshot && data.snapshot.id) || "")
+        );
       })
       .catch(function () {
         setStatus("Snapshot request failed.", true);
@@ -980,7 +1029,7 @@
         var sub = $("hcsc-subtitle");
         if (sub) {
           sub.textContent =
-            "Report (" +
+            "Central Hub HCSC–RF Report (" +
             ouLabel +
             ") · " +
             period +

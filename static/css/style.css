@@ -5672,7 +5672,7 @@ body.qn-maximized .qn-history[open] {
   .dr-summary-card .dr-summary-grid { grid-template-columns: 1fr; }
 }
 
-/* HCSC Indicator Summary */
+/* Central Hub HCSC?RF */
 .hcsc-shell-state {
   margin: 0 0 0.65rem;
   padding: 0.45rem 0.65rem;
@@ -5790,11 +5790,17 @@ body.qn-maximized .qn-history[open] {
   padding: 0.05rem 0.3rem; border-radius: 4px;
   background: #243044; color: #9ec1ff; vertical-align: middle;
 }
+.hcsc-badge.is-hcsc { background: #1e3a5f; color: #9ec1ff; }
+.hcsc-badge.is-rf { background: #3a2f14; color: #e6c35c; }
+.hcsc-badge.is-hcsc-rf { background: #2a2438; color: #c4b0ef; }
+.hcsc-badge.is-unresolved { background: #3a3030; color: #f0a0a0; }
 .hcsc-badge.is-pi { background: #1e3a5f; color: #9ec1ff; }
 .hcsc-badge.is-ind { background: #3a2f14; color: #e6c35c; }
 .hcsc-badge.is-de { background: #1f3d32; color: #7dcdc2; }
 .hcsc-badge.is-sql { background: #2a2438; color: #c4b0ef; }
 .hcsc-badge.is-lp { background: #143528; color: #7dca9a; }
+.hcsc-section-rf td { background: rgba(138,108,199,0.12); }
+.hcsc-section-rf-domain td { background: rgba(76,139,245,0.05); padding-left: 1rem !important; }
 .hcsc-uid-wrap { white-space: nowrap; }
 .hcsc-uid-link { border: 0; background: transparent; color: inherit; cursor: pointer; padding: 0; font-size: 12px; }
 .hcsc-uid-btn, .hcsc-copy-uid {

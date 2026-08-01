@@ -255,14 +255,24 @@ indicators:
         self.assertIn("convergent_units", reg["unresolved_keys"])
         section_ids = {s["id"] for s in reg["sections"]}
         for needed in (
+            "overview",
             "eligible_beneficiaries",
+            "hcsc",
+            "results_framework",
             "maternal_health",
             "child_nutrition_health",
             "household_wash_sbc",
             "food_security",
-            "convergence",
+            "unresolved",
         ):
             self.assertIn(needed, section_ids)
+        self.assertNotIn("convergence", section_ids)
+        classes = {r["key"]: r["classification"] for r in reg["indicators"]}
+        self.assertEqual(classes["convergence_rate"], "HCSC")
+        self.assertEqual(classes["exclusive_breastfeeding_rate"], "RF")
+        self.assertEqual(classes["convergent_units"], "unresolved")
+        self.assertEqual(len(reg["unresolved_classifications"]), 5)
+        self.assertNotIn("HCSC + RF", set(classes.values()))
 
 
 class AnalyticsMappingTests(unittest.TestCase):
@@ -592,6 +602,11 @@ class OverviewServiceTests(unittest.TestCase):
         section_ids = {s["id"] for s in report["sections"]}
         self.assertIn("maternal_health", section_ids)
         self.assertIn("child_nutrition_health", section_ids)
+        self.assertIn("results_framework", section_ids)
+        self.assertEqual(
+            (report.get("package") or {}).get("package_name"),
+            "Central Hub HCSC–RF Report",
+        )
 
         cat = self.svc.category(
             section="child_nutrition_health",
@@ -685,13 +700,28 @@ class UiContractTests(unittest.TestCase):
         self.assertIn("hcsc-bootstrap", js)
         self.assertIn("loadValidation", js)
         self.assertIn("hcsc-section-row", js)
-        overview = (ROOT / "templates" / "dhis2_overview.html").read_text(encoding="utf-8")
-        self.assertIn("dhis2_tools", overview)
-        self.assertIn("dhis2_hcsc_indicators", (ROOT / "app.py").read_text(encoding="utf-8"))
+        self.assertIn("Compare Sources", html)
+        self.assertIn("HCSC–RF", html)
+        self.assertIn("page_subtitle", html)  # rendered from bootstrap
+        self.assertIn("Review Differences", html)
+        self.assertIn("DHIS2 Analytics Result", html)
+        self.assertIn("classificationBadge", js)
+        self.assertIn("display_group", js)
+        self.assertIn("is-hcsc", css)
+        self.assertIn("is-rf", css)
         self.assertIn("is-drawer-open", css)
         self.assertIn("jkgkU9EiJ5k", yaml_text)
         self.assertIn("unresolved: true", yaml_text)
         self.assertNotIn(">Numerator</th>", html)
+        self.assertNotIn("This Report", html)
+        self.assertNotIn("This Report", js)
+        overview = (ROOT / "templates" / "dhis2_overview.html").read_text(encoding="utf-8")
+        self.assertIn("dhis2_tools", overview)
+        app_src = (ROOT / "app.py").read_text(encoding="utf-8")
+        self.assertIn("dhis2_hcsc_indicators", app_src)
+        self.assertEqual(app_src.count('"endpoint": "dhis2_hcsc_indicators"'), 1)
+        self.assertIn('"label": "HCSC–RF"', app_src)
+        self.assertNotIn("HCSC Indicators", app_src)
         service = (ROOT / "hub" / "hcsc_indicators" / "service.py").read_text(encoding="utf-8")
         self.assertIn("no_formula_engine", service)
         self.assertNotIn("def score_household", service)
@@ -709,10 +739,19 @@ class RouteSmokeTests(unittest.TestCase):
     def test_page_and_registry_api(self):
         page = self.client.get("/dhis2/hcsc-indicators")
         self.assertEqual(page.status_code, 200)
-        self.assertIn(b"HCSC Indicator Summary", page.data)
+        self.assertIn(b"Central Hub HCSC", page.data)
+        self.assertIn("HCSC–RF".encode("utf-8"), page.data)
+        self.assertIn(b"Indicators, Sources, and Validation", page.data)
+        self.assertIn(b"DHIS2", page.data)
+        self.assertIn("HCSC–RF".encode("utf-8"), page.data)
         boot = self.client.get("/api/dhis2/hcsc-indicators/bootstrap")
         self.assertEqual(boot.status_code, 200)
-        self.assertEqual(boot.get_json().get("phase"), "0-3")
+        boot_json = boot.get_json()
+        self.assertEqual(boot_json.get("phase"), "0-3")
+        self.assertEqual(boot_json.get("page_title"), "Central Hub HCSC–RF")
+        self.assertEqual(boot_json.get("page_subtitle"), "Indicators, Sources, and Validation")
+        self.assertEqual(boot_json.get("nav_label"), "HCSC–RF")
+        self.assertEqual(len(boot_json.get("unresolved_classifications") or []), 5)
         reg = self.client.get("/api/dhis2/hcsc-indicators/registry")
         self.assertEqual(reg.status_code, 200)
         keys = {r["key"] for r in reg.get_json().get("indicators") or []}
@@ -723,15 +762,20 @@ class RouteSmokeTests(unittest.TestCase):
         self.assertIn(b"hcsc-bootstrap", page.data)
         overview = self.client.get("/dhis2")
         self.assertEqual(overview.status_code, 200)
-        self.assertIn(b"HCSC Indicators", overview.data)
+        self.assertIn("HCSC–RF".encode("utf-8"), overview.data)
+        self.assertNotIn(b"HCSC Indicators", overview.data)
         self.assertIn(b"/dhis2/hcsc-indicators", overview.data)
-        # Nav active_prefix: endpoint must start with dhis2
+        self.assertEqual(overview.data.count("HCSC–RF".encode("utf-8")), 1)
         self.assertTrue(hasattr(self.app.view_functions.get("dhis2_hcsc_indicators"), "__call__"))
         detail = self.client.get("/api/dhis2/hcsc-indicators/eligible_households")
         self.assertEqual(detail.status_code, 200)
         overview_api = self.client.get("/api/dhis2/hcsc-indicators/overview")
         self.assertIn(overview_api.status_code, {200, 400})
         self.assertNotEqual(overview_api.get_json().get("code"), "not_found")
+        # Legacy category alias still works
+        cat = self.client.get("/api/dhis2/hcsc-indicators/category/convergence")
+        self.assertIn(cat.status_code, {200, 400})
+        self.assertNotEqual((cat.get_json() or {}).get("code"), "invalid_section")
 
     def test_client_get_analytics_is_readonly(self):
         settings = Dhis2Settings(
@@ -855,8 +899,22 @@ class Phase3ValidationTests(unittest.TestCase):
         self.assertEqual(workspace["dhis2_writes"], 0)
         self.assertFalse(workspace["sql_executed"])
         self.assertTrue(workspace["boundaries"]["no_sql_auto_execute"])
+        self.assertEqual(
+            (workspace.get("package") or {}).get("package_name"),
+            "Central Hub HCSC–RF Validation",
+        )
+        self.assertEqual(workspace.get("compare_sources_label"), "Compare Sources")
+        self.assertEqual(workspace.get("review_differences_label"), "Review Differences")
         by_key = {r["indicator_key"]: r for r in workspace["comparisons"]}
         self.assertEqual(by_key["convergence_rate"]["validation_status"], "Exact Match")
+        self.assertEqual(
+            by_key["convergence_rate"]["primary_source_label"],
+            "DHIS2 Analytics Result",
+        )
+        self.assertEqual(
+            by_key["convergence_rate"]["comparison_source_label"],
+            "DHIS2 Analytics Result",
+        )
         self.assertEqual(
             by_key["anc_prenatal_checkup_rate"]["validation_status"],
             "Expected Logic Difference",

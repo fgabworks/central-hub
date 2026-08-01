@@ -7,6 +7,12 @@ from typing import Any
 
 import yaml
 
+from hub.hcsc_indicators.branding import (
+    CLASSIFICATIONS,
+    DISPLAY_GROUP_LABELS,
+    DISPLAY_GROUPS,
+    RF_DOMAIN_GROUPS,
+)
 from hub.hcsc_indicators.cache import REGISTRY_CACHE
 from hub.settings import ROOT_DIR
 
@@ -32,36 +38,45 @@ RESULT_TYPES = frozenset(
 SOURCE_OWNERS = frozenset({"DHIS2", "Live Processing", "data_scripts"})
 
 SECTIONS = (
+    "overview",
     "eligible_beneficiaries",
+    "hcsc",
+    "results_framework",
     "maternal_health",
     "child_nutrition_health",
     "household_wash_sbc",
     "food_security",
+    "unresolved",
+    # Legacy category API aliases still accepted on normalize
     "convergence",
     "data_mapping",
     "validation",
 )
 
 SECTION_LABELS = {
+    "overview": "Overview",
     "eligible_beneficiaries": "Eligible Beneficiaries",
+    "hcsc": "HCSC",
+    "results_framework": "Results Framework",
     "maternal_health": "Maternal Health",
     "child_nutrition_health": "Child Nutrition & Health",
     "household_wash_sbc": "Household / WASH / SBC",
     "food_security": "Food Security",
-    "convergence": "Convergence",
-    "data_mapping": "Data Mapping",
-    "validation": "Validation",
+    "unresolved": "Unresolved",
+    "convergence": "HCSC",
+    "data_mapping": "Unresolved",
+    "validation": "Unresolved",
 }
 
 _CATEGORY_TO_SECTION = {
-    "household": "convergence",
+    "household": "hcsc",
     "maternal": "maternal_health",
     "child": "child_nutrition_health",
     "demographics": "eligible_beneficiaries",
     "wash": "household_wash_sbc",
     "sbc": "household_wash_sbc",
     "food_security": "food_security",
-    "convergence": "convergence",
+    "convergence": "hcsc",
 }
 
 
@@ -137,6 +152,10 @@ def _normalize_indicator(raw: dict[str, Any]) -> dict[str, Any]:
         raise RegistryError(f"Resolved indicator {key} requires dhis2_uids.value")
     category = _as_str(raw.get("category")) or "other"
     section = _as_str(raw.get("section")) or _CATEGORY_TO_SECTION.get(category, "eligible_beneficiaries")
+    if section == "convergence":
+        section = "hcsc"
+    if section in {"data_mapping", "validation"} and raw.get("unresolved"):
+        section = "unresolved"
     if section not in SECTION_LABELS:
         raise RegistryError(f"Invalid section for {key}: {section}")
     # Explicit phase wins; overview indicators default to 1, everything else to 2.
@@ -155,12 +174,35 @@ def _normalize_indicator(raw: dict[str, Any]) -> dict[str, Any]:
             else ("connected_capability" if raw.get("capability_reference") else "unresolved")
         )
     )
+    classification = _as_str(raw.get("classification")) or (
+        "unresolved" if unresolved else None
+    )
+    if classification and classification not in CLASSIFICATIONS:
+        raise RegistryError(f"Invalid classification for {key}: {classification}")
+    if not classification:
+        classification = "unresolved"
+    classification_unresolved = bool(
+        raw.get("classification_unresolved", classification == "unresolved")
+    )
+    display_group = _as_str(raw.get("display_group")) or (
+        "overview"
+        if raw.get("overview") and section in {"eligible_beneficiaries", "hcsc", "convergence"}
+        else ("unresolved" if unresolved else section)
+    )
+    if display_group == "convergence":
+        display_group = "hcsc"
+    if display_group not in DISPLAY_GROUP_LABELS:
+        raise RegistryError(f"Invalid display_group for {key}: {display_group}")
     return {
         "key": key,
         "display_name": _as_str(raw.get("display_name")) or key,
         "category": category,
         "section": section,
         "section_label": SECTION_LABELS[section],
+        "display_group": display_group,
+        "display_group_label": DISPLAY_GROUP_LABELS[display_group],
+        "classification": classification,
+        "classification_unresolved": classification_unresolved,
         "phase": phase,
         "adapter": adapter,
         "result_type": result_type,
@@ -210,9 +252,11 @@ def load_registry(path: Path | None = None, *, force: bool = False) -> dict[str,
     keys = [row["key"] for row in indicators]
     if len(keys) != len(set(keys)):
         raise RegistryError("Duplicate indicator keys in registry.")
-    by_section: dict[str, list[dict[str, Any]]] = {s: [] for s in SECTIONS}
+    by_section: dict[str, list[dict[str, Any]]] = {s: [] for s in DISPLAY_GROUPS}
+    by_group: dict[str, list[dict[str, Any]]] = {s: [] for s in DISPLAY_GROUPS}
     for row in indicators:
         by_section.setdefault(row["section"], []).append(row)
+        by_group.setdefault(row["display_group"], []).append(row)
     payload = {
         "ok": True,
         "path": str(registry_path),
@@ -222,17 +266,26 @@ def load_registry(path: Path | None = None, *, force: bool = False) -> dict[str,
         "indicators": indicators,
         "overview_indicators": [row for row in indicators if row.get("overview")],
         "unresolved_keys": [row["key"] for row in indicators if row.get("unresolved")],
+        "unresolved_classifications": [
+            row["key"] for row in indicators if row.get("classification_unresolved")
+        ],
         "sections": [
             {
-                "id": sid,
-                "label": SECTION_LABELS[sid],
-                "indicator_keys": [r["key"] for r in by_section.get(sid) or []],
-                "count": len(by_section.get(sid) or []),
+                "id": gid,
+                "label": DISPLAY_GROUP_LABELS[gid],
+                "indicator_keys": [r["key"] for r in by_group.get(gid) or []],
+                "count": len(by_group.get(gid) or []),
+                "rf_domain": gid in RF_DOMAIN_GROUPS,
             }
-            for sid in SECTIONS
-            if sid not in {"data_mapping", "validation"} or by_section.get(sid)
+            for gid in DISPLAY_GROUPS
+            if by_group.get(gid)
+            or (
+                gid == "results_framework"
+                and any(by_group.get(d) for d in RF_DOMAIN_GROUPS)
+            )
         ],
         "by_section": {k: v for k, v in by_section.items() if v},
+        "by_display_group": {k: v for k, v in by_group.items() if v},
         "phase2_keys": [row["key"] for row in indicators if int(row.get("phase") or 1) >= 2],
     }
     REGISTRY_CACHE.set(cache_key, payload)

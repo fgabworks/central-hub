@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from hub.hcsc_indicators.branding import (
+    COMPARE_SOURCES,
+    REVIEW_DIFFERENCES,
+    SOURCE_DHIS2_ANALYTICS,
+    comparison_source_label,
+)
 from hub.hcsc_indicators.validation import VALIDATION_STATUSES, compare_percentage
 
 STATUS_UNAVAILABLE = "Comparison Source Unavailable"
@@ -65,7 +71,7 @@ def build_comparison_row(
     scope: dict[str, Any],
 ) -> dict[str, Any]:
     """Build one validation comparison from registry + retrieved values only."""
-    primary_source = "DHIS2 Analytics"
+    primary_source = SOURCE_DHIS2_ANALYTICS
     key = primary_row.get("indicator_key")
     note = ""
     status = "Not Yet Validated"
@@ -108,7 +114,6 @@ def build_comparison_row(
     den_diff = None
     if primary_value is not None and comparison_value is not None:
         value_diff = primary_value - comparison_value
-        # Treat percentage-like rows as percentage points.
         if primary_row.get("result_type") in {
             "percentage",
             "numerator_denominator_percentage",
@@ -129,7 +134,7 @@ def build_comparison_row(
     elif comparison_source == "analytics_num_den" and primary_num is not None and primary_den not in (None, 0):
         recomputed = (primary_num / primary_den) * 100.0
         status = compare_percentage(primary_value, recomputed)
-        note = "Compared analytics indicator value to N/D from the same batched response."
+        note = f"{REVIEW_DIFFERENCES}: analytics value vs N/D from the same batched response."
         comparison_value = recomputed
         comparison_num = primary_num
         comparison_den = primary_den
@@ -159,9 +164,16 @@ def build_comparison_row(
         "display_name": primary_row.get("display_name"),
         "section": primary_row.get("section"),
         "section_label": primary_row.get("section_label"),
+        "display_group": primary_row.get("display_group"),
+        "display_group_label": primary_row.get("display_group_label"),
+        "classification": primary_row.get("classification"),
         "category": primary_row.get("category"),
         "primary_source": primary_source,
+        "primary_source_label": primary_source,
         "comparison_source": comparison_source,
+        "comparison_source_label": comparison_source_label(comparison_source),
+        "compare_sources_label": COMPARE_SOURCES,
+        "review_differences_label": REVIEW_DIFFERENCES,
         "primary_value": primary_value,
         "comparison_value": comparison_value,
         "numerator": primary_num,

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from hub.dhis2.redact import redact_text
+from hub.hcsc_indicators.branding import EXPORT_EVIDENCE, PAGE_TITLE, export_package_meta
 from hub.settings import ROOT_DIR
 
 DEFAULT_DB = ROOT_DIR / "data" / "hcsc_validation_evidence.db"
@@ -111,6 +112,15 @@ def save_snapshot(
     db_path = ensure_schema(path)
     snap_id = uuid.uuid4().hex
     created = datetime.now(timezone.utc).isoformat()
+    package = export_package_meta(
+        kind="evidence",
+        environment=environment,
+        period=period,
+        org_unit=org_unit,
+        generated_at=created,
+        source_versions=(report_meta or {}).get("source_versions")
+        or {"module": PAGE_TITLE, "package": EXPORT_EVIDENCE},
+    )
     payload = {
         "id": snap_id,
         "created_at": created,
@@ -119,6 +129,7 @@ def save_snapshot(
         "org_unit": org_unit,
         "disaggregation": disaggregation,
         "note": note,
+        "package": package,
         "report_meta": report_meta or {},
         "comparisons": comparisons,
         "dhis2_writes": 0,

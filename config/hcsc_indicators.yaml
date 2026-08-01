@@ -1,8 +1,8 @@
-# HCSC Indicator Summary & Data Lineage — NPMO
-# Phase 0–2 registry. Hub stores references only — no formula reimplementation.
-# Verified seeds: AI_UID_INDEX.csv + NPMO design qTQD08sNuzZ summarySingleOuDxToElementId.
-# Unresolved definitions are marked; do not invent UIDs or SQL/formulas.
-# Phase 2 rates use DHIS2 analytics (batched). Approved SQL / LP are reference/deferred.
+# Central Hub HCSC–RF registry
+# Household Convergence Scorecard and Results Framework
+# Hub stores references only — no formula reimplementation.
+# Verified seeds: AI_UID_INDEX.csv + NPMO design qTQD08sNuzZ.
+# classification: HCSC | RF | HCSC + RF | unresolved (do not invent dual membership).
 
 npmo_report_uid: qTQD08sNuzZ
 npmo_report_name: HCSC Summary Tables (NPMO)
@@ -32,6 +32,9 @@ indicators:
   section: eligible_beneficiaries
   phase: 1
   adapter: dhis2_analytics
+  classification: HCSC
+  classification_unresolved: false
+  display_group: overview
 - key: approved_eligible_households
   display_name: Approved Eligible Households
   category: household
@@ -57,6 +60,9 @@ indicators:
   section: eligible_beneficiaries
   phase: 1
   adapter: dhis2_analytics
+  classification: HCSC
+  classification_unresolved: false
+  display_group: overview
 - key: convergent_households
   display_name: Convergent Households
   category: household
@@ -79,9 +85,12 @@ indicators:
   notes: Status DE written by Live Processing convergence; hub reads PI only.
   overview: true
   unresolved: false
-  section: convergence
+  section: hcsc
   phase: 1
   adapter: dhis2_analytics
+  classification: HCSC
+  classification_unresolved: false
+  display_group: hcsc
 - key: convergence_rate
   display_name: Convergence Rate
   category: household
@@ -108,9 +117,12 @@ indicators:
     may differ — see convergent_units.
   overview: true
   unresolved: false
-  section: convergence
+  section: hcsc
   phase: 1
   adapter: dhis2_analytics
+  classification: HCSC
+  classification_unresolved: false
+  display_group: hcsc
 - key: completion_validated_eligible_rate
   display_name: Completion / Validated Eligible Rate
   category: household
@@ -136,9 +148,12 @@ indicators:
   notes: Verified evaluation seed.
   overview: true
   unresolved: false
-  section: convergence
+  section: hcsc
   phase: 1
   adapter: dhis2_analytics
+  classification: HCSC
+  classification_unresolved: false
+  display_group: hcsc
 - key: pregnant_women
   display_name: Pregnant Women
   category: maternal
@@ -164,6 +179,9 @@ indicators:
   section: eligible_beneficiaries
   phase: 1
   adapter: dhis2_analytics
+  classification: HCSC
+  classification_unresolved: false
+  display_group: eligible_beneficiaries
 - key: postpartum_women
   display_name: Postpartum Women
   category: maternal
@@ -189,6 +207,9 @@ indicators:
   section: eligible_beneficiaries
   phase: 1
   adapter: dhis2_analytics
+  classification: HCSC
+  classification_unresolved: false
+  display_group: eligible_beneficiaries
 - key: children_0_59_months
   display_name: Eligible Children 0–59 months
   category: child
@@ -215,6 +236,9 @@ indicators:
   section: eligible_beneficiaries
   phase: 1
   adapter: dhis2_analytics
+  classification: HCSC
+  classification_unresolved: false
+  display_group: eligible_beneficiaries
 - key: children_less_than_6_months
   display_name: Eligible Children less than 6 months
   category: child
@@ -241,6 +265,9 @@ indicators:
   section: eligible_beneficiaries
   phase: 1
   adapter: dhis2_analytics
+  classification: HCSC
+  classification_unresolved: false
+  display_group: eligible_beneficiaries
 - key: children_6_23_months
   display_name: Eligible Children 6–23 months
   category: child
@@ -267,6 +294,9 @@ indicators:
   section: eligible_beneficiaries
   phase: 1
   adapter: dhis2_analytics
+  classification: HCSC
+  classification_unresolved: false
+  display_group: eligible_beneficiaries
 - key: children_6_59_months
   display_name: Eligible Children 6–59 months
   category: child
@@ -293,6 +323,9 @@ indicators:
   section: eligible_beneficiaries
   phase: 1
   adapter: dhis2_analytics
+  classification: HCSC
+  classification_unresolved: false
+  display_group: eligible_beneficiaries
 - key: indigenous_peoples
   display_name: Number of IPs
   category: demographics
@@ -318,6 +351,9 @@ indicators:
   section: eligible_beneficiaries
   phase: 1
   adapter: dhis2_analytics
+  classification: HCSC
+  classification_unresolved: false
+  display_group: eligible_beneficiaries
 - key: convergent_units
   display_name: Convergent Units
   category: household
@@ -343,6 +379,9 @@ indicators:
   section: convergence
   phase: 1
   adapter: unresolved
+  classification: unresolved
+  classification_unresolved: true
+  display_group: unresolved
 - key: anc_prenatal_checkup_rate
   display_name: Pregnant Woman prenatal checkup (ANC) (%)
   category: maternal
@@ -370,6 +409,9 @@ indicators:
   notes: Verified seed from AI_UID_INDEX.csv. N/D via analytics includeNumDen.
   overview: false
   unresolved: false
+  classification: RF
+  classification_unresolved: false
+  display_group: maternal_health
 - key: hh_pw_prenatal_rate
   display_name: Households with PW Prenatal (%)
   category: maternal
@@ -396,6 +438,9 @@ indicators:
   notes: Verified AI_UID_INDEX.csv.
   overview: false
   unresolved: false
+  classification: RF
+  classification_unresolved: false
+  display_group: maternal_health
 - key: ifa_mms_intake_rate
   display_name: HH PW — Intake of Iron + Folic or MMS (%)
   category: maternal
@@ -421,6 +466,9 @@ indicators:
   notes: Verified AI_UID_INDEX.csv.
   overview: false
   unresolved: false
+  classification: RF
+  classification_unresolved: false
+  display_group: maternal_health
 - key: tetanus_vaccine_pw_rate
   display_name: HH PW — Tetanus Vaccine (%)
   category: maternal
@@ -446,6 +494,9 @@ indicators:
   notes: Verified AI_UID_INDEX.csv.
   overview: false
   unresolved: false
+  classification: RF
+  classification_unresolved: false
+  display_group: maternal_health
 - key: facility_based_delivery_rate
   display_name: Facility Based Delivery (%)
   category: maternal
@@ -471,6 +522,9 @@ indicators:
   notes: Verified AI_UID_INDEX.csv.
   overview: false
   unresolved: false
+  classification: RF
+  classification_unresolved: false
+  display_group: maternal_health
 - key: postnatal_care_rate
   display_name: Households with Post Natal Care (%)
   category: maternal
@@ -496,6 +550,9 @@ indicators:
   notes: Verified AI_UID_INDEX.csv.
   overview: false
   unresolved: false
+  classification: RF
+  classification_unresolved: false
+  display_group: maternal_health
 - key: deworming_pw_rate
   display_name: Deworming (PW) (%)
   category: maternal
@@ -521,6 +578,9 @@ indicators:
   notes: Verified AI_UID_INDEX.csv.
   overview: false
   unresolved: false
+  classification: RF
+  classification_unresolved: false
+  display_group: maternal_health
 - key: exclusive_breastfeeding_rate
   display_name: Exclusive breastfed children (<6 mos) (%)
   category: child
@@ -550,6 +610,9 @@ indicators:
   overview: false
   unresolved: false
   age_range: 0–<6 months
+  classification: RF
+  classification_unresolved: false
+  display_group: child_nutrition_health
 - key: mdd_children_6_23_rate
   display_name: Children (6–23m) with adequate diet diversity (%)
   category: child
@@ -576,6 +639,9 @@ indicators:
   overview: false
   unresolved: false
   age_range: 6–23 months
+  classification: RF
+  classification_unresolved: false
+  display_group: child_nutrition_health
 - key: vitamin_a_6_59_rate
   display_name: Children (6–59 mos) Vitamin A supplementation (%)
   category: child
@@ -602,6 +668,9 @@ indicators:
   overview: false
   unresolved: false
   age_range: 6–59 months
+  classification: RF
+  classification_unresolved: false
+  display_group: child_nutrition_health
 - key: age_appropriate_immunization_rate
   display_name: Household with Age Appropriate Immunization (%)
   category: child
@@ -628,6 +697,9 @@ indicators:
   notes: Verified AI_UID_INDEX.csv.
   overview: false
   unresolved: false
+  classification: RF
+  classification_unresolved: false
+  display_group: child_nutrition_health
 - key: growth_monitoring_rate
   display_name: Households with Growth Monitoring (%)
   category: child
@@ -653,6 +725,9 @@ indicators:
   notes: Verified AI_UID_INDEX.csv.
   overview: false
   unresolved: false
+  classification: RF
+  classification_unresolved: false
+  display_group: child_nutrition_health
 - key: safely_managed_drinking_water_rate
   display_name: HH access to safely managed drinking water (%)
   category: wash
@@ -678,6 +753,9 @@ indicators:
   notes: Verified AI_UID_INDEX.csv.
   overview: false
   unresolved: false
+  classification: RF
+  classification_unresolved: false
+  display_group: household_wash_sbc
 - key: handwashing_water_source_rate
   display_name: HH access to a handwashing water source (%)
   category: wash
@@ -703,6 +781,9 @@ indicators:
   notes: Verified AI_UID_INDEX.csv.
   overview: false
   unresolved: false
+  classification: RF
+  classification_unresolved: false
+  display_group: household_wash_sbc
 - key: improved_toilet_rate
   display_name: Household with access to improved toilet (%)
   category: wash
@@ -728,6 +809,9 @@ indicators:
   notes: Verified AI_UID_INDEX.csv.
   overview: false
   unresolved: false
+  classification: RF
+  classification_unresolved: false
+  display_group: household_wash_sbc
 - key: sbc_session_hh_child_rate
   display_name: Attendance to SBC Session — HH with Child (%)
   category: sbc
@@ -753,6 +837,9 @@ indicators:
   notes: Verified AI_UID_INDEX.csv.
   overview: false
   unresolved: false
+  classification: RF
+  classification_unresolved: false
+  display_group: household_wash_sbc
 - key: sbc_session_ip_hh_rate
   display_name: IP HH Attendance to SBC Session (%)
   category: sbc
@@ -778,6 +865,9 @@ indicators:
   notes: Verified AI_UID_INDEX.csv. Not used as Overview IP/non-IP split.
   overview: false
   unresolved: false
+  classification: RF
+  classification_unresolved: false
+  display_group: household_wash_sbc
 - key: hunger_experience_rate
   display_name: Household with hunger experience in last 3 months (%)
   category: food_security
@@ -803,6 +893,9 @@ indicators:
   notes: Verified AI_UID_INDEX.csv.
   overview: false
   unresolved: false
+  classification: RF
+  classification_unresolved: false
+  display_group: food_security
 - key: no_hunger_experience_count
   display_name: Household with no experience of hunger
   category: food_security
@@ -828,6 +921,9 @@ indicators:
   notes: Verified PI seed. Related IND WAckwWH0AMD also exists; hub registers PI count here.
   overview: false
   unresolved: false
+  classification: RF
+  classification_unresolved: false
+  display_group: food_security
 - key: nutritious_balanced_food_frequency
   display_name: Nutritious and balanced food frequency (buckets)
   category: food_security
@@ -854,6 +950,9 @@ indicators:
   notes: 'UNRESOLVED: Do not invent a % formula from bucket PIs. Mark until approved capability or IND UID verified.'
   overview: false
   unresolved: true
+  classification: unresolved
+  classification_unresolved: true
+  display_group: unresolved
 - key: hcsc_rf_approved_sql_lineage
   display_name: HCSC / RF Query (SQL Workspace lineage)
   category: convergence
@@ -881,6 +980,9 @@ indicators:
   notes: Reference for Open in SQL Workspace. Hub does not execute this as HCSC SoT (may diverge from DHIS2 PIs).
   overview: false
   unresolved: true
+  classification: unresolved
+  classification_unresolved: true
+  display_group: unresolved
 - key: pct_convergence_mun_client
   display_name: Pct_Convergence_Mun (NPMO client)
   category: convergence
@@ -905,6 +1007,9 @@ indicators:
   notes: Do not implement until definition verified vs Convergence Rate IND.
   overview: false
   unresolved: true
+  classification: unresolved
+  classification_unresolved: true
+  display_group: unresolved
 - key: overview_ip_non_ip_disaggregation
   display_name: Overview IP / non-IP disaggregation
   category: demographics
@@ -929,3 +1034,6 @@ indicators:
   notes: Blocked until verified IP/non-IP Overview dual indicators are registered.
   overview: false
   unresolved: true
+  classification: unresolved
+  classification_unresolved: true
+  display_group: unresolved
