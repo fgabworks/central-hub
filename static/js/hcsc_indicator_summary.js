@@ -1,6 +1,6 @@
 /**
- * HCSC Indicator Summary & Data Lineage — NPMO (Phase 0–1 UI).
- * Read-only: displays registry + batched analytics results. No formula engine.
+ * HCSC Indicator Summary & Data Lineage — NPMO UI
+ * Read-only presentation of registry + batched analytics. No formula engine.
  */
 (function () {
   "use strict";
@@ -17,9 +17,11 @@
 
   var state = {
     results: [],
-    query: null,
+    sections: [],
+    retrieval: null,
     lastPayload: null,
-    selectedOu: null,
+    activeTab: "summary",
+    activeRtab: "retrieval_request",
   };
 
   function $(id) {
@@ -34,19 +36,11 @@
       .replace(/"/g, "&quot;");
   }
 
-  function fmtNum(v) {
-    if (v == null || v === "") return "—";
-    var n = Number(v);
-    if (!isFinite(n)) return escapeHtml(String(v));
-    if (Math.abs(n - Math.round(n)) < 1e-9) return String(Math.round(n));
-    return n.toFixed(2);
-  }
-
-  function fmtPct(v) {
-    if (v == null || v === "") return "—";
-    var n = Number(v);
-    if (!isFinite(n)) return "—";
-    return n.toFixed(2) + "%";
+  function copyText(text) {
+    if (!text) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(String(text));
+    }
   }
 
   function setStatus(msg, isError) {
@@ -76,35 +70,78 @@
       .join("");
   }
 
-  function valueCell(row) {
-    if (row.unresolved) return '<span class="muted">Unresolved</span>';
-    if (row.result_type === "count") {
-      return '<span title="Count">' + fmtNum(row.count) + "</span>";
-    }
-    if (row.result_type === "numerator_denominator_percentage" || row.result_type === "percentage") {
-      return '<span title="Percentage">' + fmtPct(row.percentage) + "</span>";
-    }
-    return "—";
+  function typePill(displayType) {
+    var t = displayType || "Count";
+    var cls = "hcsc-type-pill is-" + String(t).toLowerCase();
+    return '<span class="' + cls + '">' + escapeHtml(t) + "</span>";
   }
 
-  function uidButton(row) {
-    var uid = row.source_uid || (row.dhis2_uids && row.dhis2_uids.value) || "";
-    var tip =
-      "UID: " +
-      (uid || "unresolved") +
-      " · Type: " +
-      (row.source_type || row.result_type || "") +
-      " · Owner: " +
-      (row.source_owner || "") +
-      " · Object: " +
-      (row.source_table_view_reference || "");
+  function sourceBadge(code, label) {
+    var c = (code || "PI").toLowerCase();
     return (
-      '<button type="button" class="hcsc-uid-btn" data-key="' +
+      '<span class="hcsc-badge is-' +
+      escapeHtml(c) +
+      '" title="' +
+      escapeHtml(label || code) +
+      '">' +
+      escapeHtml(code || "PI") +
+      "</span>"
+    );
+  }
+
+  function uidCell(row) {
+    var uid = row.source_uid || (row.dhis2_uids && row.dhis2_uids.value) || "";
+    var tip = row.uid_tooltip || {};
+    var tipText =
+      "UID: " +
+      (tip.uid || uid || "unresolved") +
+      "\nType: " +
+      (tip.source_type || row.source_badge_label || "") +
+      "\nName: " +
+      (tip.source_name || row.display_name || "") +
+      "\nOwner: " +
+      (tip.source_owner || row.source_owner || "") +
+      "\nObject: " +
+      (tip.source_object || row.source_table_view_reference || "") +
+      "\nDefinition: " +
+      (tip.definition || row.population_definition_reference || "");
+    if (!uid) {
+      return '<span class="muted">—</span>';
+    }
+    return (
+      '<span class="hcsc-uid-wrap" title="' +
+      escapeHtml(tipText) +
+      '">' +
+      sourceBadge(row.source_badge, row.source_badge_label) +
+      ' <button type="button" class="hcsc-uid-link" data-key="' +
+      escapeHtml(row.indicator_key) +
+      '"><code>' +
+      escapeHtml(uid) +
+      "</code></button>" +
+      ' <button type="button" class="hcsc-copy-uid" data-uid="' +
+      escapeHtml(uid) +
+      '" title="Copy UID" aria-label="Copy UID">⧉</button>' +
+      ' <button type="button" class="hcsc-uid-btn" data-key="' +
       escapeHtml(row.indicator_key) +
       '" title="' +
-      escapeHtml(tip) +
-      '" aria-label="Indicator details">ℹ</button>'
+      escapeHtml(tipText) +
+      '" aria-label="Indicator details">ℹ</button>' +
+      "</span>"
     );
+  }
+
+  function valueCell(row) {
+    var main = escapeHtml(row.value_text || "—");
+    var basis = row.calculation_basis
+      ? '<div class="hcsc-basis">' + escapeHtml(row.calculation_basis) + "</div>"
+      : "";
+    var popHint =
+      row.display_result_type === "Count" && row.population_definition_reference
+        ? '<div class="muted hcsc-basis">' + escapeHtml(row.population_definition_reference) + "</div>"
+        : "";
+    // Count population goes in Population/Scope column; avoid duplicating unless basis empty.
+    if (row.display_result_type === "Count") popHint = "";
+    return "<div class=\"hcsc-value\">" + main + basis + popHint + "</div>";
   }
 
   function renderCards(rows) {
@@ -117,25 +154,24 @@
       "convergence_rate",
       "completion_validated_eligible_rate",
     ];
+    var tones = ["is-blue", "is-green", "is-purple", "is-amber", "is-teal"];
     var byKey = {};
     rows.forEach(function (r) {
       byKey[r.indicator_key] = r;
     });
     host.innerHTML = keys
-      .map(function (k) {
+      .map(function (k, i) {
         var r = byKey[k];
         if (!r) return "";
-        var main =
-          r.result_type === "count" ? fmtNum(r.count) : fmtPct(r.percentage);
         return (
-          '<article class="hcsc-card">' +
+          '<article class="hcsc-card ' +
+          tones[i] +
+          '">' +
           "<h3>" +
           escapeHtml(r.display_name) +
-          " " +
-          uidButton(r) +
           "</h3>" +
           '<p class="hcsc-card-value">' +
-          main +
+          escapeHtml(r.value_text || "—") +
           "</p>" +
           '<p class="muted">' +
           escapeHtml(r.validation_status || "") +
@@ -146,112 +182,335 @@
       .join("");
   }
 
-  function renderTable(rows) {
-    var tbody = $("hcsc-tbody");
-    if (!tbody) return;
+  function filteredRows() {
     var q = (($("hcsc-filter") && $("hcsc-filter").value) || "").trim().toLowerCase();
-    var filtered = rows.filter(function (r) {
+    var pctOnly = $("hcsc-pct-only") && $("hcsc-pct-only").checked;
+    return state.results.filter(function (r) {
+      if (pctOnly && r.display_result_type !== "Percentage" && r.display_result_type !== "Ratio") {
+        return false;
+      }
       if (!q) return true;
       return (
         (r.display_name || "").toLowerCase().indexOf(q) >= 0 ||
         (r.indicator_key || "").toLowerCase().indexOf(q) >= 0 ||
-        (r.category || "").toLowerCase().indexOf(q) >= 0
+        (r.category || "").toLowerCase().indexOf(q) >= 0 ||
+        (r.source_uid || "").toLowerCase().indexOf(q) >= 0
       );
     });
-    if (!filtered.length) {
-      tbody.innerHTML = '<tr><td colspan="8" class="muted">No matching indicators.</td></tr>';
+  }
+
+  function renderTable() {
+    var tbody = $("hcsc-tbody");
+    if (!tbody) return;
+    var rows = filteredRows();
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="muted">No matching indicators.</td></tr>';
       return;
     }
-    tbody.innerHTML = filtered
-      .map(function (r) {
-        var numLabel = r.numerator_label ? '<div class="muted">' + escapeHtml(r.numerator_label) + "</div>" : "";
-        var denLabel = r.denominator_label ? '<div class="muted">' + escapeHtml(r.denominator_label) + "</div>" : "";
-        var countLabel = r.result_type === "count" ? '<div class="muted">Count</div>' : "";
-        var formula = r.percentage_formula_reference
-          ? '<div class="muted hcsc-formula">' + escapeHtml(r.percentage_formula_reference) + "</div>"
-          : "";
-        return (
+    var sections = state.sections && state.sections.length
+      ? state.sections
+      : [{ id: "_all", label: "Indicators", results: rows }];
+    var html = [];
+    sections.forEach(function (sec) {
+      var secRows = rows.filter(function (r) {
+        return !sec.id || sec.id === "_all" || r.section === sec.id;
+      });
+      if (!secRows.length) return;
+      html.push(
+        '<tr class="hcsc-section-row"><td colspan="7"><strong>' +
+          escapeHtml(sec.label || sec.id) +
+          "</strong> <span class=\"muted\">(" +
+          secRows.length +
+          ")</span></td></tr>"
+      );
+      secRows.forEach(function (r) {
+        var def = r.definition || r.population_definition_reference || "";
+        html.push(
           "<tr data-key=\"" +
-          escapeHtml(r.indicator_key) +
-          '">' +
-          "<td><strong>" +
-          escapeHtml(r.display_name) +
-          "</strong> " +
-          uidButton(r) +
-          '<div class="muted">' +
-          escapeHtml(r.category || "") +
-          "</div></td>" +
+            escapeHtml(r.indicator_key) +
+            '">' +
+            "<td><strong>" +
+            escapeHtml(r.display_name) +
+            "</strong>" +
+            (r.unresolved
+              ? ' <span class="hcsc-type-pill is-status">Unresolved</span>'
+              : "") +
+            (def
+              ? '<div class="muted hcsc-ind-def">' + escapeHtml(def) + "</div>"
+              : "") +
+            "</td>" +
+            "<td>" +
+            typePill(r.display_result_type) +
+            "</td>" +
+            "<td>" +
+            valueCell(r) +
+            "</td>" +
+            "<td><div class=\"hcsc-scope\">" +
+            escapeHtml(r.population_scope || "—") +
+            "</div></td>" +
+            "<td>" +
+            sourceBadge(r.source_badge, r.source_badge_label) +
+            ' <span class="muted">' +
+            escapeHtml(r.source_badge_label || r.source_type || "") +
+            "</span></td>" +
+            "<td>" +
+            uidCell(r) +
+            "</td>" +
+            "<td class=\"muted\">" +
+            escapeHtml((r.last_updated || r.freshness || "").replace("T", " ").slice(0, 19)) +
+            "</td>" +
+            "</tr>"
+        );
+      });
+    });
+    tbody.innerHTML = html.join("") || '<tr><td colspan="7" class="muted">No matching indicators.</td></tr>';
+  }
+
+  function renderMapping() {
+    var tbody = $("hcsc-mapping-tbody");
+    if (!tbody) return;
+    var rows =
+      (state.retrieval &&
+        state.retrieval.tabs &&
+        state.retrieval.tabs.source_mapping &&
+        state.retrieval.tabs.source_mapping.rows) ||
+      state.results.map(function (r) {
+        return {
+          indicator_key: r.indicator_key,
+          display_name: r.display_name,
+          source_badge: r.source_badge,
+          source_type: r.source_type,
+          source_owner: r.source_owner,
+          uid: r.source_uid,
+          source_table_view_reference: r.source_table_view_reference,
+          unresolved: r.unresolved,
+        };
+      });
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="muted">No mapping rows.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows
+      .map(function (r) {
+        return (
+          "<tr>" +
           "<td>" +
-          escapeHtml(r.result_type || "") +
+          escapeHtml(r.display_name || r.indicator_key) +
           "</td>" +
           "<td>" +
-          countLabel +
-          valueCell(r) +
-          formula +
+          sourceBadge(r.source_badge) +
           "</td>" +
           "<td>" +
-          numLabel +
-          (r.result_type === "numerator_denominator_percentage" ? fmtNum(r.numerator) : "—") +
+          escapeHtml(r.source_type || "") +
           "</td>" +
           "<td>" +
-          denLabel +
-          (r.result_type === "numerator_denominator_percentage" ? fmtNum(r.denominator) : "—") +
-          "</td>" +
-          "<td>" +
-          (r.result_type === "numerator_denominator_percentage" || r.result_type === "percentage"
-            ? fmtPct(r.percentage)
-            : "—") +
-          "</td>" +
-          "<td><div>" +
           escapeHtml(r.source_owner || "") +
-          '</div><div class="muted">' +
-          escapeHtml(r.source_table_view_reference || "") +
-          "</div></td>" +
-          "<td><span class=\"hcsc-val hcsc-val-" +
-          escapeHtml(String(r.validation_status || "").replace(/\s+/g, "-").toLowerCase()) +
-          '">' +
-          escapeHtml(r.validation_status || "Not Yet Validated") +
-          "</span></td>" +
+          "</td>" +
+          "<td><code>" +
+          escapeHtml(r.uid || "—") +
+          "</code></td>" +
+          "<td>" +
+          escapeHtml(r.source_table_view_reference || "—") +
+          "</td>" +
+          "<td>" +
+          (r.unresolved ? "Unresolved" : "Mapped") +
+          "</td>" +
           "</tr>"
         );
       })
       .join("");
   }
 
-  function renderQuery(query) {
-    var body = $("hcsc-query-body");
-    if (!body) return;
-    if (!query) {
-      body.innerHTML = '<p class="muted">No query yet.</p>';
+  function renderLineage() {
+    var host = $("hcsc-lineage-body");
+    if (!host) return;
+    var refs =
+      (state.retrieval &&
+        state.retrieval.tabs &&
+        state.retrieval.tabs.calculation &&
+        state.retrieval.tabs.calculation.references) ||
+      [];
+    var fromResults = state.results
+      .filter(function (r) {
+        return r.lineage_reference || r.percentage_formula_reference;
+      })
+      .map(function (r) {
+        return {
+          display_name: r.display_name,
+          formula_reference: r.percentage_formula_reference,
+          lineage_reference: r.lineage_reference,
+        };
+      });
+    var rows = refs.length ? refs : fromResults;
+    if (!rows.length) {
+      host.innerHTML =
+        '<p class="muted">No lineage references in registry for the current Overview set. Unresolved items are marked, not guessed.</p>';
       return;
     }
-    body.innerHTML =
-      "<p><strong>Retrieval method:</strong> " +
-      escapeHtml(query.retrieval_method || "") +
-      "</p>" +
-      "<p><strong>Endpoint:</strong> <code>" +
-      escapeHtml(query.endpoint || "") +
-      "</code></p>" +
-      "<p><strong>Period:</strong> " +
-      escapeHtml(query.period || "") +
-      " · <strong>OU:</strong> " +
-      escapeHtml(query.organisation_unit || "") +
-      "</p>" +
-      "<p><strong>Indicator UIDs:</strong> <code>" +
-      escapeHtml((query.indicator_uids || []).join("; ")) +
-      "</code></p>" +
-      "<p><strong>Aggregation:</strong> " +
-      escapeHtml(query.aggregation_request || "") +
-      "</p>" +
-      "<p>" +
-      escapeHtml(query.readable || "") +
-      "</p>" +
-      "<pre class=\"hcsc-query-pre\">" +
-      escapeHtml(query.query_string || "") +
-      "</pre>" +
-      '<p class="muted">' +
-      escapeHtml(query.note || "") +
-      "</p>";
+    host.innerHTML =
+      "<ul class=\"hcsc-lineage-list\">" +
+      rows
+        .map(function (r) {
+          return (
+            "<li><strong>" +
+            escapeHtml(r.display_name || r.indicator_key) +
+            "</strong>" +
+            (r.lineage_reference
+              ? '<div><code>' + escapeHtml(r.lineage_reference) + "</code></div>"
+              : "") +
+            (r.formula_reference
+              ? '<div class="muted">' + escapeHtml(r.formula_reference) + "</div>"
+              : "") +
+            "</li>"
+          );
+        })
+        .join("") +
+      "</ul>";
+  }
+
+  function renderValidation() {
+    var tbody = $("hcsc-validation-tbody");
+    if (!tbody) return;
+    if (!state.results.length) {
+      tbody.innerHTML = '<tr><td colspan="3" class="muted">No validation yet.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = state.results
+      .map(function (r) {
+        return (
+          "<tr>" +
+          "<td>" +
+          escapeHtml(r.display_name) +
+          "</td>" +
+          "<td><span class=\"hcsc-val\">" +
+          escapeHtml(r.validation_status || "Not Yet Validated") +
+          "</span></td>" +
+          "<td class=\"muted\">" +
+          escapeHtml(r.validation_note || "") +
+          "</td>" +
+          "</tr>"
+        );
+      })
+      .join("");
+  }
+
+  function renderRetrieval() {
+    var retrieval = state.retrieval || state.lastPayload && state.lastPayload.query;
+    var reqHost = $("hcsc-rtab-request");
+    var calcHost = $("hcsc-rtab-calc");
+    var mapHost = $("hcsc-rtab-map");
+    if (!retrieval) return;
+    var tabs = retrieval.tabs || {};
+    var req = tabs.retrieval_request || {};
+    var calc = tabs.calculation || {};
+    var map = tabs.source_mapping || {};
+
+    if (reqHost) {
+      var sqlBlock = req.sql
+        ? '<pre class="hcsc-query-pre">' + escapeHtml(req.sql) + "</pre>"
+        : "";
+      var capBlock = req.capability_ref
+        ? "<p><strong>Capability:</strong> " + escapeHtml(req.capability_ref) + "</p>"
+        : "";
+      reqHost.innerHTML =
+        "<p><strong>Retrieval method:</strong> " +
+        escapeHtml(retrieval.retrieval_method || "") +
+        "</p>" +
+        "<p><strong>Endpoint:</strong> <code>" +
+        escapeHtml(req.endpoint || "") +
+        "</code></p>" +
+        "<p><strong>Period:</strong> " +
+        escapeHtml(req.period || "") +
+        " · <strong>OU:</strong> " +
+        escapeHtml(req.organisation_unit || "") +
+        "</p>" +
+        "<p><strong>dx UIDs:</strong> <code>" +
+        escapeHtml((req.indicator_uids || []).join("; ")) +
+        "</code></p>" +
+        "<p><strong>Aggregation:</strong> " +
+        escapeHtml(req.aggregation_request || "") +
+        "</p>" +
+        "<p>" +
+        escapeHtml(req.readable || "") +
+        "</p>" +
+        sqlBlock +
+        capBlock +
+        '<pre class="hcsc-query-pre">' +
+        escapeHtml(req.query_string || "") +
+        "</pre>" +
+        '<p class="muted">' +
+        escapeHtml(req.note || "") +
+        "</p>";
+    }
+    if (calcHost) {
+      var refs = calc.references || [];
+      calcHost.innerHTML =
+        '<p class="muted">' +
+        escapeHtml(calc.note || "") +
+        "</p>" +
+        (Object.keys(calc.pi_expressions || {}).length
+          ? "<pre class=\"hcsc-query-pre\">" +
+            escapeHtml(JSON.stringify(calc.pi_expressions, null, 2)) +
+            "</pre>"
+          : '<p class="muted">No PI numerator/denominator expressions loaded from metadata yet (not invented).</p>') +
+        (refs.length
+          ? "<ul>" +
+            refs
+              .map(function (r) {
+                return (
+                  "<li><strong>" +
+                  escapeHtml(r.display_name || "") +
+                  "</strong>: " +
+                  escapeHtml(r.formula_reference || r.lineage_reference || "") +
+                  "</li>"
+                );
+              })
+              .join("") +
+            "</ul>"
+          : "");
+    }
+    if (mapHost) {
+      var rows = map.rows || [];
+      mapHost.innerHTML = rows.length
+        ? "<ul>" +
+          rows
+            .map(function (r) {
+              return (
+                "<li>" +
+                escapeHtml(r.display_name || "") +
+                " · " +
+                escapeHtml(r.source_badge || "") +
+                " · <code>" +
+                escapeHtml(r.uid || "—") +
+                "</code></li>"
+              );
+            })
+            .join("") +
+          "</ul>"
+        : '<p class="muted">No source mapping rows.</p>';
+    }
+  }
+
+  function setTab(tab) {
+    state.activeTab = tab;
+    document.querySelectorAll(".hcsc-tab").forEach(function (btn) {
+      var on = btn.getAttribute("data-tab") === tab;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    document.querySelectorAll(".hcsc-tab-panel").forEach(function (panel) {
+      panel.hidden = panel.getAttribute("data-panel") !== tab;
+    });
+  }
+
+  function setRtab(tab) {
+    state.activeRtab = tab;
+    document.querySelectorAll(".hcsc-subtab").forEach(function (btn) {
+      btn.classList.toggle("is-active", btn.getAttribute("data-rtab") === tab);
+    });
+    document.querySelectorAll(".hcsc-rtab-panel").forEach(function (panel) {
+      panel.hidden = panel.getAttribute("data-rpanel") !== tab;
+    });
   }
 
   function openDrawer(key) {
@@ -259,9 +518,14 @@
     var drawer = $("hcsc-drawer");
     var body = $("hcsc-drawer-body");
     var title = $("hcsc-drawer-title");
+    var badge = $("hcsc-drawer-badge");
     if (!drawer || !body) return;
+    root.classList.add("is-drawer-open");
     drawer.hidden = false;
     body.innerHTML = '<p class="muted">Loading…</p>';
+    var live = state.results.find(function (r) {
+      return r.indicator_key === key;
+    });
     fetch(url, { credentials: "same-origin" })
       .then(function (r) {
         return r.json();
@@ -269,73 +533,95 @@
       .then(function (data) {
         var ind = (data && data.indicator) || {};
         var uids = ind.dhis2_uids || {};
-        if (title) title.textContent = ind.display_name || "Data Mapping & Details";
-        var uidList = Object.keys(uids)
-          .map(function (k) {
-            return k + ": " + uids[k];
-          })
-          .join("\n");
+        if (title) title.textContent = ind.display_name || "Indicator Details";
+        if (badge) {
+          badge.textContent = ind.source_badge || "PI";
+          badge.className = "hcsc-badge is-" + String(ind.source_badge || "PI").toLowerCase();
+        }
+        var uid = uids.value || "";
+        var basis =
+          live && live.calculation_basis
+            ? "<dt>Calculation basis</dt><dd>" + escapeHtml(live.calculation_basis) + "</dd>"
+            : "";
         body.innerHTML =
-          "<dl class=\"hcsc-dl\">" +
+          '<dl class="hcsc-dl">' +
           "<dt>Result type</dt><dd>" +
-          escapeHtml(ind.result_type || "") +
+          escapeHtml(ind.display_result_type || ind.result_type || "") +
           "</dd>" +
-          "<dt>UID(s)</dt><dd><pre>" +
-          escapeHtml(uidList || "(none — unresolved)") +
-          '</pre><button type="button" class="btn btn-sm" id="hcsc-copy-uid" data-uid="' +
-          escapeHtml(uids.value || "") +
-          '">Copy UID</button></dd>' +
-          "<dt>Source owner</dt><dd>" +
-          escapeHtml(ind.source_owner || "") +
+          "<dt>Definition</dt><dd>" +
+          escapeHtml(ind.definition || ind.population_definition_reference || "—") +
           "</dd>" +
-          "<dt>Source table/view</dt><dd>" +
-          escapeHtml(ind.source_table_view_reference || "") +
+          "<dt>Population / age range</dt><dd>" +
+          escapeHtml(ind.population_definition_reference || "—") +
+          (ind.age_range ? " · " + escapeHtml(ind.age_range) : "") +
           "</dd>" +
           "<dt>Numerator</dt><dd>" +
           escapeHtml(ind.numerator_label || "—") +
+          (live && live.numerator != null ? " · " + escapeHtml(String(live.numerator)) : "") +
           "</dd>" +
           "<dt>Denominator</dt><dd>" +
           escapeHtml(ind.denominator_label || "—") +
+          (live && live.denominator != null ? " · " + escapeHtml(String(live.denominator)) : "") +
           "</dd>" +
+          basis +
           "<dt>Percentage formula</dt><dd>" +
           escapeHtml(ind.percentage_formula_reference || "—") +
           "</dd>" +
-          "<dt>Population</dt><dd>" +
-          escapeHtml(ind.population_definition_reference || "—") +
+          "<dt>Source type / owner</dt><dd>" +
+          escapeHtml(ind.source_badge_label || ind.source_type || "") +
+          " · " +
+          escapeHtml(ind.source_owner || "") +
           "</dd>" +
-          "<dt>Age range</dt><dd>" +
-          escapeHtml(ind.age_range || "—") +
+          "<dt>UID(s)</dt><dd><pre>" +
+          escapeHtml(
+            Object.keys(uids)
+              .map(function (k) {
+                return k + ": " + uids[k];
+              })
+              .join("\n") || "(none — unresolved)"
+          ) +
+          "</pre></dd>" +
+          "<dt>Source table/view</dt><dd>" +
+          escapeHtml(ind.source_table_view_reference || "—") +
           "</dd>" +
-          "<dt>Quarter rule</dt><dd>" +
+          "<dt>Source columns / DEs</dt><dd>" +
+          escapeHtml(ind.source_columns_reference || "—") +
+          "</dd>" +
+          "<dt>Quarter / OU filters</dt><dd>" +
           escapeHtml(ind.quarter_rule_reference || "—") +
-          "</dd>" +
-          "<dt>Organisation-unit rule</dt><dd>" +
+          " · " +
           escapeHtml(ind.organisation_unit_rule || "—") +
           "</dd>" +
-          "<dt>IP / non-IP rule</dt><dd>" +
+          "<dt>Status / IP filters</dt><dd>" +
+          escapeHtml(ind.status_filters_reference || "—") +
+          " · " +
           escapeHtml(ind.ip_non_ip_rule || "—") +
           "</dd>" +
-          "<dt>Repository reference</dt><dd>" +
-          escapeHtml(ind.repository_file_reference || "—") +
+          "<dt>Lineage</dt><dd>" +
+          escapeHtml(ind.lineage_reference || "—") +
           "</dd>" +
-          "<dt>Confidence</dt><dd>" +
-          escapeHtml(ind.confidence || "") +
+          "<dt>Validation</dt><dd>" +
+          escapeHtml((live && live.validation_status) || "Not Yet Validated") +
+          "</dd>" +
+          "<dt>Last refreshed</dt><dd>" +
+          escapeHtml((live && (live.last_updated || live.freshness)) || data.last_refreshed || "—") +
           "</dd>" +
           "<dt>Unresolved notes</dt><dd>" +
           escapeHtml(ind.notes || "—") +
           "</dd>" +
-          "<dt>Design element</dt><dd>" +
-          escapeHtml(data.design_element_id || "—") +
-          "</dd>" +
-          "</dl>";
+          "</dl>" +
+          '<div class="hcsc-drawer-actions">' +
+          '<button type="button" class="btn btn-sm" id="hcsc-copy-uid" data-uid="' +
+          escapeHtml(uid) +
+          '">Copy UID</button> ' +
+          '<a class="btn btn-sm" id="hcsc-open-mapping" href="' +
+          escapeHtml(data.open_mapping_url || "/dhis2/uid-explorer") +
+          '">Open Mapping</a>' +
+          "</div>";
         var copyBtn = $("hcsc-copy-uid");
         if (copyBtn) {
           copyBtn.onclick = function () {
-            var uid = copyBtn.getAttribute("data-uid") || "";
-            if (!uid) return;
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-              navigator.clipboard.writeText(uid);
-            }
+            copyText(copyBtn.getAttribute("data-uid") || "");
           };
         }
       })
@@ -344,7 +630,13 @@
       });
   }
 
-  function loadOverview(force) {
+  function closeDrawer() {
+    var d = $("hcsc-drawer");
+    if (d) d.hidden = true;
+    root.classList.remove("is-drawer-open");
+  }
+
+  function loadReport(force) {
     var env = ($("hcsc-env") && $("hcsc-env").value) || "stage";
     var period = ($("hcsc-period") && $("hcsc-period").value) || "";
     var ou = ($("hcsc-ou") && $("hcsc-ou").value) || "";
@@ -353,9 +645,10 @@
       setStatus("Organisation unit is required.", true);
       return;
     }
-    setStatus(force ? "Refreshing…" : "Loading Overview…");
+    setStatus(force ? "Refreshing…" : "Generating report…");
+    var reportUrl = root.getAttribute("data-report-url") || root.getAttribute("data-overview-url");
     var url =
-      root.getAttribute("data-overview-url") +
+      reportUrl +
       "?environment=" +
       encodeURIComponent(env) +
       "&period=" +
@@ -374,15 +667,42 @@
       })
       .then(function (data) {
         if (!data.ok) {
-          setStatus(data.error || "Overview failed", true);
+          setStatus(data.error || "Report failed", true);
           return;
         }
         state.results = data.results || [];
-        state.query = data.query || null;
+        state.sections = data.sections || [];
+        state.retrieval = data.retrieval || data.query || null;
         state.lastPayload = data;
+        var ouLabel = ($("hcsc-ou-label") && $("hcsc-ou-label").textContent) || ou;
+        var sub = $("hcsc-subtitle");
+        if (sub) {
+          sub.textContent =
+            "Report (" +
+            ouLabel +
+            ") · " +
+            period +
+            " · " +
+            env +
+            " — read-only registry + batched adapters (Phase " +
+            ((boot && boot.phase) || "0-2") +
+            ").";
+        }
         renderCards(state.results);
-        renderTable(state.results);
-        renderQuery(state.query);
+        renderTable();
+        renderMapping();
+        renderLineage();
+        renderValidation();
+        renderRetrieval();
+        var openSql = $("hcsc-open-sql");
+        if (openSql) {
+          var showSql =
+            (state.retrieval && state.retrieval.open_sql_workspace) ||
+            (state.results || []).some(function (r) {
+              return r.approved_sql_query_id || r.approved_sql_reference;
+            });
+          openSql.hidden = !showSql;
+        }
         var t = data.timings || {};
         var cache = data.cache || {};
         setStatus(
@@ -391,21 +711,23 @@
             " indicators · " +
             (t.total_ms != null ? t.total_ms + " ms" : "") +
             (cache.hit ? " (cache)" : "") +
-            " · HTTP requests: " +
-            (t.http_requests != null ? t.http_requests : "?")
+            " · HTTP: " +
+            (t.http_requests != null ? t.http_requests : "?") +
+            (data.adapters_used && data.adapters_used.length
+              ? " · adapters: " + data.adapters_used.join(", ")
+              : "")
         );
         var fresh = $("hcsc-freshness");
-        if (fresh) fresh.textContent = "Freshness: " + (data.freshness || "");
-        // Background refresh after cache hit
-        if (cache.hit && !force) {
-          setTimeout(function () {
-            loadOverview(true);
-          }, 50);
-        }
+        if (fresh) fresh.textContent = "Last updated: " + (data.freshness || "");
       })
       .catch(function () {
-        setStatus("Overview request failed.", true);
+        setStatus("Report request failed.", true);
       });
+  }
+
+  // Backward-compatible alias used by older hooks/tests.
+  function loadOverview(force) {
+    loadReport(force);
   }
 
   function wireOuSearch() {
@@ -437,7 +759,7 @@
             return r.json();
           })
           .then(function (data) {
-            var rows = (data && (data.org_units || data.results || data.items)) || [];
+            var rows = (data && data.org_units) || [];
             if (!rows.length) {
               list.innerHTML = '<li class="muted">No matches</li>';
               list.hidden = false;
@@ -445,8 +767,8 @@
             }
             list.innerHTML = rows
               .map(function (ou) {
-                var id = ou.id || ou.uid || "";
-                var name = ou.displayName || ou.name || id;
+                var id = ou.id || "";
+                var name = ou.name || id;
                 return (
                   '<li><button type="button" data-id="' +
                   escapeHtml(id) +
@@ -488,37 +810,53 @@
       });
     }
     var refresh = $("hcsc-refresh");
-    if (refresh) {
-      refresh.addEventListener("click", function () {
-        loadOverview(true);
-      });
-    }
+    if (refresh) refresh.addEventListener("click", function () { loadOverview(true); });
     var filter = $("hcsc-filter");
-    if (filter) {
-      filter.addEventListener("input", function () {
-        renderTable(state.results);
+    if (filter) filter.addEventListener("input", renderTable);
+    var pctOnly = $("hcsc-pct-only");
+    if (pctOnly) pctOnly.addEventListener("change", renderTable);
+
+    document.querySelectorAll(".hcsc-tab").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        setTab(btn.getAttribute("data-tab"));
       });
-    }
+    });
+    document.querySelectorAll(".hcsc-subtab").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        setRtab(btn.getAttribute("data-rtab"));
+      });
+    });
+
     root.addEventListener("click", function (ev) {
-      var btn = ev.target.closest(".hcsc-uid-btn");
-      if (btn) {
-        openDrawer(btn.getAttribute("data-key"));
+      var copy = ev.target.closest(".hcsc-copy-uid");
+      if (copy) {
+        copyText(copy.getAttribute("data-uid") || "");
+        return;
+      }
+      var link = ev.target.closest(".hcsc-uid-link, .hcsc-uid-btn");
+      if (link) {
+        openDrawer(link.getAttribute("data-key"));
       }
     });
     var close = $("hcsc-drawer-close");
-    if (close) {
-      close.addEventListener("click", function () {
-        var d = $("hcsc-drawer");
-        if (d) d.hidden = true;
+    if (close) close.addEventListener("click", closeDrawer);
+    var drawer = $("hcsc-drawer");
+    if (drawer) {
+      drawer.addEventListener("click", function (ev) {
+        if (ev.target === drawer) closeDrawer();
       });
     }
     var copyQ = $("hcsc-copy-query");
     if (copyQ) {
       copyQ.addEventListener("click", function () {
-        var text = (state.query && (state.query.copy_text || state.query.query_string)) || "";
-        if (text && navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(text);
-        }
+        var text =
+          (state.retrieval && state.retrieval.copy_text) ||
+          (state.retrieval &&
+            state.retrieval.tabs &&
+            state.retrieval.tabs.retrieval_request &&
+            state.retrieval.tabs.retrieval_request.copy_text) ||
+          "";
+        copyText(text);
       });
     }
   }

@@ -37,13 +37,20 @@ def compare_percentage(
 def validate_row(row: dict[str, Any]) -> dict[str, Any]:
     """Attach validation_status without inventing external comparisons."""
     out = dict(row)
+    parity = (out.get("validation_parity_note") or "").strip()
     if out.get("unresolved") or not out.get("source_uid"):
         out["validation_status"] = status_for_unresolved()
         out["validation_note"] = out.get("notes") or "Unresolved or missing UID — not validated."
         return out
 
+    if parity:
+        # Known HH vs member / Excel vs DHIS2 definition gaps — do not force Exact Match.
+        out["validation_status"] = "Expected Logic Difference"
+        out["validation_note"] = parity
+        return out
+
     result_type = out.get("result_type")
-    if result_type == "numerator_denominator_percentage":
+    if result_type in {"numerator_denominator_percentage", "percentage", "ratio"}:
         num = out.get("numerator")
         den = out.get("denominator")
         pct = out.get("percentage")
