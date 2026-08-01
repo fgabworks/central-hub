@@ -1,4 +1,4 @@
-"""HCSC Indicator Summary & Data Lineage — NPMO Phase 0–2 tests."""
+"""Central Hub HCSC–RF tests (Phase 0–3)."""
 
 from __future__ import annotations
 

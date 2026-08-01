@@ -541,9 +541,20 @@ def register_dhis2_reports_routes(app: Flask) -> None:
 
     @app.get("/api/dhis2/reports/periods")
     def api_dhis2_report_periods():
-        """Quarter/period options for report controls (cached)."""
+        """Period options for report controls (cached; calendar helpers, env-keyed)."""
         remembered = (request.args.get("remembered") or "").strip()
-        return jsonify(_svc().list_periods(remembered=remembered))
+        period_type = (request.args.get("period_type") or "quarterly").strip()
+        environment = (request.args.get("environment") or "").strip()
+        relative_raw = (request.args.get("relative") or request.args.get("relative_keys") or "").strip()
+        relative_keys = [p.strip() for p in relative_raw.split(",") if p.strip()]
+        return jsonify(
+            _svc().list_periods(
+                remembered=remembered,
+                period_type=period_type,
+                relative_keys=relative_keys or None,
+                environment=environment,
+            )
+        )
 
     @app.get("/api/dhis2/reports/org-units")
     def api_dhis2_report_org_units():

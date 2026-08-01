@@ -10,6 +10,7 @@ from urllib.parse import parse_qsl, quote, urlencode, urljoin, urlparse
 
 from hub.dhis2_reports.cache import CATALOG_CACHE
 from hub.dhis2_reports.catalog import load_report_catalog
+from hub.dhis2_reports.discovery import discover_report_parameters
 from hub.dhis2_reports.security import ReportSecurityError, validate_environment
 
 # Paths the hub may proxy to the configured DHIS2 host (SSRF guard).
@@ -173,6 +174,7 @@ def build_run_catalog(
     favs = favorites if favorites is not None else set(store.list_favorites())
     native: list[dict[str, Any]] = []
     for row in store.list_synced_reports(environment=env):
+        discovery = discover_report_parameters(row)
         native.append(
             {
                 "id": f"std:{env}:{row.uid}",
@@ -182,8 +184,14 @@ def build_run_catalog(
                 "source_type": "native_standard",
                 "report_type": row.report_type,
                 "environment": env,
-                "needs_period": row.needs_period,
-                "needs_org_unit": row.needs_org_unit,
+                "needs_period": row.needs_period or discovery.get("period_required"),
+                "needs_org_unit": row.needs_org_unit or discovery.get("org_unit_required"),
+                "period_required": bool(discovery.get("period_required")),
+                "org_unit_required": bool(discovery.get("org_unit_required")),
+                "show_period": bool(discovery.get("show_period")),
+                "show_org_unit": bool(discovery.get("show_org_unit")),
+                "preferred_period_type": discovery.get("preferred_period_type") or "monthly",
+                "relative_periods": list(row.relative_periods or []),
                 "render_supported": row.render_supported,
                 "output_formats": ["html", "pdf", "xls"] if row.render_supported else ["html"],
                 "browser_only": False,

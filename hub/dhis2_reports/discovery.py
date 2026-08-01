@@ -74,9 +74,17 @@ def discover_report_parameters(
     # HTML reports with no declared params: show optional selectors + warning.
     show_period = needs_period or incomplete
     show_org_unit = needs_org_unit or needs_parent_ou or incomplete
-    preferred_period_type = "quarterly" if (needs_quarter or incomplete) else "monthly"
-    if has_relative and not needs_quarter:
-        preferred_period_type = "monthly"
+
+    rel_l = [str(k).lower() for k in relative]
+    preferred_period_type = "monthly"
+    if needs_quarter or any("quarter" in k for k in rel_l):
+        preferred_period_type = "quarterly"
+    elif any(("year" in k and "month" not in k) for k in rel_l):
+        preferred_period_type = "yearly"
+    elif has_relative:
+        preferred_period_type = "relative"
+    elif incomplete:
+        preferred_period_type = "quarterly"
 
     warning = ""
     if incomplete:

@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-02 (navigation performance — deferred probes + Server-Timing).
+Last verified: 2026-08-02 (Central Hub HCSC–RF rename + Compare Sources).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status

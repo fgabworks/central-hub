@@ -1,5 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Run Report · {{ page_title }} · {{ app_name }}{% endblock %}
+{% block head_extra %}
+<script src="{{ url_for('static', filename='js/dhis2_reports_run.js') }}?v=params-picker-2" defer></script>
+{% endblock %}
 {% block content %}
 <section class="page-header page-header-compact">
   <div>
@@ -13,69 +16,82 @@
          data-catalog-url="{{ url_for('api_dhis2_report_run_catalog') }}"
          data-generate-view-url="{{ url_for('api_dhis2_report_generate_and_view') }}"
          data-org-units-url="{{ url_for('api_dhis2_report_org_units') }}"
+         data-periods-url="{{ url_for('api_dhis2_report_periods') }}"
          data-preset-url="{{ url_for('api_dhis2_report_preset_save') }}"
          data-preferred-env="{{ preferred_env or dhis2_instance or 'stage' }}"
          data-selected-report="{{ selected_report_id or '' }}"
          data-preset-period="{{ preset.period if preset else '' }}"
          data-preset-ou="{{ preset.org_unit if preset else '' }}">
-  <div class="panel-body rw-connect-edit-grid">
-    <label>Environment
-      <select id="dr-env">
+  <div class="panel-body dr-run-filters" id="dr-run-filters">
+    <div class="dr-filter-field">
+      <label class="dr-field-label" for="dr-env">Environment</label>
+      <select id="dr-env" class="dr-control">
         <option value="stage">Stage</option>
         <option value="live">Live</option>
       </select>
-    </label>
-    <label>Report
-      <select id="dr-report">
+    </div>
+
+    <div class="dr-filter-field">
+      <label class="dr-field-label" for="dr-report">Report</label>
+      <select id="dr-report" class="dr-control">
         <option value="">Loading reports…</option>
       </select>
-    </label>
-    <label>Period
-      <div class="dr-period-row">
-        <select id="dr-period-type" aria-label="Period type">
-          <option value="monthly">Monthly</option>
-          <option value="quarterly">Quarterly</option>
-          <option value="yearly">Yearly</option>
-          <option value="custom">Custom</option>
-        </select>
-        <input type="month" id="dr-period-month" aria-label="Month">
-        <select id="dr-period-quarter" hidden aria-label="Quarter">
-          <option value="1">Q1</option><option value="2">Q2</option><option value="3">Q3</option><option value="4">Q4</option>
-        </select>
-        <input type="number" id="dr-period-year" min="2000" max="2100" hidden aria-label="Year">
-        <input type="text" id="dr-period" placeholder="202601 / 2026Q1" hidden>
+      <p class="dr-field-error" id="dr-report-error" hidden></p>
+    </div>
+
+    <div class="dr-filter-field" id="dr-period-field">
+      <label class="dr-field-label" for="dr-period-search">Period</label>
+      <div class="dr-period-picker" id="dr-period-picker">
+        <input type="search" id="dr-period-search" class="dr-control" placeholder="Search periods…" autocomplete="off" aria-autocomplete="list" aria-controls="dr-period-results" aria-expanded="false">
+        <input type="hidden" id="dr-period" value="">
+        <ul class="dr-combobox-results" id="dr-period-results" role="listbox" hidden></ul>
       </div>
-    </label>
-    <label>Organisation unit
-      <div class="dr-ou-row">
-        <input type="search" id="dr-ou-search" placeholder="Search organisation units…" autocomplete="off">
+      <p class="dr-field-hint muted" id="dr-period-hint"></p>
+      <p class="dr-field-error" id="dr-period-error" hidden></p>
+    </div>
+
+    <div class="dr-filter-field dr-filter-ou" id="dr-ou-field">
+      <label class="dr-field-label" for="dr-ou-search">Organisation Unit</label>
+      <div class="dr-ou-picker" id="dr-ou-picker">
+        <div class="dr-ou-chip-row" id="dr-ou-chip-row" hidden>
+          <span class="dr-ou-chip" id="dr-ou-chip">
+            <span id="dr-ou-chip-label"></span>
+            <button type="button" class="dr-ou-chip-remove" id="dr-ou-clear" aria-label="Clear organisation unit">×</button>
+          </span>
+        </div>
+        <input type="search" id="dr-ou-search" class="dr-control" placeholder="Search name, code, or UID…" autocomplete="off" aria-autocomplete="list" aria-controls="dr-ou-results" aria-expanded="false">
         <input type="hidden" id="dr-ou" value="">
-        <div class="dr-ou-selected muted" id="dr-ou-label">None selected</div>
-        <ul class="dr-ou-results" id="dr-ou-results" hidden></ul>
+        <ul class="dr-combobox-results" id="dr-ou-results" role="listbox" hidden></ul>
+        <div class="dr-ou-tree" id="dr-ou-tree" hidden></div>
       </div>
-    </label>
-    <label>Output format
-      <select id="dr-format">
+      <p class="dr-field-hint muted" id="dr-ou-hint">Select from search or hierarchy — typed text alone is not submitted.</p>
+      <p class="dr-field-error" id="dr-ou-error" hidden></p>
+    </div>
+
+    <div class="dr-filter-field">
+      <label class="dr-field-label" for="dr-format">Output Format</label>
+      <select id="dr-format" class="dr-control">
         <option value="html">html</option>
         <option value="pdf">pdf (download)</option>
         <option value="xls">excel (download)</option>
       </select>
-    </label>
+    </div>
   </div>
+
   <div class="panel-body">
     <label class="rw-connect-confirm" id="dr-live-box" hidden>
       <input type="checkbox" id="dr-confirm-live"> I confirm running this report against Live
     </label>
     <p class="muted" id="dr-report-hint"></p>
-    <div class="btn-row" style="margin-top:0.55rem">
+    <div class="btn-row dr-run-actions" style="margin-top:0.55rem">
       <button type="button" class="btn btn-primary" id="dr-generate-view" disabled>Generate &amp; View</button>
+      <button type="button" class="btn" id="dr-save-preset">Save Preset</button>
       <button type="button" class="btn" id="dr-refresh" hidden>Refresh</button>
       <a class="btn" id="dr-view" href="#" target="_blank" rel="noopener" hidden>View Report</a>
       <a class="btn" id="dr-open-dhis2" href="#" target="_blank" rel="noopener" hidden>Open in DHIS2</a>
       <a class="btn" id="dr-download" href="#" hidden>Download</a>
       <button type="button" class="btn" id="dr-fullscreen" hidden>Full screen</button>
       <button type="button" class="btn" id="dr-print" hidden>Print</button>
-      <button type="button" class="btn" id="dr-save-preset">Save Preset</button>
     </div>
     <p class="muted" id="dr-status"></p>
 
@@ -91,5 +107,4 @@
     </details>
   </div>
 </section>
-<script src="{{ url_for('static', filename='js/dhis2_reports_run.js') }}?v=render-bridge-1"></script>
 {% endblock %}

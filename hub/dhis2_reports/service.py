@@ -234,12 +234,26 @@ class Dhis2ReportsService:
         ORG_UNIT_CACHE.set(cache_key, payload)
         return {**payload, "cache": "miss"}
 
-    def list_periods(self, *, remembered: str = "") -> dict[str, Any]:
-        cache_key = f"periods:quarters:{remembered}"
+    def list_periods(
+        self,
+        *,
+        remembered: str = "",
+        period_type: str = "quarterly",
+        relative_keys: list[str] | None = None,
+        environment: str = "",
+    ) -> dict[str, Any]:
+        env = (environment or "").strip().lower() or "shared"
+        rel_key = ",".join(sorted(str(k) for k in (relative_keys or []) if k))
+        cache_key = f"periods:{env}:{period_type}:{remembered}:{rel_key}"
         cached = PERIOD_CACHE.get(cache_key)
         if cached is not None:
             return {**cached, "cache": "hit"}
-        payload = periods_payload(remembered=remembered)
+        payload = periods_payload(
+            remembered=remembered,
+            period_type=period_type,
+            relative_keys=relative_keys,
+        )
+        payload["environment"] = env if env != "shared" else None
         PERIOD_CACHE.set(cache_key, payload)
         return {**payload, "cache": "miss"}
 
