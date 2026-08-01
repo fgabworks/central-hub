@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{{ page_title }} · {{ app_name }}{% endblock %}
 {% block head_extra %}
-<script src="{{ url_for('static', filename='js/dhis2_org_unit_picker.js') }}?v=ou-preview-1" defer></script>
-<script src="{{ url_for('static', filename='js/hcsc_indicator_summary.js') }}?v=hcsc-preview-1" defer></script>
+<script src="{{ url_for('static', filename='js/dhis2_org_unit_picker.js') }}?v=ou-sqlite-1" defer></script>
+<script src="{{ url_for('static', filename='js/hcsc_indicator_summary.js') }}?v=hcsc-ou-sqlite-1" defer></script>
 {% endblock %}
 {% block content %}
 <section class="page-header page-header-compact hcsc-page-header">
@@ -83,7 +83,7 @@
         <input type="hidden" id="hcsc-ou" name="orgUnit" value="">
         <div class="hcsc-ou-meta-actions">
           <button type="button" class="btn btn-sm" id="hcsc-ou-retry" title="Retry organisation unit load" hidden>Retry</button>
-          <button type="button" class="btn btn-sm" id="hcsc-ou-refresh-meta" title="Refresh organisation-unit metadata" hidden>Refresh Metadata</button>
+          <button type="button" class="btn btn-sm" id="hcsc-ou-refresh-meta" title="Refresh organisation units from DHIS2">Refresh Organisation Units</button>
         </div>
       </div>
       <p class="hcsc-field-error" id="hcsc-ou-error" hidden></p>

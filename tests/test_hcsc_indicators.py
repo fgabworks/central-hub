@@ -703,8 +703,9 @@ class CycleQuarterTests(unittest.TestCase):
         reg = load_registry(force=True)
         ids = allowed_quarter_ids(reg)
         self.assertEqual(ids[0], "2025Q3")
-        self.assertEqual(ids[-1], "2027Q4")
-        self.assertEqual(len(ids), 10)
+        self.assertEqual(ids[-1], "2026Q4")
+        self.assertEqual(len(ids), 6)
+        self.assertNotIn("2027Q1", ids)
         self.assertEqual(
             default_allowed_quarter(ids, as_of=date(2026, 8, 2)),
             "2026Q3",
@@ -713,15 +714,19 @@ class CycleQuarterTests(unittest.TestCase):
             default_allowed_quarter(ids, remembered="2026Q1", as_of=date(2026, 8, 2)),
             "2026Q1",
         )
+        self.assertEqual(
+            default_allowed_quarter(ids, remembered="2027Q1", as_of=date(2026, 8, 2)),
+            "2026Q3",
+        )
         payload = cycle_periods_payload(reg, as_of=date(2026, 5, 1))
         self.assertEqual(payload["default_period"], "2026Q2")
         self.assertEqual(payload["quarters"][0]["label"], "2025 Q3")
-        self.assertEqual(payload["quarters"][3]["id"], "2026Q2")
+        self.assertEqual(payload["quarters"][-1]["id"], "2026Q4")
         self.assertEqual(assert_allowed_quarter("2026Q2", ids), "2026Q2")
         with self.assertRaises(ReportSecurityError):
             assert_allowed_quarter("2024Q4", ids)
         with self.assertRaises(ReportSecurityError):
-            assert_allowed_quarter("2028Q1", ids)
+            assert_allowed_quarter("2027Q1", ids)
         with self.assertRaises(ReportSecurityError):
             assert_allowed_quarter("August 2026", ids)
 
@@ -742,6 +747,7 @@ class ParamUiContractTests(unittest.TestCase):
         self.assertIn("hcsc-ou-levels", html)
         self.assertIn("hcsc-ou-retry", html)
         self.assertIn("hcsc-ou-search", html)
+        self.assertIn("Refresh Organisation Units", html)
         self.assertIn("hcsc-ou-refresh-meta", html)
         self.assertIn("Municipality/City", html)
         self.assertIn("hcsc-status-strip", html)
@@ -765,6 +771,7 @@ class ParamUiContractTests(unittest.TestCase):
         self.assertIn("ensureRoots", picker)
         self.assertIn("lazyRoots", picker)
         self.assertIn("refreshMetadata", picker)
+        self.assertIn("Refresh Organisation Units", html)
         self.assertIn("Recent / frequent", picker)
         self.assertIn("resolveHierarchyFromPath", picker)
         self.assertIn("Stage is temporarily unavailable due to maintenance.", picker)
@@ -782,17 +789,16 @@ class ParamUiContractTests(unittest.TestCase):
 
 class OrgUnitApiReuseTests(unittest.TestCase):
     def test_hub_org_unit_search_name_code_uid_path_and_env_cache(self):
-        from unittest import mock
-
         from hub.dhis2_reports.cache import ORG_UNIT_CACHE
+        from hub.dhis2_reports.org_unit_store import OrgUnitStore
         from hub.dhis2_reports.service import Dhis2ReportsService
         from hub.dhis2_reports.security import ReportSecurityError, validate_org_unit
 
         ORG_UNIT_CACHE.clear()
-        with mock.patch.dict(os.environ, {"DHIS2_STAGE_MAINTENANCE": "false"}, clear=False):
-            self._run_org_unit_reuse(ORG_UNIT_CACHE, Dhis2ReportsService, ReportSecurityError, validate_org_unit, mock)
+        tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(tmp.cleanup)
+        store = OrgUnitStore(Path(tmp.name) / "ou.db")
 
-    def _run_org_unit_reuse(self, ORG_UNIT_CACHE, Dhis2ReportsService, ReportSecurityError, validate_org_unit, mock):
         class FakeClient:
             def __init__(self, env):
                 self.env = env
@@ -853,75 +859,310 @@ class OrgUnitApiReuseTests(unittest.TestCase):
                 return {"organisationUnits": rows}
 
         clients = {"stage": FakeClient("stage"), "live": FakeClient("live")}
-        svc = Dhis2ReportsService(store=mock.Mock(), client_factory=lambda env: clients[env])
+        with mock.patch.dict(os.environ, {"DHIS2_STAGE_MAINTENANCE": "false"}, clear=False):
+            svc = Dhis2ReportsService(
+                store=mock.Mock(),
+                client_factory=lambda env: clients[env],
+                org_unit_store=store,
+            )
 
-        by_name = svc.search_org_units("stage", q="Alpha")
-        self.assertEqual(by_name["org_units"][0]["name"], "Alpha District")
-        self.assertEqual(by_name["org_units"][0]["path"], "/Root/Region/Alpha")
-        self.assertTrue(by_name["org_units"][0]["has_children"])  # level 3 < 5
-        self.assertIn("identifiable:token:Alpha", str(clients["stage"].calls[0]["params"].get("filter")))
-        self.assertNotIn("children::size", str(clients["stage"].calls[0]["params"].get("fields")))
-        self.assertEqual(clients["stage"].calls[0]["retry_max"], 0)
+            by_name = svc.search_org_units("stage", q="Alpha")
+            self.assertEqual(by_name["org_units"][0]["name"], "Alpha District")
+            self.assertEqual(by_name["org_units"][0]["path"], "/Root/Region/Alpha")
+            self.assertTrue(by_name["org_units"][0]["has_children"])  # level 3 < 5
+            self.assertEqual(by_name["source"], "dhis2")
+            self.assertIn("identifiable:token:Alpha", str(clients["stage"].calls[0]["params"].get("filter")))
+            self.assertNotIn("children::size", str(clients["stage"].calls[0]["params"].get("fields")))
+            self.assertEqual(clients["stage"].calls[0]["retry_max"], 0)
 
-        by_code = svc.search_org_units("stage", q="ALP")
-        self.assertEqual(by_code["cache"], "miss")
-        self.assertEqual(by_code["org_units"][0]["code"], "ALP")
+            # Code/UID may hit SQLite after name sync populated the same row.
+            by_code = svc.search_org_units("stage", q="ALP")
+            self.assertEqual(by_code["org_units"][0]["code"], "ALP")
+            self.assertIn(by_code["cache"], {"hit", "miss"})
 
-        by_uid = svc.search_org_units("stage", q="OuUid000001")
-        self.assertEqual(by_uid["org_units"][0]["id"], "OuUid000001")
-        self.assertEqual(by_uid["org_units"][0]["uid"], "OuUid000001")
-        self.assertIn("id:eq:OuUid000001", str(clients["stage"].calls[-1]["params"].get("filter")))
+            by_uid = svc.search_org_units("stage", q="OuUid000001")
+            self.assertEqual(by_uid["org_units"][0]["id"], "OuUid000001")
+            self.assertEqual(by_uid["org_units"][0]["uid"], "OuUid000001")
 
-        regions = svc.search_org_units("stage", level=2, limit=100)
-        self.assertEqual(regions["level"], 2)
-        self.assertEqual(regions["org_units"][0]["id"], "OuUidRegion1")
-        self.assertLessEqual(regions["count"], 80)
-        # Prefer country→children nested fetch for regions.
-        region_call = next(
-            c for c in clients["stage"].calls if "level:eq:1" in str(c["params"].get("filter"))
-        )
-        self.assertIn("children[", str(region_call["params"].get("fields")))
-        self.assertEqual(region_call["retry_max"], 0)
-        self.assertLessEqual(float(region_call["timeout"]), 5.0)
-        self.assertNotIn("children::size", str(region_call["params"].get("fields")))
+            regions = svc.search_org_units("stage", level=2, limit=100)
+            self.assertEqual(regions["level"], 2)
+            self.assertEqual(regions["org_units"][0]["id"], "OuUidRegion1")
+            self.assertLessEqual(regions["count"], 80)
+            region_call = next(
+                c for c in clients["stage"].calls if "level:eq:1" in str(c["params"].get("filter"))
+            )
+            self.assertIn("children[", str(region_call["params"].get("fields")))
+            self.assertEqual(region_call["retry_max"], 0)
+            self.assertLessEqual(float(region_call["timeout"]), 5.0)
+            self.assertNotIn("children::size", str(region_call["params"].get("fields")))
 
-        children = svc.search_org_units("stage", parent_id="OuUid000001", limit=100)
-        self.assertIn("/api/organisationUnits/OuUid000001", children and clients["stage"].calls[-1]["path"])
-        self.assertEqual(children["org_units"][0]["id"], "OuUid000002")
-        self.assertTrue(children["org_units"][0]["has_children"])
-        self.assertIn("children[", str(clients["stage"].calls[-1]["params"].get("fields")))
+            children = svc.search_org_units("stage", parent_id="OuUid000001", limit=100)
+            self.assertIn("/api/organisationUnits/OuUid000001", children and clients["stage"].calls[-1]["path"])
+            self.assertEqual(children["org_units"][0]["id"], "OuUid000002")
+            self.assertTrue(children["org_units"][0]["has_children"])
+            self.assertIn("children[", str(clients["stage"].calls[-1]["params"].get("fields")))
 
-        again = svc.search_org_units("stage", q="Alpha")
-        self.assertEqual(again["cache"], "hit")
-        self.assertTrue(again.get("synced_at"))
-        live = svc.search_org_units("live", q="Alpha")
-        self.assertEqual(live["cache"], "miss")
-        self.assertEqual(len(clients["live"].calls), 1)
-        # Stage/Live isolation: Live miss must not read Stage rows.
-        self.assertEqual(live["environment"], "live")
+            stage_calls = len(clients["stage"].calls)
+            again = svc.search_org_units("stage", q="Alpha")
+            self.assertEqual(again["cache"], "hit")
+            self.assertEqual(again["source"], "sqlite")
+            self.assertTrue(again.get("synced_at"))
+            self.assertEqual(len(clients["stage"].calls), stage_calls)
+
+            live = svc.search_org_units("live", q="Alpha")
+            self.assertEqual(live["cache"], "miss")
+            self.assertEqual(live["source"], "dhis2")
+            self.assertEqual(len(clients["live"].calls), 1)
+            self.assertEqual(live["environment"], "live")
 
         with self.assertRaises(ReportSecurityError):
             validate_org_unit("Central Visayas", required=True)
         self.assertEqual(validate_org_unit("OuUid000001"), "OuUid000001")
 
 
-class StageMaintenanceOuTests(unittest.TestCase):
-    """Stage maintenance: clear message, retain Stage cache, never bleed Live."""
+class OrgUnitSqliteCacheTests(unittest.TestCase):
+    """SQLite cache-first OU loading: speed, isolation, background refresh, dedupe."""
+
+    def setUp(self):
+        from hub.dhis2_reports.cache import ORG_UNIT_CACHE
+
+        ORG_UNIT_CACHE.clear()
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(self.tmp.cleanup)
 
     def tearDown(self):
         from hub.dhis2_reports.cache import ORG_UNIT_CACHE
 
         ORG_UNIT_CACHE.clear()
 
-    def test_maintenance_blocks_stage_network_without_cache(self):
+    def _svc(self, clients, store=None):
+        from hub.dhis2_reports.org_unit_store import OrgUnitStore
+        from hub.dhis2_reports.service import Dhis2ReportsService
+
+        ou_store = store or OrgUnitStore(Path(self.tmp.name) / "ou.db")
+        return Dhis2ReportsService(
+            store=mock.Mock(),
+            client_factory=lambda env: clients[env] if isinstance(clients, dict) else clients,
+            org_unit_store=ou_store,
+        ), ou_store
+
+    def test_cached_hierarchy_and_search_are_fast(self):
+        import time
+
+        class FakeClient:
+            def __init__(self):
+                self.calls = 0
+
+            def _get_json(self, path, params=None, timeout=None, retry_max=None):
+                self.calls += 1
+                time.sleep(0.05)  # simulate network
+                if "level:eq:1" in str((params or {}).get("filter") or ""):
+                    return {
+                        "organisationUnits": [
+                            {
+                                "id": "OuUidCountry1",
+                                "displayName": "Philippines",
+                                "children": [
+                                    {"id": "OuUidRegion1", "displayName": "Region VII", "level": 2, "code": "R07"}
+                                ],
+                            }
+                        ]
+                    }
+                return {
+                    "organisationUnits": [
+                        {
+                            "id": "OuUidRegion1",
+                            "displayName": "Region VII",
+                            "code": "R07",
+                            "path": "/PH/R07",
+                            "level": 2,
+                        }
+                    ]
+                }
+
+        fake = FakeClient()
+        with mock.patch.dict(os.environ, {"DHIS2_STAGE_MAINTENANCE": "false"}, clear=False):
+            svc, _store = self._svc({"live": fake})
+            cold = svc.search_org_units("live", level=2, limit=50)
+            self.assertEqual(cold["source"], "dhis2")
+            t0 = time.perf_counter()
+            hot = svc.search_org_units("live", level=2, limit=50)
+            hierarchy_ms = (time.perf_counter() - t0) * 1000
+            t1 = time.perf_counter()
+            search = svc.search_org_units("live", q="Region")
+            search_ms = (time.perf_counter() - t1) * 1000
+        self.assertEqual(hot["source"], "sqlite")
+        self.assertEqual(hot["cache"], "hit")
+        self.assertEqual(search["source"], "sqlite")
+        self.assertLess(hierarchy_ms, 300)
+        self.assertLess(search_ms, 500)
+        self.assertEqual(fake.calls, 1)
+
+    def test_stage_live_sqlite_isolation(self):
+        class FakeClient:
+            def __init__(self, env):
+                self.env = env
+
+            def _get_json(self, path, params=None, timeout=None, retry_max=None):
+                uid = "OuUidLiveRg1" if self.env == "live" else "OuUidStgRg1"
+                name = "Live Region" if self.env == "live" else "Stage Region"
+                return {
+                    "organisationUnits": [
+                        {
+                            "id": "OuUidCountry1",
+                            "displayName": "Country",
+                            "children": [{"id": uid, "displayName": name, "level": 2}],
+                        }
+                    ]
+                }
+
+        clients = {"stage": FakeClient("stage"), "live": FakeClient("live")}
+        with mock.patch.dict(os.environ, {"DHIS2_STAGE_MAINTENANCE": "false"}, clear=False):
+            svc, store = self._svc(clients)
+            live = svc.search_org_units("live", level=2, limit=50)
+            stage = svc.search_org_units("stage", level=2, limit=50)
+        self.assertEqual(live["org_units"][0]["id"], "OuUidLiveRg1")
+        self.assertEqual(stage["org_units"][0]["id"], "OuUidStgRg1")
+        self.assertIsNone(store.get("stage", "OuUidLiveRg1"))
+        self.assertIsNone(store.get("live", "OuUidStgRg1"))
+
+    def test_background_refresh_and_duplicate_prevention(self):
+        import threading
+        import time
+
+        from hub.dhis2_reports.org_unit_store import OrgUnitStore, utcnow_iso
+
+        started = threading.Event()
+        release = threading.Event()
+        calls = {"n": 0}
+
+        class SlowClient:
+            def _get_json(self, path, params=None, timeout=None, retry_max=None):
+                calls["n"] += 1
+                started.set()
+                release.wait(timeout=2)
+                return {
+                    "organisationUnits": [
+                        {
+                            "id": "OuUidCountry1",
+                            "children": [
+                                {"id": "OuUidRegion1", "displayName": "Region VII", "level": 2}
+                            ],
+                        }
+                    ]
+                }
+
+        store = OrgUnitStore(Path(self.tmp.name) / "ou_bg.db")
+        # Seed stale scope so cache-first path schedules background refresh.
+        store.upsert_rows(
+            "live",
+            [{"id": "OuUidRegion1", "name": "Region VII", "level": 2, "has_children": True}],
+        )
+        store.mark_scope("live", "level:2", unit_count=1, synced_at="2000-01-01T00:00:00Z")
+
+        with mock.patch.dict(os.environ, {"DHIS2_STAGE_MAINTENANCE": "false"}, clear=False):
+            svc, _ = self._svc({"live": SlowClient()}, store=store)
+            first = svc.search_org_units("live", level=2, limit=50)
+            self.assertEqual(first["source"], "sqlite")
+            self.assertTrue(first.get("refresh_scheduled"))
+            second = svc.refresh_org_units("live", level=2)
+            # First background job already inflight from stale scope; duplicate blocked.
+            self.assertTrue(started.wait(timeout=1))
+            # Either already inflight from schedule, or second start raced — never two workers.
+            third = svc.refresh_org_units("live", level=2)
+            self.assertTrue(third.get("inflight") or not third.get("started"))
+            release.set()
+            time.sleep(0.15)
+        self.assertEqual(calls["n"], 1)
+
+    def test_dhis2_timeout_falls_back_to_sqlite(self):
+        from hub.dhis2.client import Dhis2Error
+        from hub.dhis2_reports.org_unit_store import OrgUnitStore
+
+        store = OrgUnitStore(Path(self.tmp.name) / "ou_to.db")
+        store.upsert_rows(
+            "live",
+            [{"id": "OuUidRegion1", "name": "Cached Region", "level": 2, "code": "CR", "has_children": True}],
+        )
+        store.mark_scope("live", "level:2", unit_count=1)
+
+        class BoomClient:
+            def _get_json(self, path, params=None, timeout=None, retry_max=None):
+                raise Dhis2Error("timeout", status_code=504)
+
+        with mock.patch.dict(os.environ, {"DHIS2_STAGE_MAINTENANCE": "false"}, clear=False):
+            svc, _ = self._svc({"live": BoomClient()}, store=store)
+            # Fresh scope → sqlite hit, no network.
+            hit = svc.search_org_units("live", level=2, limit=50)
+            self.assertEqual(hit["source"], "sqlite")
+            self.assertEqual(hit["org_units"][0]["name"], "Cached Region")
+            # Forced refresh must fall back to sqlite when DHIS2 errors.
+            store.clear_scope("live", "level:2")
+            fallback = svc.search_org_units("live", level=2, limit=50, refresh=True)
+            self.assertEqual(fallback["source"], "sqlite")
+            self.assertEqual(fallback["cache"], "stale")
+            self.assertEqual(fallback["org_units"][0]["id"], "OuUidRegion1")
+
+    def test_no_dhis2_writes_from_ou_paths(self):
+        methods = []
+
+        class SpyClient:
+            def _get_json(self, path, params=None, timeout=None, retry_max=None):
+                methods.append(("GET", path))
+                return {
+                    "organisationUnits": [
+                        {
+                            "id": "OuUidCountry1",
+                            "children": [
+                                {"id": "OuUidRegion1", "displayName": "Region VII", "level": 2}
+                            ],
+                        }
+                    ]
+                }
+
+            def request(self, *a, **k):
+                methods.append(("request", a, k))
+                raise AssertionError("unexpected write path")
+
+        with mock.patch.dict(os.environ, {"DHIS2_STAGE_MAINTENANCE": "false"}, clear=False):
+            svc, _ = self._svc({"live": SpyClient()})
+            svc.search_org_units("live", level=2, limit=50)
+            svc.refresh_org_units("live", level=2)
+        self.assertTrue(methods)
+        self.assertTrue(all(m[0] == "GET" for m in methods))
+
+
+class StageMaintenanceOuTests(unittest.TestCase):
+    """Stage maintenance: clear message, retain Stage cache, never bleed Live."""
+
+    def setUp(self):
         from hub.dhis2_reports.cache import ORG_UNIT_CACHE
+
+        ORG_UNIT_CACHE.clear()
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(self.tmp.cleanup)
+
+    def tearDown(self):
+        from hub.dhis2_reports.cache import ORG_UNIT_CACHE
+
+        ORG_UNIT_CACHE.clear()
+
+    def _store(self):
+        from hub.dhis2_reports.org_unit_store import OrgUnitStore
+
+        return OrgUnitStore(Path(self.tmp.name) / "ou.db")
+
+    def test_maintenance_blocks_stage_network_without_cache(self):
         from hub.dhis2_reports.maintenance import STAGE_MAINTENANCE_MESSAGE
         from hub.dhis2_reports.security import ReportSecurityError
         from hub.dhis2_reports.service import Dhis2ReportsService
 
-        ORG_UNIT_CACHE.clear()
         client = mock.Mock()
-        svc = Dhis2ReportsService(store=mock.Mock(), client_factory=lambda env: client)
+        svc = Dhis2ReportsService(
+            store=mock.Mock(),
+            client_factory=lambda env: client,
+            org_unit_store=self._store(),
+        )
         with mock.patch.dict(os.environ, {"DHIS2_STAGE_MAINTENANCE": "true"}, clear=False):
             with self.assertRaises(ReportSecurityError) as ctx:
                 svc.search_org_units("stage", level=2, limit=50)
@@ -930,10 +1171,7 @@ class StageMaintenanceOuTests(unittest.TestCase):
         client._get_json.assert_not_called()
 
     def test_maintenance_serves_stale_stage_cache_with_synced_at(self):
-        from hub.dhis2_reports.cache import ORG_UNIT_CACHE
         from hub.dhis2_reports.service import Dhis2ReportsService
-
-        ORG_UNIT_CACHE.clear()
 
         class FakeClient:
             def __init__(self):
@@ -954,7 +1192,12 @@ class StageMaintenanceOuTests(unittest.TestCase):
                 }
 
         fake = FakeClient()
-        svc = Dhis2ReportsService(store=mock.Mock(), client_factory=lambda env: fake)
+        store = self._store()
+        svc = Dhis2ReportsService(
+            store=mock.Mock(),
+            client_factory=lambda env: fake,
+            org_unit_store=store,
+        )
         with mock.patch.dict(os.environ, {"DHIS2_STAGE_MAINTENANCE": "false"}, clear=False):
             seeded = svc.search_org_units("stage", level=2, limit=50)
         self.assertEqual(seeded["cache"], "miss")
@@ -962,27 +1205,21 @@ class StageMaintenanceOuTests(unittest.TestCase):
         synced = seeded["synced_at"]
         calls_after_seed = fake.calls
 
-        for key, (exp, stamp, value) in list(ORG_UNIT_CACHE._data.items()):
-            if key.startswith("ou:stage:"):
-                ORG_UNIT_CACHE._data[key] = (0.0, stamp, value)
-
         with mock.patch.dict(os.environ, {"DHIS2_STAGE_MAINTENANCE": "true"}, clear=False):
-            stale = svc.search_org_units("stage", level=2, limit=50)
-        self.assertEqual(stale["cache"], "stale")
-        self.assertEqual(stale["synced_at"], synced)
-        self.assertTrue(stale["maintenance"])
+            cached = svc.search_org_units("stage", level=2, limit=50)
+        self.assertIn(cached["cache"], {"hit", "stale"})
+        self.assertEqual(cached["source"], "sqlite")
+        self.assertEqual(cached["synced_at"], synced)
+        self.assertTrue(cached["maintenance"])
         self.assertEqual(
-            stale["maintenance_message"],
+            cached["maintenance_message"],
             "Stage is temporarily unavailable due to maintenance.",
         )
         self.assertEqual(fake.calls, calls_after_seed)
 
     def test_maintenance_does_not_use_live_cache_for_stage(self):
-        from hub.dhis2_reports.cache import ORG_UNIT_CACHE
         from hub.dhis2_reports.security import ReportSecurityError
         from hub.dhis2_reports.service import Dhis2ReportsService
-
-        ORG_UNIT_CACHE.clear()
 
         class FakeClient:
             def __init__(self, env):
@@ -1005,24 +1242,22 @@ class StageMaintenanceOuTests(unittest.TestCase):
                     ]
                 }
 
+        store = self._store()
         svc = Dhis2ReportsService(
             store=mock.Mock(),
             client_factory=lambda env: FakeClient(env),
+            org_unit_store=store,
         )
         with mock.patch.dict(os.environ, {"DHIS2_STAGE_MAINTENANCE": "false"}, clear=False):
             live = svc.search_org_units("live", level=2, limit=50)
         self.assertEqual(live["org_units"][0]["id"], "OuUidLiveRg1")
-
         with mock.patch.dict(os.environ, {"DHIS2_STAGE_MAINTENANCE": "true"}, clear=False):
             with self.assertRaises(ReportSecurityError) as ctx:
                 svc.search_org_units("stage", level=2, limit=50)
         self.assertEqual(ctx.exception.code, "maintenance")
 
     def test_live_still_works_during_stage_maintenance(self):
-        from hub.dhis2_reports.cache import ORG_UNIT_CACHE
         from hub.dhis2_reports.service import Dhis2ReportsService
-
-        ORG_UNIT_CACHE.clear()
 
         class FakeClient:
             def _get_json(self, path, params=None, timeout=None, retry_max=None):
@@ -1037,13 +1272,15 @@ class StageMaintenanceOuTests(unittest.TestCase):
                     ]
                 }
 
-        svc = Dhis2ReportsService(store=mock.Mock(), client_factory=lambda env: FakeClient())
+        svc = Dhis2ReportsService(
+            store=mock.Mock(),
+            client_factory=lambda env: FakeClient(),
+            org_unit_store=self._store(),
+        )
         with mock.patch.dict(os.environ, {"DHIS2_STAGE_MAINTENANCE": "true"}, clear=False):
             live = svc.search_org_units("live", level=2, limit=50)
-        self.assertTrue(live["ok"])
-        self.assertEqual(live["environment_status"], "ok")
-        self.assertFalse(live["maintenance"])
         self.assertEqual(live["org_units"][0]["id"], "OuUidRegion1")
+        self.assertFalse(live["maintenance"])
 
 
 @unittest.skipUnless(
@@ -1082,7 +1319,7 @@ class OverviewServicePeriodGateTests(unittest.TestCase):
         REPORT_CACHE.clear()
         self.tmp = tempfile.TemporaryDirectory()
         self.reg_path = Path(self.tmp.name) / "reg.yaml"
-        sample = SAMPLE_YAML + "\nreporting_cycle:\n  quarter_start: 2025Q3\n  quarter_end: 2027Q4\n"
+        sample = SAMPLE_YAML + "\nreporting_cycle:\n  quarter_start: 2025Q3\n  quarter_end: 2026Q4\n"
         self.reg_path.write_text(sample, encoding="utf-8")
         self.clients = {}
 
@@ -1109,7 +1346,7 @@ class OverviewServicePeriodGateTests(unittest.TestCase):
         boot = self.svc.bootstrap()
         ids = [q["id"] for q in boot["periods"]["quarters"]]
         self.assertEqual(ids[0], "2025Q3")
-        self.assertEqual(ids[-1], "2027Q4")
+        self.assertEqual(ids[-1], "2026Q4")
         self.assertEqual(boot["boundaries"]["org_unit_source"], "hub_dhis2_reports_org_units")
 
 

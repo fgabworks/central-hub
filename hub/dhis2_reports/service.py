@@ -31,6 +31,8 @@ from hub.dhis2_reports.maintenance import (
     STAGE_MAINTENANCE_MESSAGE,
     environment_availability,
 )
+from hub.dhis2_reports.org_unit_store import OrgUnitStore, utcnow_iso
+from hub.dhis2_reports.org_unit_sync import OrgUnitSyncManager
 from hub.dhis2_reports.catalog import get_report, load_report_catalog
 from hub.dhis2_reports.discovery import discover_report_parameters
 from hub.dhis2_reports.models import ReportDefinition, ResolvedRun
@@ -80,6 +82,7 @@ class Dhis2ReportsService:
         get_dhis2_base_url: Callable[[str], str | None] | None = None,
         client_factory: ClientFactory | None = None,
         registry: Registry | None = None,
+        org_unit_store: OrgUnitStore | None = None,
     ) -> None:
         self.store = store or ReportsStore()
         self.processes = process_manager or ProcessManager()
@@ -87,6 +90,8 @@ class Dhis2ReportsService:
         self.get_dhis2_base_url = get_dhis2_base_url or (lambda _env: None)
         self.client_factory = client_factory
         self.registry = registry
+        self.org_unit_store = org_unit_store or OrgUnitStore()
+        self.org_unit_sync = OrgUnitSyncManager(self.org_unit_store)
         self.standard_sync = (
             StandardReportSyncService(
                 self.store,
@@ -166,15 +171,14 @@ class Dhis2ReportsService:
         level: int | None = None,
         refresh: bool = False,
     ) -> dict[str, Any]:
-        """Search organisation units (name/code/UID) or cascade children like Live Processing.
+        """Cascade/search OUs: SQLite first (env-scoped), DHIS2 refresh in background.
 
         Cascading mode (LP parity):
         - no parent + level=2 → regions
         - parent_id set → direct children (province/municipality/barangay)
 
-        Stage maintenance: serve env-scoped cache (including stale) with synced_at;
-        do not call Stage unless refresh=True (user-initiated, single attempt);
-        never fall back to Live data or mix caches across environments.
+        Stage maintenance: serve Stage SQLite/memory when available; never poll Stage
+        unless refresh=True; never fall back to Live rows.
         """
         env = validate_environment(environment)
         avail = environment_availability(env)
@@ -198,44 +202,109 @@ class Dhis2ReportsService:
         limit_i = self._org_unit_page_size(
             limit=limit, cascade=cascade, level=level_i, parent=bool(parent)
         )
-        cache_key = f"ou:{env}:{needle.lower()}:{parent}:{level_i}:{limit_i}"
+        scope_key = OrgUnitStore.scope_key(level=level_i, parent_uid=parent, q=needle)
         maintenance = bool(avail.get("maintenance"))
+        mem_key = f"ou:{env}:{needle.lower()}:{parent}:{level_i}:{limit_i}"
 
         if refresh:
-            ORG_UNIT_CACHE.delete(cache_key)
+            ORG_UNIT_CACHE.delete(mem_key)
+            self.org_unit_store.clear_scope(env, scope_key)
 
-        # Prefer env-scoped cache (fresh, or stale during Stage maintenance).
-        entry = ORG_UNIT_CACHE.get_entry(cache_key, allow_stale=maintenance and not refresh)
+        # 1) Local SQLite (env-isolated) — page never waits on DHIS2 when rows exist.
+        local_rows = self._ou_local_rows(
+            env, needle=needle, parent=parent, level=level_i, limit=limit_i
+        )
+        scope_meta = self.org_unit_store.get_scope(env, scope_key)
+        local_synced = (scope_meta or {}).get("synced_at") or (
+            local_rows[0].get("synced_at") if local_rows else None
+        )
+        local_stale = self.org_unit_store.is_scope_stale(env, scope_key)
+        refresh_scheduled = False
+
+        if local_rows and not refresh:
+            if scope_meta is None:
+                # Opportunistic hit (e.g. search over rows synced via hierarchy).
+                stamp = (local_synced or "").strip() or utcnow_iso()
+                self.org_unit_store.mark_scope(
+                    env, scope_key, unit_count=len(local_rows), synced_at=stamp
+                )
+                local_stale = False
+                local_synced = stamp
+            elif local_stale and not maintenance:
+                refresh_scheduled = self._schedule_ou_scope_refresh(
+                    env,
+                    scope_key=scope_key,
+                    parent=parent,
+                    level=level_i,
+                    needle=needle,
+                    limit=limit_i,
+                )
+            payload = self._ou_result_payload(
+                env,
+                needle=needle,
+                parent=parent,
+                level=level_i,
+                rows=local_rows,
+            )
+            return self._ou_cache_payload(
+                payload,
+                cache="stale" if local_stale else "hit",
+                synced_at=local_synced,
+                availability=avail,
+                source="sqlite",
+                refresh_scheduled=refresh_scheduled,
+            )
+
+        # Memory TTL fallback (same env key only).
+        entry = ORG_UNIT_CACHE.get_entry(mem_key, allow_stale=maintenance and not refresh)
         if entry is not None and not refresh:
             return self._ou_cache_payload(
                 entry["value"],
                 cache="stale" if entry["stale"] else "hit",
                 synced_at=entry["synced_at"],
                 availability=avail,
+                source="memory",
             )
 
-        # Maintenance with no cache and no user refresh → do not poll Stage.
+        # Maintenance with no local data and no user refresh → do not poll Stage.
         if maintenance and not refresh:
             raise ReportSecurityError(STAGE_MAINTENANCE_MESSAGE, code="maintenance")
 
-        client = self._client(env)
-        ou_timeout = self._org_unit_timeout(client)
+        # 2) Blocking DHIS2 fetch (cache miss or manual refresh).
         try:
-            if parent:
-                rows = self._fetch_ou_children(
-                    client, parent, limit=limit_i, timeout=ou_timeout
-                )
-            elif cascade and level_i is not None:
-                rows = self._fetch_ou_by_level(
-                    client, level=level_i, limit=limit_i, timeout=ou_timeout
-                )
-            else:
-                rows = self._fetch_ou_search(
-                    client, needle=needle, limit=limit_i, timeout=ou_timeout
-                )
+            rows = self._ou_fetch_from_dhis2(
+                env,
+                parent=parent,
+                level=level_i,
+                needle=needle,
+                limit=limit_i,
+            )
+            enriched, stamp = self.org_unit_sync.persist_rows(
+                env, rows, scope_key=scope_key, parent_uid=parent
+            )
         except Dhis2Error as exc:
-            # User-initiated refresh during maintenance: keep prior Stage cache if any.
-            stale = ORG_UNIT_CACHE.get_entry(cache_key, allow_stale=True)
+            if local_rows:
+                payload = self._ou_result_payload(
+                    env,
+                    needle=needle,
+                    parent=parent,
+                    level=level_i,
+                    rows=local_rows,
+                )
+                return self._ou_cache_payload(
+                    payload,
+                    cache="stale",
+                    synced_at=local_synced,
+                    availability={
+                        **avail,
+                        "status": "maintenance" if maintenance else "degraded",
+                        "message": STAGE_MAINTENANCE_MESSAGE
+                        if maintenance
+                        else redact_report_detail(exc.message),
+                    },
+                    source="sqlite",
+                )
+            stale = ORG_UNIT_CACHE.get_entry(mem_key, allow_stale=True)
             if stale is not None and env == "stage":
                 return self._ou_cache_payload(
                     stale["value"],
@@ -244,10 +313,9 @@ class Dhis2ReportsService:
                     availability=avail if maintenance else {
                         **avail,
                         "status": "degraded",
-                        "message": STAGE_MAINTENANCE_MESSAGE
-                        if maintenance
-                        else redact_report_detail(exc.message),
+                        "message": redact_report_detail(exc.message),
                     },
+                    source="memory",
                 )
             if maintenance:
                 raise ReportSecurityError(STAGE_MAINTENANCE_MESSAGE, code="maintenance") from exc
@@ -256,23 +324,194 @@ class Dhis2ReportsService:
                 code="unauthorized" if exc.status_code in {401, 403} else "unavailable",
             ) from exc
 
-        payload = {
+        payload = self._ou_result_payload(
+            env,
+            needle=needle,
+            parent=parent,
+            level=level_i,
+            rows=enriched,
+        )
+        payload["synced_at"] = stamp
+        ORG_UNIT_CACHE.set(mem_key, payload, synced_at=stamp)
+        return self._ou_cache_payload(
+            payload,
+            cache="miss",
+            synced_at=stamp,
+            availability=environment_availability(env),
+            source="dhis2",
+        )
+
+    def refresh_org_units(
+        self,
+        environment: str,
+        *,
+        parent_id: str = "",
+        level: int | None = 2,
+    ) -> dict[str, Any]:
+        """User-initiated Organisation Unit metadata refresh (GET-only, env-scoped)."""
+        env = validate_environment(environment)
+        avail = environment_availability(env)
+        parent = validate_org_unit(parent_id, required=False) if parent_id else ""
+        level_i = 2 if level is None else int(level)
+        scope_key = OrgUnitStore.scope_key(level=None if parent else level_i, parent_uid=parent)
+        if self.org_unit_sync.is_inflight(env, scope_key):
+            meta = self.org_unit_store.env_meta(env)
+            return {
+                "ok": True,
+                "environment": env,
+                "started": False,
+                "inflight": True,
+                "scope_key": scope_key,
+                "message": "Organisation unit sync already running for this environment.",
+                "meta": meta,
+                "maintenance": bool(avail.get("maintenance")),
+                "maintenance_message": avail.get("message") if avail.get("maintenance") else None,
+            }
+        self.org_unit_store.clear_scope(env, scope_key)
+        ORG_UNIT_CACHE.invalidate_prefix(f"ou:{env}:")
+
+        def _worker() -> None:
+            try:
+                self._ou_fetch_and_persist(
+                    env,
+                    scope_key=scope_key,
+                    parent=parent,
+                    level=None if parent else level_i,
+                    needle="",
+                    limit=80 if not parent else 300,
+                )
+            except Exception:
+                return
+
+        started = self.org_unit_sync.schedule(env, scope_key, _worker)
+        return {
+            "ok": True,
+            "environment": env,
+            "started": started,
+            "inflight": not started,
+            "scope_key": scope_key,
+            "message": "Organisation unit refresh started."
+            if started
+            else "Organisation unit sync already running for this environment.",
+            "meta": self.org_unit_store.env_meta(env),
+            "maintenance": bool(avail.get("maintenance")),
+            "maintenance_message": avail.get("message") if avail.get("maintenance") else None,
+        }
+
+    def org_unit_cache_status(self, environment: str) -> dict[str, Any]:
+        env = validate_environment(environment)
+        avail = environment_availability(env)
+        meta = self.org_unit_store.env_meta(env)
+        return {
+            "ok": True,
+            "environment": env,
+            "meta": meta,
+            "maintenance": bool(avail.get("maintenance")),
+            "maintenance_message": avail.get("message") if avail.get("maintenance") else None,
+            "environment_status": avail.get("status") or "ok",
+        }
+
+    def _ou_local_rows(
+        self,
+        env: str,
+        *,
+        needle: str,
+        parent: str,
+        level: int | None,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        if parent:
+            return self.org_unit_store.list_children(env, parent, limit=limit)
+        if level is not None and not needle:
+            return self.org_unit_store.list_level(env, level, limit=limit)
+        if needle:
+            return self.org_unit_store.search(env, needle, limit=limit)
+        return []
+
+    def _ou_result_payload(
+        self,
+        env: str,
+        *,
+        needle: str,
+        parent: str,
+        level: int | None,
+        rows: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        return {
             "ok": True,
             "environment": env,
             "q": needle,
             "parent_id": parent,
-            "level": level_i,
+            "level": level,
             "org_units": rows,
-            "orgunits": rows,  # LP-compatible alias
+            "orgunits": rows,
             "count": len(rows),
         }
-        synced_at = ORG_UNIT_CACHE.set(cache_key, payload)
-        payload["synced_at"] = synced_at
-        return self._ou_cache_payload(
-            payload,
-            cache="miss",
-            synced_at=synced_at,
-            availability=environment_availability(env),
+
+    def _schedule_ou_scope_refresh(
+        self,
+        env: str,
+        *,
+        scope_key: str,
+        parent: str,
+        level: int | None,
+        needle: str,
+        limit: int,
+    ) -> bool:
+        def _worker() -> None:
+            try:
+                self._ou_fetch_and_persist(
+                    env,
+                    scope_key=scope_key,
+                    parent=parent,
+                    level=level,
+                    needle=needle,
+                    limit=limit,
+                )
+            except Exception:
+                return
+
+        return self.org_unit_sync.schedule(env, scope_key, _worker)
+
+    def _ou_fetch_and_persist(
+        self,
+        env: str,
+        *,
+        scope_key: str,
+        parent: str,
+        level: int | None,
+        needle: str,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        rows = self._ou_fetch_from_dhis2(
+            env, parent=parent, level=level, needle=needle, limit=limit
+        )
+        enriched, _stamp = self.org_unit_sync.persist_rows(
+            env, rows, scope_key=scope_key, parent_uid=parent
+        )
+        return enriched
+
+    def _ou_fetch_from_dhis2(
+        self,
+        env: str,
+        *,
+        parent: str,
+        level: int | None,
+        needle: str,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        client = self._client(env)
+        ou_timeout = self._org_unit_timeout(client)
+        if parent:
+            return self._fetch_ou_children(
+                client, parent, limit=limit, timeout=ou_timeout
+            )
+        if level is not None and not needle:
+            return self._fetch_ou_by_level(
+                client, level=level, limit=limit, timeout=ou_timeout
+            )
+        return self._fetch_ou_search(
+            client, needle=needle, limit=limit, timeout=ou_timeout
         )
 
     @staticmethod
@@ -282,6 +521,8 @@ class Dhis2ReportsService:
         cache: str,
         synced_at: str | None,
         availability: dict[str, Any],
+        source: str = "memory",
+        refresh_scheduled: bool = False,
     ) -> dict[str, Any]:
         stamp = (synced_at or payload.get("synced_at") or "").strip() or None
         out = {
@@ -289,6 +530,8 @@ class Dhis2ReportsService:
             "ok": True,
             "cache": cache,
             "synced_at": stamp,
+            "source": source,
+            "refresh_scheduled": bool(refresh_scheduled),
             "environment_status": availability.get("status") or "ok",
             "maintenance": bool(availability.get("maintenance")),
             "maintenance_message": availability.get("message")

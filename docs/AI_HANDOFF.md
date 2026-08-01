@@ -4,14 +4,14 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**HCSC–RF preview UI refinement (2026-08-02)**
+**HCSC–RF OU SQLite cache + quarter cap (2026-07-30)**
 
-Refined `/dhis2/hcsc-indicators` to match the final HCSC–RF preview: compact filter card,
-Region→Province→Municipality/City→Barangay cascade + searchable OU, status strip, five overview
-cards, category nav + technical tabs, indicator toolbar, result-aware table, empty states, legend
-popover. APIs/registry/batching/validation/evidence/read-only unchanged.
+Reporting cycle capped to **2025Q3–2026Q4** (config-driven; invalid remembered quarters reset).
+Organisation units served cache-first from env-isolated SQLite (`data/dhis2_org_units.db`) with
+background DHIS2 refresh, manual **Refresh Organisation Units**, Stage/Live isolation, and Stage
+maintenance messaging. Cascade/search/UID/APIs/registry/read-only unchanged.
 
-Prior: **HCSC–RF OU cascade + Stage maintenance handling**.
+Prior: **HCSC–RF preview UI refinement** + OU cascade + Stage maintenance handling.
 
 ### Prior milestone
 

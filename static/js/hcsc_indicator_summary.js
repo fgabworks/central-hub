@@ -281,9 +281,13 @@
     if (!sel) return;
     var quarters = (boot.periods && boot.periods.quarters) || [];
     var remembered = loadRememberedQuarter();
+    var rememberedOk =
+      !!(remembered && quarters.some(function (q) { return q.id === remembered; }));
+    // Invalid remembered (e.g. removed 2027Qx) → latest valid default from server.
     var def =
-      (remembered && quarters.some(function (q) { return q.id === remembered; }) && remembered) ||
+      (rememberedOk && remembered) ||
       (boot.periods && boot.periods.default_period) ||
+      (quarters.length ? quarters[quarters.length - 1].id : "") ||
       "";
     allowedQuarters = {};
     sel.innerHTML = quarters

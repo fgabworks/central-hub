@@ -12,7 +12,7 @@ reporting_cycle:
   id: 1
   label: Cycle 1
   quarter_start: 2025Q3
-  quarter_end: 2027Q4
+  quarter_end: 2026Q4
 
 indicators:
 - key: eligible_households

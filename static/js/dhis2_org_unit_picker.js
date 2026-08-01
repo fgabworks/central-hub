@@ -3,7 +3,8 @@
  * Levels: Region → Province → Municipality/City → Barangay
  * Data: GET /api/dhis2/reports/org-units (level / parent_id / q).
  * Stage maintenance: show clear message, serve cached metadata with synced_at,
- * Retry + Refresh Metadata are user-initiated only (no Stage polling loop).
+ * Retry + Refresh Organisation Units are user-initiated only (no Stage polling loop).
+ * Local SQLite cache (env-scoped) serves hierarchy/search immediately; DHIS2 refreshes in background.
  * Stage/Live caches stay isolated — never mix Live rows into Stage.
  */
 (function (global) {
@@ -38,6 +39,10 @@
     var searchEl = opts.searchEl;
     var searchResultsEl = opts.searchResultsEl;
     var apiUrl = opts.apiUrl || "";
+    var refreshUrl = opts.refreshUrl || "";
+    if (!refreshUrl && apiUrl) {
+      refreshUrl = apiUrl.replace(/\/?(\?.*)?$/, "") + "/refresh";
+    }
     var getEnvironment = opts.getEnvironment || function () { return "stage"; };
     var storagePrefix = opts.storagePrefix || "centralhub.ou.";
     var onChange = opts.onChange || function () {};
@@ -164,7 +169,7 @@
       var synced = (data && data.synced_at) || lastSyncedAt[env()] || "";
       if (data && data.synced_at) lastSyncedAt[env()] = data.synced_at;
       setSyncLabel(synced, data && data.cache, maintenance);
-      if (refreshMetaBtn) refreshMetaBtn.hidden = !maintenance;
+      if (refreshMetaBtn) refreshMetaBtn.hidden = false;
       onEnvironmentStatus({
         environment: env(),
         maintenance: maintenance,
@@ -348,8 +353,41 @@
       rootsLoaded = false;
       clearEnvCache();
       resetFrom(0);
-      ensureRoots(true, true).then(function () {
-        syncSelection();
+      setError("", false);
+      if (syncEl) {
+        syncEl.hidden = false;
+        syncEl.textContent = "Refreshing organisation units…";
+      }
+      var startRefresh = Promise.resolve({ ok: true });
+      if (refreshUrl) {
+        var qs = "?environment=" + encodeURIComponent(env()) + "&level=2";
+        startRefresh = fetch(refreshUrl + qs, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { Accept: "application/json" },
+        })
+          .then(function (r) {
+            return r.json().catch(function () {
+              return { ok: false };
+            });
+          })
+          .catch(function () {
+            return { ok: false };
+          });
+      }
+      return startRefresh.then(function (meta) {
+        if (meta && meta.maintenance) {
+          setError(meta.maintenance_message || MAINTENANCE_MSG, true);
+        } else if (meta && meta.inflight && !meta.started) {
+          if (syncEl) {
+            syncEl.hidden = false;
+            syncEl.textContent = meta.message || "Organisation unit sync already running.";
+          }
+        }
+        // Reload from local cache immediately — do not block the page on DHIS2.
+        return ensureRoots(true, false).then(function () {
+          syncSelection();
+        });
       });
     }
 

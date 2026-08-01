@@ -583,6 +583,31 @@ def register_dhis2_reports_routes(app: Flask) -> None:
         except ReportSecurityError as exc:
             return _json_error(exc)
 
+    @app.post("/api/dhis2/reports/org-units/refresh")
+    def api_dhis2_report_org_units_refresh():
+        env = (request.args.get("environment") or request.form.get("environment") or "stage").strip()
+        parent_id = (
+            request.args.get("parent_id")
+            or request.form.get("parent_id")
+            or ""
+        ).strip()
+        level = request.args.get("level", type=int)
+        if level is None and request.form.get("level"):
+            try:
+                level = int(request.form.get("level"))
+            except (TypeError, ValueError):
+                level = 2
+        try:
+            return jsonify(
+                _svc().refresh_org_units(
+                    env,
+                    parent_id=parent_id,
+                    level=2 if level is None else level,
+                )
+            )
+        except ReportSecurityError as exc:
+            return _json_error(exc)
+
     @app.get("/api/dhis2/reports/environment-status")
     def api_dhis2_report_environment_status():
         from hub.dhis2_reports.maintenance import environment_availability

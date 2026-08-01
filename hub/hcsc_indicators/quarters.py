@@ -10,7 +10,7 @@ from hub.dhis2_reports.security import ReportSecurityError, validate_period
 
 # Defaults match Cycle 1 until config/hcsc_indicators.yaml overrides them.
 DEFAULT_QUARTER_START = "2025Q3"
-DEFAULT_QUARTER_END = "2027Q4"
+DEFAULT_QUARTER_END = "2026Q4"
 
 
 def _parse_quarter(value: str) -> tuple[int, int]:
