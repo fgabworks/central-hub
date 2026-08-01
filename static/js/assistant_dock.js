@@ -23,7 +23,7 @@
     if (!host) return null;
     var boot = parseBootstrap(host);
     var prefs = Object.assign(
-      { open: false, pinned: true, minimized: false, width: 380, min_width: 300, max_width: 560 },
+      { open: false, pinned: true, minimized: false, width: 400, min_width: 300, max_width: 560 },
       boot.prefs || {}
     );
     var profile = boot.profile || {};
@@ -35,7 +35,7 @@
     var selectedModel = "";
     var shell = document.querySelector(".app-shell");
     var panel = $("ad-panel");
-    var toggleBtn = $("ad-toggle");
+    var toggleBtn = $("ar-assistant");
     var topbarBtn = $("ad-topbar-toggle");
     var backdrop = $("ad-backdrop");
     var promptEl = $("ad-prompt");
@@ -48,6 +48,14 @@
     var contextBtn = $("ad-context-btn");
     var saveTimer = null;
     var pollTimer = null;
+    var activeRunId = null;
+    var lastPrompt = "";
+    var cancelBtn = $("ad-cancel");
+    var retryBtn = $("ad-retry");
+    var sendBtn = $("ad-send");
+    var emptyEl = $("ad-empty");
+    var moreBtn = $("ad-more");
+    var menuPop = $("ad-menu-pop");
 
     function isMobile() {
       return window.matchMedia(MOBILE_MQ).matches;
@@ -153,8 +161,41 @@
       });
     }
 
+    function setMenuOpen(open) {
+      if (!menuPop || !moreBtn) return;
+      menuPop.hidden = !open;
+      moreBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+
+    function clearEmptyState() {
+      if (!messages) return;
+      if (emptyEl && emptyEl.parentNode === messages) {
+        emptyEl.remove();
+      }
+      messages.removeAttribute("data-ad-empty");
+    }
+
+    function setRunControls(state) {
+      /* state: idle | running | failed */
+      var running = state === "running";
+      var failed = state === "failed";
+      if (cancelBtn) {
+        cancelBtn.hidden = !running;
+        cancelBtn.disabled = !running;
+      }
+      if (retryBtn) {
+        retryBtn.hidden = !failed;
+        retryBtn.disabled = !failed;
+      }
+      if (sendBtn) {
+        sendBtn.disabled = running;
+        sendBtn.hidden = false;
+      }
+    }
+
     function appendMessage(role, html) {
       if (!messages) return;
+      clearEmptyState();
       var div = document.createElement("div");
       div.className = "ad-msg ad-msg-" + role;
       div.innerHTML = html;
@@ -305,12 +346,21 @@
             ? '<p class="muted">Tool activity: ' + run.tool_activity.length + "</p>"
             : "");
       }
+      activeRunId = run.id || activeRunId;
+      if (run.status === "failed" || run.status === "cancelled") {
+        setRunControls("failed");
+      } else {
+        setRunControls("idle");
+      }
     }
 
     function pollRun(runId) {
       if (pollTimer) clearInterval(pollTimer);
+      activeRunId = runId;
+      setRunControls("running");
       function tick() {
         if (document.visibilityState === "hidden") return;
+        if (!expanded()) return;
         fetch(apiBase + "/runs/" + encodeURIComponent(runId), {
           credentials: "same-origin",
         })
@@ -335,9 +385,74 @@
       tick();
     }
 
+    function cancelActiveRun() {
+      if (!activeRunId) return;
+      fetch(apiBase + "/runs/" + encodeURIComponent(activeRunId) + "/cancel", {
+        method: "POST",
+        credentials: "same-origin",
+      })
+        .then(function (r) {
+          return r.json();
+        })
+        .then(function (run) {
+          if (pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+          }
+          if (run && run.id) renderRun(run);
+          else setRunControls("failed");
+        })
+        .catch(function () {
+          setRunControls("failed");
+        });
+    }
+
+    function retryActiveRun() {
+      if (!activeRunId) {
+        if (lastPrompt) sendPrompt(lastPrompt);
+        return;
+      }
+      setRunControls("running");
+      fetch(apiBase + "/runs/" + encodeURIComponent(activeRunId) + "/retry", {
+        method: "POST",
+        credentials: "same-origin",
+      })
+        .then(function (r) {
+          return r.json().then(function (body) {
+            return { ok: r.ok, body: body };
+          });
+        })
+        .then(function (res) {
+          var run = (res.body && (res.body.run || res.body)) || {};
+          if (!res.ok) {
+            appendMessage(
+              "assistant",
+              escapeHtml((res.body && res.body.error) || "Retry failed.")
+            );
+            setRunControls("failed");
+            return;
+          }
+          activeRunId = run.id || activeRunId;
+          if (run.status === "succeeded" || run.answer) {
+            renderRun(run);
+          } else if (run.id) {
+            appendMessage("assistant", "Retrying…");
+            pollRun(run.id);
+          } else {
+            setRunControls("idle");
+          }
+        })
+        .catch(function () {
+          appendMessage("assistant", "Retry failed.");
+          setRunControls("failed");
+        });
+    }
+
     function sendPrompt(text) {
       var prompt = String(text || "").trim();
       if (!prompt) return;
+      lastPrompt = prompt;
+      setRunControls("running");
       appendMessage("user", escapeHtml(prompt));
       if (promptEl) promptEl.value = "";
       if (!selectedAgent) {
@@ -346,6 +461,7 @@
           "Select a provider first (lazy-loaded when the panel opens)."
         );
         ensureAgents();
+        setRunControls("idle");
         return;
       }
       previewContext(prompt).then(function () {
@@ -377,14 +493,18 @@
                 (res.body && (res.body.error || res.body.message)) || "Run failed."
               )
             );
+            setRunControls("failed");
             return;
           }
           var run = res.body.run || res.body;
+          activeRunId = run.id || null;
           if (run.status === "succeeded" || run.answer) {
             renderRun(run);
           } else if (run.id) {
             appendMessage("assistant", "Running…");
             pollRun(run.id);
+          } else {
+            setRunControls("idle");
           }
         })
         .catch(function () {
@@ -392,6 +512,7 @@
             "assistant",
             "Could not start run. Check owner auth / provider connection."
           );
+          setRunControls("failed");
         });
     }
 
@@ -438,12 +559,13 @@
           sendPrompt(btn.getAttribute("data-ad-suggestion"));
         });
       });
-      var sendBtn = $("ad-send");
       if (sendBtn) {
         sendBtn.addEventListener("click", function () {
           sendPrompt(promptEl && promptEl.value);
         });
       }
+      if (cancelBtn) cancelBtn.addEventListener("click", cancelActiveRun);
+      if (retryBtn) retryBtn.addEventListener("click", retryActiveRun);
       if (promptEl) {
         promptEl.addEventListener("keydown", function (ev) {
           if (ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) {
@@ -466,10 +588,23 @@
       var settings = $("ad-settings");
       var history = $("ad-history");
       function goCenter() {
+        setMenuOpen(false);
         window.location.href = boot.center_url || "/work/okarun";
       }
       if (settings) settings.addEventListener("click", goCenter);
       if (history) history.addEventListener("click", goCenter);
+      if (moreBtn) {
+        moreBtn.addEventListener("click", function (ev) {
+          ev.stopPropagation();
+          setMenuOpen(menuPop ? menuPop.hidden : true);
+        });
+      }
+      document.addEventListener("click", function (ev) {
+        if (!menuPop || menuPop.hidden) return;
+        var menu = $("ad-menu");
+        if (menu && !menu.contains(ev.target)) setMenuOpen(false);
+      });
+      setRunControls("idle");
 
       var handle = $("ad-resize");
       if (handle && shell) {
@@ -482,7 +617,7 @@
         });
         window.addEventListener("mousemove", function (ev) {
           if (!dragging) return;
-          var rail = document.querySelector(".ad-rail");
+          var rail = document.querySelector(".activity-rail");
           var railW = rail ? rail.getBoundingClientRect().width : 48;
           var width = Math.round(window.innerWidth - railW - ev.clientX);
           prefs.width = Math.max(prefs.min_width, Math.min(prefs.max_width, width));
@@ -504,12 +639,19 @@
     bind();
     applyChrome();
     if (expanded()) ensureAgents();
+    function openWithPrompt(text) {
+      setOpen(true);
+      setMinimized(false);
+      if (promptEl && text) promptEl.value = text;
+      ensureAgents();
+    }
     return {
       prefs: prefs,
       setOpen: setOpen,
       toggle: toggle,
       ensureAgents: ensureAgents,
       applyChrome: applyChrome,
+      openWithPrompt: openWithPrompt,
     };
   }
 
@@ -517,5 +659,6 @@
     var host = $("assistant-dock-host");
     if (!host) return;
     window.__assistantDock = createDockController(host);
+    window.HubAssistantDock = window.__assistantDock;
   });
 })();

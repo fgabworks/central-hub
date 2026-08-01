@@ -267,30 +267,54 @@
     if (!run) return;
     activeRunId = run.id;
     setStatus(run.status || "unknown");
+    var empty = document.getElementById("ac-run-empty");
+    var view = document.getElementById("ac-run-view");
+    if (empty) empty.hidden = true;
+    if (view) view.hidden = false;
+    var title = document.getElementById("ac-run-title");
+    if (title) title.textContent = (run.prompt || "").slice(0, 80) || "Run";
     if (metaEl) {
       metaEl.textContent =
+        (run.created_at || "") +
+        " · " +
         (run.agent_label || run.agent_id || "") +
         " · " +
-        (run.model || "default") +
-        " · " +
-        (run.id || "");
+        (run.model || "default");
     }
+    var ctx = run.context || {};
+    var repos = run.repository_ids || [];
+    var setTxt = function (id, value) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = value || "—";
+    };
+    setTxt("ac-engine-repo", repos.length ? repos.join(", ") : "None");
+    setTxt("ac-engine-mode", run.mode || "ask");
+    var tools = (ctx.tools && (ctx.tools.enabled || ctx.tools.selected)) || [];
+    setTxt("ac-engine-sources", tools.length ? tools.length + " selected" : "Default");
+    setTxt("ac-engine-provider", run.agent_label || run.agent_id || "");
+    setTxt("ac-engine-model", run.model || "Default");
     if (answerEl) answerEl.textContent = run.answer || "—";
-    if (logsEl) logsEl.textContent = run.logs || "—";
-    if (errorEl) errorEl.textContent = run.error || "—";
-    if (toolsEl) {
+    if (logsEl) {
       var activity = run.tool_activity || [];
-      toolsEl.textContent = activity.length
-        ? JSON.stringify(activity, null, 2)
-        : "—";
+      logsEl.textContent = run.logs || "—";
+      if (toolsEl) {
+        toolsEl.hidden = false;
+        toolsEl.textContent = activity.length ? JSON.stringify(activity, null, 2) : "";
+      }
     }
+    if (errorEl) errorEl.textContent = run.error || "—";
     if (usageEl) {
       var usage = run.usage || {};
-      usageEl.textContent = Object.keys(usage).length
-        ? JSON.stringify(usage, null, 2)
-        : "—";
+      usageEl.textContent = Object.keys(usage).length ? JSON.stringify(usage, null, 2) : "—";
     }
-    renderRefs(run.referenced_files || (run.context && run.context.files) || []);
+    var refs = run.referenced_files || (ctx.files) || [];
+    renderRefs(refs);
+    var filesCount = document.getElementById("ac-files-count");
+    if (filesCount) filesCount.textContent = String(refs.length || 0);
+    var errCount = document.getElementById("ac-errors-count");
+    if (errCount) errCount.textContent = run.error ? "1" : "0";
+    if (promptEl) promptEl.value = run.prompt || "";
+    if (select && run.agent_id) select.value = run.agent_id;
     var terminal = ["completed", "failed", "cancelled", "unavailable"].indexOf(run.status) >= 0;
     if (cancelBtn) cancelBtn.disabled = !!terminal;
     if (retryBtn) retryBtn.disabled = !terminal || run.status === "unavailable";
@@ -466,6 +490,18 @@
       var mode = btn.getAttribute("data-mode");
       var radio = document.querySelector('input[name="agent-mode"][value="' + mode + '"]');
       if (radio) radio.checked = true;
+      document.querySelectorAll(".ac-list-item").forEach(function (el) {
+        el.classList.remove("is-active");
+      });
+      btn.classList.add("is-active");
+      if (window.HubAssistantDock && typeof window.HubAssistantDock.openWithPrompt === "function") {
+        window.HubAssistantDock.openWithPrompt(promptEl ? promptEl.value : "");
+      } else {
+        var dockToggle = document.getElementById("ad-topbar-toggle") || document.getElementById("ar-assistant");
+        if (dockToggle) dockToggle.click();
+        var adPrompt = document.getElementById("ad-prompt");
+        if (adPrompt && promptEl) adPrompt.value = promptEl.value;
+      }
     });
   });
 
@@ -473,16 +509,80 @@
     btn.addEventListener("click", function () {
       var id = btn.getAttribute("data-id");
       if (!id) return;
+      document.querySelectorAll(".ac-list-item").forEach(function (el) {
+        el.classList.remove("is-active");
+      });
+      btn.classList.add("is-active");
       fetch(apiBase + "/runs/" + encodeURIComponent(id))
         .then(function (r) {
           return r.json();
         })
         .then(function (data) {
-          if (data.run) {
-            if (promptEl) promptEl.value = data.run.prompt || "";
-            showRun(data.run);
-          }
+          if (data.run) showRun(data.run);
         });
     });
+  });
+
+  document.querySelectorAll(".ac-result-tab").forEach(function (tab) {
+    tab.addEventListener("click", function () {
+      var name = tab.getAttribute("data-ac-tab");
+      document.querySelectorAll(".ac-result-tab").forEach(function (el) {
+        var on = el === tab;
+        el.classList.toggle("is-active", on);
+        el.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      document.querySelectorAll(".ac-result-pane").forEach(function (pane) {
+        var on = pane.getAttribute("data-ac-pane") === name;
+        pane.classList.toggle("is-active", on);
+        pane.hidden = !on;
+      });
+    });
+  });
+
+  var lockBtn = document.getElementById("ac-lock-toggle");
+  var safetyDetails = document.getElementById("ac-safety-details");
+  if (lockBtn && safetyDetails) {
+    lockBtn.addEventListener("click", function () {
+      var open = !safetyDetails.open;
+      safetyDetails.open = open;
+      lockBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+  }
+
+  var openDockBtn = document.getElementById("ac-open-dock");
+  if (openDockBtn) {
+    openDockBtn.addEventListener("click", function () {
+      var dockToggle = document.getElementById("ad-topbar-toggle") || document.getElementById("ar-assistant");
+      if (dockToggle) dockToggle.click();
+    });
+  }
+
+  var previewCtxBtn = document.getElementById("ac-preview-context");
+  if (previewCtxBtn) {
+    previewCtxBtn.addEventListener("click", function () {
+      var box = document.getElementById("agent-preview-box");
+      if (box) box.hidden = false;
+      var previewBtn = document.getElementById("agent-preview");
+      if (previewBtn) previewBtn.click();
+    });
+  }
+
+  var search = document.getElementById("ac-search");
+  if (search) {
+    search.addEventListener("input", function () {
+      var q = (search.value || "").toLowerCase();
+      document.querySelectorAll("#ac-conversation-list .ac-list-item, #agent-history-list .ac-list-item, #agent-prompt-list .ac-list-item").forEach(function (item) {
+        var text = (item.textContent || "").toLowerCase();
+        item.parentElement.hidden = q && text.indexOf(q) < 0;
+      });
+    });
+  }
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) stopPoll();
+    else if (activeRunId) {
+      var status = (statusEl && statusEl.textContent) || "";
+      if (["completed", "failed", "cancelled", "unavailable"].indexOf(status) < 0) startPoll(activeRunId);
+    }
   });
 })();

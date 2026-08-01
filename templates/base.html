@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=wc-1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=shell-dock-2">
   {% block head_extra %}{% endblock %}
 </head>
 <body class="theme-{{ workspace|default('work') }}">
   {% from "macros.html" import brand_icon %}
-  <div class="app-shell{% if assistant_dock and not skip_assistant_dock|default(false) %} has-ad-rail{% endif %}{% if assistant_dock and assistant_dock.prefs.open and not assistant_dock.prefs.minimized %} is-ad-open{% elif assistant_dock and assistant_dock.prefs.minimized %} is-ad-open is-ad-minimized{% endif %}{% if workspace_console and workspace_console.prefs.open and not workspace_console.prefs.minimized %} is-wc-open{% elif workspace_console and workspace_console.prefs.minimized %} is-wc-open is-wc-minimized{% endif %}{% if workspace_console and workspace_console.prefs.maximized %} is-wc-maximized{% endif %}"
+  <div class="app-shell has-activity-rail{% if assistant_dock and not skip_assistant_dock|default(false) %} has-ad-dock{% endif %}{% if assistant_dock and assistant_dock.prefs.open and not assistant_dock.prefs.minimized %} is-ad-open{% elif assistant_dock and assistant_dock.prefs.minimized %} is-ad-open is-ad-minimized{% endif %}{% if workspace_console and workspace_console.prefs.open and not workspace_console.prefs.minimized %} is-wc-open{% elif workspace_console and workspace_console.prefs.minimized %} is-wc-open is-wc-minimized{% endif %}{% if workspace_console and workspace_console.prefs.maximized %} is-wc-maximized{% endif %}"
        style="{% if assistant_dock %}--ad-width: {{ assistant_dock.prefs.width }}px;{% endif %}{% if workspace_console %}--wc-height: {{ workspace_console.prefs.height }}px;{% endif %}">
     <aside class="sidebar">
       <div class="sidebar-brand">
@@ -85,16 +85,6 @@
             <span>{{ assistant_dock.profile.name }}</span>
           </button>
           {% endif %}
-          {% if workspace_console %}
-          <button type="button"
-                  class="btn btn-sm wc-topbar-btn"
-                  id="wc-topbar-toggle"
-                  aria-controls="wc-panel"
-                  aria-expanded="{{ 'true' if workspace_console.prefs.open and not workspace_console.prefs.minimized else 'false' }}"
-                  title="Toggle Workspace Console (Ctrl+J)">
-            Console
-          </button>
-          {% endif %}
           <span class="icon-btn" title="Theme" aria-label="Theme">☾</span>
           <span class="icon-btn" title="Notifications" aria-label="Notifications">
             🔔
@@ -121,23 +111,15 @@
         {% block content %}{% endblock %}
       </main>
     </div>
+
     {% if assistant_dock and not skip_assistant_dock|default(false) %}
     <div class="ad-host"
          id="assistant-dock-host"
          data-ad-bootstrap='{{ assistant_dock|tojson }}'>
       {% include "partials/assistant_dock_panel.html" %}
     </div>
-    <aside class="ad-rail" aria-label="{{ assistant_dock.profile.name }} dock">
-      <button type="button"
-              class="ad-rail-btn"
-              id="ad-toggle"
-              aria-controls="ad-panel"
-              aria-expanded="{{ 'true' if assistant_dock.prefs.open and not assistant_dock.prefs.minimized else 'false' }}"
-              title="{{ 'Hide' if assistant_dock.prefs.open and not assistant_dock.prefs.minimized else 'Show' }} {{ assistant_dock.profile.name }}">
-        <span class="ad-rail-label">{{ assistant_dock.profile.name }}</span>
-      </button>
-    </aside>
     {% endif %}
+
     {% if workspace_console %}
     <div class="wc-host"
          id="workspace-console-host"
@@ -146,12 +128,59 @@
       {% include "partials/workspace_console_panel.html" %}
     </div>
     {% endif %}
+
+    <aside class="activity-rail" id="activity-rail" aria-label="Activity rail">
+      {% if assistant_dock and not skip_assistant_dock|default(false) %}
+      <button type="button"
+              class="activity-rail-btn{% if assistant_dock.prefs.open and not assistant_dock.prefs.minimized %} is-active{% endif %}"
+              id="ar-assistant"
+              aria-controls="ad-panel"
+              aria-expanded="{{ 'true' if assistant_dock.prefs.open and not assistant_dock.prefs.minimized else 'false' }}"
+              title="{{ assistant_dock.profile.name }}">
+        <span aria-hidden="true">🤖</span>
+        <span class="sr-only">{{ assistant_dock.profile.name }}</span>
+      </button>
+      {% endif %}
+      {% if notepad and not skip_global_notepad|default(false) %}
+      <button type="button"
+              class="activity-rail-btn"
+              id="ar-notepad"
+              aria-controls="qn-panel"
+              aria-expanded="{{ 'true' if notepad.panel_open else 'false' }}"
+              title="Quick Notepad">
+        <span aria-hidden="true">📝</span>
+        <span class="sr-only">Quick Notepad</span>
+      </button>
+      {% endif %}
+      {% if workspace_console %}
+      <button type="button"
+              class="activity-rail-btn{% if workspace_console.prefs.open and not workspace_console.prefs.minimized %} is-active{% endif %}"
+              id="ar-console"
+              aria-controls="wc-panel"
+              aria-expanded="{{ 'true' if workspace_console.prefs.open and not workspace_console.prefs.minimized else 'false' }}"
+              title="Workspace Console (Ctrl+J)">
+        <span aria-hidden="true">⌨</span>
+        <span class="sr-only">Workspace Console</span>
+      </button>
+      {% endif %}
+      <button type="button" class="activity-rail-btn is-disabled" disabled title="SQL Workspace (coming to rail)">
+        <span aria-hidden="true">🗄</span><span class="sr-only">SQL</span>
+      </button>
+      <button type="button" class="activity-rail-btn is-disabled" disabled title="Calendar (coming to rail)">
+        <span aria-hidden="true">📅</span><span class="sr-only">Calendar</span>
+      </button>
+      <button type="button" class="activity-rail-btn is-disabled" disabled title="Audit (coming to rail)">
+        <span aria-hidden="true">📈</span><span class="sr-only">Audit</span>
+      </button>
+    </aside>
   </div>
+
   {% if assistant_dock and not skip_assistant_dock|default(false) %}
   <div class="ad-backdrop" id="ad-backdrop" hidden></div>
   {% endif %}
+
   {% if notepad and not skip_global_notepad|default(false) %}
-  <div class="qn-host qn-global-host{% if notepad.panel_open %} is-qn-open{% endif %}"
+  <div class="qn-host qn-global-host qn-from-rail{% if notepad.panel_open %} is-qn-open{% endif %}"
        id="qn-host"
        style="--qn-width: {{ notepad.panel_width }}px"
        data-qn-open="{{ '1' if notepad.panel_open else '0' }}"
@@ -166,17 +195,17 @@
     {% include "partials/quick_notepad_panel.html" %}
   </div>
   {% endif %}
+
   {% block scripts %}{% endblock %}
   {% if notepad and not skip_global_notepad|default(false) %}
-  <script src="{{ url_for('static', filename='js/quick_notepad.js') }}?v=qn-save-1"></script>
+  <script src="{{ url_for('static', filename='js/quick_notepad.js') }}?v=qn-rail-2"></script>
   {% endif %}
-  {% if assistant_dock and not skip_assistant_dock|default(false) %}
   <script src="{{ url_for('static', filename='js/hub_perf.js') }}?v=perf-1"></script>
-  <script src="{{ url_for('static', filename='js/assistant_dock.js') }}?v=ad-dock-5"></script>
+  {% if assistant_dock and not skip_assistant_dock|default(false) %}
+  <script src="{{ url_for('static', filename='js/assistant_dock.js') }}?v=shell-dock-2"></script>
   {% endif %}
   {% if workspace_console %}
-  <script src="{{ url_for('static', filename='js/hub_perf.js') }}?v=perf-1"></script>
-  <script src="{{ url_for('static', filename='js/workspace_console.js') }}?v=wc-1"></script>
+  <script src="{{ url_for('static', filename='js/workspace_console.js') }}?v=shell-vscode-1"></script>
   {% endif %}
 </body>
 </html>

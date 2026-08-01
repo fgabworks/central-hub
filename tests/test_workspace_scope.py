@@ -122,9 +122,10 @@ class WorkspaceNavRouteTests(unittest.TestCase):
         self.assertIn(">System<", work_html)
         self.assertIn("Audit", work_html)
         self.assertNotIn("Personal Notebook", work_html)
-        # Floating drawer remains; sidebar submenu for Quick Notepad is gone.
+        # Quick Notepad opens from the activity rail (no floating pill).
         self.assertIn("id=\"qn-panel\"", work_html)
-        self.assertIn("id=\"qn-open-btn\"", work_html)
+        self.assertIn('id="ar-notepad"', work_html)
+        self.assertIn('class="qn-open-btn sr-only"', work_html)
         self.assertNotIn('href="/work#quick-notepad"', work_html)
 
         personal_html = self.client.get("/personal").get_data(as_text=True)
@@ -133,7 +134,7 @@ class WorkspaceNavRouteTests(unittest.TestCase):
         self.assertIn("Personal Notebook", personal_html)
         self.assertIn("Personal Tasks", personal_html)
         self.assertIn("id=\"qn-panel\"", personal_html)
-        self.assertIn("id=\"qn-open-btn\"", personal_html)
+        self.assertIn('id="ar-notepad"', personal_html)
         self.assertNotIn('href="/personal#quick-notepad"', personal_html)
         self.assertNotIn("Connected Repositories", personal_html)
         css = (Path(__file__).resolve().parents[1] / "static" / "css" / "style.css").read_text(
@@ -145,7 +146,7 @@ class WorkspaceNavRouteTests(unittest.TestCase):
         self.assertIn("--accent-metallic", css)
 
     def test_floating_notepad_on_main_pages_without_sidebar_entry(self) -> None:
-        """Main pages expose the floating tab; sidebar no longer lists Quick Notepad."""
+        """Main pages expose rail notepad; sidebar no longer lists Quick Notepad."""
         for path in (
             "/personal",
             "/personal/notebook",
@@ -161,7 +162,12 @@ class WorkspaceNavRouteTests(unittest.TestCase):
             "/work/calendar",
         ):
             html = self.client.get(path).get_data(as_text=True)
-            self.assertIn('id="qn-open-btn"', html, msg=path)
+            self.assertIn('id="ar-notepad"', html, msg=path)
+            self.assertIn('id="qn-panel"', html, msg=path)
+            self.assertIn("qn-open-btn sr-only", html, msg=path)
+            self.assertNotIn(">Quick Notepad</a>", html, msg=path)
+            self.assertNotIn('href="/work#quick-notepad"', html, msg=path)
+            self.assertNotIn('href="/personal#quick-notepad"', html, msg=path)
             self.assertIn('id="qn-panel"', html, msg=path)
             self.assertNotIn("#quick-notepad", html.split("sidebar-nav")[1].split("sidebar-actions")[0], msg=path)
 

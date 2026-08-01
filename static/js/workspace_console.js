@@ -64,6 +64,11 @@
       topbar.setAttribute("aria-expanded", open && !minimized ? "true" : "false");
       topbar.classList.toggle("is-active", open);
     }
+    var rail = document.getElementById("ar-console");
+    if (rail) {
+      rail.setAttribute("aria-expanded", open && !minimized ? "true" : "false");
+      rail.classList.toggle("is-active", open && !minimized);
+    }
     document.querySelectorAll(".wc-tab").forEach(function (btn) {
       var active = btn.getAttribute("data-wc-tab") === prefs.tab;
       btn.classList.toggle("is-active", active);
@@ -443,6 +448,8 @@
   if (toggleBtn) toggleBtn.addEventListener("click", toggle);
   var topbarToggle = document.getElementById("wc-topbar-toggle");
   if (topbarToggle) topbarToggle.addEventListener("click", toggle);
+  var railConsole = document.getElementById("ar-console");
+  if (railConsole) railConsole.addEventListener("click", toggle);
   var minBtn = document.getElementById("wc-minimize");
   var maxBtn = document.getElementById("wc-maximize");
   var closeBtn = document.getElementById("wc-close");

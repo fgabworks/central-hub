@@ -185,17 +185,21 @@ class WorkQueueHelperTests(unittest.TestCase):
         self.assertEqual(overdue["due_meta"]["label"], "Overdue")
 
     def test_open_tasks_severity_levels(self) -> None:
-        self.assertEqual(open_tasks_severity({"open": 0, "overdue": 0, "blocked": 0}), "neutral")
+        self.assertEqual(open_tasks_severity({"open": 0, "overdue": 0, "blocked": 0, "urgent": 0}), "neutral")
         self.assertEqual(
-            open_tasks_severity({"open": 3, "overdue": 0, "blocked": 0, "due_this_week": 1}),
-            "attention",
+            open_tasks_severity({"open": 3, "overdue": 0, "blocked": 0, "due_this_week": 1, "urgent": 0}),
+            "neutral",
         )
         self.assertEqual(
-            open_tasks_severity({"open": 2, "overdue": 1, "blocked": 0}),
+            open_tasks_severity({"open": 2, "overdue": 1, "blocked": 0, "urgent": 0}),
             "alert",
         )
         self.assertEqual(
-            open_tasks_severity({"open": 1, "overdue": 0, "blocked": 1}),
+            open_tasks_severity({"open": 1, "overdue": 0, "blocked": 1, "urgent": 2}),
+            "alert",
+        )
+        self.assertEqual(
+            open_tasks_severity({"open": 4, "overdue": 0, "blocked": 0, "urgent": 1}),
             "alert",
         )
 
@@ -362,16 +366,18 @@ class DashboardRouteTests(unittest.TestCase):
         self.assertIn("stat-card-tasks", html)
         self.assertIn("severity-", html)
         self.assertIn('href="/work/notebook?status=open"', html)
-        self.assertIn("stat-badge", html)
-        self.assertIn("open", html.lower())
+        self.assertIn("stat-card-link", html)
+        self.assertIn("summary-compact", html)
+        self.assertIn("urgent", html.lower())
         self.assertIn("overdue", html.lower())
-        self.assertIn("due this week", html.lower())
-        self.assertIn("blocked", html.lower())
         self.assertIn("Dash queue note", html)
         self.assertIn("Sample CLI", html)
         self.assertIn(">Repository<", html)
         self.assertIn('class="col-repo"', html)
         self.assertIn("1/2", html)
+        self.assertIn("dash-repo-grid", html)
+        self.assertIn("dash-grid-lower", html)
+        self.assertIn("Connected Repositories", html)
         self.assertIn("Open (", html)
         # Empty checklist notes render an em dash, not 0/0, and omit the bar.
         empty = self.store.create(title="Empty progress note")
@@ -603,8 +609,9 @@ class DashboardRouteTests(unittest.TestCase):
         self.assertIn("Personal Notes", html)
         self.assertIn("Upcoming Events", html)
         self.assertIn("Audit Events", html)
-        # Floating Quick Notepad tab remains; summary-card shortcut removed.
-        self.assertIn('id="qn-open-btn"', html)
+        # Quick Notepad is on the activity rail; summary-card shortcut removed.
+        self.assertIn('id="ar-notepad"', html)
+        self.assertIn('id="qn-panel"', html)
         self.assertNotIn('href="/personal#quick-notepad"', html)
         self.assertIn("Upcoming Personal Events", html)
         self.assertIn("Personal Task Queue", html)
@@ -686,6 +693,137 @@ class DashboardRouteTests(unittest.TestCase):
         self.assertIn(".badge-status-ongoing", css)
         self.assertIn(".badge-status-blocked", css)
         self.assertIn(".badge-status-done", css)
+
+    def test_compact_summary_tiles_and_responsive_layout(self) -> None:
+        """Work dashboard summary tiles stay compact and wrap with Okarun / narrow viewports."""
+        urgent = self.store.create(title="Urgent dash tile")
+        self.store.save(
+            urgent["id"],
+            title="Urgent dash tile",
+            body_md="",
+            note_type="task",
+            status="pending",
+            priority="urgent",
+            due_date=None,
+            tags="",
+            repositories=[],
+            checklist=[],
+            links=[],
+            pinned=False,
+        )
+        overdue = self.store.create(title="Overdue dash tile")
+        self.store.save(
+            overdue["id"],
+            title="Overdue dash tile",
+            body_md="",
+            note_type="task",
+            status="ongoing",
+            priority="medium",
+            due_date="2020-01-01",
+            tags="",
+            repositories=[],
+            checklist=[],
+            links=[],
+            pinned=False,
+        )
+
+        html = self.client.get("/work").get_data(as_text=True)
+        self.assertIn("summary-compact", html)
+        self.assertIn("stat-card-link", html)
+        self.assertIn("severity-alert", html)
+        self.assertIn("stat-badge", html)
+        self.assertIn("stat-status", html)
+        self.assertIn("1 urgent", html)
+        self.assertIn("1 overdue", html)
+        self.assertIn("dash-grid-lower", html)
+        self.assertIn("dash-repo-grid", html)
+        # Whole tile is the link — no separate footer CTA text required.
+        self.assertNotRegex(html, r'class="stat-link"[^>]*>View all')
+
+        css = (Path(__file__).resolve().parents[1] / "static" / "css" / "style.css").read_text(
+            encoding="utf-8",
+            errors="replace",
+        )
+        self.assertIn("min-height: 90px", css)
+        self.assertIn("max-height: 110px", css)
+        self.assertIn("summary-compact", css)
+        self.assertIn("a.stat-card-link", css)
+        self.assertIn(".stat-status.is-ok", css)
+        self.assertIn(".dash-repo-card", css)
+        self.assertIn(
+            ".app-shell.is-ad-open:not(.is-ad-mobile):not(.is-ad-minimized) .summary-grid.summary-cols-5",
+            css,
+        )
+        self.assertIn("repeat(auto-fit, minmax(9rem, 1fr))", css)
+        self.assertRegex(
+            css,
+            r"@media \(max-width: 860px\)[\s\S]*?\.summary-grid[\s\S]*?minmax\(8\.5rem",
+        )
+
+        # Neutral when open tasks exist but none are urgent/overdue.
+        self.store.save(
+            urgent["id"],
+            title="Urgent dash tile",
+            body_md="",
+            note_type="task",
+            status="done",
+            priority="urgent",
+            due_date=None,
+            tags="",
+            repositories=[],
+            checklist=[],
+            links=[],
+            pinned=False,
+        )
+        self.store.save(
+            overdue["id"],
+            title="Overdue dash tile",
+            body_md="",
+            note_type="task",
+            status="done",
+            priority="medium",
+            due_date="2020-01-01",
+            tags="",
+            repositories=[],
+            checklist=[],
+            links=[],
+            pinned=False,
+        )
+        open_only = self.store.create(title="Open neutral tile")
+        self.store.save(
+            open_only["id"],
+            title="Open neutral tile",
+            body_md="",
+            note_type="task",
+            status="pending",
+            priority="medium",
+            due_date=None,
+            tags="",
+            repositories=[],
+            checklist=[],
+            links=[],
+            pinned=False,
+        )
+        neutral_html = self.client.get("/work").get_data(as_text=True)
+        self.assertIn("severity-neutral", neutral_html)
+        self.assertIn("0 urgent", neutral_html)
+        self.assertIn("0 overdue", neutral_html)
+
+        # Leave no open notes for sibling route tests that expect an empty queue.
+        self.store.save(
+            open_only["id"],
+            title="Open neutral tile",
+            body_md="",
+            note_type="task",
+            status="done",
+            priority="medium",
+            due_date=None,
+            tags="",
+            repositories=[],
+            checklist=[],
+            links=[],
+            pinned=False,
+        )
 
 
 if __name__ == "__main__":

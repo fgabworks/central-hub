@@ -7,7 +7,15 @@
       <span class="ad-status" id="ad-status"><span class="ad-status-dot" aria-hidden="true"></span> Assistant online</span>
     </div>
     <div class="ad-header-actions" role="toolbar" aria-label="Assistant panel controls">
-      <a class="btn btn-sm ad-icon-btn" id="ad-open-center" href="{{ assistant_dock.center_url }}" title="Open full Assistant Center">⋯</a>
+      <div class="ad-menu" id="ad-menu">
+        <button type="button" class="btn btn-sm ad-icon-btn" id="ad-more"
+                title="More actions" aria-haspopup="menu" aria-expanded="false" aria-controls="ad-menu-pop">⋯</button>
+        <div class="ad-menu-pop" id="ad-menu-pop" role="menu" hidden>
+          <a class="ad-menu-item" role="menuitem" id="ad-open-center" href="{{ assistant_dock.center_url }}">Assistant Center</a>
+          <button type="button" class="ad-menu-item" role="menuitem" id="ad-history">Recent runs</button>
+          <button type="button" class="ad-menu-item" role="menuitem" id="ad-settings">Settings</button>
+        </div>
+      </div>
       <button type="button" class="btn btn-sm ad-icon-btn{% if assistant_dock.prefs.pinned %} is-active{% endif %}" id="ad-pin" title="Pin panel" aria-pressed="{{ 'true' if assistant_dock.prefs.pinned else 'false' }}">📌</button>
       <button type="button" class="btn btn-sm ad-icon-btn" id="ad-minimize" title="Minimize panel">—</button>
       <button type="button" class="btn btn-sm ad-icon-btn" id="ad-close" title="Close panel" aria-label="Close assistant">×</button>
@@ -21,13 +29,9 @@
 
   <div class="ad-body">
     <div class="ad-pane is-active" id="ad-pane-conversation" role="tabpanel" aria-labelledby="ad-tab-conversation">
-      <div class="ad-messages" id="ad-messages" aria-live="polite">
-        <div class="ad-msg ad-msg-assistant">
-          <p class="ad-intro" id="ad-intro">
-            {{ assistant_dock.profile.name }} — {{ assistant_dock.profile.title }}.
-            {{ assistant_dock.profile.tone }}
-            Read-only tools only; secrets stay out of context.
-          </p>
+      <div class="ad-messages" id="ad-messages" aria-live="polite" data-ad-empty="1">
+        <div class="ad-empty" id="ad-empty">
+          <p class="ad-empty-msg">No conversation yet. Select a suggestion or ask {{ assistant_dock.profile.name }} a question.</p>
           <div class="ad-suggestions" id="ad-suggestions">
             {% for item in assistant_dock.suggestions %}
             <button type="button" class="ad-suggestion" data-ad-suggestion="{{ item.label }}">{{ item.label }}</button>
@@ -55,22 +59,27 @@
   <footer class="ad-composer">
     <div class="ad-prompt-row">
       <textarea id="ad-prompt" class="ad-prompt" rows="2" placeholder="Ask {{ assistant_dock.profile.name }} a read-only question…" aria-label="Assistant prompt"></textarea>
-      <button type="button" class="btn btn-primary ad-send" id="ad-send" title="Send" aria-label="Send">➤</button>
-    </div>
-    <div class="ad-composer-row">
-      <div class="ad-composer-tools">
-        <button type="button" class="btn btn-sm ad-icon-btn" id="ad-attach" title="Add context source" disabled aria-disabled="true">+</button>
-        <button type="button" class="btn btn-sm ad-icon-btn" id="ad-history" title="Recent runs / Assistant Center">◷</button>
-        <button type="button" class="btn btn-sm ad-icon-btn" id="ad-context-btn" title="Context preview" aria-expanded="false" aria-controls="ad-context-drawer">⧉</button>
-        <button type="button" class="btn btn-sm ad-icon-btn" id="ad-settings" title="Open full Assistant Center settings">⚙</button>
-        <label class="ad-model-wrap">
-          <span class="sr-only">Agent</span>
-          <select id="ad-agent" aria-label="Agent provider">
-            <option value="">Loading…</option>
-          </select>
-        </label>
-        <select id="ad-model" aria-label="Model" hidden></select>
+      <div class="ad-prompt-actions">
+        <button type="button" class="btn btn-sm ad-run-btn" id="ad-cancel" hidden disabled>Cancel</button>
+        <button type="button" class="btn btn-sm ad-run-btn" id="ad-retry" hidden disabled>Retry</button>
+        <button type="button" class="btn btn-primary ad-send" id="ad-send" title="Send" aria-label="Send">➤</button>
       </div>
+    </div>
+    <div class="ad-composer-row ad-composer-tools">
+      <button type="button" class="btn btn-sm ad-icon-btn" id="ad-attach" title="Add context source" disabled aria-disabled="true">+</button>
+      <button type="button" class="btn btn-sm ad-icon-btn" id="ad-context-btn" title="Context preview" aria-expanded="false" aria-controls="ad-context-drawer">⧉</button>
+    </div>
+    <div class="ad-composer-row ad-composer-selects">
+      <label class="ad-select-wrap">
+        <span class="sr-only">Agent</span>
+        <select id="ad-agent" aria-label="Agent provider">
+          <option value="">Loading…</option>
+        </select>
+      </label>
+      <label class="ad-select-wrap">
+        <span class="sr-only">Model</span>
+        <select id="ad-model" aria-label="Model" hidden></select>
+      </label>
     </div>
     <p class="ad-safety muted">🔒 {{ assistant_dock.safety.message }}</p>
   </footer>

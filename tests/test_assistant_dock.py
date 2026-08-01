@@ -66,7 +66,7 @@ class DockUnitTests(unittest.TestCase):
     def test_width_clamped(self) -> None:
         self.assertEqual(clamp_width(10), 300)
         self.assertEqual(clamp_width(9999), 560)
-        self.assertEqual(clamp_width("bad"), 380)
+        self.assertEqual(clamp_width("bad"), 400)
 
     def test_bootstrap_is_lightweight(self) -> None:
         boot = dock_shell_bootstrap(self.db, workspace="work", endpoint="dhis2")
@@ -107,9 +107,11 @@ class DockRouteTests(unittest.TestCase):
         html = self.client.get("/work").get_data(as_text=True)
         self.assertIn('id="assistant-dock-host"', html)
         self.assertIn("assistant_dock.js", html)
-        self.assertIn("has-ad-rail", html)
-        self.assertIn('id="ad-toggle"', html)
+        self.assertIn("has-activity-rail", html)
+        self.assertIn('id="ar-assistant"', html)
         self.assertIn('id="ad-topbar-toggle"', html)
+        self.assertNotIn('id="ad-toggle"', html)
+        self.assertNotIn("ad-rail", html)
         self.assertIn("Okarun", html)
         self.assertIn("Read-only mode. No actions are executed.", html)
         self.assertIn("ad-tab-conversation", html)
@@ -129,34 +131,36 @@ class DockRouteTests(unittest.TestCase):
         self.assertEqual(boot["workspace"], "personal")
 
     def test_assistant_center_keeps_dock_and_full_page(self) -> None:
-        """Full Assistant Center stays available; dock also mounts (mockup)."""
+        """Assistant Center is history/management; dock still mounts for new prompts."""
         self._set_workspace("work")
         html = self.client.get("/work/okarun").get_data(as_text=True)
         self.assertIn('id="assistant-dock-host"', html)
         self.assertIn("assistant_dock.js", html)
-        self.assertIn("has-ad-rail", html)
-        # Full-page chrome still present.
-        self.assertTrue(
-            "Prompt" in html or "prompt" in html.lower() or "Ask" in html
-        )
+        self.assertIn("has-activity-rail", html)
+        self.assertIn("Assistant Center", html)
+        self.assertIn("ac-engine-card", html)
+        self.assertIn("data-ac-tab=\"answer\"", html)
+        self.assertIn("Recent Runs", html)
+        self.assertIn("Saved Prompts", html)
 
     def test_right_docked_placement_css(self) -> None:
         css = (ROOT / "static" / "css" / "style.css").read_text(encoding="utf-8")
-        self.assertIn(".ad-rail", css)
+        self.assertIn(".activity-rail", css)
+        self.assertNotIn(".ad-rail {", css)
         self.assertIn("position: fixed", css)
-        self.assertIn("z-index: 70", css)
-        self.assertIn("padding-right: var(--ad-rail-w, 48px)", css)
+        self.assertIn("padding-right: var(--activity-rail-w, 48px)", css)
         self.assertIn(
-            "padding-right: calc(var(--ad-rail-w, 48px) + var(--ad-width, 380px))",
+            "padding-right: calc(var(--activity-rail-w, 48px) + var(--ad-width, 400px))",
             css,
         )
         self.assertIn(".ad-host", css)
+        self.assertIn("right: var(--activity-rail-w, 48px)", css)
 
     def test_mobile_drawer_behavior_css(self) -> None:
         css = (ROOT / "static" / "css" / "style.css").read_text(encoding="utf-8")
         self.assertIn("@media (max-width: 960px)", css)
         self.assertIn(".app-shell.is-ad-mobile.is-ad-open .ad-host", css)
-        self.assertIn("right: var(--ad-rail-w, 48px)", css)
+        self.assertIn("right: var(--activity-rail-w, 48px)", css)
         self.assertIn(".ad-backdrop", css)
 
     def test_js_toggle_open_close(self) -> None:
@@ -164,7 +168,9 @@ class DockRouteTests(unittest.TestCase):
         base = (ROOT / "templates" / "base.html").read_text(encoding="utf-8")
         self.assertIn("function toggle()", js)
         self.assertIn("setOpen(!prefs.open)", js)
-        self.assertIn('id="ad-toggle"', base)
+        self.assertIn('id="ar-assistant"', base)
+        self.assertIn('id="ad-topbar-toggle"', base)
+        self.assertNotIn('id="ad-toggle"', base)
         self.assertIn('toggleBtn.addEventListener("click", toggle)', js)
         self.assertIn("ad-resize", js)
         self.assertIn("/agents?probe=1", js)
@@ -198,7 +204,7 @@ class DockRouteTests(unittest.TestCase):
         html = self.client.get("/health").get_data(as_text=True)
         self.assertIn("is-ad-open", html)
         self.assertIn("--ad-width: 440px", html)
-        self.assertIn("has-ad-rail", html)
+        self.assertIn("has-activity-rail", html)
 
     def test_page_content_resizes_with_open_class(self) -> None:
         self._set_workspace("work")
@@ -209,7 +215,7 @@ class DockRouteTests(unittest.TestCase):
         )
         html = self.client.get("/repositories").get_data(as_text=True)
         self.assertIn("is-ad-open", html)
-        self.assertIn("has-ad-rail", html)
+        self.assertIn("has-activity-rail", html)
         self.assertIn('id="ad-panel"', html)
         # When open and not minimized, panel is not hidden.
         self.assertNotRegex(html, r'id="ad-panel"[^>]*hidden')
@@ -246,6 +252,75 @@ class DockRouteTests(unittest.TestCase):
         timings.sort()
         p95 = timings[-1]
         self.assertLessEqual(p95, 1000.0, msg=f"/work p95 {p95:.1f}ms")
+
+    def test_full_height_layout_and_composer_positioning(self) -> None:
+        """Dock fills host height; composer is a fixed footer; only messages scroll."""
+        self._set_workspace("work")
+        html = self.client.get("/work").get_data(as_text=True)
+        self.assertIn('id="ad-panel"', html)
+        self.assertIn('class="ad-composer"', html)
+        self.assertIn('class="ad-body"', html)
+        self.assertIn('id="ad-messages"', html)
+        self.assertIn("No conversation yet. Select a suggestion or ask Okarun a question.", html)
+        self.assertIn('id="ad-more"', html)
+        self.assertIn('id="ad-menu-pop"', html)
+        self.assertIn('id="ad-pin"', html)
+        self.assertIn('id="ad-minimize"', html)
+        self.assertIn('id="ad-close"', html)
+        self.assertIn('id="ad-cancel"', html)
+        self.assertIn('id="ad-retry"', html)
+        self.assertIn('class="ad-composer-selects"', html)
+        self.assertIn('id="ad-agent"', html)
+        self.assertIn('id="ad-model"', html)
+        # Composer follows the scroll body in markup (footer after body).
+        body_idx = html.find('class="ad-body"')
+        composer_idx = html.find('class="ad-composer"')
+        self.assertGreater(composer_idx, body_idx)
+        # No obsolete blank footer spacer after composer.
+        after = html[composer_idx : composer_idx + 1200]
+        self.assertNotIn("ad-footer-spacer", after)
+        self.assertNotIn("ad-blank", after)
+
+        css = (ROOT / "static" / "css" / "style.css").read_text(encoding="utf-8")
+        self.assertIn(".ad-host {", css)
+        self.assertIn("bottom: var(--wc-open-inset, 0px)", css)
+        self.assertRegex(css, r"\.ad-panel\s*\{[^}]*flex:\s*1\s+1\s+auto")
+        self.assertRegex(css, r"\.ad-panel\s*\{[^}]*height:\s*100%")
+        self.assertRegex(css, r"\.ad-body\s*\{[^}]*flex:\s*1\s+1\s+auto")
+        self.assertRegex(css, r"\.ad-messages,\s*\.ad-output\s*\{[^}]*overflow-y:\s*auto")
+        self.assertRegex(css, r"\.ad-composer\s*\{[^}]*flex:\s*0\s+0\s+auto")
+        self.assertIn(".ad-composer-selects", css)
+        self.assertIn("grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)", css)
+        self.assertIn("text-overflow: ellipsis", css)
+        self.assertIn("max-width: none", css)
+
+        js = (ROOT / "static" / "js" / "assistant_dock.js").read_text(encoding="utf-8")
+        self.assertIn("function setRunControls", js)
+        self.assertIn("cancelActiveRun", js)
+        self.assertIn("retryActiveRun", js)
+        self.assertIn("clearEmptyState", js)
+        self.assertIn("document.visibilityState === \"hidden\"", js)
+        self.assertIn("if (!expanded()) return", js)
+
+    def test_quick_notepad_rail_placement_without_overlap(self) -> None:
+        """Notepad launches from the rail and docks beside Okarun, not over the composer."""
+        self._set_workspace("work")
+        html = self.client.get("/work").get_data(as_text=True)
+        self.assertIn('id="ar-notepad"', html)
+        self.assertIn("qn-global-host", html)
+        self.assertIn("qn-from-rail", html)
+        self.assertIn("qn-open-btn sr-only", html)
+        self.assertNotRegex(html, r'class="qn-open-btn btn')
+
+        css = (ROOT / "static" / "css" / "style.css").read_text(encoding="utf-8")
+        self.assertIn(".qn-open-btn {", css)
+        self.assertIn("display: none !important", css)
+        self.assertIn(
+            "right: calc(var(--activity-rail-w, 48px) + var(--ad-width, 400px))",
+            css,
+        )
+        # Global notepad is a sibling drawer; ensure overlap rule exists for open dock.
+        self.assertIn("body:has(.app-shell.is-ad-open", css)
 
     @staticmethod
     def _bootstrap_from_html(html: str) -> dict:

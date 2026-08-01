@@ -37,8 +37,9 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Calendar Center | Shared Calendar service + FullCalendar grid (month/week/day) + agenda/upcoming |
 | Google Connections | System page to connect/assign/enable Gmail+Calendar scopes |
 | SQL Workspace | Read-only query library/runner (`/sql`); sqlglot allowlist; Live warning |
-| AI Assistant Center | Aira at `/personal/aira`; Okarun at `/work/okarun`; persistent right-dock panel on other pages (`hub/agent_center/dock.py`); isolated histories/summaries/context/tools; Find/Ask/Plan/Review; Codex CLI (Okarun MVP), Claude Code, Cursor, Grok, and OpenAI API providers |
-| Workspace Console | Bottom VS Code-style panel (`hub/workspace_console/`); Problems/Output/Debug/Terminal/Ports; works with the right AI dock; controlled terminal + verified process stops |
+| AI Assistant Center | Aira at `/personal/aira`; Okarun at `/work/okarun` (history/management); persistent right dock via topbar + activity rail (`hub/agent_center/dock.py`); Find/Ask/Plan/Review; Codex CLI (Okarun MVP), Claude Code, Cursor, Grok, OpenAI |
+| Workspace Console | Bottom panel (`hub/workspace_console/`); Problems/Output/Debug/Terminal/Ports; Ctrl+J; coexists with right AI dock + activity rail |
+| Activity Rail | Far-right icons for AI Assistant, Quick Notepad, Workspace Console (future utilities placeholders) |
 | AI Connections | `/system/ai-connections`; Installed/Authenticated/Version/Last Checked + connect/test/capabilities/disconnect; Codex never stores tokens |
 | DHIS2 | GET client, discovery, UID mapping, preview builder |
 | UID index admin | LP-style controlled update: dry-run → preview → typed confirm → archive/versions/restore |

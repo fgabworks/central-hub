@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% set skip_global_notepad = true %}
 {% block title %}{{ page_title }} · {{ app_name }}{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -18,19 +17,7 @@
 {% if flash %}<div class="banner" style="background:var(--success-soft);border-color:rgba(34,197,94,.35)">{{ flash }}</div>{% endif %}
 {% if error %}<div class="banner banner-error">{{ error }}</div>{% endif %}
 
-{% set show_np = show_notepad and notepad %}
-<div class="nb-workspace{% if show_np %} qn-host{% if notepad.panel_open %} is-qn-open{% endif %}{% endif %}"
-     {% if show_np %}id="qn-host"
-     style="--qn-width: {{ notepad.panel_width }}px"
-     data-qn-open="{{ '1' if notepad.panel_open else '0' }}"
-     data-qn-width="{{ notepad.panel_width }}"
-     data-qn-size="{{ notepad.panel_size|default('normal') }}"
-     data-qn-scope="{{ note_scope|default('personal') }}"
-     data-qn-save-url="{{ url_for('api_notebook_notepad_put', scope=note_scope|default('personal')) }}"
-     data-qn-snapshot-url="{{ url_for('api_notebook_notepad_snapshot', scope=note_scope|default('personal')) }}"
-     data-qn-clear-url="{{ url_for('api_notebook_notepad_clear', scope=note_scope|default('personal')) }}"
-     data-qn-convert-url="{{ url_for('api_notebook_notepad_convert', scope=note_scope|default('personal')) }}"
-     data-qn-restore-url="{{ url_for('api_notebook_notepad_restore', scope=note_scope|default('personal')) }}"{% endif %}>
+<div class="nb-workspace">
 <div class="nb-shell">
   <aside class="nb-rail card" aria-label="Note statuses">
     <div class="nav-label">Statuses</div>
@@ -302,9 +289,7 @@
   </section>
 </div>
 
-{% if show_np %}
-{% include "partials/quick_notepad_panel.html" %}
-{% endif %}
+</div>
 </div>
 
 {% if allow_repositories %}
@@ -404,5 +389,4 @@
   }
 })();
 </script>
-{% if show_np %}<script src="{{ url_for('static', filename='js/quick_notepad.js') }}?v=qn-save-1"></script>{% endif %}
 {% endblock %}

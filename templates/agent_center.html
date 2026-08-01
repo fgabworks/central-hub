@@ -1,32 +1,58 @@
 {% extends "base.html" %}
-{% block title %}{{ profile.name }} · AI Assistant Center · {{ app_name }}{% endblock %}
+{% block title %}{{ profile.name }} · Assistant Center · {{ app_name }}{% endblock %}
 {% block content %}
-<div class="page-header">
+<div class="page-header ac-page-header">
   <div>
-    <h1>{{ profile.name }}</h1>
-    <p class="page-sub">{{ profile.title }} · {{ profile.tone }} Shared Prompting and Agent orchestration.</p>
+    <h1>Assistant Center</h1>
+    <p class="page-sub">{{ profile.name }} history and run management · {{ profile.workspace }} workspace</p>
+  </div>
+  <div class="ac-header-actions">
+    <button type="button" class="ac-lock-badge" id="ac-lock-toggle" aria-expanded="false" aria-controls="ac-safety-details" title="Read-only safeguards">
+      🔒 Read-only
+    </button>
+    <button type="button" class="btn btn-sm btn-primary" id="ac-open-dock" title="Open {{ profile.name }} dock">+ {{ profile.name }}</button>
   </div>
 </div>
 
-<div class="agent-safety" role="status">
-  <strong>Read-only MVP.</strong>
-  AI Assistant Center uses one orchestration engine with an isolated {{ profile.workspace }} profile.
-  No file edits, commands, SQL execution, email/calendar actions, DHIS2 writes, or repository runs.
-  Secrets (<code>.env</code>, credentials, tokens) are excluded from context.
-  Runtime is scoped to selected local repositories with timeouts and cancel.
-</div>
+<details class="ac-safety-details" id="ac-safety-details">
+  <summary class="sr-only">Read-only details</summary>
+  <div class="ac-safety-body">
+    No file edits, shell execution, SQL execution, email/calendar actions, DHIS2 writes, or repository runs from the assistant.
+    Secrets (<code>.env</code>, credentials, tokens) stay out of context. New prompts run from the right dock.
+  </div>
+</details>
 
-<div class="agent-shell">
-  <aside class="agent-library card" aria-label="Saved prompts">
-    <div class="agent-lib-head">
-      <strong>Prompt library</strong>
-      <button type="button" class="btn btn-sm" id="agent-prompt-save">Save</button>
+<div class="ac-shell">
+  <aside class="ac-sidebar card" aria-label="History">
+    <label class="ac-search">
+      <span class="sr-only">Search conversations</span>
+      <input type="search" id="ac-search" placeholder="Search conversations…" autocomplete="off">
+    </label>
+
+    <div class="ac-section-head"><strong>Conversations</strong></div>
+    <ul class="ac-list" id="ac-conversation-list">
+      {% for c in conversations %}
+      <li>
+        <button type="button" class="ac-list-item" data-ac-kind="conversation" data-id="{{ c.id }}" data-title="{{ c.title|e }}">
+          <strong>{{ c.title }}</strong>
+          <span class="muted">{{ c.summary or 'No summary yet.' }}</span>
+        </button>
+      </li>
+      {% else %}
+      <li class="muted">No conversations yet.</li>
+      {% endfor %}
+    </ul>
+
+    <div class="ac-section-head">
+      <strong>Saved Prompts</strong>
+      <span class="ac-count">{{ prompts|length }}</span>
+      <button type="button" class="btn btn-sm" id="agent-prompt-save" title="Save current dock prompt text">Save</button>
     </div>
-    <ul class="agent-prompt-list" id="agent-prompt-list">
+    <ul class="ac-list" id="agent-prompt-list">
       {% for p in prompts %}
       <li>
-        <button type="button" class="agent-prompt-item" data-id="{{ p.id }}" data-mode="{{ p.mode }}" data-body="{{ p.body|e }}">
-          <span class="agent-prompt-title">{{ p.title }}</span>
+        <button type="button" class="ac-list-item agent-prompt-item" data-id="{{ p.id }}" data-mode="{{ p.mode }}" data-body="{{ p.body|e }}">
+          <strong class="agent-prompt-title">{{ p.title }}</strong>
           <span class="muted">{{ p.mode }}</span>
         </button>
       </li>
@@ -34,147 +60,126 @@
       <li class="muted">No saved prompts yet.</li>
       {% endfor %}
     </ul>
-    <div class="agent-history-head"><strong>Conversation summaries</strong></div>
-    <ul class="agent-history-list">
-      {% for c in conversations %}
-      <li class="agent-conversation">
-        <strong>{{ c.title }}</strong>
-        <span class="muted">{{ c.summary or 'No summary yet.' }}</span>
-      </li>
-      {% else %}
-      <li class="muted">No conversations yet.</li>
-      {% endfor %}
-    </ul>
-    <div class="agent-history-head"><strong>Recent runs</strong></div>
-    <ul class="agent-history-list" id="agent-history-list">
+
+    <div class="ac-section-head">
+      <strong>Recent Runs</strong>
+      <span class="ac-count">{{ history|length }}</span>
+    </div>
+    <ul class="ac-list" id="agent-history-list">
       {% for r in history %}
       <li>
-        <button type="button" class="agent-history-item" data-id="{{ r.id }}">
+        <button type="button" class="ac-list-item agent-history-item" data-id="{{ r.id }}">
           <span class="status-pill status-{{ r.status }}">{{ r.status }}</span>
-          <span>{{ r.agent_label or r.agent_id }} · {{ r.mode }}</span>
+          <strong>{{ r.agent_label or r.agent_id }} · {{ r.mode }}</strong>
           <span class="muted">{{ r.prompt_preview }}</span>
         </button>
       </li>
       {% else %}
-      <li class="muted">No runs yet.</li>
+      <li class="muted">No runs yet. Use the {{ profile.name }} dock to start one.</li>
       {% endfor %}
     </ul>
   </aside>
 
-  <section class="agent-main card" aria-label="Run composer">
-    <div class="agent-modes" role="group" aria-label="Modes">
-      {% for m in modes %}
-        {% if m.enabled %}
-        <label class="agent-mode">
-          <input type="radio" name="agent-mode" value="{{ m.id }}" {% if m.id == 'ask' %}checked{% endif %}>
-          <span>{{ m.label }}</span>
-        </label>
-        {% else %}
-        <span class="agent-mode agent-mode-disabled" title="{{ m.note }}">{{ m.label }} · Not yet available</span>
-        {% endif %}
-      {% endfor %}
+  <section class="ac-main card" aria-label="Run details" id="ac-main">
+    <div class="ac-run-empty muted" id="ac-run-empty">
+      Select a recent run to inspect answer, activity, files, usage, and errors.
+      Start new read-only prompts from the {{ profile.name }} dock.
     </div>
 
-    <div class="agent-grid">
-      {% if profile.repositories_allowed %}
-      <fieldset class="agent-repos">
-        <legend>Repositories (read-only)</legend>
-        {% for repo in repositories %}
-        <label class="agent-repo {% if not repo.selectable %}is-disabled{% endif %}">
-          <input type="checkbox" name="repo" value="{{ repo.id }}" {% if not repo.selectable %}disabled{% endif %}>
-          <span>
-            <strong>{{ repo.name }}</strong>
-            <span class="muted">{{ repo.id }} · {{ repo.type }}</span>
-            {% if not repo.selectable %}<span class="muted"> — {{ repo.reason }}</span>{% endif %}
-          </span>
-        </label>
-        {% else %}
-        <p class="muted">No repositories in registry.</p>
-        {% endfor %}
-      </fieldset>
-      {% endif %}
+    <div class="ac-run-view" id="ac-run-view" hidden>
+      <header class="ac-run-header">
+        <div>
+          <h2 id="ac-run-title">Run</h2>
+          <div class="ac-run-meta muted" id="agent-run-meta"></div>
+        </div>
+        <span class="status-pill" id="agent-status">idle</span>
+      </header>
 
-      <div class="agent-selectors">
-        <label>
-          Agent
-          <select id="agent-select" aria-label="Agent">
-            {% for a in agents %}
-            <option value="{{ a.id }}" data-status="{{ a.status }}" data-runnable="{{ '1' if a.runnable else '0' }}"
-              {% if not a.runnable %}disabled{% endif %}>
-              {{ a.label }} — {{ a.status }}{% if a.models_source %} ({{ a.models_source }} models){% endif %}
-            </option>
-            {% endfor %}
-          </select>
-        </label>
-        <p class="muted" id="agent-detail"></p>
-        <p class="agent-none-warn" id="agent-none-warn" hidden>
-          No runnable agents. Use <strong>Hub Simulator (demo)</strong> or install <code>claude</code> / Cursor <code>agent</code> / <code>codex</code> on PATH.
-          The IDE <code>cursor</code> binary is not an agent CLI.
-        </p>
-        <label>
-          Model
-          <select id="agent-model" aria-label="Model"></select>
-        </label>
-        <p class="muted" id="agent-model-meta"></p>
-        <label id="agent-effort-wrap" hidden>
-          Reasoning effort
-          <select id="agent-effort" aria-label="Reasoning effort">
-            <option value="low">low</option>
-            <option value="medium" selected>medium</option>
-            <option value="high">high</option>
-          </select>
-        </label>
+      <div class="ac-engine-card" id="ac-engine-card">
+        <div class="ac-engine-grid">
+          <div><span class="muted">Repository</span><strong id="ac-engine-repo">—</strong></div>
+          <div><span class="muted">Mode</span><strong id="ac-engine-mode">—</strong></div>
+          <div><span class="muted">Sources</span><strong id="ac-engine-sources">—</strong></div>
+          <div><span class="muted">Provider</span><strong id="ac-engine-provider">—</strong></div>
+          <div><span class="muted">Model</span><strong id="ac-engine-model">—</strong></div>
+        </div>
+        <button type="button" class="btn btn-sm" id="ac-preview-context">Preview context</button>
+      </div>
+
+      <div class="ac-result-tabs" role="tablist" aria-label="Run result tabs">
+        <button type="button" class="ac-result-tab is-active" data-ac-tab="answer" role="tab" aria-selected="true">Answer</button>
+        <button type="button" class="ac-result-tab" data-ac-tab="activity" role="tab" aria-selected="false">Activity</button>
+        <button type="button" class="ac-result-tab" data-ac-tab="files" role="tab" aria-selected="false">Files <span class="ac-tab-count" id="ac-files-count">0</span></button>
+        <button type="button" class="ac-result-tab" data-ac-tab="usage" role="tab" aria-selected="false">Usage</button>
+        <button type="button" class="ac-result-tab" data-ac-tab="errors" role="tab" aria-selected="false">Errors <span class="ac-tab-count" id="ac-errors-count">0</span></button>
+      </div>
+
+      <div class="ac-result-panes">
+        <div class="ac-result-pane is-active" data-ac-pane="answer" role="tabpanel">
+          <pre id="agent-answer" class="agent-pre agent-answer">—</pre>
+        </div>
+        <div class="ac-result-pane" data-ac-pane="activity" role="tabpanel" hidden>
+          <pre id="agent-logs" class="agent-pre agent-logs">—</pre>
+          <pre id="agent-tools" class="agent-pre agent-tools" hidden></pre>
+        </div>
+        <div class="ac-result-pane" data-ac-pane="files" role="tabpanel" hidden>
+          <ul id="agent-refs" class="agent-refs"><li class="muted">—</li></ul>
+        </div>
+        <div class="ac-result-pane" data-ac-pane="usage" role="tabpanel" hidden>
+          <pre id="agent-usage" class="agent-pre agent-usage">—</pre>
+        </div>
+        <div class="ac-result-pane" data-ac-pane="errors" role="tabpanel" hidden>
+          <pre id="agent-error" class="agent-pre agent-error">—</pre>
+        </div>
+      </div>
+
+      <div class="ac-run-actions">
+        <button type="button" class="btn" id="agent-cancel" disabled>Cancel</button>
+        <button type="button" class="btn" id="agent-retry" disabled>Retry</button>
       </div>
     </div>
 
-    <fieldset class="agent-tools">
-      <legend>Read-only sources</legend>
-      {% for tool in profile.allowed_tools %}
-      <label class="agent-tool">
-        <input type="checkbox" name="agent-tool" value="{{ tool }}"
-          {% if tool in profile.default_tools %}checked{% endif %}>
-        <span>{{ tool|replace('_', ' ')|title }}</span>
-      </label>
-      {% endfor %}
-    </fieldset>
-
-    <label class="agent-prompt-label" for="agent-prompt">Prompt</label>
-    <textarea id="agent-prompt" rows="8" placeholder="Ask {{ profile.name }} a read-only question…"></textarea>
-
-    <div class="agent-actions">
-      <button type="button" class="btn" id="agent-preview">Preview context</button>
-      <button type="button" class="btn btn-primary" id="agent-run">Run</button>
-      <button type="button" class="btn" id="agent-cancel" disabled>Cancel</button>
-      <button type="button" class="btn" id="agent-retry" disabled>Retry</button>
-      <span class="status-pill" id="agent-status">idle</span>
-    </div>
-
-    <details class="agent-preview-box" id="agent-preview-box">
+    <details class="agent-preview-box" id="agent-preview-box" hidden>
       <summary>Context preview</summary>
-      <pre id="agent-preview-body" class="agent-pre">Choose sources and click Preview context.</pre>
+      <pre id="agent-preview-body" class="agent-pre">No context packed yet.</pre>
     </details>
-  </section>
 
-  <section class="agent-output card" aria-label="Run output">
-    <div class="agent-out-head">
-      <strong>Output</strong>
-      <span class="muted" id="agent-run-meta">No active run</span>
+    {# Hidden fields kept so existing agent_center.js helpers keep working for retry/save. #}
+    <div class="ac-hidden-controls" hidden>
+      <div class="agent-modes">
+        {% for m in modes if m.enabled %}
+        <label class="agent-mode"><input type="radio" name="agent-mode" value="{{ m.id }}" {% if m.id == 'ask' %}checked{% endif %}><span>{{ m.label }}</span></label>
+        {% endfor %}
+      </div>
+      {% if profile.repositories_allowed %}
+      <fieldset class="agent-repos">
+        {% for repo in repositories %}
+        <label><input type="checkbox" name="repo" value="{{ repo.id }}" {% if not repo.selectable %}disabled{% endif %}>{{ repo.name }}</label>
+        {% endfor %}
+      </fieldset>
+      {% endif %}
+      <fieldset class="agent-tools">
+        {% for tool in profile.allowed_tools %}
+        <label><input type="checkbox" name="agent-tool" value="{{ tool }}" {% if tool in profile.default_tools %}checked{% endif %}>{{ tool }}</label>
+        {% endfor %}
+      </fieldset>
+      <select id="agent-select">
+        {% for a in agents %}
+        <option value="{{ a.id }}" data-status="{{ a.status }}" data-runnable="{{ '1' if a.runnable else '0' }}" {% if not a.runnable %}disabled{% endif %}>{{ a.label }}</option>
+        {% endfor %}
+      </select>
+      <select id="agent-model"></select>
+      <label id="agent-effort-wrap" hidden><select id="agent-effort"><option value="low">low</option><option value="medium" selected>medium</option><option value="high">high</option></select></label>
+      <textarea id="agent-prompt" rows="2"></textarea>
+      <button type="button" id="agent-preview">Preview context</button>
+      <button type="button" id="agent-run">Run</button>
+      <p id="agent-detail"></p>
+      <p id="agent-model-meta"></p>
+      <p id="agent-none-warn" hidden></p>
     </div>
-    <h3 class="agent-out-title">Answer</h3>
-    <pre id="agent-answer" class="agent-pre agent-answer">—</pre>
-    <h3 class="agent-out-title">Streaming logs</h3>
-    <pre id="agent-logs" class="agent-pre agent-logs">—</pre>
-    <h3 class="agent-out-title">Referenced files</h3>
-    <ul id="agent-refs" class="agent-refs"><li class="muted">—</li></ul>
-    <h3 class="agent-out-title">Tool activity</h3>
-    <pre id="agent-tools" class="agent-pre agent-tools">—</pre>
-    <h3 class="agent-out-title">Usage</h3>
-    <pre id="agent-usage" class="agent-pre agent-usage">—</pre>
-    <h3 class="agent-out-title">Errors</h3>
-    <pre id="agent-error" class="agent-pre agent-error">—</pre>
   </section>
 </div>
 
 <script type="application/json" id="agent-bootstrap">{{ bootstrap|tojson }}</script>
-<script src="{{ url_for('static', filename='js/agent_center.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/agent_center.js') }}?v=shell-vscode-1" defer></script>
 {% endblock %}

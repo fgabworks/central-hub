@@ -203,6 +203,11 @@
       workspace.classList.toggle("is-qn-open", !!open);
       workspace.setAttribute("data-qn-open", open ? "1" : "0");
       if (openBtn) openBtn.setAttribute("aria-expanded", open ? "true" : "false");
+      var railNotepadBtn = document.getElementById("ar-notepad");
+      if (railNotepadBtn) {
+        railNotepadBtn.classList.toggle("is-active", !!open);
+        railNotepadBtn.setAttribute("aria-expanded", open ? "true" : "false");
+      }
       syncSizeChrome();
       if (persist) {
         queueSave(
@@ -450,12 +455,19 @@
     if (closeBtn) {
       closeBtn.addEventListener("click", function () {
         applyOpen(false, true);
-        if (openBtn) openBtn.focus();
+        var railFocus = document.getElementById("ar-notepad") || openBtn;
+        if (railFocus) railFocus.focus();
       });
     }
     if (openBtn) {
       openBtn.addEventListener("click", function () {
         applyOpen(true, true);
+      });
+    }
+    var railNotepad = document.getElementById("ar-notepad");
+    if (railNotepad) {
+      railNotepad.addEventListener("click", function () {
+        applyOpen(!isOpen(), true);
       });
     }
     if (backdrop) {
@@ -477,7 +489,8 @@
         return;
       }
       applyOpen(false, true);
-      if (openBtn) openBtn.focus();
+      var railFocus = document.getElementById("ar-notepad") || openBtn;
+      if (railFocus) railFocus.focus();
     });
 
     var copyBtn = document.getElementById("qn-copy");

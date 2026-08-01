@@ -137,6 +137,7 @@ def classify_open_note(
     status = str(note.get("status") or "")
     pinned = bool(note.get("pinned"))
     week_end = day + timedelta(days=7)
+    priority = str(note.get("priority") or "").strip().lower()
     flags = {
         "open": True,
         "pinned": pinned,
@@ -145,6 +146,7 @@ def classify_open_note(
         "upcoming": bool(due and due > day),
         "due_this_week": bool(due and day <= due <= week_end),
         "blocked": status == "blocked",
+        "urgent": priority == "urgent",
     }
     return {
         **note,
@@ -172,6 +174,7 @@ def open_task_stats(
         "overdue": sum(1 for n in classified if n["flags"]["overdue"]),
         "due_this_week": sum(1 for n in classified if n["flags"]["due_this_week"]),
         "blocked": sum(1 for n in classified if n["flags"]["blocked"]),
+        "urgent": sum(1 for n in classified if n["flags"]["urgent"]),
         "pinned": sum(1 for n in classified if n["flags"]["pinned"]),
         "due_today": sum(1 for n in classified if n["flags"]["due_today"]),
         "upcoming": sum(1 for n in classified if n["flags"]["upcoming"]),
@@ -182,17 +185,13 @@ def open_tasks_severity(stats: dict[str, int] | None) -> str:
     """
     Visual severity for the Open Tasks summary card.
 
-    - neutral: no open tasks
-    - attention: open tasks, none overdue/blocked (subtle crimson)
-    - alert: overdue or blocked present (stronger red glow)
+    Highlight only when urgent or overdue items exist; otherwise stay neutral
+    even if other open tasks are present.
     """
     data = stats or {}
-    open_n = int(data.get("open") or 0)
-    if open_n <= 0:
-        return "neutral"
-    if int(data.get("overdue") or 0) > 0 or int(data.get("blocked") or 0) > 0:
+    if int(data.get("urgent") or 0) > 0 or int(data.get("overdue") or 0) > 0:
         return "alert"
-    return "attention"
+    return "neutral"
 
 
 def _normalize_tab(tab: str | None) -> str:

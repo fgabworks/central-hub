@@ -583,8 +583,7 @@ def create_app() -> Flask:
             {"label": "View Logs", "endpoint": "audit", "available": True},
         ]
 
-        # Floating Quick Notepad is available on all main pages via base.html
-        # (pages with an embedded panel set skip_global_notepad).
+        # Floating Quick Notepad is available on all main pages via activity rail + base.html.
         notepad = QuickNotepadStore(notebook.db, scope=workspace).get(
             include_revisions=False
         )
@@ -667,16 +666,19 @@ def create_app() -> Flask:
         notepad = QuickNotepadStore(notebook.db, scope=scope_n).get()
 
         if scope_n == "personal":
+            urgent_n = int(task_stats.get("urgent") or 0)
+            overdue_n = int(task_stats.get("overdue") or 0)
             cards = [
                 {
                     "kind": "open_tasks",
                     "label": "Personal Tasks",
                     "value": str(task_stats["open"]),
-                    "badge": task_stats["open"],
+                    "badge": urgent_n or overdue_n or None,
                     "severity": open_tasks_severity(task_stats),
                     "metrics": {
                         "open": task_stats["open"],
-                        "overdue": task_stats["overdue"],
+                        "urgent": urgent_n,
+                        "overdue": overdue_n,
                         "due_this_week": task_stats["due_this_week"],
                         "blocked": task_stats["blocked"],
                     },
@@ -691,6 +693,7 @@ def create_app() -> Flask:
                     "icon": "✎",
                     "href": url_for("personal_notebook"),
                     "link_label": "Open notebook →",
+                    "status": "ok",
                 },
                 {
                     "kind": "default",
@@ -700,6 +703,7 @@ def create_app() -> Flask:
                     "icon": "🛡",
                     "href": url_for("audit"),
                     "link_label": "View all →",
+                    "status": "ok" if events else "neutral",
                 },
             ]
             live_repos: list = []
@@ -717,6 +721,7 @@ def create_app() -> Flask:
                     "href": url_for("personal_calendar", view="upcoming"),
                     "link_label": "Open calendar →",
                     "async_id": "card-upcoming-count",
+                    "status": "neutral",
                 },
             )
         else:
@@ -750,6 +755,20 @@ def create_app() -> Flask:
                 )
             except Exception:  # noqa: BLE001
                 report_summary = {}
+            dhis2_value = (
+                "Online"
+                if last_dhis2 and last_dhis2.get("ok")
+                else ("Configured" if dhis2_cfg.get("configured") else "Off")
+            )
+            if last_dhis2 and last_dhis2.get("ok"):
+                dhis2_status = "ok"
+            elif dhis2_cfg.get("configured"):
+                dhis2_status = "ok"
+            else:
+                dhis2_status = "warn"
+            failed_reports = int(report_summary.get("failed_count") or 0)
+            urgent_n = int(task_stats.get("urgent") or 0)
+            overdue_n = int(task_stats.get("overdue") or 0)
             cards = [
                 {
                     "kind": "default",
@@ -760,16 +779,18 @@ def create_app() -> Flask:
                     "href": url_for("repositories"),
                     "link_label": "View all →",
                     "async_id": "card-repo-health",
+                    "status": "ok" if healthy else ("warn" if enabled else "neutral"),
                 },
                 {
                     "kind": "open_tasks",
                     "label": "Open Tasks",
                     "value": str(task_stats["open"]),
-                    "badge": task_stats["open"],
+                    "badge": urgent_n or overdue_n or None,
                     "severity": open_tasks_severity(task_stats),
                     "metrics": {
                         "open": task_stats["open"],
-                        "overdue": task_stats["overdue"],
+                        "urgent": urgent_n,
+                        "overdue": overdue_n,
                         "due_this_week": task_stats["due_this_week"],
                         "blocked": task_stats["blocked"],
                     },
@@ -779,15 +800,12 @@ def create_app() -> Flask:
                 {
                     "kind": "default",
                     "label": "DHIS2",
-                    "value": (
-                        "Online"
-                        if last_dhis2 and last_dhis2.get("ok")
-                        else ("Configured" if dhis2_cfg.get("configured") else "Off")
-                    ),
+                    "value": dhis2_value,
                     "sub": dhis2_sub,
                     "icon": "◎",
                     "href": url_for("dhis2"),
                     "link_label": "View details →",
+                    "status": dhis2_status,
                 },
                 {
                     "kind": "default",
@@ -796,11 +814,12 @@ def create_app() -> Flask:
                     "sub": (
                         f"Stage: {report_summary.get('stage_synced') or 0}"
                         f" · Live: {report_summary.get('live_synced') or 0}"
-                        f" · Failed runs: {report_summary.get('failed_count') or 0}"
+                        f" · Failed: {failed_reports}"
                     ),
                     "icon": "▤",
                     "href": url_for("dhis2_reports_library"),
                     "link_label": "Open Reports →",
+                    "status": "warn" if failed_reports else "ok",
                 },
                 {
                     "kind": "default",
@@ -810,6 +829,7 @@ def create_app() -> Flask:
                     "icon": "🛡",
                     "href": url_for("audit"),
                     "link_label": "View all →",
+                    "status": "ok" if events else "neutral",
                 },
             ]
             dhis2_tools_local = _DHIS2_TOOLS

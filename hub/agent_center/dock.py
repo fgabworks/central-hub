@@ -9,7 +9,7 @@ from hub.agent_center.profiles import get_profile, profile_for_workspace
 from hub.notebook.models import normalize_workspace
 from hub.notebook.workspace import get_pref, set_pref
 
-DEFAULT_WIDTH = 380
+DEFAULT_WIDTH = 400
 MIN_WIDTH = 300
 MAX_WIDTH = 560
 PREF_PREFIX = "assistant_dock"

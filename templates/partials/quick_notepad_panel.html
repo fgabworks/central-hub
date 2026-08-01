@@ -75,8 +75,10 @@
   {% endif %}
 </aside>
 
-<button type="button" class="qn-open-btn btn btn-sm btn-primary" id="qn-open-btn"
-        aria-controls="qn-panel" aria-expanded="{{ 'true' if notepad.panel_open else 'false' }}">
+{# Launcher lives on the activity rail (#ar-notepad). Keep a hidden control for focus targets. #}
+<button type="button" class="qn-open-btn sr-only" id="qn-open-btn"
+        aria-controls="qn-panel" aria-expanded="{{ 'true' if notepad.panel_open else 'false' }}"
+        tabindex="-1">
   Quick Notepad
 </button>
 <div class="qn-backdrop" id="qn-backdrop" hidden></div>
