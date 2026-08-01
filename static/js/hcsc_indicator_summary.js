@@ -2579,7 +2579,7 @@
       },
     });
     // Bootstrap may already know Stage is under maintenance.
-    var envs = (BOOT && BOOT.environments) || [];
+    var envs = (boot && boot.environments) || [];
     var stageMeta = envs.filter(function (e) { return e && e.id === "stage"; })[0];
     var currentEnv = ($("hcsc-env") && $("hcsc-env").value) || "stage";
     if (currentEnv === "stage" && stageMeta && stageMeta.maintenance) {
@@ -2683,7 +2683,15 @@
     fillPeriods();
     fillDisagg();
     fillGeoBreakdown();
-    wireOuSearch();
+    try {
+      wireOuSearch();
+    } catch (ouErr) {
+      showShellBanner(
+        "Organisation unit picker failed to initialize: " +
+          ((ouErr && ouErr.message) || "unknown error"),
+        true
+      );
+    }
     renderCards([]);
     renderTable();
     validateForm();
@@ -2701,9 +2709,20 @@
       run.addEventListener("click", function (ev) {
         ev.preventDefault();
         ev.stopPropagation();
-        loadReport(
-          state.genPhase === GEN.SUCCESS_STALE || state.genPhase === GEN.SUCCESS_CACHED
-        );
+        try {
+          loadReport(
+            state.genPhase === GEN.SUCCESS_STALE || state.genPhase === GEN.SUCCESS_CACHED
+          );
+        } catch (genErr) {
+          setGenPhase(GEN.ERROR, {
+            errorMessage:
+              "Generate failed to start: " +
+              ((genErr && genErr.message) || "unknown error"),
+            explicitMsg:
+              "Generate failed to start: " +
+              ((genErr && genErr.message) || "unknown error"),
+          });
+        }
       });
     }
     var refresh = $("hcsc-refresh");
