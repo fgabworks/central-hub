@@ -289,6 +289,7 @@ class SyncStoreTests(unittest.TestCase):
         args, kwargs = client.get_text.call_args
         self.assertIn("Abcdefghijk", args[0])
         self.assertEqual((kwargs.get("params") or {}).get("date"), "2026-01-01")
+        self.assertEqual((kwargs.get("params") or {}).get("pe"), "202601")
 
         RESULT_CACHE.clear()
         self.svc._clients.clear()
@@ -307,6 +308,37 @@ class SyncStoreTests(unittest.TestCase):
 
         cleaned = scrub_parameters({"period": "2026", "token": "x", "password": "y"})
         self.assertEqual(cleaned, {"period": "2026"})
+
+    def test_download_falls_back_to_design_when_data_html_fails(self) -> None:
+        client = self._mock_client_pages()
+        client.get_text.side_effect = Dhis2Error(
+            "DHIS2 returned HTTP 400. Bad Request", status_code=400
+        )
+        html_report = normalize_report_payload(
+            {
+                "id": "HtmlReport01",
+                "name": "HTML Design Report",
+                "type": "HTML",
+                "designContent": "<html><body><h1>Design Fallback</h1></body></html>",
+                "reportParams": {},
+            },
+            environment="stage",
+            dhis2_version="2.40.0",
+            last_synced_at="2026-01-01T00:00:00+00:00",
+            cache_design=True,
+        )
+        self.store.upsert_synced_report(
+            html_report,
+            design_content="<html><body><h1>Design Fallback</h1></body></html>",
+        )
+
+        def factory(env: str) -> Dhis2Client:
+            return client
+
+        self.svc.client_factory = factory
+        data = self.svc.download_standard_html("stage", "HtmlReport01")
+        self.assertIn("Design Fallback", data["html"])
+        self.assertEqual(data.get("source"), "designContent_fallback")
 
     def test_hub_render_path_and_live_confirm(self) -> None:
         path = build_hub_standard_render_path(
@@ -459,6 +491,7 @@ class CapabilityAndRouteTests(unittest.TestCase):
     def test_rendered_route_uses_env_credentials_not_browser_login(self) -> None:
         from app import create_app
 
+        RESULT_CACHE.clear()
         app = create_app()
         store: ReportsStore = app.config["DHIS2_REPORTS"].store
         report = normalize_report_payload(
@@ -487,6 +520,7 @@ class CapabilityAndRouteTests(unittest.TestCase):
         app.config["DHIS2_REPORTS"].get_dhis2_base_url = (
             lambda env: "https://stage.example.org"
         )
+        app.config["DHIS2_REPORTS"]._clients.clear()
 
         client = app.test_client()
         with mock.patch.dict(
@@ -504,6 +538,7 @@ class CapabilityAndRouteTests(unittest.TestCase):
             self.assertNotIn("https://stage.example.org/api/reports/", vhtml)
             self.assertNotIn("secret-password", vhtml)
 
+            RESULT_CACHE.clear()
             rendered = client.get(
                 "/dhis2/reports/standard/stage/Abcdefghijk/rendered?period=202601"
             )
@@ -515,6 +550,54 @@ class CapabilityAndRouteTests(unittest.TestCase):
         mock_client.get_text.assert_called()
         path_arg = mock_client.get_text.call_args[0][0]
         self.assertIn("/api/reports/Abcdefghijk/data.html", path_arg)
+
+    def test_rendered_error_page_not_bare_werkzeug_bad_request(self) -> None:
+        from app import create_app
+
+        RESULT_CACHE.clear()
+        app = create_app()
+        store: ReportsStore = app.config["DHIS2_REPORTS"].store
+        report = normalize_report_payload(
+            {
+                "id": "JasperFail001",
+                "name": "Jasper Fail Report",
+                "type": "JASPER_REPORT_TABLE",
+                "reportParams": {"paramReportingMonth": True},
+            },
+            environment="stage",
+            dhis2_version="2.40.0",
+            last_synced_at="2026-01-01T00:00:00+00:00",
+        )
+        store.upsert_synced_report(report)
+
+        mock_client = mock.MagicMock(spec=Dhis2Client)
+        mock_client.settings = _settings()
+        mock_client.get_text.side_effect = Dhis2Error(
+            "DHIS2 returned HTTP 400. Bad Request", status_code=400
+        )
+        app.config["DHIS2_REPORTS"].client_factory = lambda env: mock_client
+        app.config["DHIS2_REPORTS"].get_dhis2_base_url = (
+            lambda env: "https://stage.example.org"
+        )
+        app.config["DHIS2_REPORTS"]._clients.clear()
+
+        client = app.test_client()
+        with mock.patch.dict(
+            os.environ,
+            {"STAGE_DHIS2_URL": "https://stage.example.org"},
+            clear=False,
+        ):
+            rendered = client.get(
+                "/dhis2/reports/standard/stage/JasperFail001/rendered?period=202601"
+            )
+        self.assertEqual(rendered.status_code, 502)
+        body = rendered.get_data(as_text=True)
+        self.assertIn("Report could not be rendered", body)
+        self.assertNotIn(
+            "The browser (or proxy) sent a request that this server could not understand",
+            body,
+        )
+        self.assertNotIn("secret-password", body)
 
 
 if __name__ == "__main__":

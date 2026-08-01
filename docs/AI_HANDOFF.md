@@ -4,7 +4,20 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**Workspace Console → Terminal IDE UI (2026-08-02)**
+**DHIS2 Reports — render iframe Bad Request fix (2026-08-02)**
+
+`/rendered` was aborting with Flask’s bare “Bad Request” when Stage `data.html` failed/timed out (e.g. BARANGAY CONSOLIDATION SCORECARD). HTML-type reports now fall back to cached `designContent`, and failures return a clear iframe error page instead of Werkzeug’s default.
+
+### Verify
+
+1. Restart the hub app
+2. Library → open the scorecard → View (hub credentials)
+3. Expect design HTML (Household Convergence Scorecard) when `data.html` is unavailable
+4. Jasper/data reports that still fail show “Report could not be rendered” with a useful message
+
+---
+
+**Previous: Workspace Console → Terminal IDE UI**
 
 Refine the bottom dock Terminal into a VS Code-style interactive PTY console matching the target layout.
 

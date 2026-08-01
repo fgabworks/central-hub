@@ -500,6 +500,7 @@ class Dhis2ReportsService:
             "uses_env_credentials": True,
             "fingerprint": content_fingerprint(prepared),
             "cache": "miss",
+            "source": data.get("source") or "data.html",
         }
         # Do not store secrets — HTML only.
         RESULT_CACHE.set(
@@ -513,6 +514,7 @@ class Dhis2ReportsService:
                 "base_url": base,
                 "uses_env_credentials": True,
                 "fingerprint": payload["fingerprint"],
+                "source": payload["source"],
             },
         )
         return payload
@@ -826,7 +828,11 @@ class Dhis2ReportsService:
         org_unit: str = "",
         confirm_live: bool = False,
     ) -> dict[str, Any]:
-        """GET /api/reports/{uid}/data.html via hub credentials (never exposed to browser)."""
+        """GET /api/reports/{uid}/data.html via hub credentials (never exposed to browser).
+
+        For HTML-type reports, falls back to cached/API designContent when data.html
+        fails (common when Stage is slow, returns 400, or the report is design-only).
+        """
         env = validate_environment(environment)
         if env == "live" and not confirm_live:
             raise ReportSecurityError(
@@ -842,21 +848,45 @@ class Dhis2ReportsService:
         date = period_to_dhis2_date(period_v)
         if date:
             params["date"] = date
+        if period_v and period_v != date:
+            # Some DHIS2 builds still honor pe= alongside date=.
+            params.setdefault("pe", period_v)
         if ou_v:
             params["ou"] = ou_v
         client = self._client(env)
+        html = ""
+        source = "data.html"
+        data_error: str | None = None
         try:
             html = client.get_text(
                 f"/api/reports/{uid}/data.html",
                 params=params or None,
                 accept="text/html, */*",
+                timeout=60,
             )
         except Dhis2Error as exc:
-            self._audit("DHIS2_REPORT_DOWNLOAD", report.id, exc.message, False)
-            code = "unauthorized" if exc.status_code in {401, 403} else "unavailable"
-            if exc.status_code == 404:
-                code = "not_found"
-            raise ReportSecurityError(redact_report_detail(exc.message), code=code) from exc
+            data_error = redact_report_detail(exc.message)
+            self._audit("DHIS2_REPORT_DOWNLOAD", report.id, data_error, False)
+            html = self._fallback_html_design(env, uid, report)
+            if html:
+                source = "designContent_fallback"
+            else:
+                code = "unauthorized" if exc.status_code in {401, 403} else "unavailable"
+                if exc.status_code == 404:
+                    code = "not_found"
+                if exc.status_code == 400:
+                    code = "dhis2_bad_request"
+                raise ReportSecurityError(data_error, code=code) from exc
+
+        if not (html or "").strip():
+            html = self._fallback_html_design(env, uid, report)
+            source = "designContent_fallback" if html else source
+        if not (html or "").strip():
+            raise ReportSecurityError(
+                data_error or "DHIS2 returned empty report HTML.",
+                code="missing_output",
+            )
+
         # Redact accidental secrets in body for audit only; return HTML for download.
         if any(s in html.lower() for s in ("password=", "authorization:", "bearer ")):
             raise ReportSecurityError(
@@ -866,7 +896,7 @@ class Dhis2ReportsService:
         self._audit(
             "DHIS2_REPORT_DOWNLOAD",
             report.id,
-            f"data.html pe={period_v} ou={ou_v}",
+            f"{source} pe={period_v} ou={ou_v}",
             True,
         )
         filename = f"{report.uid}-{env}.html"
@@ -876,7 +906,34 @@ class Dhis2ReportsService:
             "report": report.to_public(),
             "period": period_v,
             "org_unit": ou_v,
+            "source": source,
         }
+
+    def _fallback_html_design(self, environment: str, uid: str, report: Any) -> str:
+        """Use synced/API designContent when data.html is unavailable."""
+        rtype = str(getattr(report, "report_type", "") or "").upper()
+        allow = rtype in {"HTML", ""} or bool(getattr(report, "html_design_available", False))
+        if not allow:
+            return ""
+        html = self.store.get_synced_design_content(environment, uid)
+        if html and html.strip():
+            return html
+        if not self.client_factory:
+            return ""
+        try:
+            detail = self.client_factory(environment).get_metadata_object(
+                "reports",
+                uid,
+                fields="id,name,type,designContent",
+            )
+            raw = detail.get("raw") if isinstance(detail.get("raw"), dict) else {}
+            html = str(raw.get("designContent") or "")
+            if html.strip():
+                self.store.upsert_synced_report(report, design_content=html)
+            return html
+        except Exception:
+            return ""
+
 
     def _collect_params(
         self,

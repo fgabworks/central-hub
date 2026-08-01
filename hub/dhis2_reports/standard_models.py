@@ -79,6 +79,7 @@ def _report_params_summary(raw: Any) -> dict[str, Any]:
         raw.get("paramReportingMonth")
         or raw.get("reportingMonth")
         or raw.get("paramPeriod")
+        or raw.get("reportingPeriod")
     )
     ou = bool(
         raw.get("paramOrganisationUnit")
@@ -88,6 +89,7 @@ def _report_params_summary(raw: Any) -> dict[str, Any]:
     parent = bool(
         raw.get("paramParentOrganisationUnit")
         or raw.get("parentOrganisationUnit")
+        or raw.get("grandParentOrganisationUnit")
     )
     return {
         "param_reporting_month": period,

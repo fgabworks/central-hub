@@ -198,14 +198,35 @@ def register_dhis2_reports_routes(app: Flask) -> None:
                 confirm_live=confirm_live,
             )
         except ReportSecurityError as exc:
-            code = getattr(exc, "code", "")
-            if code == "confirm_required":
-                abort(400)
-            if code in {"not_found", "missing_output"}:
-                abort(404)
-            if code == "unauthorized":
-                abort(401)
-            abort(400)
+            code = getattr(exc, "code", "") or "error"
+            message = redact_report_detail(str(exc))
+            status = {
+                "confirm_required": 400,
+                "not_found": 404,
+                "missing_output": 404,
+                "unauthorized": 401,
+                "dhis2_bad_request": 502,
+                "unavailable": 502,
+            }.get(code, 400)
+            # Friendly iframe body instead of Flask's bare "Bad Request" page.
+            body = (
+                "<!doctype html><html><head><meta charset='utf-8'>"
+                "<title>Report unavailable</title>"
+                "<style>body{font-family:system-ui,sans-serif;background:#111;color:#eee;"
+                "padding:1.25rem;line-height:1.45}code{color:#f6c}a{color:#9cf}</style>"
+                "</head><body>"
+                "<h1>Report could not be rendered</h1>"
+                f"<p>{message}</p>"
+                "<p>The hub tried <code>/api/reports/{uid}/data.html</code> with your "
+                ".env credentials. For HTML design reports it also tries cached design "
+                "content. Use <strong>Open in DHIS2</strong> if the report needs the "
+                "full Reports app, or set period / organisation unit and retry.</p>"
+                f"<p class='muted'>code=<code>{code}</code></p>"
+                "</body></html>"
+            )
+            resp = Response(body, status=status, mimetype="text/html; charset=utf-8")
+            resp.headers["Cache-Control"] = "private, no-store"
+            return resp
         resp = Response(data["html"], mimetype="text/html; charset=utf-8")
         resp.headers["Content-Security-Policy"] = (
             "default-src 'none'; img-src data: blob: https: http: 'self'; "
@@ -217,6 +238,8 @@ def register_dhis2_reports_routes(app: Flask) -> None:
         )
         resp.headers["X-Content-Type-Options"] = "nosniff"
         resp.headers["Cache-Control"] = "private, no-store"
+        if data.get("source"):
+            resp.headers["X-Hub-Report-Source"] = str(data.get("source"))[:80]
         return resp
 
     @app.get("/dhis2/reports/standard/<environment>/<uid>/html")
