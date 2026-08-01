@@ -11,7 +11,7 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 | Registry grouping | Optional `repository_group_id` — one UI row for local + API (+ future) adapters; independent Workspace / Application / API statuses (`hub/registry/grouping.py`) |
 | Repository Workspace Phases 1–2 + Connect + Run Profile Builder + Processes + Active Application | `/repositories/<id>` tabs + `/connect` + Settings → Run Profiles + Run → Active Application / History / Processes; Health Local Process Monitor; `hub/repository_workspace/` |
 | DHIS2 Reports (Standard Report Manager Phase 1) | `/dhis2/reports` sync/view Stage+Live standard reports; `hub/dhis2_reports/`; catalog shortcuts `config/dhis2_reports.yaml` |
-| HCSC Indicator Summary (Phase 0–2) | `/dhis2/hcsc-indicators` — registry + batched Overview/report/category; adapters in `hub/hcsc_indicators/`; `config/hcsc_indicators.yaml` |
+| HCSC Indicator Summary (Phase 0–3) | `/dhis2/hcsc-indicators` — registry + Overview/report/category + Validation; evidence snapshots local-only; no formula engine / no SQL auto-exec |
 | `${VAR:-default}` in registry YAML | `hub/registry/loader.py` |
 | Live Processing (GET-only API + path health) | `config/repositories.yaml` |
 | Data-Script / Report Template (git + optional path) | `config/repositories.yaml` |

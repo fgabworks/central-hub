@@ -4,27 +4,27 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**HCSC Indicator Summary Phase 2 — broader indicators (2026-08-02)**
+**HCSC Phase 3 Validation + UI visibility fix (2026-08-02)**
 
-### What changed
+### Root cause (invisible / non-interactive HCSC page)
 
-Registry-backed maternal / child / WASH·SBC / food-security indicators via **batched DHIS2 analytics** (no formula copy). Overview (Phase 0–1) preserved. Category + full report APIs with env/period/OU caches.
+1. Template used `{% block head %}` but `base.html` only defines `{% block head_extra %}` — **JS never loaded**.
+2. DHIS2 Overview tools grid was **hardcoded** and omitted HCSC Indicators (and other `_DHIS2_TOOLS` entries).
+3. Bootstrap JSON lived in a single-quoted HTML attribute (fragile); moved to `<script type="application/json" id="hcsc-bootstrap">`.
+4. Page endpoint renamed to `dhis2_hcsc_indicators` so Work → DHIS2 nav `active_prefix` highlights correctly.
 
-| Area | Detail |
-|---|---|
-| Adapters | `dhis2_analytics` (batched GET), `approved_sql` (reference/deferred), `connected_capability` (deferred) |
-| Sections | Eligible Beneficiaries · Maternal · Child Nutrition & Health · Household/WASH/SBC · Food Security · Convergence · Data Mapping · Validation |
-| APIs | `/overview` (unchanged set), `/report` (full), `/category/<section>` |
-| UI | Sectioned Indicator Summary; Open in SQL Workspace when referenced; cache shown immediately |
-| Result model | count / % / ratio / status / disaggregation + N/D labels, lineage, validation, unresolved notes |
+### Phase 3 Validation
 
-### Unresolved (marked, not invented)
+Read-only Validation workspace comparing report results to:
+- same-batch analytics N/D
+- local evidence snapshots
+- approved SQL / capabilities marked **Comparison Source Unavailable** (no auto-execute)
 
-- Convergent Units — no dx UID (NPMO JS)
-- Pct_Convergence_Mun — client-computed; may ≠ `qzjKcfO9J2w`
-- Overview IP/non-IP disaggregation — planned
-- Nutritious/balanced food frequency % — bucket PIs exist; no verified rate IND / capability
-- HCSC / RF SQL Workspace query — lineage only, not SoT
+API: `GET /api/dhis2/hcsc-indicators/validation`, snapshot + investigation notes POSTs. Evidence DB under `data/hcsc_validation_evidence.db` (gitignored).
+
+### Unresolved (unchanged)
+
+Convergent Units · Pct_Convergence_Mun · Overview IP/non-IP · balanced-food frequency rate · SQL lineage SoT
 
 ### Verify
 
@@ -33,10 +33,4 @@ Registry-backed maternal / child / WASH·SBC / food-security indicators via **ba
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-Open `/dhis2/hcsc-indicators` → Generate Report (loads `/api/dhis2/hcsc-indicators/report`).
-
----
-
-## Previous: HCSC UI refine + Phase 0–1
-
-Mockup table/tabs/drawer; registry YAML + batched analytics Overview — see `config/hcsc_indicators.yaml`, `hub/hcsc_indicators/`.
+Open Work → DHIS2 → HCSC Indicators, or `/dhis2/hcsc-indicators` (refresh / back-forward).

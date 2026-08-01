@@ -61,7 +61,7 @@ class HcscIndicatorService:
         return {
             "ok": True,
             "page_title": "HCSC Indicator Summary & Data Lineage — NPMO",
-            "phase": "0-2",
+            "phase": "0-3",
             "npmo_report_uid": reg.get("npmo_report_uid"),
             "npmo_report_name": reg.get("npmo_report_name"),
             "indicators": reg.get("indicators") or [],
@@ -613,3 +613,191 @@ class HcscIndicatorService:
                 "no_html_scrape": True,
             },
         }
+
+    def validation_workspace(
+        self,
+        *,
+        environment: str,
+        period: str,
+        org_unit: str,
+        disaggregation: str = "none",
+        force_refresh: bool = False,
+        evidence_path=None,
+    ) -> dict[str, Any]:
+        """Phase 3 read-only validation against compatible authoritative sources."""
+        from hub.hcsc_indicators.compare import build_comparison_row, summarize_comparisons
+        from hub.hcsc_indicators.evidence import latest_snapshot_comparisons
+
+        started = time.perf_counter()
+        report = self.report(
+            environment=environment,
+            period=period,
+            org_unit=org_unit,
+            disaggregation=disaggregation,
+            force_refresh=force_refresh,
+        )
+        scope = {
+            "environment": report["environment"],
+            "period": report["period"],
+            "org_unit": report["org_unit"],
+            "disaggregation": report["disaggregation"],
+        }
+        snap_map = latest_snapshot_comparisons(
+            environment=scope["environment"],
+            period=scope["period"],
+            org_unit=scope["org_unit"],
+            path=evidence_path,
+        )
+        comparisons: list[dict[str, Any]] = []
+        for row in report.get("results") or []:
+            comparison_source = "analytics_num_den"
+            comparison_payload: dict[str, Any] | None = {
+                "period": scope["period"],
+                "org_unit": scope["org_unit"],
+                "numerator": row.get("numerator"),
+                "denominator": row.get("denominator"),
+                "numerator_label": row.get("numerator_label"),
+                "denominator_label": row.get("denominator_label"),
+                "population_definition_reference": row.get("population_definition_reference"),
+                "age_range": row.get("age_range"),
+                "ip_non_ip_rule": row.get("ip_non_ip_rule"),
+                "reference": "same-batch includeNumDen / companion UIDs",
+                "freshness": row.get("freshness"),
+            }
+            # Prefer prior evidence snapshot values when present (same env/period/OU).
+            if row.get("indicator_key") in snap_map:
+                comparison_source = "evidence_snapshot"
+                comparison_payload = snap_map[row["indicator_key"]]
+            elif row.get("adapter") == "approved_sql" or row.get("approved_sql_reference"):
+                comparison_source = "approved_sql"
+                comparison_payload = {
+                    "unavailable": True,
+                    "reason": "Approved SQL is lineage-only — not auto-executed for validation.",
+                    "reference": row.get("approved_sql_reference") or row.get("approved_sql_query_id"),
+                    "period": scope["period"],
+                    "org_unit": scope["org_unit"],
+                }
+            elif row.get("adapter") == "connected_capability" or row.get("capability_reference"):
+                comparison_source = "connected_capability"
+                comparison_payload = {
+                    "unavailable": True,
+                    "reason": row.get("capability_reference")
+                    or "No allowlisted connected capability result available.",
+                    "reference": row.get("capability_reference"),
+                    "period": scope["period"],
+                    "org_unit": scope["org_unit"],
+                }
+            elif row.get("unresolved") or not row.get("source_uid"):
+                comparison_source = "unresolved"
+                comparison_payload = {
+                    "unavailable": True,
+                    "reason": row.get("notes") or "Unresolved — no comparable UID/source.",
+                    "period": scope["period"],
+                    "org_unit": scope["org_unit"],
+                }
+            elif row.get("result_type") == "count":
+                # Counts: compare only when a snapshot exists; otherwise mark unavailable
+                # rather than inventing a second source.
+                if row.get("indicator_key") not in snap_map:
+                    comparison_source = "npmo_or_snapshot"
+                    comparison_payload = {
+                        "unavailable": True,
+                        "reason": (
+                            "No structured NPMO value or saved evidence snapshot for this count yet. "
+                            "HTML scrape is not used."
+                        ),
+                        "period": scope["period"],
+                        "org_unit": scope["org_unit"],
+                    }
+
+            comparisons.append(
+                build_comparison_row(
+                    primary_row=row,
+                    comparison_source=comparison_source,
+                    comparison_payload=comparison_payload,
+                    scope=scope,
+                )
+            )
+
+        summary = summarize_comparisons(comparisons)
+        total_ms = int((time.perf_counter() - started) * 1000)
+        return {
+            "ok": True,
+            "scope": scope,
+            "summary": summary,
+            "comparisons": comparisons,
+            "filters": {
+                "categories": sorted(
+                    {c.get("section_label") or c.get("section") for c in comparisons if c.get("section")}
+                ),
+                "statuses": sorted({c.get("validation_status") for c in comparisons if c.get("validation_status")}),
+                "sources": sorted({c.get("comparison_source") for c in comparisons if c.get("comparison_source")}),
+            },
+            "timings": {
+                "total_ms": total_ms,
+                "report_ms": (report.get("timings") or {}).get("total_ms"),
+                "http_requests": (report.get("timings") or {}).get("http_requests"),
+                "report_cache_hit": (report.get("cache") or {}).get("hit"),
+            },
+            "retrieval": report.get("retrieval"),
+            "dhis2_writes": 0,
+            "sql_executed": False,
+            "boundaries": {
+                "readonly": True,
+                "no_formula_engine": True,
+                "no_html_scrape": True,
+                "no_sql_auto_execute": True,
+            },
+        }
+
+    def save_validation_snapshot(
+        self,
+        *,
+        environment: str,
+        period: str,
+        org_unit: str,
+        disaggregation: str = "none",
+        note: str | None = None,
+        evidence_path=None,
+    ) -> dict[str, Any]:
+        from hub.hcsc_indicators.evidence import save_snapshot
+
+        workspace = self.validation_workspace(
+            environment=environment,
+            period=period,
+            org_unit=org_unit,
+            disaggregation=disaggregation,
+            evidence_path=evidence_path,
+        )
+        saved = save_snapshot(
+            environment=workspace["scope"]["environment"],
+            period=workspace["scope"]["period"],
+            org_unit=workspace["scope"]["org_unit"],
+            disaggregation=disaggregation or "none",
+            comparisons=workspace.get("comparisons") or [],
+            report_meta={"timings": workspace.get("timings"), "summary": workspace.get("summary")},
+            note=note,
+            path=evidence_path,
+        )
+        return {"ok": True, "snapshot": saved, "summary": workspace.get("summary")}
+
+    def add_validation_note(
+        self,
+        *,
+        note: str,
+        indicator_key: str | None = None,
+        environment: str | None = None,
+        period: str | None = None,
+        org_unit: str | None = None,
+        evidence_path=None,
+    ) -> dict[str, Any]:
+        from hub.hcsc_indicators.evidence import add_investigation_note
+
+        return add_investigation_note(
+            note=note,
+            indicator_key=indicator_key,
+            environment=environment,
+            period=period,
+            org_unit=org_unit,
+            path=evidence_path,
+        )

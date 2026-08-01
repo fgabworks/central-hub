@@ -10,9 +10,16 @@
 
   var boot = {};
   try {
-    boot = JSON.parse(root.getAttribute("data-bootstrap") || "{}");
+    var bootEl = document.getElementById("hcsc-bootstrap");
+    if (bootEl && bootEl.textContent) {
+      boot = JSON.parse(bootEl.textContent);
+    } else {
+      // Legacy attribute fallback
+      boot = JSON.parse(root.getAttribute("data-bootstrap") || "{}");
+    }
   } catch (e) {
     boot = {};
+    showShellBanner("Bootstrap JSON failed to parse. Shell still usable — reload or check registry.", true);
   }
 
   var state = {
@@ -20,6 +27,7 @@
     sections: [],
     retrieval: null,
     lastPayload: null,
+    validation: null,
     activeTab: "summary",
     activeRtab: "retrieval_request",
   };
@@ -43,11 +51,26 @@
     }
   }
 
+  function showShellBanner(msg, isError) {
+    var el = $("hcsc-shell-banner");
+    if (!el) return;
+    if (!msg) {
+      el.hidden = true;
+      el.textContent = "";
+      return;
+    }
+    el.hidden = false;
+    el.textContent = msg;
+    el.classList.toggle("is-error", !!isError);
+    el.classList.toggle("is-loading", !isError && /loading|generating|validat/i.test(msg));
+  }
+
   function setStatus(msg, isError) {
     var el = $("hcsc-status");
     if (!el) return;
     el.textContent = msg || "";
     el.classList.toggle("is-error", !!isError);
+    if (isError) showShellBanner(msg, true);
   }
 
   function fillPeriods() {
@@ -368,30 +391,315 @@
       "</ul>";
   }
 
+  function fmtNum(v) {
+    if (v == null || v === "") return "—";
+    var n = Number(v);
+    if (isNaN(n)) return String(v);
+    return Math.abs(n - Math.round(n)) < 1e-9 ? String(Math.round(n)) : n.toFixed(2);
+  }
+
+  function fillSelect(sel, values) {
+    if (!sel) return;
+    var cur = sel.value;
+    sel.innerHTML =
+      '<option value="">All</option>' +
+      (values || [])
+        .map(function (v) {
+          return '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + "</option>";
+        })
+        .join("");
+    if (cur) sel.value = cur;
+  }
+
+  function filteredValidationRows() {
+    var rows = (state.validation && state.validation.comparisons) || [];
+    var cat = ($("hcsc-val-category") && $("hcsc-val-category").value) || "";
+    var st = ($("hcsc-val-status") && $("hcsc-val-status").value) || "";
+    var src = ($("hcsc-val-source") && $("hcsc-val-source").value) || "";
+    return rows.filter(function (r) {
+      if (cat && (r.section_label || r.section) !== cat) return false;
+      if (st && r.validation_status !== st) return false;
+      if (src && r.comparison_source !== src) return false;
+      return true;
+    });
+  }
+
+  function renderValidationCards(summary) {
+    var host = $("hcsc-val-cards");
+    if (!host) return;
+    var by = (summary && summary.by_status) || {};
+    var keys = [
+      "Exact Match",
+      "Rounding Difference",
+      "Expected Logic Difference",
+      "Unexplained Difference",
+      "Not Yet Validated",
+      "Comparison Source Unavailable",
+    ];
+    host.innerHTML = keys
+      .map(function (k) {
+        return (
+          '<article class="hcsc-val-card"><h4>' +
+          escapeHtml(k) +
+          "</h4><p>" +
+          escapeHtml(String(by[k] || 0)) +
+          "</p></article>"
+        );
+      })
+      .join("");
+  }
+
   function renderValidation() {
     var tbody = $("hcsc-validation-tbody");
     if (!tbody) return;
-    if (!state.results.length) {
-      tbody.innerHTML = '<tr><td colspan="3" class="muted">No validation yet.</td></tr>';
+    if (!state.validation) {
+      tbody.innerHTML =
+        '<tr><td colspan="7" class="muted">Generate a report, then Run Validation.</td></tr>';
       return;
     }
-    tbody.innerHTML = state.results
+    renderValidationCards(state.validation.summary);
+    fillSelect($("hcsc-val-category"), (state.validation.filters || {}).categories);
+    fillSelect($("hcsc-val-status"), (state.validation.filters || {}).statuses);
+    fillSelect($("hcsc-val-source"), (state.validation.filters || {}).sources);
+    var rows = filteredValidationRows();
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="muted">No comparisons match filters.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows
       .map(function (r) {
+        var delta =
+          r.pp_diff != null
+            ? fmtNum(r.pp_diff) + " pp"
+            : r.value_diff != null
+              ? fmtNum(r.value_diff)
+              : "—";
         return (
-          "<tr>" +
-          "<td>" +
+          "<tr data-val-key=\"" +
+          escapeHtml(r.indicator_key) +
+          '">' +
+          "<td><strong>" +
           escapeHtml(r.display_name) +
+          "</strong><div class=\"muted\">" +
+          escapeHtml(r.section_label || "") +
+          "</div></td>" +
+          "<td>" +
+          fmtNum(r.primary_value) +
+          '<div class="muted">' +
+          escapeHtml(r.primary_source || "") +
+          "</div></td>" +
+          "<td>" +
+          fmtNum(r.comparison_value) +
+          '<div class="muted">' +
+          escapeHtml(r.comparison_source || "") +
+          "</div></td>" +
+          "<td>" +
+          escapeHtml(delta) +
           "</td>" +
           "<td><span class=\"hcsc-val\">" +
-          escapeHtml(r.validation_status || "Not Yet Validated") +
+          escapeHtml(r.validation_status || "") +
           "</span></td>" +
           "<td class=\"muted\">" +
-          escapeHtml(r.validation_note || "") +
+          escapeHtml(r.note || "") +
+          "</td>" +
+          "<td>" +
+          '<button type="button" class="btn btn-sm hcsc-val-detail" data-key="' +
+          escapeHtml(r.indicator_key) +
+          '">Details</button>' +
           "</td>" +
           "</tr>"
         );
       })
       .join("");
+  }
+
+  function openValidationDetail(key) {
+    var rows = (state.validation && state.validation.comparisons) || [];
+    var row = null;
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].indicator_key === key) {
+        row = rows[i];
+        break;
+      }
+    }
+    if (!row) return;
+    var d = $("hcsc-drawer");
+    var body = $("hcsc-drawer-body");
+    var title = $("hcsc-drawer-title");
+    if (title) title.textContent = row.display_name || key;
+    if (body) {
+      body.innerHTML =
+        "<dl class=\"detail-list\">" +
+        "<div><dt>Status</dt><dd>" +
+        escapeHtml(row.validation_status || "") +
+        "</dd></div>" +
+        "<div><dt>Primary</dt><dd>" +
+        escapeHtml(String(row.primary_value)) +
+        " · " +
+        escapeHtml(row.primary_source || "") +
+        "</dd></div>" +
+        "<div><dt>Comparison</dt><dd>" +
+        escapeHtml(String(row.comparison_value)) +
+        " · " +
+        escapeHtml(row.comparison_source || "") +
+        "</dd></div>" +
+        "<div><dt>Numerator</dt><dd>" +
+        fmtNum(row.numerator) +
+        " / cmp " +
+        fmtNum(row.comparison_numerator) +
+        " (" +
+        escapeHtml(row.numerator_label || "") +
+        ")</dd></div>" +
+        "<div><dt>Denominator</dt><dd>" +
+        fmtNum(row.denominator) +
+        " / cmp " +
+        fmtNum(row.comparison_denominator) +
+        " (" +
+        escapeHtml(row.denominator_label || "") +
+        ")</dd></div>" +
+        "<div><dt>Compatibility</dt><dd>" +
+        escapeHtml(row.compatibility_note || "") +
+        "</dd></div>" +
+        "<div><dt>Note</dt><dd>" +
+        escapeHtml(row.note || "") +
+        "</dd></div>" +
+        "<div><dt>Evidence</dt><dd><pre class=\"hcsc-query-pre\">" +
+        escapeHtml(JSON.stringify(row.evidence || {}, null, 2)) +
+        "</pre></dd></div>" +
+        "</dl>" +
+        '<div class="hcsc-drawer-actions">' +
+        '<button type="button" class="btn btn-sm" id="hcsc-copy-evidence">Copy Evidence</button> ' +
+        '<button type="button" class="btn btn-sm" id="hcsc-copy-diagnostics">Copy Diagnostics</button> ' +
+        (row.open_mapping_url
+          ? '<a class="btn btn-sm" href="' + escapeHtml(row.open_mapping_url) + '">Open Mapping</a> '
+          : "") +
+        (row.open_sql_workspace_url
+          ? '<a class="btn btn-sm" href="' + escapeHtml(row.open_sql_workspace_url) + '">Open SQL Workspace</a>'
+          : "") +
+        "</div>";
+      var ce = $("hcsc-copy-evidence");
+      if (ce) {
+        ce.addEventListener("click", function () {
+          copyText(JSON.stringify(row, null, 2));
+        });
+      }
+      var cd = $("hcsc-copy-diagnostics");
+      if (cd) {
+        cd.addEventListener("click", function () {
+          copyText(
+            JSON.stringify(
+              {
+                indicator_key: row.indicator_key,
+                validation_status: row.validation_status,
+                note: row.note,
+                evidence: row.evidence,
+                timings: state.validation && state.validation.timings,
+              },
+              null,
+              2
+            )
+          );
+        });
+      }
+    }
+    if (d) d.hidden = false;
+    root.classList.add("is-drawer-open");
+  }
+
+  function scopeQuery(force) {
+    var env = ($("hcsc-env") && $("hcsc-env").value) || "stage";
+    var period = ($("hcsc-period") && $("hcsc-period").value) || "";
+    var ou = ($("hcsc-ou") && $("hcsc-ou").value) || "";
+    var disagg = ($("hcsc-disagg") && $("hcsc-disagg").value) || "none";
+    return (
+      "?environment=" +
+      encodeURIComponent(env) +
+      "&period=" +
+      encodeURIComponent(period) +
+      "&orgUnit=" +
+      encodeURIComponent(ou) +
+      "&disaggregation=" +
+      encodeURIComponent(disagg) +
+      (force ? "&fresh=1" : "")
+    );
+  }
+
+  function loadValidation(force) {
+    var ou = ($("hcsc-ou") && $("hcsc-ou").value) || "";
+    if (!ou) {
+      setStatus("Organisation unit is required for validation.", true);
+      return;
+    }
+    var url = root.getAttribute("data-validation-url");
+    if (!url) {
+      setStatus("Validation API not available.", true);
+      return;
+    }
+    showShellBanner("Running validation…");
+    setStatus("Validating…");
+    fetch(url + scopeQuery(force), { credentials: "same-origin" })
+      .then(function (r) {
+        return r.json().then(function (body) {
+          body._status = r.status;
+          return body;
+        });
+      })
+      .then(function (data) {
+        if (!data.ok) {
+          setStatus(data.error || "Validation failed", true);
+          return;
+        }
+        state.validation = data;
+        renderValidation();
+        setTab("validation");
+        showShellBanner("");
+        setStatus(
+          "Validation complete · " +
+            ((data.summary && data.summary.total) || 0) +
+            " comparisons · " +
+            ((data.timings && data.timings.total_ms) || "?") +
+            " ms" +
+            (data.timings && data.timings.report_cache_hit ? " (report cache)" : "")
+        );
+      })
+      .catch(function () {
+        setStatus("Validation request failed.", true);
+      });
+  }
+
+  function saveValidationSnapshot() {
+    var env = ($("hcsc-env") && $("hcsc-env").value) || "stage";
+    var period = ($("hcsc-period") && $("hcsc-period").value) || "";
+    var ou = ($("hcsc-ou") && $("hcsc-ou").value) || "";
+    if (!ou) {
+      setStatus("Organisation unit is required.", true);
+      return;
+    }
+    fetch("/api/dhis2/hcsc-indicators/validation/snapshot", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        environment: env,
+        period: period,
+        orgUnit: ou,
+        disaggregation: ($("hcsc-disagg") && $("hcsc-disagg").value) || "none",
+        note: "Manual evidence snapshot from HCSC Validation tab",
+      }),
+    })
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (data) {
+        if (!data.ok) {
+          setStatus(data.error || "Snapshot failed", true);
+          return;
+        }
+        setStatus("Evidence snapshot saved: " + ((data.snapshot && data.snapshot.id) || ""));
+      })
+      .catch(function () {
+        setStatus("Snapshot request failed.", true);
+      });
   }
 
   function renderRetrieval() {
@@ -646,18 +954,11 @@
       return;
     }
     setStatus(force ? "Refreshing…" : "Generating report…");
+    showShellBanner(force ? "Refreshing report…" : "Generating report…");
     var reportUrl = root.getAttribute("data-report-url") || root.getAttribute("data-overview-url");
     var url =
       reportUrl +
-      "?environment=" +
-      encodeURIComponent(env) +
-      "&period=" +
-      encodeURIComponent(period) +
-      "&orgUnit=" +
-      encodeURIComponent(ou) +
-      "&disaggregation=" +
-      encodeURIComponent(disagg) +
-      (force ? "&fresh=1" : "");
+      scopeQuery(force);
     fetch(url, { credentials: "same-origin" })
       .then(function (r) {
         return r.json().then(function (body) {
@@ -670,6 +971,7 @@
           setStatus(data.error || "Report failed", true);
           return;
         }
+        showShellBanner("");
         state.results = data.results || [];
         state.sections = data.sections || [];
         state.retrieval = data.retrieval || data.query || null;
@@ -815,6 +1117,14 @@
     if (filter) filter.addEventListener("input", renderTable);
     var pctOnly = $("hcsc-pct-only");
     if (pctOnly) pctOnly.addEventListener("change", renderTable);
+    var valRun = $("hcsc-val-run");
+    if (valRun) valRun.addEventListener("click", function () { loadValidation(false); });
+    var valSnap = $("hcsc-val-snapshot");
+    if (valSnap) valSnap.addEventListener("click", saveValidationSnapshot);
+    ["hcsc-val-category", "hcsc-val-status", "hcsc-val-source"].forEach(function (id) {
+      var el = $(id);
+      if (el) el.addEventListener("change", renderValidation);
+    });
 
     document.querySelectorAll(".hcsc-tab").forEach(function (btn) {
       btn.addEventListener("click", function () {
@@ -831,6 +1141,11 @@
       var copy = ev.target.closest(".hcsc-copy-uid");
       if (copy) {
         copyText(copy.getAttribute("data-uid") || "");
+        return;
+      }
+      var valBtn = ev.target.closest(".hcsc-val-detail");
+      if (valBtn) {
+        openValidationDetail(valBtn.getAttribute("data-key"));
         return;
       }
       var link = ev.target.closest(".hcsc-uid-link, .hcsc-uid-btn");

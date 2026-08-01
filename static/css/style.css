@@ -5673,8 +5673,48 @@ body.qn-maximized .qn-history[open] {
 }
 
 /* HCSC Indicator Summary */
-.hcsc-root { position: relative; }
-.hcsc-root.is-drawer-open { padding-right: min(22rem, 36vw); }
+.hcsc-shell-state {
+  margin: 0 0 0.65rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 6px;
+  background: rgba(76,139,245,0.12);
+  color: #9ec1ff;
+  font-size: 12px;
+}
+.hcsc-shell-state.is-error {
+  background: rgba(220,38,38,0.12);
+  color: #fca5a5;
+}
+.hcsc-shell-state.is-loading {
+  background: rgba(212,160,23,0.12);
+  color: #e6c35c;
+}
+.hcsc-status.is-error { color: #fca5a5; }
+.hcsc-val-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 0.45rem;
+  margin-bottom: 0.65rem;
+}
+.hcsc-val-card {
+  background: #161a20;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
+  padding: 0.45rem 0.55rem;
+}
+.hcsc-val-card h4 { margin: 0; font-size: 11px; color: #9aa5b1; font-weight: 600; }
+.hcsc-val-card p { margin: 0.2rem 0 0; font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+.hcsc-drawer-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.75rem; }
+.hcsc-card-placeholder { opacity: 0.75; }
+/* Keep HCSC usable with Okarun dock + Workspace Console open */
+.app-shell.has-ad-dock .hcsc-root,
+.app-shell.is-wc-open .hcsc-root {
+  max-width: 100%;
+}
+.app-shell.is-ad-open .hcsc-table-scroll,
+.app-shell.is-wc-open .hcsc-table-scroll {
+  max-height: min(55vh, 36rem);
+}
 .hcsc-controls { margin: 0.75rem 0 0.5rem; align-items: end; }
 .hcsc-control,
 .hcsc-controls select,

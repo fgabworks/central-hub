@@ -648,7 +648,7 @@ class OverviewServiceTests(unittest.TestCase):
         self.assertTrue(payload["boundaries"]["no_formula_engine"])
         self.assertFalse(self.clients["stage"].writes_allowed())
         boot = self.svc.bootstrap()
-        self.assertEqual(boot["phase"], "0-2")
+        self.assertEqual(boot["phase"], "0-3")
         service_src = (ROOT / "hub" / "hcsc_indicators" / "service.py").read_text(encoding="utf-8")
         self.assertNotIn("def score_household", service_src)
         self.assertNotIn("process_data", service_src)
@@ -677,10 +677,17 @@ class UiContractTests(unittest.TestCase):
         self.assertIn("hcsc-drawer", html)
         self.assertIn("Data Retrieval &amp; Calculation", html)
         self.assertIn("data-report-url", html)
+        self.assertIn("hcsc-bootstrap", html)
+        self.assertIn("head_extra", (ROOT / "templates" / "hcsc_indicator_summary.html").read_text(encoding="utf-8"))
         self.assertIn("Open in SQL Workspace", html)
         self.assertIn("Copy UID", js)
         self.assertIn("loadReport", js)
+        self.assertIn("hcsc-bootstrap", js)
+        self.assertIn("loadValidation", js)
         self.assertIn("hcsc-section-row", js)
+        overview = (ROOT / "templates" / "dhis2_overview.html").read_text(encoding="utf-8")
+        self.assertIn("dhis2_tools", overview)
+        self.assertIn("dhis2_hcsc_indicators", (ROOT / "app.py").read_text(encoding="utf-8"))
         self.assertIn("is-drawer-open", css)
         self.assertIn("jkgkU9EiJ5k", yaml_text)
         self.assertIn("unresolved: true", yaml_text)
@@ -705,17 +712,26 @@ class RouteSmokeTests(unittest.TestCase):
         self.assertIn(b"HCSC Indicator Summary", page.data)
         boot = self.client.get("/api/dhis2/hcsc-indicators/bootstrap")
         self.assertEqual(boot.status_code, 200)
-        self.assertEqual(boot.get_json().get("phase"), "0-2")
+        self.assertEqual(boot.get_json().get("phase"), "0-3")
         reg = self.client.get("/api/dhis2/hcsc-indicators/registry")
         self.assertEqual(reg.status_code, 200)
         keys = {r["key"] for r in reg.get_json().get("indicators") or []}
+        self.assertEqual(len(keys), 36)
         self.assertIn("eligible_households", keys)
         self.assertIn("exclusive_breastfeeding_rate", keys)
+        self.assertIn(b"hcsc_indicator_summary.js", page.data)
+        self.assertIn(b"hcsc-bootstrap", page.data)
+        overview = self.client.get("/dhis2")
+        self.assertEqual(overview.status_code, 200)
+        self.assertIn(b"HCSC Indicators", overview.data)
+        self.assertIn(b"/dhis2/hcsc-indicators", overview.data)
+        # Nav active_prefix: endpoint must start with dhis2
+        self.assertTrue(hasattr(self.app.view_functions.get("dhis2_hcsc_indicators"), "__call__"))
         detail = self.client.get("/api/dhis2/hcsc-indicators/eligible_households")
         self.assertEqual(detail.status_code, 200)
-        overview = self.client.get("/api/dhis2/hcsc-indicators/overview")
-        self.assertIn(overview.status_code, {200, 400})
-        self.assertNotEqual(overview.get_json().get("code"), "not_found")
+        overview_api = self.client.get("/api/dhis2/hcsc-indicators/overview")
+        self.assertIn(overview_api.status_code, {200, 400})
+        self.assertNotEqual(overview_api.get_json().get("code"), "not_found")
 
     def test_client_get_analytics_is_readonly(self):
         settings = Dhis2Settings(
@@ -730,6 +746,188 @@ class RouteSmokeTests(unittest.TestCase):
         self.assertFalse(client.writes_allowed())
         self.assertTrue(hasattr(client, "get_analytics"))
         self.assertFalse(hasattr(client, "post_analytics"))
+
+
+class Phase3ValidationTests(unittest.TestCase):
+    def setUp(self):
+        OVERVIEW_CACHE.clear()
+        REPORT_CACHE.clear()
+        CATEGORY_CACHE.clear()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.reg_path = Path(self.tmp.name) / "reg.yaml"
+        self.reg_path.write_text(SAMPLE_YAML, encoding="utf-8")
+        self.evidence_path = Path(self.tmp.name) / "evidence.db"
+        self.clients: dict[str, FakeAnalyticsClient] = {}
+
+        def factory(env: str):
+            if env not in self.clients:
+                self.clients[env] = FakeAnalyticsClient(
+                    {
+                        "fxmvSiKfEpn": 100,
+                        "LOMZy9q1euI": 40,
+                        "BSqDSIpHhoT": 80,
+                        "qzjKcfO9J2w": 50,
+                        "jkgkU9EiJ5k": 55,
+                        "fgfeI3Az7zv": 11,
+                        "r5cHtnYeyXd": 20,
+                        "S1hLvdJSuiZ": 74.16,
+                    },
+                    environment=env,
+                )
+            return self.clients[env]
+
+        self.svc = HcscIndicatorService(client_factory=factory, registry_path=self.reg_path)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+        OVERVIEW_CACHE.clear()
+        REPORT_CACHE.clear()
+        CATEGORY_CACHE.clear()
+
+    def test_validation_statuses_and_sources(self):
+        from hub.hcsc_indicators.compare import STATUS_UNAVAILABLE, build_comparison_row
+
+        exact = build_comparison_row(
+            primary_row={
+                "indicator_key": "convergence_rate",
+                "display_name": "Convergence Rate",
+                "result_type": "numerator_denominator_percentage",
+                "percentage": 50.0,
+                "numerator": 40,
+                "denominator": 80,
+                "numerator_label": "Convergent Households",
+                "denominator_label": "Approved Eligible Households",
+                "source_uid": "qzjKcfO9J2w",
+                "unresolved": False,
+            },
+            comparison_source="analytics_num_den",
+            comparison_payload={
+                "numerator": 40,
+                "denominator": 80,
+                "numerator_label": "Convergent Households",
+                "denominator_label": "Approved Eligible Households",
+                "period": "2026Q1",
+                "org_unit": "OuUid000001",
+            },
+            scope={"environment": "stage", "period": "2026Q1", "org_unit": "OuUid000001"},
+        )
+        self.assertEqual(exact["validation_status"], "Exact Match")
+
+        expected = build_comparison_row(
+            primary_row={
+                "indicator_key": "anc",
+                "display_name": "ANC",
+                "result_type": "numerator_denominator_percentage",
+                "percentage": 74.16,
+                "numerator": 10,
+                "denominator": 20,
+                "source_uid": "S1hLvdJSuiZ",
+                "validation_parity_note": "HH vs member",
+                "unresolved": False,
+            },
+            comparison_source="analytics_num_den",
+            comparison_payload={"numerator": 10, "denominator": 20},
+            scope={"environment": "stage", "period": "2026Q1", "org_unit": "OuUid000001"},
+        )
+        self.assertEqual(expected["validation_status"], "Expected Logic Difference")
+
+        unavailable = build_comparison_row(
+            primary_row={
+                "indicator_key": "sql",
+                "display_name": "SQL",
+                "result_type": "status",
+                "unresolved": True,
+                "notes": "lineage only",
+            },
+            comparison_source="approved_sql",
+            comparison_payload={"unavailable": True, "reason": "not executed"},
+            scope={"environment": "stage", "period": "2026Q1", "org_unit": "OuUid000001"},
+        )
+        self.assertEqual(unavailable["validation_status"], STATUS_UNAVAILABLE)
+
+        workspace = self.svc.validation_workspace(
+            environment="stage",
+            period="2026Q1",
+            org_unit="OuUid000001",
+            evidence_path=self.evidence_path,
+        )
+        self.assertTrue(workspace["ok"])
+        self.assertEqual(workspace["dhis2_writes"], 0)
+        self.assertFalse(workspace["sql_executed"])
+        self.assertTrue(workspace["boundaries"]["no_sql_auto_execute"])
+        by_key = {r["indicator_key"]: r for r in workspace["comparisons"]}
+        self.assertEqual(by_key["convergence_rate"]["validation_status"], "Exact Match")
+        self.assertEqual(
+            by_key["anc_prenatal_checkup_rate"]["validation_status"],
+            "Expected Logic Difference",
+        )
+        self.assertEqual(
+            by_key["hcsc_rf_approved_sql_lineage"]["validation_status"],
+            STATUS_UNAVAILABLE,
+        )
+        self.assertEqual(self.clients["stage"].get_analytics_calls, 1)
+
+        snap = self.svc.save_validation_snapshot(
+            environment="stage",
+            period="2026Q1",
+            org_unit="OuUid000001",
+            note="test evidence",
+            evidence_path=self.evidence_path,
+        )
+        self.assertTrue(snap["ok"])
+        self.assertNotIn("secret-token", json.dumps(snap))
+        self.assertNotIn('"password": "nope"', json.dumps(snap))
+
+        note = self.svc.add_validation_note(
+            note="Manual investigation — definitions differ",
+            indicator_key="anc_prenatal_checkup_rate",
+            environment="stage",
+            period="2026Q1",
+            org_unit="OuUid000001",
+            evidence_path=self.evidence_path,
+        )
+        self.assertTrue(note["ok"])
+
+    def test_incompatible_population_and_redaction(self):
+        from hub.hcsc_indicators.compare import definitions_compatible
+        from hub.hcsc_indicators.evidence import save_snapshot
+
+        ok, _ = definitions_compatible(
+            {"period": "2026Q1", "org_unit": "A", "population_definition_reference": "HH"},
+            {"period": "2026Q1", "org_unit": "A", "population_definition_reference": "HH"},
+        )
+        self.assertTrue(ok)
+        bad, note = definitions_compatible(
+            {
+                "period": "2026Q1",
+                "org_unit": "A",
+                "population_definition_reference": "HH",
+                "age_range": "0-5",
+            },
+            {
+                "period": "2026Q1",
+                "org_unit": "A",
+                "population_definition_reference": "Member",
+                "age_range": "6-23",
+            },
+        )
+        self.assertFalse(bad)
+        self.assertIn("population_definition_reference", note)
+        saved = save_snapshot(
+            environment="stage",
+            period="2026Q1",
+            org_unit="OuUid000001",
+            disaggregation="none",
+            comparisons=[{"indicator_key": "x", "password": "nope", "authorization": "tok"}],
+            path=self.evidence_path,
+        )
+        from hub.hcsc_indicators.evidence import get_snapshot
+
+        full = get_snapshot(saved["id"], path=self.evidence_path)
+        self.assertEqual(full["comparisons"][0]["password"], "[REDACTED]")
+        self.assertEqual(full["comparisons"][0]["authorization"], "[REDACTED]")
+        self.assertFalse(full["sql_executed"])
+        self.assertEqual(full["dhis2_writes"], 0)
 
 
 if __name__ == "__main__":

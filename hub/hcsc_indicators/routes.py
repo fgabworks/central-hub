@@ -50,7 +50,7 @@ def register_hcsc_indicator_routes(app: Flask) -> None:
         }
 
     @app.get("/dhis2/hcsc-indicators")
-    def hcsc_indicator_summary():
+    def dhis2_hcsc_indicators():
         boot = _svc().bootstrap()
         _audit(
             getattr(audit_actions, "HCSC_INDICATOR_VIEW", "HCSC_INDICATOR_VIEW"),
@@ -167,7 +167,71 @@ def register_hcsc_indicator_routes(app: Flask) -> None:
             )
             return _json_error(exc)
 
-    # Dynamic detail route last so it cannot shadow overview/report/category.
+    @app.get("/api/dhis2/hcsc-indicators/validation")
+    def api_hcsc_indicators_validation():
+        p = _scope_params()
+        try:
+            payload = _svc().validation_workspace(
+                environment=p["env"],
+                period=p["period"],
+                org_unit=p["org_unit"],
+                disaggregation=p["disagg"],
+                force_refresh=p["force"],
+            )
+            _audit(
+                getattr(audit_actions, "HCSC_INDICATOR_OVERVIEW", "HCSC_INDICATOR_VALIDATION"),
+                target=f"hcsc-validation:{p['env']}:{p['period']}:{p['org_unit']}",
+                detail=(
+                    f"Validation rows={payload.get('summary', {}).get('total')} "
+                    f"report_cache={payload.get('timings', {}).get('report_cache_hit')}"
+                ),
+            )
+            return jsonify(payload)
+        except ReportSecurityError as exc:
+            return _json_error(exc)
+
+    @app.post("/api/dhis2/hcsc-indicators/validation/snapshot")
+    def api_hcsc_indicators_validation_snapshot():
+        data = request.get_json(silent=True) or {}
+        try:
+            payload = _svc().save_validation_snapshot(
+                environment=str(data.get("environment") or ""),
+                period=str(data.get("period") or ""),
+                org_unit=str(data.get("orgUnit") or data.get("org_unit") or ""),
+                disaggregation=str(data.get("disaggregation") or "none"),
+                note=(str(data.get("note")).strip() if data.get("note") else None),
+            )
+            _audit(
+                getattr(audit_actions, "HCSC_INDICATOR_OVERVIEW", "HCSC_INDICATOR_VALIDATION_SNAPSHOT"),
+                target="hcsc-validation-snapshot",
+                detail=f"Saved evidence snapshot {payload.get('snapshot', {}).get('id')}",
+            )
+            return jsonify(payload)
+        except ReportSecurityError as exc:
+            return _json_error(exc)
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+
+    @app.post("/api/dhis2/hcsc-indicators/validation/notes")
+    def api_hcsc_indicators_validation_notes():
+        data = request.get_json(silent=True) or {}
+        try:
+            payload = _svc().add_validation_note(
+                note=str(data.get("note") or ""),
+                indicator_key=(str(data.get("indicator_key")).strip() if data.get("indicator_key") else None),
+                environment=(str(data.get("environment")).strip() if data.get("environment") else None),
+                period=(str(data.get("period")).strip() if data.get("period") else None),
+                org_unit=(
+                    str(data.get("orgUnit") or data.get("org_unit")).strip()
+                    if (data.get("orgUnit") or data.get("org_unit"))
+                    else None
+                ),
+            )
+            return jsonify(payload)
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+
+    # Dynamic detail route last so it cannot shadow overview/report/category/validation.
     @app.get("/api/dhis2/hcsc-indicators/<key>")
     def api_hcsc_indicator_detail(key: str):
         try:
