@@ -87,10 +87,8 @@ class AgentRunner:
             child_env.update(env)
         for key in list(child_env):
             upper = key.upper()
-            if any(s in upper for s in ("PASSWORD", "SECRET", "TOKEN", "API_KEY", "PRIVATE")):
-                # Keep PATH etc.; only drop obvious secret-bearing vars we control.
-                if upper.startswith(("DHIS2_", "SQL_WS_", "GMAIL_", "CENTRAL_HUB_OWNER", "LIVE_", "STAGE_")):
-                    child_env.pop(key, None)
+            if any(s in upper for s in ("PASSWORD", "SECRET", "TOKEN", "API_KEY", "PRIVATE_KEY", "COOKIE")):
+                child_env.pop(key, None)
 
         try:
             proc = subprocess.Popen(

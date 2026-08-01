@@ -27,6 +27,7 @@ from hub.agent_center.openai_tools import (
 )
 from hub.agent_center.redact import redact_text
 from hub.agent_center.service import AgentCenterError, AgentCenterService
+from hub.agent_center.profiles import get_profile
 from hub.agent_center.store import AgentCenterStore
 from hub.registry.models import Registry, RegistryDefaults, Repository
 
@@ -107,8 +108,8 @@ class OpenAIAdapterTests(unittest.TestCase):
         adapter = OpenAIApiAdapter(settings=_settings(), client=client)
         models, source = adapter.list_models()
         self.assertTrue(source.startswith("discovered") or source == "discovered")
-        self.assertEqual(models, ["gpt-5.6-terra", "gpt-5.6-luna"])
-        self.assertNotIn("gpt-unrelated", models)
+        # The provider response is authoritative; the Hub no longer hardcodes a catalog.
+        self.assertEqual(models, ["gpt-5.6-terra", "gpt-5.6-luna", "gpt-unrelated"])
 
         client.list_model_ids.side_effect = OpenAIClientError("rate", code="rate_limit", status=429)
         adapter2 = OpenAIApiAdapter(
@@ -356,7 +357,7 @@ class OpenAIAdapterTests(unittest.TestCase):
 
         def stream_events(body, timeout=None):
             tool_names = {t.get("name") for t in (body.get("tools") or [])}
-            self.assertEqual(tool_names, set(ALLOWED_TOOLS))
+            self.assertEqual(tool_names, set(get_profile("okarun").allowed_tools))
             self.assertEqual(body.get("model"), "gpt-5.6-terra")
             yield {"type": "response.output_text.delta", "delta": "ok"}
             yield {

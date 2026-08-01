@@ -3675,6 +3675,60 @@ body.qn-maximized .qn-history[open] {
   margin: 0.35rem 0;
 }
 .agent-repo.is-disabled { opacity: 0.55; }
+.agent-tools {
+  border: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 1rem;
+  margin: 0 0 0.85rem;
+  padding: 0.7rem;
+}
+
+.connections-list {
+  display: grid;
+  gap: 12px;
+}
+
+.connection-row {
+  border-radius: 8px;
+}
+
+.connection-main,
+.connection-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.connection-main h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.connection-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 14px 0;
+}
+
+.connection-facts dt {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.connection-facts dd {
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .connection-facts { grid-template-columns: 1fr; }
+}
+.agent-tool { align-items: center; display: inline-flex; gap: 0.4rem; }
+.agent-conversation { display: grid; gap: 0.2rem; padding: 0.45rem 0; }
 .agent-selectors label {
   display: grid;
   gap: 0.25rem;

@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-07-27 (Repository grouping + Run Profile Builder + Repository Processes).
+Last verified: 2026-08-01 (AI Connections and provider-neutral Assistant Center registry).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -8,7 +8,7 @@ Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](doc
 **Phases 1–6 MVP + connected Live Processing + DHIS2 enrichment + Repository Notebook
 + Personal/Work workspace switcher + registry Add/Edit/Disable + SQL Workspace (read-only)
 + Email Center (Gmail readonly) + Calendar Center (Calendar readonly, shared Google accounts)
-+ Prompting & Agent Center (read-only multi-agent MVP, including OpenAI Responses API)
++ AI Assistant Center (read-only Aira/Okarun profiles, including OpenAI Responses API)
 + Repository Workspace Phases 1–2 + Connect Local Workspace
 + DHIS2 Reports — Standard Report Manager Phase 1 (sync/view) + catalog shortcuts.**
 Hub coordinates repos via registry/adapters; DHIS2 stays GET-only; jobs run
@@ -35,7 +35,8 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Calendar Center | Shared Calendar service + FullCalendar grid (month/week/day) + agenda/upcoming |
 | Google Connections | System page to connect/assign/enable Gmail+Calendar scopes |
 | SQL Workspace | Read-only query library/runner (`/sql`); sqlglot allowlist; Live warning |
-| Prompting & Agent Center | Read-only Find/Ask/Plan/Review (`/agents`); Hub Simulator, OpenAI API, Claude/Cursor/Codex; Edit/Test not available |
+| AI Assistant Center | Aira at `/personal/aira`; Okarun at `/work/okarun`; isolated histories/summaries/context/tools; Find/Ask/Plan/Review; dynamic Codex, Claude Code, Cursor, Grok, and OpenAI API providers |
+| AI Connections | `/system/ai-connections`; connect/test/model refresh/capabilities/disconnect through one provider-neutral registry |
 | DHIS2 | GET client, discovery, UID mapping, preview builder |
 | UID index admin | LP-style controlled update: dry-run → preview → typed confirm → archive/versions/restore |
 | Metadata enrichment | Read-only DHIS2 enrich → local SQLite relationships + audit statuses |
@@ -45,7 +46,7 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | API exec (Phase 4) | GET/HEAD only from YAML `http_path` |
 | Files (Phase 5) | Uploads/results under `data/{uploads,results}/{job_id}/` |
 | Safeguards (Phase 6) | Dry-run default, confirm for apply, max concurrent, owner token |
-| Tests | `tests/` — includes `test_openai_catalog.py`, `test_openai_agent.py`, `test_agent_center.py` |
+| Tests | `tests/` — includes `test_ai_assistant_center.py`, `test_openai_catalog.py`, `test_openai_agent.py`, `test_agent_center.py` |
 | DHIS2 writes | **Disabled** |
 | Gmail writes | **Disabled** (no send/reply/delete/label/mark-read) |
 | Calendar writes | **Disabled** (no create/update/delete/RSVP) |
@@ -83,36 +84,45 @@ Store: `data/notebook.db` (`hub/notebook/`) migrations include `pinned`, `quick_
 and `panel_size` (`normal`\|`expanded`\|`maximized`) for the shared floating drawer.
 Existing notes migrate to **work**. Existing Quick Notepad content migrates to the
 **personal** pad; work starts empty. Convert → note uses the same scope as the pad.
-Work Dashboard queue shows work-scoped notes only. Agent prompting is separate
-(see Prompting & Agent Center); notebook content is not auto-fed to agents.
+Work Dashboard queue shows work-scoped notes only. Assistant context never preloads
+Notebook content; selected lookup tools search the active profile scope.
 
-## Prompting & Agent Center (read-only MVP)
+## AI Assistant Center (read-only MVP)
 
 | Route | Purpose |
 |---|---|
-| `/agents` or `/prompting` | Work UI: repos, agent/model, prompt, preview, run, history |
-| `/api/agents` | List adapters with availability / capability status |
-| `/api/agents/<id>/models` | Models from adapter (managed fallback when undiscoverable) |
-| `/api/agents/context/preview` | Instruction + file context preview (secrets excluded) |
-| `/api/agents/runs` | Start run (POST) / history (GET) |
-| `/api/agents/runs/<id>` | Status, logs, answer, referenced files, errors |
-| `/api/agents/runs/<id>/cancel` | Cooperative cancel |
-| `/api/agents/prompts` | Saved prompt library |
+| `/personal/aira` | Personal UI; no repository/SQL/DHIS2/jobs/logs/Audit access |
+| `/work/okarun` | Work UI; selected repositories and Work read-only services |
+| `/api/assistants/<profile>/agents` | Profile-bound adapter availability |
+| `/api/assistants/<profile>/agents/<id>/models` | Dynamic adapter model list |
+| `/api/assistants/<profile>/context/preview` | Included/excluded sources and secret-safe context |
+| `/api/assistants/<profile>/runs` | Start run / isolated history |
+| `/api/assistants/<profile>/runs/<id>` | Profile-bound status, stream, files, tools, usage |
+| `/api/assistants/<profile>/runs/<id>/cancel` | Cooperative cancel |
+| `/api/assistants/<profile>/runs/<id>/retry` | Retry in the same scoped conversation |
+| `/api/assistants/<profile>/prompts` | Isolated saved prompt library |
 
 Implementation: `hub/agent_center/`, `config/agents.yaml`, SQLite `data/agent_center.db`.
 Modes: Find / Ask / Plan / Review. Edit / Test labeled **Not yet available**.
-Adapters: Hub Simulator (demo), **OpenAI API** (Responses + streaming; `OPENAI_ENABLED` /
-`OPENAI_API_KEY` / `OPENAI_DEFAULT_MODEL`), Claude Code / Cursor Agent / Codex CLIs.
-OpenAI models: curated Hub catalog ∩ `GET /v1/models` for the configured key
-(never shows inaccessible models). Mode recommendations: Find=`gpt-5.6-luna`,
-Ask/Plan=`gpt-5.6-terra`, Review=`gpt-5.6-sol`, with fallbacks. Optional
-`OPENAI_ALLOWED_MODELS`, cache TTL, Pro longer timeout + background mode.
+Adapters: Hub Simulator (demo), **OpenAI API** and **Grok/xAI** Responses APIs,
+plus Claude Code / Cursor Agent / Codex CLIs. Provider accounts are managed at
+`/system/ai-connections`; Aira and Okarun are profiles, never providers.
+OpenAI and Grok models come from the provider model-list endpoint; Codex uses
+`app-server model/list`; Cursor uses `agent models`. Claude Code currently exposes
+only its provider default because its supported non-interactive CLI has no model-list command.
+Inaccessible models are never shown. Optional `OPENAI_ALLOWED_MODELS` can further restrict
+the live list; cache TTL and Pro timeout settings remain available.
+
+Connection persistence stores only Hub disconnect/check metadata. CLI credentials stay in
+provider-managed storage; API keys stay in server environment variables. Audit events contain
+provider ID, operation, and outcome only.
 Reasoning-effort selector only for models that support it.
-Read-only tools: `repo_search`, `read_file`, `uid_lookup`, `sql_lookup`, `notebook_lookup`
-(search/read reuse Repository Workspace file services; edits and commands stay disabled).
-Auto-includes repo AI instructions (`AGENTS.md`, `AI_START_HERE.md`, etc.).
-Never packs `.env` / credentials / token paths / binaries. Output treated as untrusted.
-Does not consume Email or Calendar content; does not execute SQL or shell.
+Read-only tools: repository search/read, scoped Notebook/Quick Notepad, SQL-library
+lookup, DHIS2 UID metadata, scoped Email/Calendar search, jobs, and redacted Audit.
+Schemas are filtered by profile and user selection. Repository instructions load only
+for Okarun's selected repositories. No repositories, emails, documents, or old messages
+are bulk-loaded. Never packs `.env`, credentials, token paths, binaries, or oversized
+files. Output is untrusted. No SQL/shell/repository execution or external writes.
 
 ## Repository Workspace runs
 

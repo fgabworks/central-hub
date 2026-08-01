@@ -13,7 +13,7 @@ a **local UID mapping index**, a preview-only metadata builder, a **Repository N
 linked to registry repos), a **SQL Workspace** (read-only query library/runner), an
 **Email Center** (Gmail `gmail.readonly` OAuth; shared Personal/Work service), a
 **Calendar Center** (Calendar readonly; reuses the same Google accounts), and a
-**Prompting & Agent Center** (read-only multi-agent orchestration via external CLIs).
+**AI Assistant Center** (read-only multi-agent orchestration with isolated Personal and Work profiles).
 Connected repos own: domain rules, data models, their own APIs and secrets handling.
 The hub must never duplicate PMNP, DHIS2 *domain/business* logic, reporting,
 convergence, immunization, DDS, tetanus, or scorecard rules — those stay in the
@@ -39,22 +39,29 @@ Browser ──HTTP──> Flask app (app.py, create_app)
                                                                  data/{uploads,results,jobs}/
 ```
 
-- **`hub/agent_center/`** — Prompting & Agent Center: Find/Ask/Plan/Review (read-only),
-  adapter registry for Hub Simulator / OpenAI Responses API / Claude Code / Cursor Agent /
-  Codex / future agents. OpenAI curated catalog (`openai_catalog.py`) ∩ live model list,
+- **`hub/agent_center/`** — shared AI Assistant Center orchestration engine for
+  **Aira** (Personal & General) and **Okarun** (Work & Data). Histories,
+  conversations, summaries, settings, context, and permissions are profile-isolated.
+  Find/Ask/Plan/Review are read-only;
+  provider-neutral connection and adapter registry for Hub Simulator / OpenAI Responses API /
+  Grok Responses API / Claude Code / Cursor Agent / Codex / future agents. Models are loaded
+  from provider-supported discovery surfaces rather than a configured model-name list.
   grouped selector, mode recommendations, reasoning effort, Pro background/timeouts,
-  context packing with secret exclusion + repo AI instructions, cancellable runs,
-  tool activity + usage, local history/audit. Tools allowlisted and read-only.
-  Edit/Test not available. No Email/Calendar feed; agent output is untrusted.
+  search-first context with secret exclusion + selected-repo AI instructions,
+  cancellable/retryable runs, tool activity + usage, and redacted local history/audit.
+  Email/Calendar/Notebook lookup is opt-in and forces the active workspace. Aira
+  cannot select Work repositories, SQL, DHIS2, jobs, logs, or Audit. Edit/Test,
+  execution, and writes are unavailable; agent output is untrusted.
 - **`hub/calendar/`** — Shared Calendar Center: readonly Google Calendar API + FullCalendar
   grid (month/week/day) and list agenda/upcoming, JSON event feed, sanitized HTML
   descriptions, read-only detail drawer. Reuses `hub/email/` accounts, encrypted tokens,
-  and incremental OAuth scopes. No writes/RSVP/drag/resize/push/agent access.
+  and incremental OAuth scopes. No writes/RSVP/drag/resize/push; assistant lookup
+  is opt-in, read-only, and workspace-scoped.
 - **`hub/email/`** — Shared Email Center: OAuth 2.0 web-server flow, multi-account
   Personal/Work assignment, Fernet-encrypted refresh tokens in `data/email.db`,
   Gmail REST readonly client, limited list/message cache + manual refresh.
   Convert-to-note/task and work repo linking use `hub/notebook/`. No send/modify;
-  no automatic agent access to mail content.
+  assistant search is opt-in, read-only, and workspace-scoped.
   Incremental Calendar scopes are requested via the same OAuth helpers.
 - **`hub/sql_workspace/`** — Read-only SQL Workspace: query library (folders, tags,
   favorites, versions), run history in `data/sql_workspace.db`, connection profiles
@@ -132,6 +139,15 @@ Browser ──HTTP──> Flask app (app.py, create_app)
 - **`hub/audit/`** — append-only JSONL audit store for operator actions.
 
 ## Adapter design
+
+`AgentConnectionRegistry` owns installation, authentication, account-label, capability,
+health-check, disconnect, and model-refresh state. Routes and templates call this interface;
+provider-specific commands and HTTP behavior remain in `hub/agent_center/adapters/`.
+The same adapter selected for a prompt supplies its dynamic models and runner. Run context
+records the assistant profile, provider, model, mode, repository scope, and context preview.
+
+Assistant profiles are an orthogonal boundary: connection state is shared system configuration,
+while conversations, summaries, source permissions, and histories remain keyed by `profile_id`.
 
 | Adapter | Mechanism | Scope |
 |---|---|---|

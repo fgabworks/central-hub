@@ -4,6 +4,26 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
+**AI Connections — shared provider registry for isolated Aira and Okarun profiles (2026-08-01)**
+
+- Aira: /personal/aira; Okarun: /work/okarun
+- One orchestration engine with profile-isolated runs, prompts, conversations,
+  summaries, context, settings, permissions, lookup, cancel, and retry
+- Dynamic adapter/model selection; Ask/Find/Plan/Review; context preview;
+  streaming, files, tool activity, usage, and redacted Audit
+- Search-first, workspace-forced read-only tools and selected repository instructions
+- No file/command/SQL/email/calendar/DHIS2/repository execution or writes
+
+Focused verification: `python -m pytest tests/test_ai_connections.py tests/test_agent_center.py
+tests/test_openai_agent.py tests/test_ai_assistant_center.py -q`.
+
+Implemented providers: Codex app-server/browser-device auth, Claude Code browser auth,
+Cursor browser auth, OpenAI API env key, and Grok/xAI env key. Model IDs are discovered
+dynamically. Claude Code uses a provider-default sentinel because no supported headless
+catalog command is documented. API-provider disconnect is Hub-local and does not mutate env.
+
+The Find Missing UIDs milestone below remains implemented and is retained for history.
+
 **Find Missing UIDs UI** — selection + compact layout
 
 - Select all visible / all filtered / clear; selection survives filter & pagination
@@ -34,4 +54,5 @@ Do **not** implement yet unless asked:
 - Auto-killing processes that occupy fixed ports
 - Free-form terminal / unrestricted shell
 
-Keep DHIS2 writes off. Do not auto-feed mail/calendar to agents.
+Keep DHIS2 writes off. Never preload mail/calendar; assistant lookup stays explicit,
+read-only, minimal, and workspace-scoped.

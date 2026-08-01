@@ -24,11 +24,48 @@ class AgentCenterStore:
     def __init__(self, db: AgentCenterDb | None = None) -> None:
         self.db = db or AgentCenterDb()
 
+    def get_connection(self, agent_id: str) -> dict[str, Any]:
+        with self.db.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM agent_connections WHERE agent_id=?", (agent_id,)
+            ).fetchone()
+        return dict(row) if row else {"agent_id": agent_id, "disconnected": 0}
+
+    def save_connection(
+        self,
+        agent_id: str,
+        *,
+        disconnected: bool | None = None,
+        last_check: str | None = None,
+        last_successful_check: str | None = None,
+        last_error: str | None = None,
+    ) -> dict[str, Any]:
+        current = self.get_connection(agent_id)
+        values = {
+            "disconnected": int(disconnected if disconnected is not None else bool(current.get("disconnected"))),
+            "last_check": last_check if last_check is not None else str(current.get("last_check") or ""),
+            "last_successful_check": last_successful_check if last_successful_check is not None else str(current.get("last_successful_check") or ""),
+            "last_error": redact_text(last_error, limit=500) if last_error is not None else str(current.get("last_error") or ""),
+        }
+        with self.db.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO agent_connections(agent_id, disconnected, last_check, last_successful_check, last_error, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(agent_id) DO UPDATE SET disconnected=excluded.disconnected,
+                    last_check=excluded.last_check, last_successful_check=excluded.last_successful_check,
+                    last_error=excluded.last_error, updated_at=excluded.updated_at
+                """,
+                (agent_id, values["disconnected"], values["last_check"], values["last_successful_check"], values["last_error"], _now()),
+            )
+        return self.get_connection(agent_id)
+
     # --- prompts ---
-    def list_prompts(self) -> list[dict[str, Any]]:
+    def list_prompts(self, *, profile_id: str = "okarun") -> list[dict[str, Any]]:
         with self.db.connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM agent_prompts ORDER BY favorite DESC, updated_at DESC"
+                "SELECT * FROM agent_prompts WHERE profile_id = ? ORDER BY favorite DESC, updated_at DESC",
+                (profile_id,),
             ).fetchall()
         return [self._prompt_row(r) for r in rows]
 
@@ -46,6 +83,7 @@ class AgentCenterStore:
         tags: list[str] | None = None,
         favorite: bool = False,
         prompt_id: str | None = None,
+        profile_id: str = "okarun",
     ) -> dict[str, Any]:
         now = _now()
         pid = prompt_id or _uid()
@@ -57,24 +95,71 @@ class AgentCenterStore:
                     """
                     UPDATE agent_prompts
                     SET title=?, body=?, mode=?, tags_json=?, favorite=?, updated_at=?
-                    WHERE id=?
+                    WHERE id=? AND profile_id=?
                     """,
-                    (title[:200], body, mode, tags_json, 1 if favorite else 0, now, pid),
+                    (title[:200], body, mode, tags_json, 1 if favorite else 0, now, pid, profile_id),
                 )
             else:
                 conn.execute(
                     """
-                    INSERT INTO agent_prompts(id, title, body, mode, tags_json, favorite, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO agent_prompts(id, title, body, mode, tags_json, favorite, created_at, updated_at, profile_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (pid, title[:200] or "Untitled prompt", body, mode, tags_json, 1 if favorite else 0, now, now),
+                    (pid, title[:200] or "Untitled prompt", body, mode, tags_json, 1 if favorite else 0, now, now, profile_id),
                 )
         return self.get_prompt(pid) or {}
 
-    def delete_prompt(self, prompt_id: str) -> bool:
+    def delete_prompt(self, prompt_id: str, *, profile_id: str = "okarun") -> bool:
         with self.db.connect() as conn:
-            cur = conn.execute("DELETE FROM agent_prompts WHERE id = ?", (prompt_id,))
+            cur = conn.execute(
+                "DELETE FROM agent_prompts WHERE id = ? AND profile_id = ?",
+                (prompt_id, profile_id),
+            )
             return cur.rowcount > 0
+
+    # --- conversations ---
+    def create_conversation(self, *, profile_id: str, title: str) -> dict[str, Any]:
+        cid, now = _uid(), _now()
+        with self.db.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO agent_conversations(id, profile_id, title, summary, created_at, updated_at)
+                VALUES (?, ?, ?, '', ?, ?)
+                """,
+                (cid, profile_id, (title or "New conversation")[:160], now, now),
+            )
+        return self.get_conversation(cid, profile_id=profile_id) or {}
+
+    def get_conversation(self, conversation_id: str, *, profile_id: str) -> dict[str, Any] | None:
+        with self.db.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM agent_conversations WHERE id=? AND profile_id=?",
+                (conversation_id, profile_id),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def list_conversations(self, *, profile_id: str, limit: int = 50) -> list[dict[str, Any]]:
+        with self.db.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM agent_conversations
+                WHERE profile_id=? ORDER BY updated_at DESC LIMIT ?
+                """,
+                (profile_id, max(1, min(limit, 200))),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def update_conversation_summary(
+        self, conversation_id: str, *, profile_id: str, summary: str
+    ) -> None:
+        with self.db.connect() as conn:
+            conn.execute(
+                """
+                UPDATE agent_conversations SET summary=?, updated_at=?
+                WHERE id=? AND profile_id=?
+                """,
+                (redact_text(summary, limit=4000), _now(), conversation_id, profile_id),
+            )
 
     # --- runs ---
     def create_run(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -87,8 +172,8 @@ class AgentCenterStore:
                     id, status, mode, agent_id, agent_label, model, repository_ids_json,
                     prompt, packed_prompt, context_json, answer, logs, referenced_files_json,
                     error, cancel_requested, pid, created_at, started_at, finished_at,
-                    tool_activity_json, usage_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', ?, '', 0, NULL, ?, NULL, NULL, '[]', '{}')
+                    tool_activity_json, usage_json, profile_id, conversation_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', ?, '', 0, NULL, ?, NULL, NULL, '[]', '{}', ?, ?)
                 """,
                 (
                     rid,
@@ -103,20 +188,28 @@ class AgentCenterStore:
                     json.dumps(payload.get("context") or {}, ensure_ascii=False),
                     json.dumps(payload.get("referenced_files") or [], ensure_ascii=False),
                     now,
+                    payload.get("profile_id") or "okarun",
+                    payload.get("conversation_id") or "",
                 ),
             )
         return self.get_run(rid) or {}
 
-    def get_run(self, run_id: str) -> dict[str, Any] | None:
+    def get_run(self, run_id: str, *, profile_id: str | None = None) -> dict[str, Any] | None:
         with self.db.connect() as conn:
-            row = conn.execute("SELECT * FROM agent_runs WHERE id = ?", (run_id,)).fetchone()
+            if profile_id:
+                row = conn.execute(
+                    "SELECT * FROM agent_runs WHERE id = ? AND profile_id = ?",
+                    (run_id, profile_id),
+                ).fetchone()
+            else:
+                row = conn.execute("SELECT * FROM agent_runs WHERE id = ?", (run_id,)).fetchone()
         return self._run_row(row) if row else None
 
-    def list_runs(self, *, limit: int = 50) -> list[dict[str, Any]]:
+    def list_runs(self, *, limit: int = 50, profile_id: str = "okarun") -> list[dict[str, Any]]:
         with self.db.connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM agent_runs ORDER BY created_at DESC LIMIT ?",
-                (max(1, min(limit, 200)),),
+                "SELECT * FROM agent_runs WHERE profile_id = ? ORDER BY created_at DESC LIMIT ?",
+                (profile_id, max(1, min(limit, 200))),
             ).fetchall()
         return [public_run(self._run_row(r)) for r in rows]
 
@@ -181,6 +274,7 @@ class AgentCenterStore:
         return self.get_run(run_id)
 
     def _prompt_row(self, row: Any) -> dict[str, Any]:
+        keys = set(row.keys()) if hasattr(row, "keys") else set()
         return {
             "id": row["id"],
             "title": row["title"],
@@ -190,6 +284,7 @@ class AgentCenterStore:
             "favorite": bool(row["favorite"]),
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
+            "profile_id": row["profile_id"] if "profile_id" in keys else "okarun",
         }
 
     def _run_row(self, row: Any) -> dict[str, Any]:
@@ -198,6 +293,8 @@ class AgentCenterStore:
         usage_raw = row["usage_json"] if "usage_json" in keys else "{}"
         return {
             "id": row["id"],
+            "profile_id": row["profile_id"] if "profile_id" in keys else "okarun",
+            "conversation_id": row["conversation_id"] if "conversation_id" in keys else "",
             "status": row["status"],
             "mode": row["mode"],
             "agent_id": row["agent_id"],

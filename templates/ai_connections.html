@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}AI Connections - {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>AI Connections</h1>
+    <p class="page-sub">Connect provider tools once, then select them from Aira or Okarun.</p>
+  </div>
+</div>
+
+<div class="agent-safety" role="status">
+  Credentials remain in provider-managed CLI storage or server environment variables. Central Hub never accepts passwords, browser cookies, private sessions, or API keys on this page.
+</div>
+
+<div class="connections-list" id="ai-connections">
+  {% for item in connections %}
+  <section class="connection-row card" data-provider-id="{{ item.id }}">
+    <div class="connection-main">
+      <div>
+        <h2>{{ item.label }}</h2>
+        <p class="muted">{{ item.authentication_method }}</p>
+      </div>
+      <span class="status-pill connection-status status-{{ item.state|replace('_', '-') }}">{{ item.status }}</span>
+    </div>
+    <dl class="connection-facts">
+      <div><dt>Account</dt><dd class="connection-account">{{ item.account_label or 'Not exposed' }}</dd></div>
+      <div><dt>Last successful check</dt><dd class="connection-last-success">{{ item.last_successful_check or 'Never' }}</dd></div>
+      <div><dt>Credential storage</dt><dd>{{ item.credential_storage }}</dd></div>
+    </dl>
+    <p class="connection-detail">{{ item.detail }}</p>
+    <details>
+      <summary>View Capabilities</summary>
+      <pre class="agent-pre connection-capabilities">{{ item.capabilities|tojson(indent=2) }}</pre>
+    </details>
+    <div class="connection-actions">
+      <button type="button" class="btn btn-primary" data-action="{{ 'reconnect' if item.state == 'connected' else 'connect' }}">{{ 'Reconnect' if item.state == 'connected' else 'Connect' }}</button>
+      <button type="button" class="btn" data-action="test">Test Connection</button>
+      <button type="button" class="btn" data-action="refresh-models">Refresh Models</button>
+      <button type="button" class="btn" data-action="disconnect">Disconnect</button>
+    </div>
+  </section>
+  {% endfor %}
+</div>
+<script src="{{ url_for('static', filename='js/ai_connections.js') }}" defer></script>
+{% endblock %}

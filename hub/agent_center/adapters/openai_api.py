@@ -1,4 +1,4 @@
-"""OpenAI API adapter for Prompting & Agent Center."""
+"""OpenAI Responses API adapter with dynamic model discovery."""
 
 from __future__ import annotations
 
@@ -6,237 +6,117 @@ from typing import Any
 
 from hub.agent_center.adapters.base import AgentAvailability, AgentDescriptor
 from hub.agent_center.models import MODES
-from hub.agent_center.openai_catalog import (
-    GROUP_ORDER,
-    REASONING_EFFORTS,
-    build_grouped_models,
-    catalog_ids,
-    get_spec,
-    intersect_accessible,
-    recommend_model_id,
-)
+from hub.agent_center.openai_catalog import REASONING_EFFORTS, get_spec
 from hub.agent_center.openai_client import OpenAIClient, OpenAIClientError
 from hub.agent_center.openai_settings import OpenAISettings, load_openai_settings
 
 
 class OpenAIApiAdapter:
-    """Responses API adapter — curated catalog ∩ GET /v1/models."""
-
     is_api_adapter = True
+    authentication_method = "Server-side OPENAI_API_KEY (optional separate billing)"
+    credential_storage = "Environment only"
 
-    def __init__(
-        self,
-        descriptor: AgentDescriptor | None = None,
-        *,
-        settings: OpenAISettings | None = None,
-        client: OpenAIClient | None = None,
-    ) -> None:
+    def __init__(self, descriptor: AgentDescriptor | None = None, *, settings: OpenAISettings | None = None, client: OpenAIClient | None = None) -> None:
         self.settings = settings or load_openai_settings()
         self.client = client or OpenAIClient(self.settings)
         self.descriptor = descriptor or AgentDescriptor(
-            id="openai-api",
-            label="OpenAI API",
-            provider="openai_api",
-            executable="",
-            modes=list(MODES),
-            models_managed=[],
-            enabled=True,
-            notes="OpenAI Responses API with curated Hub catalog. Edit/terminal/SQL exec disabled.",
+            id="openai-api", label="OpenAI API", provider="openai_api", executable="", modes=list(MODES)
         )
-        self._last_list_error: str = ""
+
+    def capabilities(self) -> dict[str, Any]:
+        return {
+            "modes": list(self.descriptor.modes), "streaming": True, "cancel": True,
+            "dynamic_models": True, "read_only": True, "api": True,
+            "file_write": False, "command_execution": False, "sql_execution": False,
+            "email_actions": False, "repository_runs": False,
+        }
 
     def list_models(self) -> tuple[list[str], str]:
-        """Accessible curated model IDs only."""
-        details = self.list_model_details(mode="ask")
-        return list(details.get("models") or []), str(details.get("models_source") or "none")
+        details = self.list_model_details()
+        return list(details["models"]), str(details["models_source"])
 
-    def list_model_details(
-        self,
-        *,
-        mode: str = "ask",
-        force_refresh: bool = False,
-    ) -> dict[str, Any]:
-        """Rich model payload for UI: groups, recommendations, reasoning support."""
-        empty = {
-            "models": [],
-            "model_details": [],
-            "groups": {g: [] for g in GROUP_ORDER},
-            "recommended_model": None,
-            "recommendation_reason": "none",
-            "models_source": "none",
-            "reasoning_efforts": list(REASONING_EFFORTS),
-            "catalog_ids": list(catalog_ids()),
-            "error": "",
-        }
-        if not self.settings.enabled:
-            empty["models_source"] = "disabled"
-            return empty
-        if not self.settings.api_key:
-            empty["models_source"] = "none"
-            empty["error"] = "OPENAI_API_KEY is missing"
-            return empty
-
+    def list_model_details(self, *, mode: str = "ask", force_refresh: bool = False) -> dict[str, Any]:
+        if not self.settings.enabled or not self.settings.api_key:
+            return self._empty("OPENAI_API_KEY is missing", "none")
         try:
-            api_ids, source = self.client.list_model_ids(force_refresh=force_refresh)
-            self._last_list_error = ""
+            ids, source = self.client.list_model_ids(force_refresh=force_refresh)
         except OpenAIClientError as exc:
-            self._last_list_error = str(exc)
-            empty["models_source"] = "error"
-            empty["error"] = str(exc)
-            # Never advertise catalog models we could not verify for this key.
-            return empty
-
-        accessible_specs = intersect_accessible(
-            api_ids,
-            allowed=self.settings.allowed_models,
-        )
-        accessible_ids = [s.id for s in accessible_specs]
-        recommended, reason = recommend_model_id(
-            mode,
-            accessible_ids,
-            default_model=self.settings.default_model,
-        )
-        groups = build_grouped_models(
-            accessible_specs,
-            mode=mode,
-            recommended_id=recommended,
-        )
+            return self._empty(str(exc), "error")
+        allowed = self.settings.allowed_models
+        ids = [item for item in ids if allowed is None or item in allowed]
+        recommended = self.settings.default_model if self.settings.default_model in ids else (ids[0] if ids else None)
+        rows = []
+        for model_id in ids:
+            spec = get_spec(model_id)
+            rows.append(spec.public_dict(availability="available") if spec else {
+                "id": model_id, "display_name": model_id, "availability": "available",
+                "supports_reasoning_effort": False,
+            })
         return {
-            "models": accessible_ids,
-            "model_details": [s.public_dict(availability="available") for s in accessible_specs],
-            "groups": groups,
+            "models": ids, "model_details": rows, "groups": {},
             "recommended_model": recommended,
-            "recommendation_reason": reason,
-            "models_source": source,
-            "reasoning_efforts": list(REASONING_EFFORTS),
-            "catalog_ids": list(catalog_ids()),
-            "error": "",
+            "recommendation_reason": "configured_default" if recommended == self.settings.default_model and recommended else "first_accessible",
+            "models_source": source, "reasoning_efforts": list(REASONING_EFFORTS), "error": "",
         }
 
-    def resolve_run_model(
-        self,
-        *,
-        mode: str,
-        requested_model: str | None,
-        force_refresh: bool = True,
-    ) -> dict[str, Any]:
-        """Revalidate availability and resolve model + run options before a run."""
-        details = self.list_model_details(mode=mode, force_refresh=force_refresh)
-        accessible = set(details.get("models") or [])
-        requested = (requested_model or "").strip()
-        model_id, reason = recommend_model_id(
-            mode,
-            accessible,
-            user_override=requested or None,
-            default_model=self.settings.default_model,
-        )
-        if requested and reason == "override_unavailable":
-            return {
-                "ok": False,
-                "code": "model_unavailable",
-                "error": (
-                    f"Model {requested!r} is not accessible with this API key "
-                    "(unavailable, restricted, or not in the Hub catalog)."
-                ),
-                "model": None,
-            }
-        if not model_id:
-            return {
-                "ok": False,
-                "code": "model_unavailable",
-                "error": details.get("error")
-                or "No curated OpenAI models are accessible for this API key.",
-                "model": None,
-            }
+    def _empty(self, error: str, source: str) -> dict[str, Any]:
+        return {"models": [], "model_details": [], "groups": {}, "recommended_model": None, "recommendation_reason": "none", "models_source": source, "reasoning_efforts": list(REASONING_EFFORTS), "error": error}
 
-        spec = get_spec(model_id)
+    def resolve_run_model(self, *, mode: str, requested_model: str | None, force_refresh: bool = True) -> dict[str, Any]:
+        details = self.list_model_details(mode=mode, force_refresh=force_refresh)
+        ids = list(details["models"])
+        requested = (requested_model or "").strip()
+        if requested and requested not in ids:
+            return {"ok": False, "code": "model_unavailable", "error": f"Model {requested!r} is not accessible with this API key"}
+        model = requested or details.get("recommended_model")
+        if not model:
+            return {"ok": False, "code": "model_unavailable", "error": details.get("error") or "No text models are accessible for this API key"}
+        spec = get_spec(model)
         is_pro = bool(spec and spec.is_pro)
-        supports_effort = bool(spec and spec.supports_reasoning_effort)
-        timeout = (
-            self.settings.pro_model_timeout_seconds
-            if is_pro
-            else self.settings.timeout_seconds
-        )
         return {
-            "ok": True,
-            "code": "ok",
-            "error": "",
-            "model": model_id,
-            "reason": reason,
-            "is_pro": is_pro,
-            "supports_reasoning_effort": supports_effort,
+            "ok": True, "model": model, "reason": "user_override" if requested else details.get("recommendation_reason"),
+            "is_pro": is_pro, "supports_reasoning_effort": bool(spec and spec.supports_reasoning_effort),
             "background": is_pro,
-            "timeout_seconds": float(timeout),
+            "timeout_seconds": self.settings.pro_model_timeout_seconds if is_pro else self.settings.timeout_seconds,
             "spec": spec.public_dict(availability="available") if spec else None,
             "models_source": details.get("models_source"),
         }
 
-    def availability(self) -> AgentAvailability:
-        desc = self.descriptor
-        details = self.list_model_details(mode="ask")
-        models = list(details.get("models") or [])
-        source = str(details.get("models_source") or "none")
+    def connection_status(self, *, force_refresh: bool = False) -> dict[str, Any]:
         if not self.settings.enabled:
-            return AgentAvailability(
-                id=desc.id,
-                label=desc.label,
-                status="disabled",
-                detail="OPENAI_ENABLED is false",
-                executable_found=False,
-                modes=list(MODES),
-                models=models,
-                models_source=source,
-            )
+            return {"state": "authentication_required", "detail": "Set OPENAI_ENABLED=true and OPENAI_API_KEY on the server", "installed": True, "available": False}
         if not self.settings.api_key:
-            return AgentAvailability(
-                id=desc.id,
-                label=desc.label,
-                status="unavailable",
-                detail="OPENAI_API_KEY is missing",
-                executable_found=False,
-                modes=list(MODES),
-                models=models,
-                models_source=source,
-            )
-        if source == "error":
-            return AgentAvailability(
-                id=desc.id,
-                label=desc.label,
-                status="degraded",
-                detail=details.get("error") or "OpenAI model list failed",
-                executable_found=True,
-                modes=list(MODES),
-                models=[],
-                models_source=source,
-            )
-        if not models:
-            return AgentAvailability(
-                id=desc.id,
-                label=desc.label,
-                status="degraded",
-                detail=(
-                    "No curated Hub models are accessible for this API key. "
-                    "Grant access or adjust OPENAI_ALLOWED_MODELS."
-                ),
-                executable_found=True,
-                modes=list(MODES),
-                models=[],
-                models_source=source,
-            )
-        status = "available" if source.startswith("discovered") or source.startswith("cache") else "degraded"
-        detail = f"OpenAI curated catalog · {len(models)} accessible · source={source}"
-        if self.settings.default_model:
-            detail += f" · default={self.settings.default_model}"
+            return {"state": "authentication_required", "detail": "Set OPENAI_API_KEY on the server", "installed": True, "available": False}
+        details = self.list_model_details(force_refresh=force_refresh)
+        if details["error"]:
+            text = str(details["error"])
+            state = "authentication_required" if "authentication" in text.lower() or "authorization" in text.lower() else "error"
+            return {"state": state, "detail": text, "installed": True, "available": False}
+        return {"state": "connected", "detail": f"OpenAI API connected; {len(details['models'])} text models", "installed": True, "available": True}
+
+    def test_connection(self) -> dict[str, Any]:
+        status = self.connection_status(force_refresh=True)
+        return {"ok": status["state"] == "connected", **status}
+
+    def connect(self) -> dict[str, Any]:
+        return self.test_connection()
+
+    def disconnect(self) -> dict[str, Any]:
+        return {"ok": True, "state": "authentication_required", "detail": "Disabled in Central Hub; server environment was not changed"}
+
+    def availability(self) -> AgentAvailability:
+        status = self.connection_status()
+        details = self.list_model_details() if status["state"] == "connected" else self._empty("", "none")
+        availability_status = (
+            "disabled" if not self.settings.enabled else
+            ("available" if status["state"] == "connected" else "unavailable")
+        )
         return AgentAvailability(
-            id=desc.id,
-            label=desc.label,
-            status=status,
-            detail=detail,
-            executable_found=True,
-            modes=list(MODES),
-            models=models,
-            models_source=source,
+            self.descriptor.id, self.descriptor.label,
+            availability_status,
+            status["detail"], bool(status.get("installed")), list(self.descriptor.modes),
+            list(details["models"]), str(details["models_source"]),
         )
 
-    def build_argv(self, *, mode: str, prompt: str, model: str, cwd: str, prompt_file: str = "") -> list[str]:
+    def build_argv(self, **_: Any) -> list[str]:
         raise ValueError("OpenAI API adapter does not use CLI argv")

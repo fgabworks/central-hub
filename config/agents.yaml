@@ -28,22 +28,23 @@ agents:
     models_managed: []
     notes: "OpenAI Responses API. Models loaded dynamically when OPENAI_ENABLED=true. Read-only tools only."
 
+  - id: grok
+    label: Grok
+    provider: xai_api
+    executable: ""
+    enabled: true
+    modes: [find, ask, plan, review]
+    models_managed: []
+    notes: "xAI Responses API. Models loaded dynamically from XAI_API_KEY. Read-only tools only."
+
   - id: claude-code
     label: Claude Code
     provider: claude_code
     executable: claude
     enabled: true
     modes: [find, ask, plan, review]
-    models_managed:
-      - claude-opus-4
-      - claude-sonnet-4
-      - claude-haiku-4
+    models_managed: []
     notes: "Requires `claude` on PATH. Edit/Test not available."
-    command_templates:
-      find: ["{executable}", "-p", "{prompt}", "--output-format", "text"]
-      ask: ["{executable}", "-p", "{prompt}", "--output-format", "text"]
-      plan: ["{executable}", "-p", "{prompt}", "--output-format", "text"]
-      review: ["{executable}", "-p", "{prompt}", "--output-format", "text"]
 
   - id: cursor-agent
     label: Cursor Agent
@@ -51,17 +52,8 @@ agents:
     executable: agent
     enabled: true
     modes: [find, ask, plan, review]
-    models_managed:
-      - inherit
-      - composer-2.5-fast
-      - gpt-5.6-sol-medium
-      - claude-sonnet-5-thinking-high
+    models_managed: []
     notes: "Requires Cursor Agent CLI (`agent` or `cursor-agent`). The IDE `cursor` binary is not valid."
-    command_templates:
-      find: ["{executable}", "-p", "{prompt_file}"]
-      ask: ["{executable}", "-p", "{prompt_file}"]
-      plan: ["{executable}", "-p", "{prompt_file}"]
-      review: ["{executable}", "-p", "{prompt_file}"]
 
   - id: codex
     label: Codex
@@ -69,13 +61,5 @@ agents:
     executable: codex
     enabled: true
     modes: [find, ask, plan, review]
-    models_managed:
-      - o4-mini
-      - gpt-5
-      - codex-mini
+    models_managed: []
     notes: "Requires `codex` on PATH. Read-only hub mode (no auto-apply)."
-    command_templates:
-      find: ["{executable}", "exec", "--skip-git-repo-check", "{prompt}"]
-      ask: ["{executable}", "exec", "--skip-git-repo-check", "{prompt}"]
-      plan: ["{executable}", "exec", "--skip-git-repo-check", "{prompt}"]
-      review: ["{executable}", "exec", "--skip-git-repo-check", "{prompt}"]

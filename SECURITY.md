@@ -30,23 +30,38 @@ Scope: personal, local-first tool. Canonical agent rules: [AGENTS.md](AGENTS.md)
   - Disconnect clears local ciphertext and attempts Google token revocation.
   - Attachment download validates `attachment_id` against the message metadata
     and streams through the hub (Google tokens stay server-side).
-  - No automatic agent/API consumer of mailbox or calendar content.
-- **Prompting & Agent Center:** read-only Find/Ask/Plan/Review only.
+  - AI Assistant Center never preloads mailbox/calendar content. Explicitly
+    selected `email_search` / `calendar_lookup` tools are read-only and force
+    the active Personal or Work account scope.
+- **AI Assistant Center:** read-only Find/Ask/Plan/Review only.
+  - Aira and Okarun are server-side policies. Run lookup, cancel, retry, prompts,
+    histories, conversations, summaries, tools, and sources are profile-filtered;
+    cross-profile run IDs return not found.
+  - Aira cannot access repositories, Work Notebook, Work Email/Calendar, SQL,
+    DHIS2, jobs, logs, or Audit. Okarun uses Work-scoped services.
   - Adapter argv from `config/agents.yaml` templates (`shell=False`); cwd jailed
     to selected local repository roots.
   - **OpenAI API adapter:** `OPENAI_ENABLED` / `OPENAI_API_KEY` /
     `OPENAI_DEFAULT_MODEL` / optional `OPENAI_ALLOWED_MODELS` /
     `OPENAI_MODEL_CACHE_TTL_SECONDS` / `OPENAI_PRO_MODEL_TIMEOUT_SECONDS`.
-    Key never returned to UI, logs, or audit. Curated catalog in
-    `openai_catalog.py` intersected with `GET /v1/models` — inaccessible models
-    are omitted (not errors). Mode recommendations + user override; reasoning
+    Key never returned to UI, logs, or audit. `GET /v1/models` is authoritative;
+    inaccessible models are omitted (not errors). User overrides are revalidated; reasoning
     effort only when supported; Pro models use background mode and longer timeout.
     Estimated tier labels only (no hardcoded pricing).
   - Context packing excludes `.env`, credentials, tokens, binaries, and oversized files.
   - Hub `.env` secret vars are stripped from child process env where obvious.
   - Agent stdout/stderr and answers are redacted before audit/history persistence.
   - Treat agent output as untrusted; Edit/Test modes are disabled.
-  - Does not read Email or Calendar stores.
+  - **AI Connections:** CLI login uses only each provider's browser/device flow. The Hub never
+    accepts passwords, browser cookies, private sessions, or CLI tokens. Codex uses
+    `codex login --device-auth`, Claude Code uses `claude auth login`, and Cursor uses
+    `agent login`; their logout/status commands remain provider-owned.
+  - OpenAI and xAI keys are environment-only (`OPENAI_API_KEY`, `XAI_API_KEY`). Disconnecting
+    an API provider disables it in Hub metadata and never reads, returns, or deletes the env key.
+  - Provider audit records contain provider ID, action, and boolean outcome; account labels,
+    command output, model-list payloads, and credentials are excluded.
+  - No assistant tool exists for file edits, commands, SQL execution, mail/calendar
+    actions, DHIS2 writes, repository runs, voice input, or text-to-speech.
 - **Repository Workspace (Phases 1–2):** local checkout files + approved run profiles.
   - Requires configured `local_path` / `working_directory` that exists on disk.
   - All paths resolved under the repo root; absolute paths, `..`, symlink/junction
@@ -123,6 +138,8 @@ Scope: personal, local-first tool. Canonical agent rules: [AGENTS.md](AGENTS.md)
 - Calendar / Google Connections: `CALENDAR_*`, `GOOGLE_CONNECTIONS_VIEW` (no token values).
 - Agent Center: `AGENT_CENTER_VIEW`, `AGENT_RUN_*`, `AGENT_PROMPT_*` (no packed secrets;
   prompt length / ids only on submit).
+- AI Connections: `AI_CONNECTIONS_VIEW`, `AI_CONNECTION_ACTION`
+  (provider/action/outcome only).
 - Repository Workspace: `REPO_WS_VIEW`, `REPO_WS_READ`, `REPO_WS_SEARCH`,
   `REPO_WS_DIFF_PREVIEW`, `REPO_WS_SAVE`, `REPO_WS_REVERT`, `REPO_WS_CREATE`,
   `REPO_WS_RENAME`, `REPO_WS_DELETE`, `REPO_WS_OPEN_EXTERNAL`,

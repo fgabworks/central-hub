@@ -60,6 +60,40 @@ _MIGRATIONS: list[tuple[str, str]] = [
         ALTER TABLE agent_runs ADD COLUMN usage_json TEXT NOT NULL DEFAULT '{}';
         """,
     ),
+    (
+        "003_assistant_profiles",
+        """
+        ALTER TABLE agent_prompts ADD COLUMN profile_id TEXT NOT NULL DEFAULT 'okarun';
+        ALTER TABLE agent_runs ADD COLUMN profile_id TEXT NOT NULL DEFAULT 'okarun';
+        ALTER TABLE agent_runs ADD COLUMN conversation_id TEXT NOT NULL DEFAULT '';
+        CREATE INDEX IF NOT EXISTS idx_agent_runs_profile_created
+            ON agent_runs(profile_id, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS agent_conversations (
+            id TEXT PRIMARY KEY,
+            profile_id TEXT NOT NULL,
+            title TEXT NOT NULL DEFAULT 'New conversation',
+            summary TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_agent_conversations_profile_updated
+            ON agent_conversations(profile_id, updated_at DESC);
+        """,
+    ),
+    (
+        "004_ai_connections",
+        """
+        CREATE TABLE IF NOT EXISTS agent_connections (
+            agent_id TEXT PRIMARY KEY,
+            disconnected INTEGER NOT NULL DEFAULT 0,
+            last_check TEXT NOT NULL DEFAULT '',
+            last_successful_check TEXT NOT NULL DEFAULT '',
+            last_error TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL
+        );
+        """,
+    ),
 ]
 
 

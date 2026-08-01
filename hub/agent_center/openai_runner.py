@@ -45,6 +45,7 @@ class OpenAIRunner:
         timeout_seconds: float | None = None,
         reasoning_effort: str | None = None,
         background: bool = False,
+        agent_id: str = "openai-api",
     ) -> None:
         thread = threading.Thread(
             target=self._run,
@@ -58,6 +59,7 @@ class OpenAIRunner:
                 "timeout_seconds": timeout_seconds or self.settings.timeout_seconds,
                 "reasoning_effort": reasoning_effort,
                 "background": background,
+                "agent_id": agent_id,
             },
             daemon=True,
             name=f"openai-run-{run_id[:8]}",
@@ -81,6 +83,7 @@ class OpenAIRunner:
         timeout_seconds: float,
         reasoning_effort: str | None = None,
         background: bool = False,
+        agent_id: str = "openai-api",
     ) -> None:
         started = datetime.now(timezone.utc).isoformat()
         self.store.update_run(run_id, status="running", started_at=started, model=model)
@@ -89,7 +92,7 @@ class OpenAIRunner:
                 action="AGENT_RUN_START",
                 detail={
                     "run_id": run_id,
-                    "agent_id": "openai-api",
+                    "agent_id": agent_id,
                     "model": model,
                     "reasoning_effort": reasoning_effort,
                     "background": background,
@@ -140,7 +143,7 @@ class OpenAIRunner:
                 body: dict[str, Any] = {
                     "model": model,
                     "instructions": system,
-                    "tools": tool_definitions(),
+                    "tools": tool_definitions(tools_ctx.allowed_tools),
                     "max_output_tokens": self.settings.max_output_tokens,
                 }
                 if reasoning_effort:

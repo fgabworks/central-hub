@@ -10,6 +10,8 @@
   }
 
   var agents = bootstrap.agents || [];
+  var profileId = (bootstrap.profile && bootstrap.profile.id) || "okarun";
+  var apiBase = "/api/assistants/" + encodeURIComponent(profileId);
   var select = document.getElementById("agent-select");
   var modelSelect = document.getElementById("agent-model");
   var modelMeta = document.getElementById("agent-model-meta");
@@ -29,6 +31,7 @@
   var metaEl = document.getElementById("agent-run-meta");
   var previewBody = document.getElementById("agent-preview-body");
   var cancelBtn = document.getElementById("agent-cancel");
+  var retryBtn = document.getElementById("agent-retry");
   var runBtn = document.getElementById("agent-run");
   var pollTimer = null;
   var activeRunId = null;
@@ -41,6 +44,14 @@
   function selectedRepos() {
     return Array.prototype.slice
       .call(document.querySelectorAll('input[name="repo"]:checked'))
+      .map(function (el) {
+        return el.value;
+      });
+  }
+
+  function selectedTools() {
+    return Array.prototype.slice
+      .call(document.querySelectorAll('input[name="agent-tool"]:checked'))
       .map(function (el) {
         return el.value;
       });
@@ -187,7 +198,7 @@
     }
     var mode = selectedMode();
     fetch(
-      "/api/agents/" +
+      apiBase + "/agents/" +
         encodeURIComponent(agent.id) +
         "/models?mode=" +
         encodeURIComponent(mode)
@@ -240,6 +251,8 @@
     var payload = {
       mode: selectedMode(),
       repository_ids: selectedRepos(),
+      tool_ids: selectedTools(),
+      profile_id: profileId,
       agent_id: select ? select.value : "",
       model: modelSelect ? modelSelect.value : "",
       prompt: promptEl ? promptEl.value : "",
@@ -280,6 +293,7 @@
     renderRefs(run.referenced_files || (run.context && run.context.files) || []);
     var terminal = ["completed", "failed", "cancelled", "unavailable"].indexOf(run.status) >= 0;
     if (cancelBtn) cancelBtn.disabled = !!terminal;
+    if (retryBtn) retryBtn.disabled = !terminal || run.status === "unavailable";
     if (!terminal) startPoll(run.id);
     else stopPoll();
   }
@@ -287,7 +301,7 @@
   function startPoll(runId) {
     stopPoll();
     pollTimer = setInterval(function () {
-      fetch("/api/agents/runs/" + encodeURIComponent(runId))
+      fetch(apiBase + "/runs/" + encodeURIComponent(runId))
         .then(function (r) {
           return r.json();
         })
@@ -332,11 +346,7 @@
   if (previewBtn) {
     previewBtn.addEventListener("click", function () {
       var payload = payloadBase();
-      if (!payload.repository_ids.length) {
-        previewBody.textContent = "Select at least one local repository first.";
-        return;
-      }
-      fetch("/api/agents/context/preview", {
+      fetch(apiBase + "/context/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -358,11 +368,6 @@
   if (runBtn) {
     runBtn.addEventListener("click", function () {
       var payload = payloadBase();
-      if (!payload.repository_ids.length) {
-        setStatus("error");
-        errorEl.textContent = "Select at least one local repository.";
-        return;
-      }
       if (!payload.agent_id) {
         setStatus("error");
         errorEl.textContent = "Select a runnable agent (Hub Simulator works without external CLIs).";
@@ -370,7 +375,7 @@
       }
       setStatus("submitting");
       errorEl.textContent = "—";
-      fetch("/api/agents/runs", {
+      fetch(apiBase + "/runs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -400,7 +405,7 @@
   if (cancelBtn) {
     cancelBtn.addEventListener("click", function () {
       if (!activeRunId) return;
-      fetch("/api/agents/runs/" + encodeURIComponent(activeRunId) + "/cancel", {
+      fetch(apiBase + "/runs/" + encodeURIComponent(activeRunId) + "/cancel", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       })
@@ -413,12 +418,32 @@
     });
   }
 
+  if (retryBtn) {
+    retryBtn.addEventListener("click", function () {
+      if (!activeRunId) return;
+      retryBtn.disabled = true;
+      setStatus("retrying");
+      fetch(apiBase + "/runs/" + encodeURIComponent(activeRunId) + "/retry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.run) showRun(data.run);
+          else {
+            setStatus("error");
+            errorEl.textContent = data.error || "Retry failed.";
+          }
+        });
+    });
+  }
+
   var saveBtn = document.getElementById("agent-prompt-save");
   if (saveBtn) {
     saveBtn.addEventListener("click", function () {
       var title = window.prompt("Prompt title", "Saved prompt");
       if (!title) return;
-      fetch("/api/agents/prompts", {
+      fetch(apiBase + "/prompts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -445,7 +470,7 @@
     btn.addEventListener("click", function () {
       var id = btn.getAttribute("data-id");
       if (!id) return;
-      fetch("/api/agents/runs/" + encodeURIComponent(id))
+      fetch(apiBase + "/runs/" + encodeURIComponent(id))
         .then(function (r) {
           return r.json();
         })

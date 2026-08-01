@@ -290,6 +290,13 @@ def create_app() -> Flask:
         notebook=app.config["NOTEBOOK"],
         sql_store=app.config["SQL_WS_STORE"],
         uid_index=app.config["DHIS2_UID_INDEX"],
+        email=app.config["EMAIL"],
+        calendar=app.config["CALENDAR"],
+        job_store=app.config["JOB_STORE"],
+        audit_store=app.config["AUDIT"],
+        notepad_factory=lambda scope: QuickNotepadStore(
+            app.config["NOTEBOOK"].db, scope=scope
+        ),
     )
     register_agent_center_routes(app)
     def _repo_ws_audit(action: str, target: str, detail: str, ok: bool = True) -> None:
@@ -333,6 +340,7 @@ def create_app() -> Flask:
         client_factory=_dhis2_client_for_env,
         registry=app.config.get("REGISTRY"),
     )
+    app.config["AGENT_CENTER"].dhis2_reports = app.config["DHIS2_REPORTS"]
     register_dhis2_reports_routes(app)
 
     @app.context_processor
@@ -375,6 +383,7 @@ def create_app() -> Flask:
             "repository_detail",
             "sql_workspace",
             "agent_center",
+            "work_okarun",
             "dhis2",
             "jobs",
             "job_detail",
@@ -387,6 +396,7 @@ def create_app() -> Flask:
             "personal_tasks",
             "personal_email",
             "personal_calendar",
+            "personal_aira",
         }:
             workspace = "personal"
 
@@ -408,6 +418,12 @@ def create_app() -> Flask:
                 "label": "Personal Tasks",
                 "icon": "☑",
                 "active_prefix": None,
+            },
+            {
+                "endpoint": "personal_aira",
+                "label": "Aira",
+                "icon": "AI",
+                "active_prefix": "personal_aira",
             },
             {
                 "endpoint": "personal_email",
@@ -448,10 +464,10 @@ def create_app() -> Flask:
                 "active_prefix": "sql_workspace",
             },
             {
-                "endpoint": "agent_center",
-                "label": "Prompting & Agents",
-                "icon": "⌘",
-                "active_prefix": "agent_center",
+                "endpoint": "work_okarun",
+                "label": "Okarun",
+                "icon": "AI",
+                "active_prefix": "work_okarun",
             },
             {
                 "endpoint": "work_email",
@@ -492,6 +508,12 @@ def create_app() -> Flask:
             },
         ]
         system_nav = [
+            {
+                "endpoint": "ai_connections",
+                "label": "AI Connections",
+                "icon": "AI",
+                "active_prefix": "ai_connections",
+            },
             {
                 "endpoint": "google_connections",
                 "label": "Google Connections",

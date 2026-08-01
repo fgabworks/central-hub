@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, redirect, render_template, request, url_for
 
 from hub.agent_center.service import AgentCenterError, AgentCenterService
 from hub.jobs.auth import require_owner
@@ -20,12 +20,13 @@ def register_agent_center_routes(app: Flask) -> None:
             detail = {k: v for k, v in kwargs.items() if k != "action"}
         app.config["AUDIT"].append(action=action, detail=detail or {})
 
-    @app.get("/agents")
-    @app.get("/prompting")
-    def agent_center():
+    def _page(profile_id: str):
         svc = _svc()
-        data = svc.page_bootstrap()
-        _audit("AGENT_CENTER_VIEW")
+        try:
+            data = svc.page_bootstrap(profile_id)
+        except ValueError:
+            return jsonify({"error": "Unknown assistant profile"}), 404
+        _audit("ASSISTANT_CENTER_VIEW", detail={"profile_id": profile_id})
         return render_template(
             "agent_center.html",
             bootstrap=data,
@@ -35,25 +36,73 @@ def register_agent_center_routes(app: Flask) -> None:
             prompts=data["prompts"],
             history=data["history"],
             safety=data["safety"],
+            profile=data["profile"],
+            conversations=data["conversations"],
         )
 
+    @app.get("/system/ai-connections")
+    def ai_connections():
+        connections = _svc().connections.list()
+        _audit("AI_CONNECTIONS_VIEW", detail={"providers": len(connections)})
+        return render_template("ai_connections.html", connections=connections)
+
+    @app.get("/api/ai-connections")
+    def api_ai_connections():
+        return jsonify({"connections": _svc().connections.list(refresh=request.args.get("refresh") == "1")})
+
+    @app.post("/api/ai-connections/<agent_id>/<action>")
+    @require_owner
+    def api_ai_connection_action(agent_id: str, action: str):
+        try:
+            return jsonify(_svc().connections.action(agent_id, action))
+        except KeyError:
+            return jsonify({"error": "Unknown provider"}), 404
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    @app.get("/personal/aira")
+    def personal_aira():
+        return _page("aira")
+
+    @app.get("/work/okarun")
+    def work_okarun():
+        return _page("okarun")
+
+    @app.get("/agents")
+    @app.get("/prompting")
+    def agent_center():
+        return _page("okarun")
+
     @app.get("/api/agents")
-    def api_agents_list():
+    @app.get("/api/assistants/<profile_id>/agents")
+    def api_agents_list(profile_id: str = "okarun"):
+        try:
+            _svc().page_bootstrap(profile_id)
+        except ValueError:
+            return jsonify({"error": "Unknown assistant profile"}), 404
         mode = request.args.get("mode")
         return jsonify({"agents": _svc().list_agents(mode=mode)})
 
     @app.get("/api/agents/<agent_id>/models")
-    def api_agent_models(agent_id: str):
+    @app.get("/api/assistants/<profile_id>/agents/<agent_id>/models")
+    def api_agent_models(agent_id: str, profile_id: str = "okarun"):
         try:
+            _svc().page_bootstrap(profile_id)
             mode = request.args.get("mode")
             return jsonify(_svc().list_models(agent_id, mode=mode))
         except AgentCenterError as exc:
             return jsonify({"error": str(exc), "code": exc.code}), 404
+        except ValueError as exc:
+            return jsonify({"error": str(exc), "code": "unknown_profile"}), 404
 
     @app.post("/api/agents/context/preview")
-    def api_context_preview():
-        payload = request.get_json(silent=True) or {}
-        preview = _svc().preview_context(payload)
+    @app.post("/api/assistants/<profile_id>/context/preview")
+    def api_context_preview(profile_id: str = "okarun"):
+        payload = {**(request.get_json(silent=True) or {}), "profile_id": profile_id}
+        try:
+            preview = _svc().preview_context(payload)
+        except AgentCenterError as exc:
+            return jsonify({"error": str(exc), "code": exc.code}), 400
         # Strip full packed prompt / file contents from JSON response size; keep preview fields.
         public = {
             k: v
@@ -63,9 +112,10 @@ def register_agent_center_routes(app: Flask) -> None:
         return jsonify(public)
 
     @app.post("/api/agents/runs")
+    @app.post("/api/assistants/<profile_id>/runs")
     @require_owner
-    def api_agent_run_start():
-        payload = request.get_json(silent=True) or {}
+    def api_agent_run_start(profile_id: str = "okarun"):
+        payload = {**(request.get_json(silent=True) or {}), "profile_id": profile_id}
         try:
             run = _svc().start_run(payload)
             return jsonify({"run": _public_run(run)}), 201
@@ -73,34 +123,48 @@ def register_agent_center_routes(app: Flask) -> None:
             return jsonify({"error": str(exc), "code": exc.code}), 400
 
     @app.get("/api/agents/runs/<run_id>")
-    def api_agent_run_get(run_id: str):
+    @app.get("/api/assistants/<profile_id>/runs/<run_id>")
+    def api_agent_run_get(run_id: str, profile_id: str = "okarun"):
         try:
-            run = _svc().get_run(run_id)
+            run = _svc().get_run(run_id, profile_id=profile_id)
             return jsonify({"run": _public_run(run, include_body=True)})
         except AgentCenterError as exc:
             return jsonify({"error": str(exc), "code": exc.code}), 404
 
     @app.post("/api/agents/runs/<run_id>/cancel")
+    @app.post("/api/assistants/<profile_id>/runs/<run_id>/cancel")
     @require_owner
-    def api_agent_run_cancel(run_id: str):
+    def api_agent_run_cancel(run_id: str, profile_id: str = "okarun"):
         try:
-            run = _svc().cancel_run(run_id)
+            run = _svc().cancel_run(run_id, profile_id=profile_id)
             return jsonify({"run": _public_run(run, include_body=True)})
         except AgentCenterError as exc:
             return jsonify({"error": str(exc), "code": exc.code}), 404
 
+    @app.post("/api/assistants/<profile_id>/runs/<run_id>/retry")
+    @require_owner
+    def api_agent_run_retry(profile_id: str, run_id: str):
+        try:
+            run = _svc().retry_run(run_id, profile_id=profile_id)
+            return jsonify({"run": _public_run(run)}), 201
+        except AgentCenterError as exc:
+            return jsonify({"error": str(exc), "code": exc.code}), 404
+
     @app.get("/api/agents/runs")
-    def api_agent_runs():
+    @app.get("/api/assistants/<profile_id>/runs")
+    def api_agent_runs(profile_id: str = "okarun"):
         limit = request.args.get("limit", 50, type=int)
-        return jsonify({"runs": _svc().history(limit=limit or 50)})
+        return jsonify({"runs": _svc().history(limit=limit or 50, profile_id=profile_id)})
 
     @app.get("/api/agents/prompts")
-    def api_prompts_list():
-        return jsonify({"prompts": _svc().store.list_prompts()})
+    @app.get("/api/assistants/<profile_id>/prompts")
+    def api_prompts_list(profile_id: str = "okarun"):
+        return jsonify({"prompts": _svc().store.list_prompts(profile_id=profile_id)})
 
     @app.post("/api/agents/prompts")
+    @app.post("/api/assistants/<profile_id>/prompts")
     @require_owner
-    def api_prompts_save():
+    def api_prompts_save(profile_id: str = "okarun"):
         payload = request.get_json(silent=True) or {}
         prompt = _svc().store.save_prompt(
             title=str(payload.get("title") or "Untitled prompt"),
@@ -109,14 +173,15 @@ def register_agent_center_routes(app: Flask) -> None:
             tags=list(payload.get("tags") or []),
             favorite=bool(payload.get("favorite")),
             prompt_id=payload.get("id"),
+            profile_id=profile_id,
         )
         _audit("AGENT_PROMPT_SAVE", detail={"prompt_id": prompt.get("id")})
         return jsonify({"prompt": prompt}), 201
 
-    @app.delete("/api/agents/prompts/<prompt_id>")
+    @app.delete("/api/assistants/<profile_id>/prompts/<prompt_id>")
     @require_owner
-    def api_prompts_delete(prompt_id: str):
-        ok = _svc().store.delete_prompt(prompt_id)
+    def api_prompts_delete(profile_id: str, prompt_id: str):
+        ok = _svc().store.delete_prompt(prompt_id, profile_id=profile_id)
         if not ok:
             return jsonify({"error": "Not found"}), 404
         _audit("AGENT_PROMPT_DELETE", detail={"prompt_id": prompt_id})
@@ -126,6 +191,8 @@ def register_agent_center_routes(app: Flask) -> None:
 def _public_run(run: dict[str, Any], *, include_body: bool = False) -> dict[str, Any]:
     out = {
         "id": run.get("id"),
+        "profile_id": run.get("profile_id"),
+        "conversation_id": run.get("conversation_id"),
         "status": run.get("status"),
         "mode": run.get("mode"),
         "agent_id": run.get("agent_id"),
@@ -144,6 +211,10 @@ def _public_run(run: dict[str, Any], *, include_body: bool = False) -> dict[str,
             "files": (run.get("context") or {}).get("files") or [],
             "excluded_secrets": (run.get("context") or {}).get("excluded_secrets") or [],
             "packed_prompt_chars": (run.get("context") or {}).get("packed_prompt_chars"),
+            "tools": (run.get("context") or {}).get("tools") or {},
+            "included_sources": (run.get("context") or {}).get("included_sources") or [],
+            "excluded_sources": (run.get("context") or {}).get("excluded_sources") or [],
+            "connection": (run.get("context") or {}).get("connection") or {},
         },
     }
     if include_body:

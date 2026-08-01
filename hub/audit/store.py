@@ -7,6 +7,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from hub.agent_center.redact import redact_text
+
+
+def _redact(value: Any) -> Any:
+    if isinstance(value, str):
+        return redact_text(value, limit=4000)
+    if isinstance(value, dict):
+        return {str(key): _redact(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_redact(item) for item in value]
+    return value
+
 
 class AuditStore:
     """Persists operator actions to a local JSONL file (no secrets)."""
@@ -28,10 +40,10 @@ class AuditStore:
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "action": action,
             "actor": actor,
-            "target": target,
-            "detail": detail,
+            "target": _redact(target),
+            "detail": _redact(detail),
             "ok": ok,
-            "metadata": metadata or {},
+            "metadata": _redact(metadata or {}),
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("a", encoding="utf-8") as handle:

@@ -8,6 +8,34 @@ class CursorAgentAdapter(BaseCliAdapter):
     """Cursor Agent CLI only — never the IDE `cursor` editor binary."""
 
     _CANDIDATES = ("agent", "cursor-agent")
+    authentication_method = "Cursor CLI browser authentication"
+
+    def _authentication_probe(self, executable: str) -> dict[str, Any]:
+        result = self._run_probe([executable, "status"])
+        text = (result.stdout or result.stderr or "").strip()
+        if result.returncode == 0 and not any(word in text.lower() for word in ("not logged", "unauthenticated", "login required")):
+            return {"state": "connected", "detail": "Cursor Agent authenticated"}
+        return {"state": "authentication_required", "detail": "Cursor Agent authentication required"}
+
+    def _login_argv(self, executable: str) -> list[str]:
+        return [executable, "login"]
+
+    def _logout_argv(self, executable: str) -> list[str]:
+        return [executable, "logout"]
+
+    def list_models(self) -> tuple[list[str], str]:
+        exe = self.resolve_executable()
+        if not exe:
+            return [], "none"
+        result = self._run_probe([exe, "models"])
+        if result.returncode != 0:
+            return [], "error"
+        models = []
+        for raw in (result.stdout or "").splitlines():
+            model = raw.strip().lstrip("*- ").split()[0] if raw.strip() else ""
+            if model and not model.lower().startswith(("available", "model")):
+                models.append(model)
+        return list(dict.fromkeys(models)), "discovered"
 
     def resolve_executable(self) -> str | None:
         desc = self.descriptor
@@ -61,7 +89,10 @@ class CursorAgentAdapter(BaseCliAdapter):
 
     def _default_template(self, mode: str) -> list[str]:
         # Prompt is large; pass via file path for the CLI when supported.
-        return ["{executable}", "-p", "{prompt_file}"]
+        return [
+            "{executable}", "-p", "{prompt}", "--mode=ask",
+            "--output-format", "text", "--model", "{model}",
+        ]
 
     @staticmethod
     def _looks_like_editor_cli(path: str) -> bool:

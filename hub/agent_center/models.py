@@ -98,6 +98,8 @@ def public_run(row: dict[str, Any]) -> dict[str, Any]:
     """Strip bulky fields for list views."""
     return {
         "id": row.get("id"),
+        "profile_id": row.get("profile_id"),
+        "conversation_id": row.get("conversation_id"),
         "created_at": row.get("created_at"),
         "finished_at": row.get("finished_at"),
         "status": row.get("status"),

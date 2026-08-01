@@ -22,6 +22,12 @@ ALLOWED_TOOLS = frozenset(
         "uid_lookup",
         "sql_lookup",
         "notebook_lookup",
+        "notepad_lookup",
+        "email_search",
+        "calendar_lookup",
+        "jobs_lookup",
+        "audit_lookup",
+        "dhis2_reports_lookup",
     }
 )
 
@@ -42,6 +48,15 @@ class AgentToolsContext:
     notebook: Any | None = None
     sql_store: Any | None = None
     uid_index: Any | None = None
+    profile_id: str = "okarun"
+    workspace: str = "work"
+    allowed_tools: set[str] = field(default_factory=set)
+    email: Any | None = None
+    calendar: Any | None = None
+    job_store: Any | None = None
+    audit_store: Any | None = None
+    dhis2_reports: Any | None = None
+    notepad_factory: Callable[[str], Any] | None = None
     max_result_chars: int = 12_000
     activity: list[ToolActivity] = field(default_factory=list)
     referenced_files: list[dict[str, str]] = field(default_factory=list)
@@ -59,9 +74,9 @@ class AgentToolsContext:
         return out
 
 
-def tool_definitions() -> list[dict[str, Any]]:
+def tool_definitions(allowed_tools: set[str] | None = None) -> list[dict[str, Any]]:
     """OpenAI Responses API function tool schemas (read-only)."""
-    return [
+    definitions = [
         {
             "type": "function",
             "name": "repo_search",
@@ -128,20 +143,86 @@ def tool_definitions() -> list[dict[str, Any]]:
                 "type": "object",
                 "properties": {
                     "search": {"type": "string"},
-                    "scope": {"type": "string", "description": "personal|work|omit for both"},
+                    "limit": {"type": "integer"},
+                },
+                "additionalProperties": False,
+            },
+        },
+        {
+            "type": "function",
+            "name": "notepad_lookup",
+            "description": "Read the Quick Notepad for the active assistant workspace.",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+        {
+            "type": "function",
+            "name": "email_search",
+            "description": "Search message metadata in connected Email accounts for the active workspace. Read-only.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "limit": {"type": "integer"},
+                },
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "type": "function",
+            "name": "calendar_lookup",
+            "description": "List upcoming Calendar events for the active workspace. Read-only.",
+            "parameters": {
+                "type": "object",
+                "properties": {"limit": {"type": "integer"}},
+                "additionalProperties": False,
+            },
+        },
+        {
+            "type": "function",
+            "name": "jobs_lookup",
+            "description": "List existing Work job records and statuses. Never starts or cancels jobs.",
+            "parameters": {
+                "type": "object",
+                "properties": {"limit": {"type": "integer"}},
+                "additionalProperties": False,
+            },
+        },
+        {
+            "type": "function",
+            "name": "audit_lookup",
+            "description": "List recent redacted Audit records. Read-only.",
+            "parameters": {
+                "type": "object",
+                "properties": {"limit": {"type": "integer"}},
+                "additionalProperties": False,
+            },
+        },
+        {
+            "type": "function",
+            "name": "dhis2_reports_lookup",
+            "description": "Search cached DHIS2 standard reports and configured report shortcuts. Read-only.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "environment": {"type": "string", "enum": ["", "stage", "live"]},
                     "limit": {"type": "integer"},
                 },
                 "additionalProperties": False,
             },
         },
     ]
+    allowed = set(allowed_tools or ALLOWED_TOOLS)
+    return [item for item in definitions if item["name"] in allowed]
 
 
 def execute_tool(name: str, arguments: dict[str, Any] | str, ctx: AgentToolsContext) -> str:
-    if name not in ALLOWED_TOOLS:
+    effective_allowed = ctx.allowed_tools or set(ALLOWED_TOOLS)
+    if name not in ALLOWED_TOOLS or name not in effective_allowed:
         act = ToolActivity(name=name, arguments={}, ok=False, detail="Tool not allowlisted")
         ctx.activity.append(act)
-        return json.dumps({"error": "Tool not allowlisted", "allowed": sorted(ALLOWED_TOOLS)})
+        return json.dumps({"error": "Tool not allowlisted for this assistant profile", "allowed": sorted(effective_allowed)})
 
     if isinstance(arguments, str):
         try:
@@ -157,6 +238,12 @@ def execute_tool(name: str, arguments: dict[str, Any] | str, ctx: AgentToolsCont
         "uid_lookup": _tool_uid_lookup,
         "sql_lookup": _tool_sql_lookup,
         "notebook_lookup": _tool_notebook_lookup,
+        "notepad_lookup": _tool_notepad_lookup,
+        "email_search": _tool_email_search,
+        "calendar_lookup": _tool_calendar_lookup,
+        "jobs_lookup": _tool_jobs_lookup,
+        "audit_lookup": _tool_audit_lookup,
+        "dhis2_reports_lookup": _tool_dhis2_reports_lookup,
     }
     try:
         result = handlers[name](arguments, ctx)
@@ -328,7 +415,7 @@ def _tool_notebook_lookup(args: dict[str, Any], ctx: AgentToolsContext) -> dict[
     if ctx.notebook is None:
         return {"error": "Notebook store not available"}
     search = str(args.get("search") or "").strip()
-    scope = str(args.get("scope") or "").strip() or None
+    scope = ctx.workspace
     limit = max(1, min(int(args.get("limit") or 20), 50))
     if not search:
         return {"error": "search is required"}
@@ -345,6 +432,152 @@ def _tool_notebook_lookup(args: dict[str, Any], ctx: AgentToolsContext) -> dict[
                 "body_preview": (r.get("body_md") or r.get("body") or r.get("content") or "")[:500],
             }
             for r in rows[:limit]
+        ],
+    }
+
+
+def _tool_notepad_lookup(args: dict[str, Any], ctx: AgentToolsContext) -> dict[str, Any]:
+    if ctx.notepad_factory is None:
+        return {"error": "Quick Notepad is not available"}
+    pad = ctx.notepad_factory(ctx.workspace).get(include_revisions=False)
+    return {
+        "summary": f"{ctx.workspace} Quick Notepad",
+        "content": str(pad.get("content") or "")[:4000],
+        "updated_at": pad.get("updated_at"),
+    }
+
+
+def _tool_email_search(args: dict[str, Any], ctx: AgentToolsContext) -> dict[str, Any]:
+    if ctx.email is None:
+        return {"error": "Email service is not available"}
+    query = str(args.get("query") or "").strip()
+    if not query:
+        return {"error": "query is required"}
+    limit = max(1, min(int(args.get("limit") or 10), 20))
+    messages: list[dict[str, Any]] = []
+    for account in ctx.email.list_accounts(ctx.workspace):
+        if account.get("status") != "connected" or not account.get("has_gmail", True):
+            continue
+        result = ctx.email.list_messages(account["id"], q=query, page_size=limit)
+        for item in result.get("messages") or []:
+            messages.append(
+                {
+                    "account": account.get("email"),
+                    "id": item.get("id"),
+                    "subject": item.get("subject"),
+                    "from": item.get("from_addr"),
+                    "date": item.get("date_header") or item.get("internal_date"),
+                    "snippet": item.get("snippet"),
+                }
+            )
+            if len(messages) >= limit:
+                break
+        if len(messages) >= limit:
+            break
+    return {"summary": f"{len(messages)} messages", "messages": messages}
+
+
+def _tool_calendar_lookup(args: dict[str, Any], ctx: AgentToolsContext) -> dict[str, Any]:
+    if ctx.calendar is None:
+        return {"error": "Calendar service is not available"}
+    limit = max(1, min(int(args.get("limit") or 10), 25))
+    rows = ctx.calendar.upcoming_for_workspace(ctx.workspace, limit=limit)
+    return {
+        "summary": f"{len(rows)} upcoming events",
+        "events": [
+            {
+                "id": row.get("id"),
+                "summary": row.get("summary"),
+                "start": row.get("start"),
+                "end": row.get("end"),
+                "location": row.get("location"),
+                "account": row.get("account_email"),
+            }
+            for row in rows
+        ],
+    }
+
+
+def _tool_jobs_lookup(args: dict[str, Any], ctx: AgentToolsContext) -> dict[str, Any]:
+    if ctx.job_store is None:
+        return {"error": "Job store is not available"}
+    limit = max(1, min(int(args.get("limit") or 20), 50))
+    rows = ctx.job_store.list_recent(limit=limit)
+    return {
+        "summary": f"{len(rows)} jobs",
+        "jobs": [
+            {
+                "id": row.get("id"),
+                "repository_id": row.get("repository_id"),
+                "capability_id": row.get("capability_id"),
+                "status": row.get("status"),
+                "created_at": row.get("created_at"),
+                "finished_at": row.get("finished_at"),
+            }
+            for row in rows
+        ],
+    }
+
+
+def _tool_audit_lookup(args: dict[str, Any], ctx: AgentToolsContext) -> dict[str, Any]:
+    if ctx.audit_store is None:
+        return {"error": "Audit store is not available"}
+    limit = max(1, min(int(args.get("limit") or 20), 50))
+    rows = ctx.audit_store.list_recent(limit=limit)
+    return {
+        "summary": f"{len(rows)} audit records",
+        "events": [
+            {
+                "timestamp": row.get("timestamp"),
+                "action": row.get("action"),
+                "target": redact_text(str(row.get("target") or ""), limit=300),
+                "detail": redact_text(str(row.get("detail") or ""), limit=500),
+                "ok": row.get("ok"),
+            }
+            for row in rows
+        ],
+    }
+
+
+def _tool_dhis2_reports_lookup(
+    args: dict[str, Any], ctx: AgentToolsContext
+) -> dict[str, Any]:
+    if ctx.dhis2_reports is None:
+        return {"error": "DHIS2 Reports service is not available"}
+    query = str(args.get("query") or "").strip()
+    environment = str(args.get("environment") or "").strip().lower()
+    limit = max(1, min(int(args.get("limit") or 20), 50))
+    standard = ctx.dhis2_reports.list_standard_library(
+        q=query, environment=environment
+    )
+    standard_rows: list[dict[str, Any]] = []
+    for section in standard.get("sections") or []:
+        for row in section.get("reports") or []:
+            standard_rows.append(
+                {
+                    "environment": section.get("environment"),
+                    "id": row.get("uid") or row.get("id"),
+                    "name": row.get("name"),
+                    "type": row.get("report_type"),
+                    "html_available": row.get("html_available"),
+                }
+            )
+            if len(standard_rows) >= limit:
+                break
+        if len(standard_rows) >= limit:
+            break
+    shortcuts = ctx.dhis2_reports.list_library(q=query)[:limit]
+    return {
+        "summary": f"{len(standard_rows)} standard reports; {len(shortcuts)} shortcuts",
+        "standard_reports": standard_rows,
+        "shortcuts": [
+            {
+                "id": row.get("id"),
+                "name": row.get("name"),
+                "type": row.get("report_type"),
+                "repository_id": row.get("repository_id"),
+            }
+            for row in shortcuts
         ],
     }
 

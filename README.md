@@ -18,6 +18,8 @@ job engine (SQLite), safe command/API capabilities, uploads/results, owner role.
 - Uploads under `data/uploads/{job_id}/`, results under `data/results/{job_id}/`
 - Confirm gates for non-dry-run; optional `CENTRAL_HUB_OWNER_TOKEN`
 - Audit JSONL + SQLite job history
+- AI Assistant Center: Aira under Personal and Okarun under Work, using one
+  read-only engine with isolated histories, summaries, context, and tools
 
 ## What is *not* included
 
@@ -25,6 +27,23 @@ job engine (SQLite), safe command/API capabilities, uploads/results, owner role.
 - PMNP / Live Processing / report calculation domain logic inside the hub
 - Free-form shell / unrestricted terminal execution
 - Multi-user auth beyond a single local owner token
+- Assistant file edits, commands, SQL execution, email/calendar actions, DHIS2
+  writes, repository runs, voice input, and text-to-speech
+
+## AI Assistant Center
+
+- **Aira**: /personal/aira; Personal Notebook/tasks, Quick Notepad, and explicitly
+  selected Personal Email/Calendar search.
+- **Okarun**: /work/okarun; selected repositories and instructions, Work Notebook,
+  SQL library, DHIS2 UID metadata, Work Email/Calendar, jobs, and Audit.
+- Adapters include Codex, Claude Code, Cursor Agent, Grok, OpenAI API, Hub Simulator,
+  and future config-driven adapters. Models refresh for the selected adapter.
+- System -> AI Connections provides Connect/Reconnect, Test Connection, Refresh Models,
+  capability inspection, and Disconnect. Credentials remain in supported CLI storage or
+  server environment variables; Aira/Okarun data remains isolated.
+- Modes are Ask, Find, Plan, and Review. Context preview lists included and
+  excluded sources. Runs support streaming, cancel, retry, files, tools, and usage.
+- Context is search-first; repositories, mail, and documents are never bulk-loaded.
 
 ## Quick start
 
@@ -49,6 +68,9 @@ python samples/sample-api/app.py
 ```powershell
 python -m unittest discover -s tests -v
 ```
+
+Focused assistant suite: `python -m pytest tests/test_ai_connections.py
+tests/test_agent_center.py tests/test_openai_agent.py tests/test_ai_assistant_center.py -q`
 
 ## Docs for agents
 

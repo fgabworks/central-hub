@@ -1,16 +1,17 @@
 {% extends "base.html" %}
-{% block title %}Prompting & Agent Center · {{ app_name }}{% endblock %}
+{% block title %}{{ profile.name }} · AI Assistant Center · {{ app_name }}{% endblock %}
 {% block content %}
 <div class="page-header">
   <div>
-    <h1>Prompting &amp; Agent Center</h1>
-    <p class="page-sub">Select repositories, choose an available agent and model, run one read-only prompt, and review the output. Edit/Test are not yet available. Agent output is untrusted.</p>
+    <h1>{{ profile.name }}</h1>
+    <p class="page-sub">{{ profile.title }} · {{ profile.tone }} Shared Prompting and Agent orchestration.</p>
   </div>
 </div>
 
 <div class="agent-safety" role="status">
   <strong>Read-only MVP.</strong>
-  No repository edits, arbitrary commands, or automatic merges.
+  AI Assistant Center uses one orchestration engine with an isolated {{ profile.workspace }} profile.
+  No file edits, commands, SQL execution, email/calendar actions, DHIS2 writes, or repository runs.
   Secrets (<code>.env</code>, credentials, tokens) are excluded from context.
   Runtime is scoped to selected local repositories with timeouts and cancel.
 </div>
@@ -31,6 +32,17 @@
       </li>
       {% else %}
       <li class="muted">No saved prompts yet.</li>
+      {% endfor %}
+    </ul>
+    <div class="agent-history-head"><strong>Conversation summaries</strong></div>
+    <ul class="agent-history-list">
+      {% for c in conversations %}
+      <li class="agent-conversation">
+        <strong>{{ c.title }}</strong>
+        <span class="muted">{{ c.summary or 'No summary yet.' }}</span>
+      </li>
+      {% else %}
+      <li class="muted">No conversations yet.</li>
       {% endfor %}
     </ul>
     <div class="agent-history-head"><strong>Recent runs</strong></div>
@@ -64,6 +76,7 @@
     </div>
 
     <div class="agent-grid">
+      {% if profile.repositories_allowed %}
       <fieldset class="agent-repos">
         <legend>Repositories (read-only)</legend>
         {% for repo in repositories %}
@@ -79,6 +92,7 @@
         <p class="muted">No repositories in registry.</p>
         {% endfor %}
       </fieldset>
+      {% endif %}
 
       <div class="agent-selectors">
         <label>
@@ -113,19 +127,31 @@
       </div>
     </div>
 
+    <fieldset class="agent-tools">
+      <legend>Read-only sources</legend>
+      {% for tool in profile.allowed_tools %}
+      <label class="agent-tool">
+        <input type="checkbox" name="agent-tool" value="{{ tool }}"
+          {% if tool in profile.default_tools %}checked{% endif %}>
+        <span>{{ tool|replace('_', ' ')|title }}</span>
+      </label>
+      {% endfor %}
+    </fieldset>
+
     <label class="agent-prompt-label" for="agent-prompt">Prompt</label>
-    <textarea id="agent-prompt" rows="8" placeholder="Ask a read-only question about the selected repositories…"></textarea>
+    <textarea id="agent-prompt" rows="8" placeholder="Ask {{ profile.name }} a read-only question…"></textarea>
 
     <div class="agent-actions">
       <button type="button" class="btn" id="agent-preview">Preview context</button>
       <button type="button" class="btn btn-primary" id="agent-run">Run</button>
       <button type="button" class="btn" id="agent-cancel" disabled>Cancel</button>
+      <button type="button" class="btn" id="agent-retry" disabled>Retry</button>
       <span class="status-pill" id="agent-status">idle</span>
     </div>
 
     <details class="agent-preview-box" id="agent-preview-box">
       <summary>Context preview</summary>
-      <pre id="agent-preview-body" class="agent-pre">Select repositories and click Preview context.</pre>
+      <pre id="agent-preview-body" class="agent-pre">Choose sources and click Preview context.</pre>
     </details>
   </section>
 

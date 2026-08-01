@@ -13,12 +13,14 @@ from hub.agent_center.adapters.codex import CodexAdapter
 from hub.agent_center.adapters.cursor_agent import CursorAgentAdapter
 from hub.agent_center.adapters.hub_simulator import HubSimulatorAdapter
 from hub.agent_center.adapters.openai_api import OpenAIApiAdapter
+from hub.agent_center.adapters.xai_api import XaiApiAdapter
 from hub.agent_center.models import MODES
 from hub.settings import ROOT_DIR
 
 _ADAPTER_TYPES = {
     "hub_simulator": HubSimulatorAdapter,
     "openai_api": OpenAIApiAdapter,
+    "xai_api": XaiApiAdapter,
     "claude_code": ClaudeCodeAdapter,
     "cursor_agent": CursorAgentAdapter,
     "codex": CodexAdapter,
@@ -80,6 +82,14 @@ def build_adapters(descriptors: list[AgentDescriptor] | None = None) -> list[Age
 def _builtin_descriptors() -> list[AgentDescriptor]:
     return [
         AgentDescriptor(
+            id="grok",
+            label="Grok",
+            provider="xai_api",
+            executable="",
+            modes=list(MODES),
+            notes="xAI Responses API; models loaded dynamically from XAI_API_KEY.",
+        ),
+        AgentDescriptor(
             id="hub-simulator",
             label="Hub Simulator (demo)",
             provider="hub_simulator",
@@ -102,7 +112,7 @@ def _builtin_descriptors() -> list[AgentDescriptor]:
             provider="claude_code",
             executable="claude",
             modes=list(MODES),
-            models_managed=["claude-opus-4", "claude-sonnet-4", "claude-haiku-4"],
+            models_managed=[],
         ),
         AgentDescriptor(
             id="cursor-agent",
@@ -110,7 +120,7 @@ def _builtin_descriptors() -> list[AgentDescriptor]:
             provider="cursor_agent",
             executable="agent",
             modes=list(MODES),
-            models_managed=["inherit", "composer-2.5-fast", "gpt-5.6-sol-medium"],
+            models_managed=[],
         ),
         AgentDescriptor(
             id="codex",
@@ -118,6 +128,6 @@ def _builtin_descriptors() -> list[AgentDescriptor]:
             provider="codex",
             executable="codex",
             modes=list(MODES),
-            models_managed=["o4-mini", "gpt-5", "codex-mini"],
+            models_managed=[],
         ),
     ]
