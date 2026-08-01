@@ -21,12 +21,16 @@ from hub.dhis2_reports.bridge import (
 from hub.dhis2_reports.cache import (
     CATALOG_CACHE,
     CAPABILITY_CACHE,
+    METADATA_CACHE,
     ORG_UNIT_CACHE,
+    PERIOD_CACHE,
     RESULT_CACHE,
     result_cache_key,
 )
 from hub.dhis2_reports.catalog import get_report, load_report_catalog
+from hub.dhis2_reports.discovery import discover_report_parameters
 from hub.dhis2_reports.models import ReportDefinition, ResolvedRun
+from hub.dhis2_reports.periods import periods_payload
 from hub.dhis2_reports.security import (
     ReportSecurityError,
     build_dhis2_report_url,
@@ -108,12 +112,16 @@ class Dhis2ReportsService:
             RESULT_CACHE.invalidate_prefix(f"result|{env}|")
             ORG_UNIT_CACHE.invalidate_prefix(f"ou:{env}:")
             CAPABILITY_CACHE.invalidate_prefix(f"cap:{env}")
+            METADATA_CACHE.invalidate_prefix(f"meta:{env}:")
+            PERIOD_CACHE.clear()
             self._clients.pop(env, None)
         else:
             CATALOG_CACHE.clear()
             RESULT_CACHE.clear()
             ORG_UNIT_CACHE.clear()
             CAPABILITY_CACHE.clear()
+            METADATA_CACHE.clear()
+            PERIOD_CACHE.clear()
             self._clients.clear()
 
     def list_run_catalog(self, environment: str) -> dict[str, Any]:
@@ -143,47 +151,165 @@ class Dhis2ReportsService:
         *,
         q: str = "",
         limit: int = 25,
+        parent_id: str = "",
     ) -> dict[str, Any]:
+        """Search organisation units (name/code/UID) or lazy-load children of parent_id."""
         env = validate_environment(environment)
         needle = (q or "").strip()
+        parent = validate_org_unit(parent_id, required=False) if parent_id else ""
         limit_i = max(1, min(int(limit or 25), 50))
-        cache_key = f"ou:{env}:{needle.lower()}:{limit_i}"
+        cache_key = f"ou:{env}:{needle.lower()}:{parent}:{limit_i}"
         cached = ORG_UNIT_CACHE.get(cache_key)
         if cached is not None:
             return {**cached, "cache": "hit"}
         client = self._client(env)
         params: dict[str, Any] = {
-            "fields": "id,displayName,name,path,level",
+            "fields": "id,displayName,name,code,path,level,children::size",
             "paging": "true",
             "pageSize": limit_i,
             "page": 1,
             "order": "name:asc",
         }
+        filters: list[str] = []
+        if parent:
+            filters.append(f"parent.id:eq:{parent}")
         if needle:
-            # Prefer identifiable token search when available; fall back to name filter.
-            params["filter"] = f"name:ilike:{needle}"
+            if len(needle) == 11 and needle.isalnum():
+                filters.append(f"id:eq:{needle}")
+            else:
+                # identifiable covers name/code/id tokens on modern DHIS2.
+                filters.append(f"identifiable:token:{needle}")
+        if filters:
+            # requests encodes repeated filter keys; pass joined for single filter when one.
+            if len(filters) == 1:
+                params["filter"] = filters[0]
+            else:
+                params["filter"] = filters
         try:
             data = client._get_json("/api/organisationUnits", params=params)  # noqa: SLF001
         except Dhis2Error as exc:
-            raise ReportSecurityError(
-                redact_report_detail(exc.message),
-                code="unauthorized" if exc.status_code in {401, 403} else "unavailable",
-            ) from exc
+            # Older servers may not support identifiable:token — retry name ilike.
+            if needle and "identifiable" in (params.get("filter") or ""):
+                params["filter"] = f"name:ilike:{needle}"
+                try:
+                    data = client._get_json("/api/organisationUnits", params=params)  # noqa: SLF001
+                except Dhis2Error as exc2:
+                    raise ReportSecurityError(
+                        redact_report_detail(exc2.message),
+                        code="unauthorized" if exc2.status_code in {401, 403} else "unavailable",
+                    ) from exc2
+            else:
+                raise ReportSecurityError(
+                    redact_report_detail(exc.message),
+                    code="unauthorized" if exc.status_code in {401, 403} else "unavailable",
+                ) from exc
         rows = []
         for item in data.get("organisationUnits") or []:
             if not isinstance(item, dict):
                 continue
+            children = item.get("children")
+            child_count = 0
+            if isinstance(children, int):
+                child_count = children
+            elif isinstance(children, list):
+                child_count = len(children)
             rows.append(
                 {
                     "id": item.get("id") or "",
                     "name": item.get("displayName") or item.get("name") or "",
+                    "code": item.get("code") or "",
                     "path": item.get("path") or "",
                     "level": item.get("level"),
+                    "has_children": child_count > 0,
                 }
             )
-        payload = {"ok": True, "environment": env, "q": needle, "org_units": rows, "count": len(rows)}
+        payload = {
+            "ok": True,
+            "environment": env,
+            "q": needle,
+            "parent_id": parent,
+            "org_units": rows,
+            "count": len(rows),
+        }
         ORG_UNIT_CACHE.set(cache_key, payload)
         return {**payload, "cache": "miss"}
+
+    def list_periods(self, *, remembered: str = "") -> dict[str, Any]:
+        cache_key = f"periods:quarters:{remembered}"
+        cached = PERIOD_CACHE.get(cache_key)
+        if cached is not None:
+            return {**cached, "cache": "hit"}
+        payload = periods_payload(remembered=remembered)
+        PERIOD_CACHE.set(cache_key, payload)
+        return {**payload, "cache": "miss"}
+
+    def standard_detail_payload(
+        self,
+        environment: str,
+        uid: str,
+        *,
+        period: str = "",
+        org_unit: str = "",
+    ) -> dict[str, Any]:
+        """Compact summary + discovery + diagnostics for the detail page."""
+        env = validate_environment(environment)
+        meta_key = f"meta:{env}:{uid}"
+        cached = METADATA_CACHE.get(meta_key)
+        if cached is not None:
+            report = cached["report"]
+            discovery = cached["discovery"]
+            design_len = cached.get("design_len", 0)
+            meta_cache = "hit"
+        else:
+            report_obj = self.get_standard_report(env, uid)
+            design = self.store.get_synced_design_content(env, uid)
+            discovery = discover_report_parameters(report_obj, design_html=design)
+            report = report_obj.to_public()
+            # Align public needs_* with discovery for UI consumers.
+            report["needs_period"] = discovery["period_required"]
+            report["needs_org_unit"] = discovery["org_unit_required"]
+            report["parameter_discovery"] = discovery
+            METADATA_CACHE.set(
+                meta_key,
+                {
+                    "report": report,
+                    "discovery": discovery,
+                    "design_len": len(design or ""),
+                },
+            )
+            design_len = len(design or "")
+            meta_cache = "miss"
+
+        urls = None
+        error = None
+        try:
+            if period or org_unit or not (
+                discovery.get("period_required") or discovery.get("org_unit_required")
+            ):
+                urls = self.standard_urls(env, uid, period=period, org_unit=org_unit)
+        except ReportSecurityError as exc:
+            error = str(exc)
+
+        return {
+            "report": report,
+            "discovery": discovery,
+            "urls": urls,
+            "error": error,
+            "form": {"period": period, "org_unit": org_unit},
+            "diagnostics": {
+                "uid": report.get("uid"),
+                "report_parameters": report.get("report_parameters"),
+                "relative_periods": report.get("relative_periods"),
+                "data_source": report.get("data_source"),
+                "html_design_available": report.get("html_design_available"),
+                "design_content_bytes": design_len,
+                "discovery_sources": discovery.get("sources"),
+                "open_url": (urls or {}).get("open_url") if urls else "",
+                "external_embed_url": (urls or {}).get("embed_url") if urls else "",
+                "meta_cache": meta_cache,
+            },
+            "run_report_id": f"std:{env}:{uid}",
+        }
 
     def _audit(self, action: str, target: str, detail: str, ok: bool = True) -> None:
         if self.audit:
@@ -466,6 +592,7 @@ class Dhis2ReportsService:
         use_cache: bool = True,
     ) -> dict[str, Any]:
         """Fetch data.html with .env credentials and prepare it for iframe display."""
+        t0 = time.perf_counter()
         env = validate_environment(environment)
         cache_key = result_cache_key(
             environment=env,
@@ -474,11 +601,25 @@ class Dhis2ReportsService:
             org_unit=org_unit or "",
             output_format="html",
         )
+        t_cache0 = time.perf_counter()
         if use_cache:
             cached = RESULT_CACHE.get(cache_key)
             if cached is not None:
-                return {**cached, "cache": "hit"}
+                timings = {
+                    "cache_lookup_ms": int((time.perf_counter() - t_cache0) * 1000),
+                    "metadata_ms": 0,
+                    "dhis2_ms": 0,
+                    "html_ms": 0,
+                    "total_ms": int((time.perf_counter() - t0) * 1000),
+                }
+                return {**cached, "cache": "hit", "timings": timings}
 
+        t_meta0 = time.perf_counter()
+        # Touch metadata (path jail / existence) before DHIS2 fetch.
+        self.get_standard_report(env, uid)
+        meta_ms = int((time.perf_counter() - t_meta0) * 1000)
+
+        t_dhis0 = time.perf_counter()
         data = self.download_standard_html(
             environment,
             uid,
@@ -486,6 +627,9 @@ class Dhis2ReportsService:
             org_unit=org_unit,
             confirm_live=confirm_live,
         )
+        dhis_ms = int((time.perf_counter() - t_dhis0) * 1000)
+
+        t_html0 = time.perf_counter()
         base = self.get_dhis2_base_url(env) or ""
         prepared = rewrite_report_html(
             data["html"],
@@ -493,6 +637,14 @@ class Dhis2ReportsService:
             dhis2_base=base,
             confirm_live=bool(confirm_live) if env == "live" else False,
         )
+        html_ms = int((time.perf_counter() - t_html0) * 1000)
+        timings = {
+            "cache_lookup_ms": int((t_meta0 - t_cache0) * 1000),
+            "metadata_ms": meta_ms,
+            "dhis2_ms": dhis_ms,
+            "html_ms": html_ms,
+            "total_ms": int((time.perf_counter() - t0) * 1000),
+        }
         payload = {
             **data,
             "html": prepared,
@@ -501,6 +653,7 @@ class Dhis2ReportsService:
             "fingerprint": content_fingerprint(prepared),
             "cache": "miss",
             "source": data.get("source") or "data.html",
+            "timings": timings,
         }
         # Do not store secrets — HTML only.
         RESULT_CACHE.set(
@@ -709,6 +862,8 @@ class Dhis2ReportsService:
                 "period": rendered.get("period"),
                 "org_unit": rendered.get("org_unit"),
                 "fingerprint": rendered.get("fingerprint"),
+                "source": rendered.get("source"),
+                "timings": rendered.get("timings") or {},
                 "warnings": [],
             },
         }

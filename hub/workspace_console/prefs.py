@@ -47,6 +47,7 @@ def default_console_state(workspace: str) -> dict[str, Any]:
         "tabs": list(TABS),
         "terminal_session_id": "",
         "terminal_split": False,
+        "terminal_split_session_id": "",
     }
 
 
@@ -73,8 +74,18 @@ def load_console_prefs(db: Any, workspace: str) -> dict[str, Any]:
         state["tab"] = normalize_tab(data.get("tab"))
     if "terminal_session_id" in data:
         state["terminal_session_id"] = str(data.get("terminal_session_id") or "")[:64]
+    if "terminal_split_session_id" in data:
+        state["terminal_split_session_id"] = str(data.get("terminal_split_session_id") or "")[:64]
     if "terminal_split" in data:
         state["terminal_split"] = bool(data.get("terminal_split"))
+    # Split is only meaningful with two distinct session ids.
+    if not state.get("terminal_split_session_id") or state.get("terminal_split_session_id") == state.get(
+        "terminal_session_id"
+    ):
+        state["terminal_split"] = False
+        state["terminal_split_session_id"] = ""
+    elif not state.get("terminal_split"):
+        state["terminal_split_session_id"] = ""
     return state
 
 
@@ -94,8 +105,16 @@ def save_console_prefs(db: Any, workspace: str, payload: dict[str, Any] | None) 
     if "terminal_session_id" in data:
         # Remember selected session id only — never command text or scrollback.
         current["terminal_session_id"] = str(data.get("terminal_session_id") or "")[:64]
+    if "terminal_split_session_id" in data:
+        current["terminal_split_session_id"] = str(data.get("terminal_split_session_id") or "")[:64]
     if "terminal_split" in data:
         current["terminal_split"] = bool(data.get("terminal_split"))
+    # Never persist an empty/invalid split layout.
+    split_id = current.get("terminal_split_session_id") or ""
+    active_id = current.get("terminal_session_id") or ""
+    if not current.get("terminal_split") or not split_id or split_id == active_id:
+        current["terminal_split"] = False
+        current["terminal_split_session_id"] = ""
     if current["maximized"]:
         current["minimized"] = False
     if current["minimized"]:
@@ -112,6 +131,7 @@ def save_console_prefs(db: Any, workspace: str, payload: dict[str, Any] | None) 
                 "tab": current["tab"],
                 "terminal_session_id": current.get("terminal_session_id") or "",
                 "terminal_split": bool(current.get("terminal_split")),
+                "terminal_split_session_id": current.get("terminal_split_session_id") or "",
             }
         ),
     )
@@ -134,6 +154,7 @@ def console_shell_bootstrap(db: Any, *, workspace: str) -> dict[str, Any]:
             "tab": prefs["tab"],
             "terminal_session_id": prefs.get("terminal_session_id") or "",
             "terminal_split": bool(prefs.get("terminal_split")),
+            "terminal_split_session_id": prefs.get("terminal_split_session_id") or "",
         },
         "tabs": list(TABS),
         "prefs_url": "/api/workspace-console/prefs",

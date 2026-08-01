@@ -4,7 +4,7 @@
 <section class="page-header page-header-compact">
   <div>
     <h1>{{ report.name }}</h1>
-    <p class="muted">{{ report.environment|title }} · <code>{{ report.uid }}</code> · {{ report.type }} · DHIS2 source of truth</p>
+    <p class="muted">{{ report.environment|title }} · {{ report.type }} · DHIS2 source of truth</p>
   </div>
   <div class="page-meta">
     <a class="btn btn-sm" href="{{ url_for('dhis2_reports_library') }}">Library</a>
@@ -16,114 +16,129 @@
 <div class="banner banner-error" style="margin-top:0.85rem">{{ error }}</div>
 {% endif %}
 
+<section class="panel dr-summary-card" style="margin-top:0.85rem"
+         id="dr-detail"
+         data-environment="{{ report.environment }}"
+         data-uid="{{ report.uid }}"
+         data-report-id="{{ run_report_id }}"
+         data-generate-view-url="{{ url_for('api_dhis2_report_generate_and_view') }}"
+         data-org-units-url="{{ url_for('api_dhis2_report_org_units') }}"
+         data-periods-url="{{ url_for('api_dhis2_report_periods') }}"
+         data-open-url="{{ (urls.open_url if urls else '') }}"
+         data-initial-period="{{ form.period }}"
+         data-initial-ou="{{ form.org_unit }}"
+         data-period-required="{{ '1' if discovery.period_required else '0' }}"
+         data-ou-required="{{ '1' if discovery.org_unit_required else '0' }}"
+         data-show-period="{{ '1' if discovery.show_period else '0' }}"
+         data-show-ou="{{ '1' if discovery.show_org_unit else '0' }}"
+         data-preferred-period-type="{{ discovery.preferred_period_type or 'quarterly' }}">
+  <div class="dr-summary-grid">
+    <div>
+      <div class="dr-summary-kicker muted">Report</div>
+      <div class="dr-summary-title">{{ report.name }}</div>
+      <div class="dr-summary-meta muted">
+        <span>{{ report.environment|title }}</span>
+        <span>·</span>
+        <span>{{ report.type }}</span>
+        <span>·</span>
+        <span>DHIS2 {{ report.dhis2_version or '—' }}</span>
+      </div>
+    </div>
+    <div class="dr-summary-side">
+      <div><span class="muted">Parameters</span><div>{{ discovery.summary }}</div></div>
+      <div><span class="muted">Last synchronized</span><div>{{ (report.last_synced_at or '')[:19].replace('T',' ') or '—' }}</div></div>
+    </div>
+  </div>
+  {% if discovery.warning %}
+  <p class="banner" style="margin-top:0.65rem">{{ discovery.warning }}</p>
+  {% endif %}
+  {% if report.unsupported_reason %}
+  <p class="muted" style="margin-top:0.45rem">{{ report.unsupported_reason }}</p>
+  {% endif %}
+</section>
+
 <section class="panel" style="margin-top:0.85rem">
-  <div class="panel-header"><h2>Metadata</h2></div>
-  <dl class="kv">
-    <div><dt>UID</dt><dd><code>{{ report.uid }}</code></dd></div>
-    <div><dt>Type</dt><dd>{{ report.type }}</dd></div>
-    <div><dt>Environment</dt><dd>{{ report.environment }}</dd></div>
-    <div><dt>HTML design</dt><dd>{% if report.html_design_available %}Available{% else %}Not available{% endif %}</dd></div>
-    <div><dt>Report parameters</dt>
+  <div class="panel-header"><h2>Generate &amp; View</h2></div>
+  <div class="dr-detail-controls">
+    <label id="dr-period-field" {% if not discovery.show_period %}hidden{% endif %}>
+      <span class="dr-field-label">Quarter / period</span>
+      <div class="dr-period-row">
+        <select id="dr-period-type" aria-label="Period type">
+          <option value="quarterly">Quarterly</option>
+          <option value="monthly">Monthly</option>
+          <option value="yearly">Yearly</option>
+          <option value="custom">Custom</option>
+        </select>
+        <select id="dr-period-quarter" aria-label="Quarter"></select>
+        <input type="month" id="dr-period-month" hidden aria-label="Month">
+        <input type="number" id="dr-period-year" min="2000" max="2100" hidden aria-label="Year">
+        <input type="text" id="dr-period-custom" placeholder="202601 / 2026Q1" hidden>
+        <input type="search" id="dr-period-filter" placeholder="Filter quarters…" aria-label="Filter quarters">
+      </div>
+    </label>
+    <label id="dr-ou-field" {% if not discovery.show_org_unit %}hidden{% endif %}>
+      <span class="dr-field-label">Organisation unit</span>
+      <div class="dr-ou-row">
+        <input type="search" id="dr-ou-search" placeholder="Search name, code, or UID…" autocomplete="off">
+        <input type="hidden" id="dr-ou" value="{{ form.org_unit }}">
+        <div class="dr-ou-selected muted" id="dr-ou-label">None selected</div>
+        <ul class="dr-ou-results" id="dr-ou-results" hidden></ul>
+        <div class="dr-ou-tree" id="dr-ou-tree" hidden></div>
+      </div>
+    </label>
+    {% if report.environment == 'live' %}
+    <label class="rw-connect-confirm">
+      <input type="checkbox" id="dr-confirm-live"> I confirm generating this report against Live
+    </label>
+    {% endif %}
+  </div>
+  <div class="btn-row" style="margin-top:0.65rem; display:flex; gap:0.45rem; flex-wrap:wrap">
+    <button type="button" class="btn btn-sm btn-primary" id="dr-generate-view">Generate &amp; View</button>
+    <button type="button" class="btn btn-sm" id="dr-cancel" hidden>Cancel</button>
+    <button type="button" class="btn btn-sm" id="dr-refresh" hidden>Refresh</button>
+    <button type="button" class="btn btn-sm" id="dr-fullscreen" hidden>Full screen</button>
+    <button type="button" class="btn btn-sm" id="dr-print" hidden>Print</button>
+    <a class="btn btn-sm" id="dr-download" href="#" hidden>Download</a>
+    <a class="btn btn-sm" id="dr-open-dhis2" href="{{ (urls.open_url if urls else '#') }}" target="_blank" rel="noopener" {% if not urls %}hidden{% endif %}>Open in DHIS2</a>
+    <button type="button" class="btn btn-sm" id="dr-refresh-meta">Refresh Metadata</button>
+  </div>
+  <p class="muted" id="dr-status" style="margin-top:0.45rem"></p>
+
+  <div class="dr-viewer-wrap" id="dr-viewer-wrap">
+    <div class="dr-viewer-skeleton" id="dr-viewer-skeleton" hidden>Loading report… <span id="dr-elapsed"></span></div>
+    <iframe class="dr-viewer" id="dr-viewer" title="DHIS2 Report Viewer" sandbox="allow-same-origin allow-scripts allow-popups" hidden></iframe>
+    <div class="dr-viewer-empty muted" id="dr-viewer-empty">Set parameters if needed, then Generate &amp; View. Credentials stay on the server.</div>
+  </div>
+</section>
+
+<details class="panel dr-diagnostics" style="margin-top:0.85rem">
+  <summary>Diagnostics</summary>
+  <dl class="kv dr-diag-kv">
+    <div><dt>UID</dt><dd><code>{{ diagnostics.uid }}</code></dd></div>
+    <div><dt>Report parameters (raw)</dt>
       <dd>
-        period={{ report.report_parameters.param_reporting_month }} ·
-        org unit={{ report.report_parameters.param_organisation_unit }} ·
-        parent OU={{ report.report_parameters.param_parent_organisation_unit }}
+        period={{ diagnostics.report_parameters.param_reporting_month }} ·
+        org unit={{ diagnostics.report_parameters.param_organisation_unit }} ·
+        parent OU={{ diagnostics.report_parameters.param_parent_organisation_unit }}
       </dd>
     </div>
-    <div><dt>Relative periods</dt><dd>{% if report.relative_periods %}{{ report.relative_periods|join(', ') }}{% else %}—{% endif %}</dd></div>
+    <div><dt>Relative periods</dt><dd>{% if diagnostics.relative_periods %}{{ diagnostics.relative_periods|join(', ') }}{% else %}—{% endif %}</dd></div>
     <div><dt>Data source</dt>
       <dd>
-        {% if report.data_source.name or report.data_source.id %}
-          {{ report.data_source.kind }} · {{ report.data_source.name or '—' }}
-          {% if report.data_source.id %}<code>{{ report.data_source.id }}</code>{% endif %}
+        {% if diagnostics.data_source.name or diagnostics.data_source.id %}
+          {{ diagnostics.data_source.kind }} · {{ diagnostics.data_source.name or '—' }}
+          {% if diagnostics.data_source.id %}<code>{{ diagnostics.data_source.id }}</code>{% endif %}
         {% else %}—{% endif %}
       </dd>
     </div>
-    <div><dt>DHIS2 version</dt><dd>{{ report.dhis2_version or '—' }}</dd></div>
-    <div><dt>Last synchronized</dt><dd>{{ (report.last_synced_at or '')[:19].replace('T',' ') or '—' }}</dd></div>
-    {% if report.unsupported_reason %}
-    <div><dt>Note</dt><dd class="muted">{{ report.unsupported_reason }}</dd></div>
-    {% endif %}
+    <div><dt>HTML design</dt><dd>{% if diagnostics.html_design_available %}Available ({{ diagnostics.design_content_bytes }} bytes){% else %}Not available{% endif %}</dd></div>
+    <div><dt>Discovery sources</dt><dd>{{ (diagnostics.discovery_sources or [])|join(', ') or '—' }}</dd></div>
+    <div><dt>Open URL</dt><dd class="mono" style="word-break:break-all">{{ diagnostics.open_url or '—' }}</dd></div>
+    <div><dt>External embed</dt><dd class="mono" style="word-break:break-all">{{ diagnostics.external_embed_url or '—' }}</dd></div>
+    <div><dt>Meta cache</dt><dd>{{ diagnostics.meta_cache }}</dd></div>
   </dl>
-</section>
+  <pre class="mono" id="dr-preview" style="margin-top:0.55rem">Timings appear here after Generate &amp; View.</pre>
+</details>
 
-<section class="panel" style="margin-top:0.85rem">
-  <div class="panel-header"><h2>Parameters</h2></div>
-  <form method="get" class="nb-filters">
-    <label>Period
-      <input name="period" value="{{ form.period }}" placeholder="YYYYMM or YYYY-MM-DD" {% if report.needs_period %}required{% endif %}>
-    </label>
-    <label>Organisation unit UID
-      <input name="org_unit" value="{{ form.org_unit }}" placeholder="11-char UID" {% if report.needs_org_unit %}required{% endif %}>
-    </label>
-    <button class="btn btn-sm btn-primary" type="submit">Apply</button>
-  </form>
-  <p class="muted">Period and organisation unit are required when the report declares those parameters or relative periods.</p>
-</section>
-
-<section class="panel" style="margin-top:0.85rem">
-  <div class="panel-header"><h2>Actions</h2></div>
-  <div class="btn-row" style="display:flex; gap:0.5rem; flex-wrap:wrap">
-    {% if urls %}
-      <a class="btn btn-sm btn-primary" id="dr-view-report" href="{{ url_for('dhis2_reports_standard_view', environment=report.environment, uid=report.uid, period=form.period, org_unit=form.org_unit) }}">View Report</a>
-      <a class="btn btn-sm" href="{{ urls.open_url }}" target="_blank" rel="noopener">Open in DHIS2</a>
-    {% else %}
-      <button class="btn btn-sm" type="button" disabled>View Report (set parameters)</button>
-    {% endif %}
-    <a class="btn btn-sm" href="{{ url_for('dhis2_reports_standard_html_source', environment=report.environment, uid=report.uid) }}">View HTML Source</a>
-    {% if urls %}
-      <a class="btn btn-sm" href="{{ url_for('api_dhis2_report_standard_html', environment=report.environment, uid=report.uid, rendered=1, download=1, period=form.period, org_unit=form.org_unit, confirm_live=1 if report.environment=='live' else 0) }}">Download HTML</a>
-    {% endif %}
-    <button type="button" class="btn btn-sm" id="dr-refresh-meta">Refresh Metadata</button>
-    {% if report.environment == 'live' %}
-      <label class="muted" style="display:inline-flex; gap:0.35rem; align-items:center">
-        <input type="checkbox" id="dr-live-confirm"> Confirm Live
-      </label>
-    {% endif %}
-    <span class="muted" id="dr-action-status"></span>
-  </div>
-  <p class="muted" style="margin-top:0.5rem">View Report fetches HTML with hub <code>.env</code> credentials (no browser login). Credentials are never placed in URLs. Use Open in DHIS2 only for the full DHIS2 Reports app.</p>
-</section>
-<script>
-(function () {
-  var viewBtn = document.getElementById("dr-view-report");
-  var live = {{ 'true' if report.environment == 'live' else 'false' }};
-  if (viewBtn && live) {
-    viewBtn.addEventListener("click", function (ev) {
-      var box = document.getElementById("dr-live-confirm");
-      if (!box || !box.checked) {
-        ev.preventDefault();
-        var status = document.getElementById("dr-action-status");
-        if (status) status.textContent = "Confirm Live first to view with .env credentials.";
-        return;
-      }
-      var url = new URL(viewBtn.href, window.location.origin);
-      url.searchParams.set("confirm_live", "1");
-      viewBtn.href = url.pathname + url.search;
-    });
-  }
-})();
-document.getElementById("dr-refresh-meta").onclick = function () {
-  var status = document.getElementById("dr-action-status");
-  var live = {{ 'true' if report.environment == 'live' else 'false' }};
-  var confirmLive = !live || (document.getElementById("dr-live-confirm") && document.getElementById("dr-live-confirm").checked);
-  if (live && !confirmLive) {
-    status.textContent = "Confirm Live first.";
-    return;
-  }
-  status.textContent = "Refreshing…";
-  fetch("/api/dhis2/reports/standard/{{ report.environment }}/{{ report.uid }}/refresh", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ confirm_live: !!confirmLive }),
-  }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
-    .then(function (res) {
-      if (!res.ok) {
-        status.textContent = (res.j && res.j.error) || "Refresh failed";
-        return;
-      }
-      location.reload();
-    });
-};
-</script>
+<script src="{{ url_for('static', filename='js/dhis2_reports_detail.js') }}?v=detail-params-1"></script>
 {% endblock %}

@@ -219,6 +219,7 @@ class ConsoleRouteTests(unittest.TestCase):
                 "tab": "terminal",
                 "terminal_session_id": "abc123",
                 "terminal_split": True,
+                "terminal_split_session_id": "def456",
             },
         )
         self.assertEqual(put.status_code, 200)
@@ -226,6 +227,35 @@ class ConsoleRouteTests(unittest.TestCase):
         self.assertEqual(get["prefs"]["tab"], "terminal")
         self.assertEqual(get["prefs"]["terminal_session_id"], "abc123")
         self.assertTrue(get["prefs"]["terminal_split"])
+        self.assertEqual(get["prefs"]["terminal_split_session_id"], "def456")
+
+    def test_prefs_reject_empty_or_same_split_session(self):
+        # Split flag alone must not persist an empty second pane.
+        put = self.client.put(
+            "/api/workspace-console/prefs",
+            json={
+                "terminal_session_id": "only-one",
+                "terminal_split": True,
+                "terminal_split_session_id": "",
+            },
+        )
+        self.assertEqual(put.status_code, 200)
+        prefs = self.client.get("/api/workspace-console/prefs").get_json()["prefs"]
+        self.assertFalse(prefs["terminal_split"])
+        self.assertEqual(prefs.get("terminal_split_session_id") or "", "")
+
+        put2 = self.client.put(
+            "/api/workspace-console/prefs",
+            json={
+                "terminal_session_id": "same",
+                "terminal_split": True,
+                "terminal_split_session_id": "same",
+            },
+        )
+        self.assertEqual(put2.status_code, 200)
+        prefs2 = self.client.get("/api/workspace-console/prefs").get_json()["prefs"]
+        self.assertFalse(prefs2["terminal_split"])
+        self.assertEqual(prefs2.get("terminal_split_session_id") or "", "")
 
     def test_bootstrap_does_not_scan_ports(self):
         with mock.patch.object(

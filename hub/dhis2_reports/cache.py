@@ -54,9 +54,11 @@ class TtlCache:
 
 # Module-level caches shared across requests (per process).
 CATALOG_CACHE = TtlCache(ttl_seconds=120, max_entries=32)
-ORG_UNIT_CACHE = TtlCache(ttl_seconds=90, max_entries=128)
-RESULT_CACHE = TtlCache(ttl_seconds=45, max_entries=64)
+ORG_UNIT_CACHE = TtlCache(ttl_seconds=180, max_entries=256)
+RESULT_CACHE = TtlCache(ttl_seconds=120, max_entries=96)
 CAPABILITY_CACHE = TtlCache(ttl_seconds=300, max_entries=8)
+PERIOD_CACHE = TtlCache(ttl_seconds=600, max_entries=16)
+METADATA_CACHE = TtlCache(ttl_seconds=180, max_entries=128)
 
 
 def result_cache_key(

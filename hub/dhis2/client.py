@@ -311,6 +311,11 @@ class Dhis2Client:
             "raw": payload,
         }
 
+    def get_analytics(self, params: dict[str, Any] | list[tuple[str, str]]) -> dict[str, Any]:
+        """GET /api/analytics.json — read-only aggregate values (no writes)."""
+        self._require_ready()
+        return self._get_json("/api/analytics.json", params=params)
+
     def _search_by_uid(self, uid: str) -> dict[str, Any]:
         try:
             payload = self._get_json(f"/api/identifiableObjects/{quote(uid, safe='')}")
@@ -789,7 +794,7 @@ class Dhis2Client:
     def _get_json(
         self,
         path: str,
-        params: dict[str, Any] | None = None,
+        params: dict[str, Any] | list[tuple[str, str]] | None = None,
         *,
         timeout: float | None = None,
     ) -> dict[str, Any]:
@@ -801,7 +806,7 @@ class Dhis2Client:
     def _get_json_any(
         self,
         path: str,
-        params: dict[str, Any] | None = None,
+        params: dict[str, Any] | list[tuple[str, str]] | None = None,
         *,
         timeout: float | None = None,
     ) -> Any:
@@ -821,7 +826,7 @@ class Dhis2Client:
     def _get_bytes(
         self,
         path: str,
-        params: dict[str, Any] | None = None,
+        params: dict[str, Any] | list[tuple[str, str]] | None = None,
         *,
         accept: str = "*/*",
         timeout: float | None = None,
@@ -843,7 +848,7 @@ class Dhis2Client:
     def _get_response(
         self,
         path: str,
-        params: dict[str, Any] | None = None,
+        params: dict[str, Any] | list[tuple[str, str]] | None = None,
         *,
         timeout: float | None = None,
         accept: str = "application/json",

@@ -78,10 +78,32 @@
       </div>
       <div class="wc-term-stage" id="wc-term-stage" data-split="0" hidden>
         <div class="wc-term-view is-active" id="wc-term-view-a" data-slot="a">
+          <div class="wc-term-pane-chrome">
+            <span class="wc-term-pane-title" id="wc-term-title-a">Terminal</span>
+            <button type="button" class="wc-term-pane-close" data-close-pane="a" title="Close pane" aria-label="Close pane">×</button>
+          </div>
           <div class="wc-xterm" id="wc-xterm-a"></div>
+          <div class="wc-term-ws-fail" id="wc-term-fail-a" hidden>
+            <p class="wc-term-ws-fail-msg">WebSocket disconnected</p>
+            <div class="wc-term-ws-fail-actions">
+              <button type="button" class="btn btn-sm btn-primary wc-control-btn" data-ws-reconnect="a">Reconnect</button>
+              <button type="button" class="btn btn-sm wc-control-btn" data-ws-close-pane="a">Close pane</button>
+            </div>
+          </div>
         </div>
         <div class="wc-term-view" id="wc-term-view-b" data-slot="b" hidden>
+          <div class="wc-term-pane-chrome">
+            <span class="wc-term-pane-title" id="wc-term-title-b">Terminal</span>
+            <button type="button" class="wc-term-pane-close" data-close-pane="b" title="Close pane" aria-label="Close pane">×</button>
+          </div>
           <div class="wc-xterm" id="wc-xterm-b"></div>
+          <div class="wc-term-ws-fail" id="wc-term-fail-b" hidden>
+            <p class="wc-term-ws-fail-msg">WebSocket disconnected</p>
+            <div class="wc-term-ws-fail-actions">
+              <button type="button" class="btn btn-sm btn-primary wc-control-btn" data-ws-reconnect="b">Reconnect</button>
+              <button type="button" class="btn btn-sm wc-control-btn" data-ws-close-pane="b">Close pane</button>
+            </div>
+          </div>
         </div>
       </div>
       <details class="wc-term-profiles">

@@ -1,6 +1,12 @@
 /**
  * Interactive repository terminal (xterm.js ↔ PTY WebSocket).
  * AI cannot execute — Insert into Terminal fills text without Enter.
+ *
+ * Split rules:
+ * - Default = single full-width terminal.
+ * - Split only after explicit Split click creates/attaches a second session.
+ * - Never show an empty second pane; collapse on second-pane WS failure.
+ * - Persist split only when two distinct live session ids exist.
  */
 (function (global) {
   "use strict";
@@ -22,12 +28,18 @@
     activeId: "",
     splitId: "",
     splitEnabled: false,
+    splitCreating: false,
+    pendingSplitId: "",
+    wantSplitRestore: false,
     catalog: null,
     views: { a: null, b: null },
     pendingInsert: null,
     hiddenActivity: 0,
     renderingPaused: false,
     initialized: false,
+    fitTimer: null,
+    resizeObserver: null,
+    activePane: "a",
   };
 
   function $(id) {
@@ -101,6 +113,7 @@
       sessionId: "",
       ws: null,
       disposed: false,
+      intentionalClose: false,
     };
     term.onData(function (data) {
       if (!view.ws || view.ws.readyState !== 1) return;
@@ -121,11 +134,35 @@
         origPaste(text);
       };
     }
+    var pane = hostEl.closest ? hostEl.closest(".wc-term-view") : null;
+    if (pane) {
+      pane.addEventListener("mousedown", function () {
+        setActivePane(slot);
+      });
+    }
     return view;
+  }
+
+  function scheduleFit() {
+    if (state.fitTimer) clearTimeout(state.fitTimer);
+    state.fitTimer = setTimeout(function () {
+      state.fitTimer = null;
+      requestAnimationFrame(function () {
+        fitAll();
+        requestAnimationFrame(fitAll);
+      });
+    }, 16);
+  }
+
+  function fitAll() {
+    fitView(state.views.a);
+    if (state.splitEnabled && state.splitId) fitView(state.views.b);
   }
 
   function fitView(view) {
     if (!view || !view.fit || state.renderingPaused) return;
+    var pane = view.host && view.host.closest ? view.host.closest(".wc-term-view") : null;
+    if (pane && pane.hidden) return;
     try {
       view.fit.fit();
       if (view.ws && view.ws.readyState === 1) {
@@ -136,32 +173,57 @@
     } catch (e) {}
   }
 
-  function disconnectView(view) {
+  function failEl(slot) {
+    return $("wc-term-fail-" + slot);
+  }
+
+  function hideFail(slot) {
+    var el = failEl(slot);
+    if (el) el.hidden = true;
+  }
+
+  function showFail(slot, message) {
+    var el = failEl(slot);
+    if (!el) return;
+    var msg = el.querySelector(".wc-term-ws-fail-msg");
+    if (msg) msg.textContent = message || "WebSocket disconnected";
+    el.hidden = false;
+  }
+
+  function disconnectView(view, opts) {
+    opts = opts || {};
     if (!view) return;
+    view.intentionalClose = !!opts.intentional;
     if (view.ws) {
       try {
-        view.ws.send(JSON.stringify({ type: "close" }));
+        if (opts.sendClose !== false) {
+          view.ws.send(JSON.stringify({ type: "close" }));
+        }
         view.ws.close();
       } catch (e) {}
       view.ws = null;
     }
-    view.sessionId = "";
+    if (!opts.keepSessionId) view.sessionId = "";
+    if (opts.hideFail) hideFail(view.slot);
   }
 
   function attachSession(view, sessionId) {
-    if (!view || !sessionId) return Promise.resolve();
+    if (!view || !sessionId) return Promise.resolve(false);
     if (view.sessionId === sessionId && view.ws && view.ws.readyState === 1) {
+      hideFail(view.slot);
       fitView(view);
-      return Promise.resolve();
+      return Promise.resolve(true);
     }
-    disconnectView(view);
+    disconnectView(view, { intentional: true, hideFail: true });
     view.sessionId = sessionId;
+    view.intentionalClose = false;
     view.term.reset();
     return jsonFetch(API.sessions + "/" + sessionId + "/ticket", { method: "POST", body: "{}" }).then(
       function (body) {
         if (!body.ok) {
-          view.term.writeln("\r\n\x1b[31m" + (body.error || "Ticket failed") + "\x1b[0m");
-          return;
+          showFail(view.slot, body.error || "Could not open terminal ticket");
+          handleConnectionLost(view, "ticket");
+          return false;
         }
         var sock = new WebSocket(wsUrl(sessionId, body.ticket));
         view.ws = sock;
@@ -181,6 +243,7 @@
             view.term.write(msg.data || "");
             markActivity();
           } else if (msg.type === "ready") {
+            hideFail(view.slot);
             fitView(view);
           } else if (msg.type === "exit") {
             view.term.writeln("\r\n\x1b[33m[process exited " + (msg.exit_code == null ? "" : msg.exit_code) + "]\x1b[0m");
@@ -189,18 +252,65 @@
             view.term.writeln("\r\n\x1b[31m" + (msg.error || "error") + "\x1b[0m");
           }
         };
-        sock.onclose = function () {
+        sock.onerror = function () {
+          if (view.intentionalClose) return;
+          showFail(
+            view.slot,
+            "WebSocket error — restart the hub with .venv\\Scripts\\python.exe app.py after pip install -r requirements.txt."
+          );
+          handleConnectionLost(view, "error");
+        };
+        sock.onclose = function (ev) {
           if (view.ws === sock) view.ws = null;
+          if (view.intentionalClose) return;
+          var msg =
+            ev && ev.code === 1006
+              ? "WebSocket closed unexpectedly (often missing flask-sock on the hub Python)."
+              : "WebSocket disconnected";
+          showFail(view.slot, msg);
+          handleConnectionLost(view, "close");
         };
         sock.onopen = function () {
+          hideFail(view.slot);
           fitView(view);
           if (state.pendingInsert && state.pendingInsert.sessionId === sessionId) {
             insertText(state.pendingInsert.text, false);
             state.pendingInsert = null;
           }
         };
+        return true;
       }
-    );
+    ).catch(function () {
+      showFail(view.slot, "Could not connect terminal WebSocket");
+      handleConnectionLost(view, "fetch");
+      return false;
+    });
+  }
+
+  function handleConnectionLost(view, reason) {
+    if (!view) return;
+    // Second pane must never remain as an empty/broken split.
+    if (view.slot === "b" && state.splitEnabled) {
+      collapseSplit({ reason: reason || "ws-fail" });
+      return;
+    }
+    showFail(view.slot);
+  }
+
+  function sessionById(id) {
+    return state.sessions.find(function (s) {
+      return s.id === id;
+    });
+  }
+
+  function sessionIsLive(id) {
+    var s = sessionById(id);
+    if (!s) return false;
+    return !!(s.alive || s.status === "running" || s.has_active_process);
+  }
+
+  function sessionExists(id) {
+    return !!sessionById(id);
   }
 
   function markActivity() {
@@ -247,6 +357,55 @@
     return shellLabel(s.shell) + " — " + (s.repository_name || s.repository_id || "repo");
   }
 
+  function updatePaneTitles() {
+    var titleA = $("wc-term-title-a");
+    var titleB = $("wc-term-title-b");
+    var a = sessionById(state.activeId);
+    var b = sessionById(state.splitId);
+    if (titleA) titleA.textContent = a ? tabLabel(a) : "Terminal";
+    if (titleB) titleB.textContent = b ? tabLabel(b) : "Terminal";
+  }
+
+  function setActivePane(slot) {
+    state.activePane = slot === "b" ? "b" : "a";
+    var viewA = $("wc-term-view-a");
+    var viewB = $("wc-term-view-b");
+    if (viewA) viewA.classList.toggle("is-active", state.activePane === "a");
+    if (viewB) viewB.classList.toggle("is-active", state.activePane === "b");
+  }
+
+  function applySplitLayout(enabled) {
+    var stage = $("wc-term-stage");
+    var viewB = $("wc-term-view-b");
+    var on = !!enabled && !!state.splitId && state.splitId !== state.activeId;
+    state.splitEnabled = on;
+    if (!on) {
+      state.splitId = "";
+      if (viewB) viewB.hidden = true;
+      if (stage) stage.setAttribute("data-split", "0");
+      setActivePane("a");
+    } else {
+      if (viewB) viewB.hidden = false;
+      if (stage) stage.setAttribute("data-split", "1");
+    }
+    updatePaneTitles();
+    updateActionButtons();
+    scheduleFit();
+  }
+
+  function collapseSplit(opts) {
+    opts = opts || {};
+    state.splitCreating = false;
+    disconnectView(state.views.b, { intentional: true, hideFail: true });
+    state.splitId = "";
+    state.splitEnabled = false;
+    applySplitLayout(false);
+    hideFail("b");
+    notifySessionChange(state.activeId);
+    scheduleFit();
+    return opts;
+  }
+
   function updateEmptyState() {
     var empty = $("wc-term-empty");
     var stage = $("wc-term-stage");
@@ -257,14 +416,20 @@
 
   function updateActionButtons() {
     var has = !!state.activeId;
-    var active = state.sessions.find(function (s) {
-      return s.id === state.activeId;
-    });
+    var active = sessionById(state.activeId);
     var running = !!(active && (active.alive || active.status === "running" || active.has_active_process));
     var split = $("wc-term-split");
     var restart = $("wc-term-restart");
     var kill = $("wc-term-kill");
-    if (split) split.disabled = !has;
+    if (split) {
+      split.disabled = !has || state.splitCreating;
+      split.textContent = state.splitEnabled ? "Unsplit" : "Split";
+      split.title = state.splitCreating
+        ? "Creating split…"
+        : state.splitEnabled
+          ? "Collapse to a single terminal"
+          : "Split view (opens a second terminal)";
+    }
     if (restart) restart.disabled = !has;
     if (kill) {
       kill.disabled = !has;
@@ -329,6 +494,7 @@
     });
     updateEmptyState();
     updateActionButtons();
+    updatePaneTitles();
     updateBadges();
   }
 
@@ -344,25 +510,73 @@
     state.hiddenActivity = 0;
     renderSessionTabs();
     if (!id) {
-      disconnectView(state.views.a);
+      disconnectView(state.views.a, { intentional: true, hideFail: true });
+      collapseSplit();
       updateEmptyState();
       updateActionButtons();
       notifySessionChange("");
       return;
     }
-    var view = state.views.a;
-    attachSession(view, id).then(function () {
-      if (state.splitEnabled && state.splitId) {
+    // Selecting the split session into the primary pane collapses split (tabs select primary).
+    if (state.splitEnabled && id === state.splitId) {
+      state.splitId = "";
+      applySplitLayout(false);
+      disconnectView(state.views.b, { intentional: true, hideFail: true });
+    }
+    attachSession(state.views.a, id).then(function () {
+      if (state.splitEnabled && state.splitId && state.splitId !== id) {
         attachSession(state.views.b, state.splitId);
       }
-      fitView(view);
+      scheduleFit();
     });
     notifySessionChange(id);
   }
 
   function notifySessionChange(id) {
     if (global.WCTerminal && global.WCTerminal.onSessionChange) {
-      global.WCTerminal.onSessionChange(id, { split: state.splitEnabled });
+      global.WCTerminal.onSessionChange(id, {
+        split: !!(state.splitEnabled && state.splitId && state.splitId !== id),
+        splitId: state.splitEnabled ? state.splitId || "" : "",
+      });
+    }
+  }
+
+  function reconcileSplitAfterRefresh() {
+    if (state.splitCreating) return;
+    if (state.wantSplitRestore && state.pendingSplitId) {
+      var splitCandidate = state.pendingSplitId;
+      state.wantSplitRestore = false;
+      state.pendingSplitId = "";
+      if (
+        state.activeId &&
+        splitCandidate &&
+        splitCandidate !== state.activeId &&
+        sessionIsLive(state.activeId) &&
+        sessionIsLive(splitCandidate)
+      ) {
+        state.splitId = splitCandidate;
+        applySplitLayout(true);
+        attachSession(state.views.b, state.splitId).then(function (ok) {
+          if (!ok) collapseSplit({ reason: "restore-attach-failed" });
+          else {
+            notifySessionChange(state.activeId);
+            scheduleFit();
+          }
+        });
+        return;
+      }
+      // Invalid saved split — stay full width and clear persistence.
+      state.splitId = "";
+      applySplitLayout(false);
+      notifySessionChange(state.activeId);
+      return;
+    }
+    if (state.splitEnabled) {
+      if (!state.splitId || state.splitId === state.activeId || !sessionExists(state.splitId)) {
+        collapseSplit({ reason: "missing-split-session" });
+      }
+    } else {
+      applySplitLayout(false);
     }
   }
 
@@ -376,15 +590,17 @@
       renderSessionTabs();
       if (state.activeId) {
         attachSession(state.views.a, state.activeId);
+        reconcileSplitAfterRefresh();
         if (state.splitEnabled && state.splitId) {
           attachSession(state.views.b, state.splitId);
         }
       } else {
-        disconnectView(state.views.a);
-        disconnectView(state.views.b);
+        disconnectView(state.views.a, { intentional: true, hideFail: true });
+        collapseSplit();
       }
       updateEmptyState();
       updateActionButtons();
+      scheduleFit();
       return state.sessions;
     });
   }
@@ -472,9 +688,7 @@
   }
 
   function closeSession(id) {
-    var s = state.sessions.find(function (x) {
-      return x.id === id;
-    });
+    var s = sessionById(id);
     if (s && (s.alive || s.status === "running" || s.has_active_process)) {
       if (!window.confirm("Close terminal and terminate its process tree?")) return;
     }
@@ -482,15 +696,20 @@
       method: "DELETE",
       body: JSON.stringify({ confirm: true }),
     }).then(function () {
-      if (state.activeId === id) state.activeId = "";
       if (state.splitId === id) {
-        state.splitId = "";
-        state.splitEnabled = false;
-        var stage = $("wc-term-stage");
-        var viewB = $("wc-term-view-b");
-        if (stage) stage.setAttribute("data-split", "0");
-        if (viewB) viewB.hidden = true;
-        disconnectView(state.views.b);
+        collapseSplit({ reason: "session-closed" });
+      }
+      if (state.activeId === id) {
+        if (state.splitEnabled && state.splitId) {
+          // Promote remaining split session to full width without killing it.
+          var keep = state.splitId;
+          disconnectView(state.views.b, { intentional: true, hideFail: true });
+          state.activeId = keep;
+          state.splitId = "";
+          applySplitLayout(false);
+        } else {
+          state.activeId = "";
+        }
       }
       refreshSessions();
     });
@@ -498,9 +717,7 @@
 
   function restartActive() {
     if (!state.activeId) return;
-    var s = state.sessions.find(function (x) {
-      return x.id === state.activeId;
-    });
+    var s = sessionById(state.activeId);
     if (s && (s.alive || s.status === "running" || s.has_active_process)) {
       if (!window.confirm("Restart terminal and terminate the current process tree?")) return;
     }
@@ -515,54 +732,133 @@
 
   function killActive() {
     if (!state.activeId) return;
-    var s = state.sessions.find(function (x) {
-      return x.id === state.activeId;
-    });
+    var s = sessionById(state.activeId);
     var running = !!(s && (s.alive || s.status === "running" || s.has_active_process));
     if (running) {
       if (!window.confirm("Kill this terminal and terminate its process tree?\n\nThis cannot be undone.")) {
         return;
       }
     }
-    jsonFetch(API.sessions + "/" + state.activeId + "?confirm=1", {
+    var id = state.activeId;
+    jsonFetch(API.sessions + "/" + id + "?confirm=1", {
       method: "DELETE",
       body: JSON.stringify({ confirm: true }),
     }).then(function () {
-      var id = state.activeId;
-      state.activeId = "";
-      if (state.splitId === id) state.splitId = "";
+      if (state.splitId === id) collapseSplit({ reason: "killed-split" });
+      if (state.activeId === id) {
+        if (state.splitEnabled && state.splitId) {
+          var keep = state.splitId;
+          disconnectView(state.views.b, { intentional: true, hideFail: true });
+          state.activeId = keep;
+          state.splitId = "";
+          applySplitLayout(false);
+        } else {
+          state.activeId = "";
+        }
+      }
       refreshSessions();
     });
   }
 
-  function toggleSplit() {
-    if (!state.activeId) return;
-    state.splitEnabled = !state.splitEnabled;
-    var stage = $("wc-term-stage");
-    var viewB = $("wc-term-view-b");
-    if (stage) stage.setAttribute("data-split", state.splitEnabled ? "1" : "0");
-    if (viewB) viewB.hidden = !state.splitEnabled;
-    if (state.splitEnabled) {
-      if (!state.splitId) {
-        jsonFetch(API.sessions + "/" + state.activeId + "/duplicate", { method: "POST", body: "{}" }).then(
-          function (body) {
-            if (body.ok) {
-              state.splitId = body.session.id;
-              refreshSessions().then(function () {
-                attachSession(state.views.b, state.splitId);
-                fitView(state.views.a);
-                fitView(state.views.b);
-              });
+  function beginSplit() {
+    if (!state.activeId || state.splitCreating || state.splitEnabled) return;
+    state.splitCreating = true;
+    updateActionButtons();
+    jsonFetch(API.sessions + "/" + state.activeId + "/duplicate", { method: "POST", body: "{}" })
+      .then(function (body) {
+        if (!body.ok || !body.session || !body.session.id) {
+          state.splitCreating = false;
+          updateActionButtons();
+          window.alert((body && body.error) || "Failed to create split terminal");
+          applySplitLayout(false);
+          scheduleFit();
+          return;
+        }
+        state.splitId = body.session.id;
+        return refreshSessions().then(function () {
+          return attachSession(state.views.b, state.splitId).then(function (ok) {
+            state.splitCreating = false;
+            if (!ok) {
+              collapseSplit({ reason: "attach-failed" });
+              return;
             }
-          }
-        );
-      } else {
-        attachSession(state.views.b, state.splitId);
-      }
-    } else {
-      disconnectView(state.views.b);
+            applySplitLayout(true);
+            setActivePane("b");
+            notifySessionChange(state.activeId);
+            scheduleFit();
+          });
+        });
+      })
+      .catch(function () {
+        state.splitCreating = false;
+        collapseSplit({ reason: "duplicate-failed" });
+        window.alert("Failed to create split terminal");
+      });
+  }
+
+  function toggleSplit() {
+    if (!state.activeId || state.splitCreating) return;
+    if (state.splitEnabled) {
+      // Unsplit: hide second pane without killing its session.
+      disconnectView(state.views.b, { intentional: true, hideFail: true });
+      state.splitId = "";
+      applySplitLayout(false);
+      notifySessionChange(state.activeId);
+      scheduleFit();
+      return;
     }
-    notifySessionChange(state.activeId);
+    beginSplit();
+  }
+
+  /**
+   * Close a split pane layout without killing the other terminal session.
+   */
+  function closePane(slot) {
+    hideFail(slot);
+    if (!state.splitEnabled) {
+      // Single pane: dismiss failure UI only; session stays in tabs.
+      if (slot === "a") {
+        disconnectView(state.views.a, { intentional: true, keepSessionId: true, hideFail: true });
+        showFail("a", "Terminal pane closed — use Reconnect or pick a session tab.");
+      }
+      return;
+    }
+    if (slot === "b") {
+      disconnectView(state.views.b, { intentional: true, hideFail: true });
+      state.splitId = "";
+      applySplitLayout(false);
+      notifySessionChange(state.activeId);
+      scheduleFit();
+      return;
+    }
+    // Close primary pane while split: promote B to full width.
+    var keep = state.splitId;
+    disconnectView(state.views.a, { intentional: true, hideFail: true });
+    disconnectView(state.views.b, { intentional: true, hideFail: true });
+    state.activeId = keep || state.activeId;
+    state.splitId = "";
+    applySplitLayout(false);
+    if (state.activeId) {
+      attachSession(state.views.a, state.activeId);
+      renderSessionTabs();
+      notifySessionChange(state.activeId);
+    }
+    scheduleFit();
+  }
+
+  function reconnectPane(slot) {
+    var view = slot === "b" ? state.views.b : state.views.a;
+    var sid = view && view.sessionId;
+    if (!sid) {
+      if (slot === "a") sid = state.activeId;
+      if (slot === "b") sid = state.splitId;
+    }
+    if (!view || !sid) return;
+    hideFail(slot);
+    attachSession(view, sid).then(function (ok) {
+      if (!ok && slot === "b") collapseSplit({ reason: "reconnect-failed" });
+      scheduleFit();
+    });
   }
 
   /**
@@ -570,10 +866,11 @@
    */
   function insertText(text, notifyServer) {
     var cleaned = String(text || "").replace(/\r?\n$/, "");
-    var view = state.views.a;
+    var view = state.activePane === "b" && state.splitEnabled ? state.views.b : state.views.a;
+    var sid = view && view.sessionId ? view.sessionId : state.activeId;
     if (!view || !view.ws || view.ws.readyState !== 1) {
-      state.pendingInsert = { sessionId: state.activeId, text: cleaned };
-      if (!state.activeId) {
+      state.pendingInsert = { sessionId: sid, text: cleaned };
+      if (!sid) {
         window.alert("Open a terminal session first, then use Insert into Terminal.");
       }
       return false;
@@ -585,7 +882,7 @@
     if (notifyServer !== false) {
       jsonFetch(API.insert, {
         method: "POST",
-        body: JSON.stringify({ session_id: state.activeId, executed: false }),
+        body: JSON.stringify({ session_id: sid, executed: false }),
       }).catch(function () {});
     }
     return true;
@@ -596,8 +893,7 @@
     if (!paused) {
       state.hiddenActivity = 0;
       updateBadges();
-      fitView(state.views.a);
-      if (state.splitEnabled) fitView(state.views.b);
+      scheduleFit();
     } else {
       updateBadges();
     }
@@ -616,12 +912,37 @@
     if (btnSplit) btnSplit.onclick = toggleSplit;
     if (btnRestart) btnRestart.onclick = restartActive;
     if (btnKill) btnKill.onclick = killActive;
+
+    document.querySelectorAll("[data-close-pane]").forEach(function (btn) {
+      btn.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        closePane(btn.getAttribute("data-close-pane"));
+      });
+    });
+    document.querySelectorAll("[data-ws-reconnect]").forEach(function (btn) {
+      btn.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        reconnectPane(btn.getAttribute("data-ws-reconnect"));
+      });
+    });
+    document.querySelectorAll("[data-ws-close-pane]").forEach(function (btn) {
+      btn.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        closePane(btn.getAttribute("data-ws-close-pane"));
+      });
+    });
   }
 
   function init(opts) {
     opts = opts || {};
     if (opts.activeId) state.activeId = opts.activeId;
-    if (opts.split) state.splitEnabled = !!opts.split;
+    // Never enable split chrome from a bare boolean — require a second session id,
+    // then validate both are live after refreshSessions.
+    state.pendingSplitId = opts.splitId || opts.splitSessionId || "";
+    state.wantSplitRestore = !!(opts.split && state.pendingSplitId && state.pendingSplitId !== state.activeId);
+    state.splitEnabled = false;
+    state.splitId = "";
     return ensureXterm().then(function () {
       var a = $("wc-xterm-a");
       var b = $("wc-xterm-b");
@@ -629,16 +950,17 @@
       if (b && !state.views.b) state.views.b = createView("b", b);
       if (!state.initialized) {
         wireButtons();
-        window.addEventListener("resize", function () {
-          fitView(state.views.a);
-          if (state.splitEnabled) fitView(state.views.b);
-        });
+        window.addEventListener("resize", scheduleFit);
+        var stage = $("wc-term-stage");
+        if (stage && typeof ResizeObserver !== "undefined") {
+          state.resizeObserver = new ResizeObserver(function () {
+            scheduleFit();
+          });
+          state.resizeObserver.observe(stage);
+        }
         state.initialized = true;
       }
-      var stage = $("wc-term-stage");
-      var viewB = $("wc-term-view-b");
-      if (stage) stage.setAttribute("data-split", state.splitEnabled ? "1" : "0");
-      if (viewB) viewB.hidden = !state.splitEnabled;
+      applySplitLayout(false);
       updateEmptyState();
       updateActionButtons();
       return refreshSessions();
@@ -653,15 +975,41 @@
     newTerminal: newTerminal,
     insertText: insertText,
     setRenderingPaused: setRenderingPaused,
+    toggleSplit: toggleSplit,
+    beginSplit: beginSplit,
+    collapseSplit: collapseSplit,
+    closePane: closePane,
+    scheduleFit: scheduleFit,
     getActiveId: function () {
       return state.activeId;
+    },
+    getSplitId: function () {
+      return state.splitEnabled ? state.splitId : "";
+    },
+    isSplitEnabled: function () {
+      return !!(state.splitEnabled && state.splitId);
+    },
+    isSplitCreating: function () {
+      return !!state.splitCreating;
     },
     getSessions: function () {
       return state.sessions.slice();
     },
+    /** Test/helper: snapshot layout flags without touching the DOM heavily. */
+    getLayoutState: function () {
+      var stage = $("wc-term-stage");
+      var viewB = $("wc-term-view-b");
+      return {
+        splitEnabled: !!state.splitEnabled,
+        splitId: state.splitId || "",
+        activeId: state.activeId || "",
+        splitCreating: !!state.splitCreating,
+        dataSplit: stage ? stage.getAttribute("data-split") : null,
+        viewBHidden: viewB ? !!viewB.hidden : true,
+      };
+    },
     fit: function () {
-      fitView(state.views.a);
-      if (state.splitEnabled) fitView(state.views.b);
+      scheduleFit();
     },
     onSessionChange: null,
   };

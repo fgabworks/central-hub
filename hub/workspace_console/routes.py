@@ -364,10 +364,15 @@ def register_workspace_console_routes(app: Flask) -> None:
             code = getattr(exc, "code", "error")
             return jsonify({"ok": False, "error": str(exc), "code": code}), 400
 
-    # WebSocket via flask-sock
+    # WebSocket via flask-sock (required for interactive typing).
     try:
         from flask_sock import Sock
     except ImportError:  # pragma: no cover
+        app.logger.error(
+            "flask-sock is not installed — interactive terminal WebSockets are disabled. "
+            "Install requirements into the same Python that runs the hub "
+            "(prefer .venv\\Scripts\\python.exe -m pip install -r requirements.txt)."
+        )
         return
 
     sock = Sock(app)

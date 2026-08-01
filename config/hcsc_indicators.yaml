@@ -1,0 +1,315 @@
+# HCSC Indicator Summary & Data Lineage — NPMO
+# Phase 0–1 registry. Hub stores references only — no formula reimplementation.
+# Verified seeds: evaluation + NPMO design qTQD08sNuzZ summarySingleOuDxToElementId.
+# Unresolved definitions are marked; do not invent UIDs.
+
+npmo_report_uid: qTQD08sNuzZ
+npmo_report_name: HCSC Summary Tables (NPMO)
+
+indicators:
+  - key: eligible_households
+    display_name: Eligible Households
+    category: household
+    result_type: count
+    source_owner: DHIS2
+    source_type: program_indicator
+    dhis2_uids:
+      value: fxmvSiKfEpn
+    numerator_label: null
+    denominator_label: null
+    percentage_formula_reference: null
+    population_definition_reference: "Eligible HH (pregnant OR postpartum OR child ID flags per PI filter)"
+    source_table_view_reference: "DHIS2 programIndicators / analytics dx:fxmvSiKfEpn"
+    repository_file_reference: "AI_UID_INDEX.csv (programIndicator fxmvSiKfEpn); NPMO design span id=fxmvSiKfEpn"
+    quarter_rule_reference: "Analytics pe dimension (YYYYQn)"
+    organisation_unit_rule: "Analytics ou dimension (selected org unit)"
+    ip_non_ip_rule: "Not applied on this PI"
+    confidence: high
+    validation_source: "NPMO HTML qTQD08sNuzZ; DHIS2 analytics; AI_UID_INDEX.csv"
+    notes: "Verified evaluation seed + NPMO design mapping."
+    overview: true
+    unresolved: false
+
+  - key: approved_eligible_households
+    display_name: Approved Eligible Households
+    category: household
+    result_type: count
+    source_owner: DHIS2
+    source_type: program_indicator
+    dhis2_uids:
+      value: BSqDSIpHhoT
+    numerator_label: null
+    denominator_label: null
+    percentage_formula_reference: null
+    population_definition_reference: "Eligible HH with Approved + Completed interview status (PI filter)"
+    source_table_view_reference: "DHIS2 programIndicators / analytics dx:BSqDSIpHhoT"
+    repository_file_reference: "AI_UID_INDEX.csv (programIndicator BSqDSIpHhoT); NPMO design span id=BSqDSIpHhoT"
+    quarter_rule_reference: "Analytics pe dimension (YYYYQn)"
+    organisation_unit_rule: "Analytics ou dimension (selected org unit)"
+    ip_non_ip_rule: "Not applied on this PI"
+    confidence: high
+    validation_source: "NPMO HTML qTQD08sNuzZ; DHIS2 analytics; AI_UID_INDEX.csv"
+    notes: "Verified evaluation seed + NPMO design mapping."
+    overview: true
+    unresolved: false
+
+  - key: convergent_households
+    display_name: Convergent Households
+    category: household
+    result_type: count
+    source_owner: DHIS2
+    source_type: program_indicator
+    dhis2_uids:
+      value: LOMZy9q1euI
+    numerator_label: null
+    denominator_label: null
+    percentage_formula_reference: null
+    population_definition_reference: "Eligible Approved+Completed HH where wrebGMGk0a2 == 1 (PI filter)"
+    source_table_view_reference: "DHIS2 programIndicators / analytics dx:LOMZy9q1euI"
+    repository_file_reference: "AI_UID_INDEX.csv (programIndicator LOMZy9q1euI); NPMO design span id=LOMZy9q1euI"
+    quarter_rule_reference: "Analytics pe dimension (YYYYQn)"
+    organisation_unit_rule: "Analytics ou dimension (selected org unit)"
+    ip_non_ip_rule: "Not applied on this PI"
+    confidence: high
+    validation_source: "NPMO HTML qTQD08sNuzZ; DHIS2 analytics; AI_UID_INDEX.csv"
+    notes: "Status DE written by Live Processing convergence; hub reads PI only."
+    overview: true
+    unresolved: false
+
+  - key: convergence_rate
+    display_name: Convergence Rate
+    category: household
+    result_type: numerator_denominator_percentage
+    source_owner: DHIS2
+    source_type: indicator
+    dhis2_uids:
+      value: qzjKcfO9J2w
+      numerator: LOMZy9q1euI
+      denominator: BSqDSIpHhoT
+    numerator_label: Convergent Households
+    denominator_label: Approved Eligible Households
+    percentage_formula_reference: "I{LOMZy9q1euI} / I{BSqDSIpHhoT} (DHIS2 indicator qzjKcfO9J2w)"
+    population_definition_reference: "Approved Eligible Households (denominator)"
+    source_table_view_reference: "DHIS2 indicators / analytics dx:qzjKcfO9J2w"
+    repository_file_reference: "AI_UID_INDEX.csv (indicator qzjKcfO9J2w)"
+    quarter_rule_reference: "Analytics pe dimension (YYYYQn)"
+    organisation_unit_rule: "Analytics ou dimension (selected org unit)"
+    ip_non_ip_rule: "Not applied on this indicator"
+    confidence: high
+    validation_source: "DHIS2 analytics; AI_UID_INDEX.csv; NPMO municipality formula text (Convergent/Approved Eligible)"
+    notes: "NPMO header Overall Convergence Rate (Pct_Convergence_Mun) is client-computed from convergent units/total units and may differ — see convergent_units."
+    overview: true
+    unresolved: false
+
+  - key: completion_validated_eligible_rate
+    display_name: Completion / Validated Eligible Rate
+    category: household
+    result_type: numerator_denominator_percentage
+    source_owner: DHIS2
+    source_type: indicator
+    dhis2_uids:
+      value: StDJxe7tIiS
+      numerator: BSqDSIpHhoT
+      denominator: fxmvSiKfEpn
+    numerator_label: Approved Eligible Households
+    denominator_label: Eligible Households
+    percentage_formula_reference: "I{BSqDSIpHhoT} / I{fxmvSiKfEpn} (DHIS2 indicator StDJxe7tIiS)"
+    population_definition_reference: "Eligible Households (denominator)"
+    source_table_view_reference: "DHIS2 indicators / analytics dx:StDJxe7tIiS"
+    repository_file_reference: "AI_UID_INDEX.csv (indicator StDJxe7tIiS); NPMO Percent Completion tooltip"
+    quarter_rule_reference: "Analytics pe dimension (YYYYQn)"
+    organisation_unit_rule: "Analytics ou dimension (selected org unit)"
+    ip_non_ip_rule: "Not applied on this indicator"
+    confidence: high
+    validation_source: "NPMO Percent Completion tooltip; DHIS2 analytics; AI_UID_INDEX.csv"
+    notes: "Verified evaluation seed."
+    overview: true
+    unresolved: false
+
+  - key: pregnant_women
+    display_name: Pregnant Women
+    category: maternal
+    result_type: count
+    source_owner: DHIS2
+    source_type: program_indicator
+    dhis2_uids:
+      value: egST5Av3tJh
+    numerator_label: null
+    denominator_label: null
+    percentage_formula_reference: null
+    population_definition_reference: "Eligible pregnant members (PI filter — see DHIS2 programIndicator)"
+    source_table_view_reference: "DHIS2 programIndicators / analytics dx:egST5Av3tJh"
+    repository_file_reference: "NPMO design summarySingleOuDxToElementId egST5Av3tJh→egST5Av3tJh; AI_UID_INDEX.csv"
+    quarter_rule_reference: "Analytics pe dimension (YYYYQn)"
+    organisation_unit_rule: "Analytics ou dimension (selected org unit)"
+    ip_non_ip_rule: "Not applied on this PI (IP disaggregation not registered for Overview)"
+    confidence: high
+    validation_source: "NPMO design qTQD08sNuzZ; DHIS2 analytics; AI_UID_INDEX.csv"
+    notes: "Decoded from NPMO design span id=egST5Av3tJh."
+    overview: true
+    unresolved: false
+
+  - key: postpartum_women
+    display_name: Postpartum Women
+    category: maternal
+    result_type: count
+    source_owner: DHIS2
+    source_type: program_indicator
+    dhis2_uids:
+      value: NLIeH5JjPOa
+    numerator_label: null
+    denominator_label: null
+    percentage_formula_reference: null
+    population_definition_reference: "Eligible postpartum members (PI filter — see DHIS2 programIndicator)"
+    source_table_view_reference: "DHIS2 programIndicators / analytics dx:NLIeH5JjPOa"
+    repository_file_reference: "NPMO design summarySingleOuDxToElementId NLIeH5JjPOa→NLIeH5JjPOa; AI_UID_INDEX.csv"
+    quarter_rule_reference: "Analytics pe dimension (YYYYQn)"
+    organisation_unit_rule: "Analytics ou dimension (selected org unit)"
+    ip_non_ip_rule: "Not applied on this PI"
+    confidence: high
+    validation_source: "NPMO design qTQD08sNuzZ; DHIS2 analytics; AI_UID_INDEX.csv"
+    notes: "Decoded from NPMO design span id=NLIeH5JjPOa."
+    overview: true
+    unresolved: false
+
+  - key: children_0_59_months
+    display_name: Eligible Children 0–59 months
+    category: child
+    result_type: count
+    source_owner: DHIS2
+    source_type: program_indicator
+    dhis2_uids:
+      value: M14FqSaQu5Q
+    numerator_label: null
+    denominator_label: null
+    percentage_formula_reference: null
+    population_definition_reference: "Eligible children age_months < 60 (PI filter)"
+    source_table_view_reference: "DHIS2 programIndicators / analytics dx:M14FqSaQu5Q"
+    repository_file_reference: "NPMO design span id=M14FqSaQu5Q; AI_UID_INDEX.csv"
+    quarter_rule_reference: "Analytics pe dimension (YYYYQn)"
+    organisation_unit_rule: "Analytics ou dimension (selected org unit)"
+    ip_non_ip_rule: "Not applied on this PI"
+    confidence: high
+    validation_source: "NPMO design qTQD08sNuzZ; DHIS2 analytics; AI_UID_INDEX.csv"
+    notes: "Decoded from NPMO design. Age range 0–59 months per PI name."
+    overview: true
+    unresolved: false
+    age_range: "0–59 months"
+
+  - key: children_less_than_6_months
+    display_name: Eligible Children less than 6 months
+    category: child
+    result_type: count
+    source_owner: DHIS2
+    source_type: program_indicator
+    dhis2_uids:
+      value: r5cHtnYeyXd
+    numerator_label: null
+    denominator_label: null
+    percentage_formula_reference: null
+    population_definition_reference: "Eligible children age_months < 6 (PI filter)"
+    source_table_view_reference: "DHIS2 programIndicators / analytics dx:r5cHtnYeyXd"
+    repository_file_reference: "NPMO design span id=r5cHtnYeyXd; AI_UID_INDEX.csv"
+    quarter_rule_reference: "Analytics pe dimension (YYYYQn)"
+    organisation_unit_rule: "Analytics ou dimension (selected org unit)"
+    ip_non_ip_rule: "Not applied on this PI"
+    confidence: high
+    validation_source: "NPMO design qTQD08sNuzZ; DHIS2 analytics; AI_UID_INDEX.csv"
+    notes: "Decoded from NPMO design. Age range 0–5.9 months."
+    overview: true
+    unresolved: false
+    age_range: "0–<6 months"
+
+  - key: children_6_23_months
+    display_name: Eligible Children 6–23 months
+    category: child
+    result_type: count
+    source_owner: DHIS2
+    source_type: program_indicator
+    dhis2_uids:
+      value: ePaxQu8511O
+    numerator_label: null
+    denominator_label: null
+    percentage_formula_reference: null
+    population_definition_reference: "Eligible children 6 <= age_months < 24 (PI filter)"
+    source_table_view_reference: "DHIS2 programIndicators / analytics dx:ePaxQu8511O"
+    repository_file_reference: "NPMO design span id=ePaxQu8511O; AI_UID_INDEX.csv"
+    quarter_rule_reference: "Analytics pe dimension (YYYYQn)"
+    organisation_unit_rule: "Analytics ou dimension (selected org unit)"
+    ip_non_ip_rule: "Not applied on this PI"
+    confidence: high
+    validation_source: "NPMO design qTQD08sNuzZ; DHIS2 analytics; AI_UID_INDEX.csv"
+    notes: "Decoded from NPMO design."
+    overview: true
+    unresolved: false
+    age_range: "6–23 months"
+
+  - key: children_6_59_months
+    display_name: Eligible Children 6–59 months
+    category: child
+    result_type: count
+    source_owner: DHIS2
+    source_type: program_indicator
+    dhis2_uids:
+      value: OHXq7rbDo7b
+    numerator_label: null
+    denominator_label: null
+    percentage_formula_reference: null
+    population_definition_reference: "Eligible children 6 <= age_months < 60 (PI filter)"
+    source_table_view_reference: "DHIS2 programIndicators / analytics dx:OHXq7rbDo7b"
+    repository_file_reference: "NPMO design span id=OHXq7rbDo7b; AI_UID_INDEX.csv"
+    quarter_rule_reference: "Analytics pe dimension (YYYYQn)"
+    organisation_unit_rule: "Analytics ou dimension (selected org unit)"
+    ip_non_ip_rule: "Not applied on this PI"
+    confidence: high
+    validation_source: "NPMO design qTQD08sNuzZ; DHIS2 analytics; AI_UID_INDEX.csv"
+    notes: "Decoded from NPMO design."
+    overview: true
+    unresolved: false
+    age_range: "6–59 months"
+
+  - key: indigenous_peoples
+    display_name: Number of IPs
+    category: demographics
+    result_type: count
+    source_owner: DHIS2
+    source_type: program_indicator
+    dhis2_uids:
+      value: ZkDVhSbzeRq
+    numerator_label: null
+    denominator_label: null
+    percentage_formula_reference: null
+    population_definition_reference: "IP members per PI filter (AI_UID_INDEX.csv)"
+    source_table_view_reference: "DHIS2 programIndicators / analytics dx:ZkDVhSbzeRq"
+    repository_file_reference: "NPMO design summarySingleOuDxToElementId ZkDVhSbzeRq→Number_IPs; AI_UID_INDEX.csv"
+    quarter_rule_reference: "Analytics pe dimension (YYYYQn)"
+    organisation_unit_rule: "Analytics ou dimension (selected org unit)"
+    ip_non_ip_rule: "This PI counts IP members (not a non-IP counterpart)"
+    confidence: high
+    validation_source: "NPMO design qTQD08sNuzZ; DHIS2 analytics; AI_UID_INDEX.csv"
+    notes: "Decoded from NPMO design map (span id=Number_IPs bound to ZkDVhSbzeRq)."
+    overview: true
+    unresolved: false
+
+  - key: convergent_units
+    display_name: Convergent Units
+    category: household
+    result_type: derived_status
+    source_owner: DHIS2
+    source_type: report_client_computed
+    dhis2_uids: {}
+    numerator_label: null
+    denominator_label: null
+    percentage_formula_reference: null
+    population_definition_reference: "Unresolved — NPMO JS totalConvergentUnits over scorecard rows"
+    source_table_view_reference: "NPMO HTML span id=Number_Convergent_Bgy (no dx UID in summarySingleOuDxToElementId)"
+    repository_file_reference: "Synced design qTQD08sNuzZ — client assigns Number_Convergent_Bgy = totalConvergentUnits"
+    quarter_rule_reference: "Same report period selection as NPMO HTML"
+    organisation_unit_rule: "Derived across child org units in NPMO scorecard body (not a single PI)"
+    ip_non_ip_rule: "Unresolved"
+    confidence: low
+    validation_source: "NPMO design JS only — no program indicator UID decoded"
+    notes: "UNRESOLVED: No DHIS2 UID in summarySingleOuDxToElementId. Hub will not invent a UID or formula."
+    overview: true
+    unresolved: true
+    age_range: null

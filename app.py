@@ -126,6 +126,8 @@ from hub.repository_workspace.routes import register_repository_workspace_routes
 from hub.dhis2_reports.routes import register_dhis2_reports_routes
 from hub.dhis2_reports.service import Dhis2ReportsService
 from hub.dhis2_reports.store import ReportsStore
+from hub.hcsc_indicators.routes import register_hcsc_indicator_routes
+from hub.hcsc_indicators.service import HcscIndicatorService
 from hub.repository_workspace.service import RepositoryWorkspaceService
 from hub.registry import load_registry
 from hub.registry.git_util import default_search_roots, find_local_checkout, slugify_repo_id
@@ -147,6 +149,7 @@ settings = load_settings()
 _DHIS2_TOOLS = [
     {"label": "Instance Details", "icon": "◎", "endpoint": "dhis2_instance"},
     {"label": "Reports", "icon": "▤", "endpoint": "dhis2_reports_library"},
+    {"label": "HCSC Indicators", "icon": "▣", "endpoint": "hcsc_indicator_summary"},
     {"label": "Metadata Catalog", "icon": "▦", "endpoint": "dhis2_catalog"},
     {"label": "Authorities", "icon": "☰", "endpoint": "dhis2_authorities"},
     {"label": "Metadata Lookup", "icon": "⌕", "endpoint": "dhis2_lookup"},
@@ -387,6 +390,11 @@ def create_app() -> Flask:
     )
     app.config["AGENT_CENTER"].dhis2_reports = app.config["DHIS2_REPORTS"]
     register_dhis2_reports_routes(app)
+
+    app.config["HCSC_INDICATORS"] = HcscIndicatorService(
+        client_factory=_dhis2_client_for_env,
+    )
+    register_hcsc_indicator_routes(app)
 
     @app.context_processor
     def inject_globals():

@@ -352,6 +352,68 @@ class TerminalRouteTests(unittest.TestCase):
         self.assertIn("Open URL", wc_js)
         self.assertIn("terminal_name", wc_js)
 
+    def test_terminal_split_defaults_full_width_and_collapses_safely(self):
+        panel = (ROOT / "templates" / "partials" / "workspace_console_panel.html").read_text(encoding="utf-8")
+        css = (ROOT / "static" / "css" / "style.css").read_text(encoding="utf-8")
+        term_js = (ROOT / "static" / "js" / "wc_terminal.js").read_text(encoding="utf-8")
+        wc_js = (ROOT / "static" / "js" / "workspace_console.js").read_text(encoding="utf-8")
+        prefs_py = (ROOT / "hub" / "workspace_console" / "prefs.py").read_text(encoding="utf-8")
+
+        # One terminal uses full width by default
+        self.assertIn('data-split="0"', panel)
+        self.assertIn('id="wc-term-view-b"', panel)
+        self.assertIn("hidden", panel.split('id="wc-term-view-b"', 1)[1].split(">", 1)[0])
+        self.assertIn('.wc-term-stage:not([data-split="1"]) .wc-term-view', css)
+        self.assertIn("width: 100%", css)
+        self.assertIn(".wc-term-view[hidden]", css)
+        self.assertIn("display: none !important", css)
+
+        # Explicit split creates two valid panes (duplicate + attach before layout)
+        self.assertIn("beginSplit", term_js)
+        self.assertIn("/duplicate", term_js)
+        self.assertIn("applySplitLayout(true)", term_js)
+        self.assertIn("splitCreating", term_js)
+        self.assertIn("Creating split", term_js)
+
+        # Failed second session collapses cleanly; never empty pane
+        self.assertIn("collapseSplit", term_js)
+        self.assertIn("attach-failed", term_js)
+        self.assertIn('view.slot === "b"', term_js)
+        self.assertIn("Never enable split chrome from a bare boolean", term_js)
+
+        # Closing one pane restores full width without killing the other
+        self.assertIn("closePane", term_js)
+        self.assertIn("data-close-pane", panel)
+        self.assertIn("promote B to full width", term_js)
+
+        # Reload does not restore an invalid empty split
+        self.assertIn("terminal_split_session_id", prefs_py)
+        self.assertIn("terminal_split_session_id", wc_js)
+        self.assertIn("wantSplitRestore", term_js)
+        self.assertIn("sessionIsLive", term_js)
+        self.assertIn("Never persist an empty/invalid split layout", prefs_py)
+
+        # xterm resize after split/collapse
+        self.assertIn("scheduleFit", term_js)
+        self.assertIn("ResizeObserver", term_js)
+        self.assertIn("requestAnimationFrame", term_js)
+
+        # WS failure UI
+        self.assertIn("wc-term-ws-fail", panel)
+        self.assertIn("Reconnect", panel)
+        self.assertIn("Close pane", panel)
+        self.assertIn("data-ws-reconnect", term_js)
+        self.assertIn("showFail", term_js)
+
+        # Active pane chrome when split
+        self.assertIn("wc-term-pane-title", panel)
+        self.assertIn('.wc-term-stage[data-split="1"] .wc-term-view.is-active', css)
+        self.assertIn("setActivePane", term_js)
+
+        # Public layout helpers for diagnostics/tests
+        self.assertIn("getLayoutState", term_js)
+        self.assertIn("isSplitEnabled", term_js)
+
 
 class TerminalConsoleRegressionTests(unittest.TestCase):
     def test_existing_console_tests_still_import(self):

@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}{{ page_title }} · {{ app_name }}{% endblock %}
+{% block head %}
+<script src="{{ url_for('static', filename='js/hcsc_indicator_summary.js') }}" defer></script>
+{% endblock %}
+{% block content %}
+<section class="page-header page-header-compact">
+  <div>
+    <h1>{{ page_title }}</h1>
+    <p class="muted">
+      Phase 0–1 — read-only registry + batched DHIS2 analytics Overview.
+      Formulas stay in DHIS2 program indicators / connected repositories.
+      Reference report: <code>{{ bootstrap.npmo_report_uid }}</code> {{ bootstrap.npmo_report_name }}.
+    </p>
+  </div>
+  <div class="page-meta">
+    {% if dhis2_instance %}<span class="badge">Active: {{ dhis2_instance }}</span>{% endif %}
+    <span class="badge">GET-only</span>
+  </div>
+</section>
+
+<div id="hcsc-root"
+     data-bootstrap='{{ bootstrap | tojson }}'
+     data-overview-url="{{ url_for('api_hcsc_indicators_overview') }}"
+     data-detail-url="{{ url_for('api_hcsc_indicator_detail', key='__KEY__') }}"
+     data-org-units-url="{{ url_for('api_dhis2_reports_org_units') }}"
+     data-periods-url="{{ url_for('api_dhis2_report_periods') }}">
+
+  <form class="hcsc-controls nb-filters" id="hcsc-controls">
+    <label>Environment
+      <select id="hcsc-env" name="environment">
+        <option value="stage">Stage</option>
+        <option value="live">Live</option>
+      </select>
+    </label>
+    <label>Quarter
+      <select id="hcsc-period" name="period"></select>
+    </label>
+    <label>Organisation unit
+      <input type="search" id="hcsc-ou-search" placeholder="Search name / code / UID" autocomplete="off">
+      <input type="hidden" id="hcsc-ou" name="orgUnit">
+      <ul class="hcsc-ou-results" id="hcsc-ou-results" hidden></ul>
+      <span class="muted" id="hcsc-ou-label"></span>
+    </label>
+    <label>Disaggregation
+      <select id="hcsc-disagg" name="disaggregation">
+        <option value="none">None (aggregate)</option>
+        <option value="ip" disabled>IP / non-IP (planned)</option>
+      </select>
+    </label>
+    <button type="submit" class="btn btn-sm btn-primary" id="hcsc-run">Load Overview</button>
+    <button type="button" class="btn btn-sm" id="hcsc-refresh" title="Force refresh">Refresh</button>
+  </form>
+
+  <p class="muted hcsc-status" id="hcsc-status">Select environment, quarter, and organisation unit.</p>
+
+  <section class="hcsc-overview-cards" id="hcsc-cards" aria-label="Overview cards"></section>
+
+  <section class="hcsc-table-wrap">
+    <div class="hcsc-table-toolbar">
+      <input type="search" id="hcsc-filter" placeholder="Filter indicators…" aria-label="Filter indicators">
+      <span class="muted" id="hcsc-freshness"></span>
+    </div>
+    <div class="table-scroll">
+      <table class="data-table hcsc-table" id="hcsc-table">
+        <thead>
+          <tr>
+            <th>Indicator</th>
+            <th>Type</th>
+            <th>Count / Value</th>
+            <th>Numerator</th>
+            <th>Denominator</th>
+            <th>%</th>
+            <th>Source</th>
+            <th>Validation</th>
+          </tr>
+        </thead>
+        <tbody id="hcsc-tbody">
+          <tr><td colspan="8" class="muted">No results yet.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <details class="hcsc-query" id="hcsc-query">
+    <summary>Query Used to Generate This</summary>
+    <div class="hcsc-query-body" id="hcsc-query-body">
+      <p class="muted">Load Overview to show the analytics request (credentials never included).</p>
+    </div>
+    <button type="button" class="btn btn-sm" id="hcsc-copy-query">Copy Request</button>
+  </details>
+</div>
+
+<aside class="hcsc-drawer" id="hcsc-drawer" hidden aria-label="Data Mapping & Details">
+  <div class="hcsc-drawer-panel">
+    <header class="hcsc-drawer-header">
+      <h2 id="hcsc-drawer-title">Data Mapping &amp; Details</h2>
+      <button type="button" class="btn btn-sm" id="hcsc-drawer-close" aria-label="Close">Close</button>
+    </header>
+    <div class="hcsc-drawer-body" id="hcsc-drawer-body"></div>
+  </div>
+</aside>
+{% endblock %}

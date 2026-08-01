@@ -127,27 +127,23 @@ def register_dhis2_reports_routes(app: Flask) -> None:
 
     @app.get("/dhis2/reports/standard/<environment>/<uid>")
     def dhis2_reports_standard_detail(environment: str, uid: str):
-        try:
-            report = _svc().get_standard_report(environment, uid)
-        except ReportSecurityError:
-            abort(404)
         period = (request.args.get("period") or "").strip()
         org_unit = (request.args.get("org_unit") or request.args.get("ou") or "").strip()
-        urls = None
-        error = None
         try:
-            if period or org_unit or not (report.needs_period or report.needs_org_unit):
-                urls = _svc().standard_urls(
-                    environment, uid, period=period, org_unit=org_unit
-                )
-        except ReportSecurityError as exc:
-            error = str(exc)
+            payload = _svc().standard_detail_payload(
+                environment, uid, period=period, org_unit=org_unit
+            )
+        except ReportSecurityError:
+            abort(404)
         return render_template(
             "dhis2_reports_standard_detail.html",
-            report=report.to_public(),
-            urls=urls,
-            form={"period": period, "org_unit": org_unit},
-            error=error,
+            report=payload["report"],
+            discovery=payload["discovery"],
+            diagnostics=payload["diagnostics"],
+            urls=payload["urls"],
+            form=payload["form"],
+            error=payload["error"],
+            run_report_id=payload["run_report_id"],
             **_ctx("library"),
         )
 
@@ -543,13 +539,22 @@ def register_dhis2_reports_routes(app: Flask) -> None:
         except ReportSecurityError as exc:
             return _json_error(exc)
 
+    @app.get("/api/dhis2/reports/periods")
+    def api_dhis2_report_periods():
+        """Quarter/period options for report controls (cached)."""
+        remembered = (request.args.get("remembered") or "").strip()
+        return jsonify(_svc().list_periods(remembered=remembered))
+
     @app.get("/api/dhis2/reports/org-units")
     def api_dhis2_report_org_units():
         env = (request.args.get("environment") or "stage").strip()
         q = (request.args.get("q") or "").strip()
+        parent_id = (request.args.get("parent_id") or request.args.get("parent") or "").strip()
         limit = request.args.get("limit", 25, type=int) or 25
         try:
-            return jsonify(_svc().search_org_units(env, q=q, limit=limit))
+            return jsonify(
+                _svc().search_org_units(env, q=q, limit=limit, parent_id=parent_id)
+            )
         except ReportSecurityError as exc:
             return _json_error(exc)
 

@@ -103,7 +103,8 @@
           height: prefs.height,
           tab: prefs.tab,
           terminal_session_id: prefs.terminal_session_id || "",
-          terminal_split: !!prefs.terminal_split,
+          terminal_split: !!prefs.terminal_split && !!(prefs.terminal_split_session_id || ""),
+          terminal_split_session_id: prefs.terminal_split ? (prefs.terminal_split_session_id || "") : "",
         }),
       }).catch(function () {});
     };
@@ -269,7 +270,9 @@
         var initTerm = window.WCTerminal
           ? window.WCTerminal.init({
               activeId: prefs.terminal_session_id || "",
-              split: !!prefs.terminal_split,
+              splitId: prefs.terminal_split_session_id || "",
+              // Only attempt restore when both ids were saved; JS validates live sessions.
+              split: !!(prefs.terminal_split && prefs.terminal_split_session_id),
             })
           : Promise.resolve();
         return initTerm.then(function () {
@@ -279,7 +282,9 @@
           if (window.WCTerminal) {
             window.WCTerminal.onSessionChange = function (id, meta) {
               prefs.terminal_session_id = id || "";
-              if (meta && typeof meta.split === "boolean") prefs.terminal_split = meta.split;
+              var splitOn = !!(meta && meta.split && meta.splitId);
+              prefs.terminal_split = splitOn;
+              prefs.terminal_split_session_id = splitOn ? String(meta.splitId || "") : "";
               persist(false);
             };
           }
