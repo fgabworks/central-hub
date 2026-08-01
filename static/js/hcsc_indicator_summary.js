@@ -70,6 +70,13 @@
     lastSuccessScopeKey: "",
     lastDiagnostics: "",
     updatingBackground: false,
+    geographicBreakdown: "none",
+    breakdown: null,
+    geoEstimate: null,
+    bdPage: 0,
+    bdPageSize: 50,
+    pendingForceRefresh: false,
+    genSubPhase: "",
   };
   var ouPicker = null;
   var allowedQuarters = {};
@@ -210,6 +217,317 @@
     return sel.selectedOptions[0].textContent || "None";
   }
 
+
+  function selectedPopulationLabel() {
+    var sel = $("hcsc-disagg");
+    if (!sel || !sel.selectedOptions || !sel.selectedOptions[0]) return "All Households";
+    return sel.selectedOptions[0].textContent || "All Households";
+  }
+
+  function selectedGeoBreakdown() {
+    var sel = $("hcsc-geo-breakdown");
+    return (sel && sel.value) || "none";
+  }
+
+  function selectedGeoLabel() {
+    var sel = $("hcsc-geo-breakdown");
+    if (!sel || !sel.selectedOptions || !sel.selectedOptions[0]) return "None";
+    return sel.selectedOptions[0].textContent || "None";
+  }
+
+  function selectedOuLevel() {
+    if (ouPicker && ouPicker.selectedPath) {
+      var p = ouPicker.selectedPath();
+      if (p && p.level != null) return p.level;
+    }
+    return null;
+  }
+
+  function geoOptionsForLevel(level) {
+    var meta = (boot.geographic_breakdown && boot.geographic_breakdown.labels) || {};
+    var opts = [{ id: "none", label: meta.none || "None (selected area total)" }];
+    if (level == null) return opts;
+    var order = [
+      ["region", 2],
+      ["province", 3],
+      ["municipality_city", 4],
+      ["barangay", 5],
+    ];
+    order.forEach(function (pair) {
+      if (pair[1] > level) {
+        opts.push({
+          id: pair[0],
+          label: meta[pair[0]] || ("By " + pair[0]),
+        });
+      }
+    });
+    return opts;
+  }
+
+  function fillGeoBreakdown() {
+    var sel = $("hcsc-geo-breakdown");
+    if (!sel) return;
+    var level = selectedOuLevel();
+    var opts = geoOptionsForLevel(level);
+    var cur = state.geographicBreakdown || sel.value || "none";
+    var allowed = {};
+    sel.innerHTML = opts
+      .map(function (o) {
+        allowed[o.id] = true;
+        return (
+          '<option value="' +
+          escapeHtml(o.id) +
+          '"' +
+          (o.id === cur ? " selected" : "") +
+          ">" +
+          escapeHtml(o.label) +
+          "</option>"
+        );
+      })
+      .join("");
+    if (!allowed[sel.value]) sel.value = "none";
+    state.geographicBreakdown = sel.value || "none";
+    refreshGeoEstimate();
+  }
+
+  function refreshGeoEstimate() {
+    var est = $("hcsc-geo-estimate");
+    var geo = selectedGeoBreakdown();
+    if (!est) return;
+    if (!geo || geo === "none") {
+      est.textContent = "Select a breakdown to see estimate.";
+      state.geoEstimate = null;
+      return;
+    }
+    var ou = selectedOu();
+    if (!ou) {
+      est.textContent = "Select an organisation unit to see estimate.";
+      state.geoEstimate = null;
+      return;
+    }
+    var url = root.getAttribute("data-breakdown-estimate-url");
+    if (!url) {
+      est.textContent = "Estimate unavailable.";
+      return;
+    }
+    est.textContent = "Estimating…";
+    var qs =
+      "?environment=" +
+      encodeURIComponent(($("hcsc-env") && $("hcsc-env").value) || "stage") +
+      "&orgUnit=" +
+      encodeURIComponent(ou) +
+      "&geographicBreakdown=" +
+      encodeURIComponent(geo);
+    fetch(url + qs, { credentials: "same-origin" })
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (data) {
+        if (selectedGeoBreakdown() !== geo) return;
+        if (!data || !data.ok) {
+          est.textContent = (data && data.error) || "Estimate unavailable.";
+          state.geoEstimate = null;
+          return;
+        }
+        state.geoEstimate = data;
+        est.textContent = data.estimate_label || (data.child_count + " units");
+        if (data.requires_confirmation) {
+          est.textContent += " · confirmation required";
+        }
+      })
+      .catch(function () {
+        est.textContent = "Estimate unavailable.";
+        state.geoEstimate = null;
+      });
+  }
+
+  function showGeoConfirm(message, onContinue) {
+    var box = $("hcsc-geo-confirm");
+    var msg = $("hcsc-geo-confirm-msg");
+    var ok = $("hcsc-geo-confirm-ok");
+    var cancel = $("hcsc-geo-confirm-cancel");
+    if (!box || !ok || !cancel) {
+      onContinue();
+      return;
+    }
+    if (msg) msg.textContent = message;
+    box.hidden = false;
+    function close() {
+      box.hidden = true;
+      ok.removeEventListener("click", onOk);
+      cancel.removeEventListener("click", onCancel);
+    }
+    function onOk() {
+      close();
+      onContinue();
+    }
+    function onCancel() {
+      close();
+      var geo = $("hcsc-geo-breakdown");
+      if (geo) geo.value = "none";
+      fillGeoBreakdown();
+      applyGenUi();
+    }
+    ok.addEventListener("click", onOk);
+    cancel.addEventListener("click", onCancel);
+  }
+
+  function renderBreakdown() {
+    var panel = $("hcsc-breakdown-panel");
+    var tbody = $("hcsc-breakdown-tbody");
+    var title = $("hcsc-breakdown-title");
+    var status = $("hcsc-breakdown-status");
+    var retry = $("hcsc-bd-retry");
+    if (!panel || !tbody) return;
+    var bd = state.breakdown;
+    if (!bd || bd.mode === "none") {
+      panel.hidden = true;
+      return;
+    }
+    panel.hidden = false;
+    if (title) {
+      title.textContent =
+        bd.label ||
+        ("Breakdown by " + (bd.mode || "").replace(/_/g, " "));
+    }
+    if (status) {
+      if (bd.loading) {
+        status.textContent = "Parent ready, breakdown loading…";
+      } else if (bd.ok === false) {
+        status.textContent =
+          "Breakdown generation failed" + (bd.error ? ": " + bd.error : "");
+      } else {
+        status.textContent =
+          (bd.child_count != null ? bd.child_count + " organisation units" : "") +
+          (bd.cache && bd.cache.hit ? " · cached" : "");
+      }
+    }
+    if (retry) retry.hidden = !(bd.ok === false && !bd.loading);
+    var indicator = (($("hcsc-bd-indicator") && $("hcsc-bd-indicator").value) || "eligible_households");
+    var q = (($("hcsc-bd-filter") && $("hcsc-bd-filter").value) || "").trim().toLowerCase();
+    var sort = (($("hcsc-bd-sort") && $("hcsc-bd-sort").value) || "name_asc");
+    var rows = (bd.children || []).map(function (child) {
+      var hit = null;
+      (child.results || []).forEach(function (r) {
+        if (r.indicator_key === indicator) hit = r;
+      });
+      return {
+        child: child,
+        row: hit,
+        name: child.org_unit_name || child.org_unit || "",
+        path: child.hierarchy_path || "",
+        value: hit
+          ? hit.percentage != null
+            ? hit.percentage
+            : hit.count != null
+              ? hit.count
+              : null
+          : null,
+      };
+    });
+    rows = rows.filter(function (r) {
+      if (!q) return true;
+      return (
+        r.name.toLowerCase().indexOf(q) >= 0 ||
+        (r.path || "").toLowerCase().indexOf(q) >= 0 ||
+        (r.child.org_unit || "").toLowerCase().indexOf(q) >= 0
+      );
+    });
+    rows.sort(function (a, b) {
+      if (sort === "name_desc") return b.name.localeCompare(a.name);
+      if (sort === "value_desc") return (b.value || 0) - (a.value || 0);
+      if (sort === "value_asc") return (a.value || 0) - (b.value || 0);
+      return a.name.localeCompare(b.name);
+    });
+    var pageSize = state.bdPageSize || 50;
+    var pages = Math.max(1, Math.ceil(rows.length / pageSize));
+    if (state.bdPage >= pages) state.bdPage = pages - 1;
+    if (state.bdPage < 0) state.bdPage = 0;
+    var start = state.bdPage * pageSize;
+    var pageRows = rows.slice(start, start + pageSize);
+    var pager = $("hcsc-breakdown-pager");
+    var pageLabel = $("hcsc-bd-page-label");
+    if (pager) pager.hidden = rows.length <= pageSize;
+    if (pageLabel) pageLabel.textContent = "Page " + (state.bdPage + 1) + " / " + pages;
+    if (!pageRows.length) {
+      tbody.innerHTML =
+        '<tr class="hcsc-empty-row"><td colspan="7"><div class="hcsc-empty"><strong>No breakdown rows</strong></div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = pageRows
+      .map(function (item) {
+        var r = item.row || {};
+        return (
+          "<tr>" +
+          '<td><button type="button" class="hcsc-bd-ou-link" data-ou="' +
+          escapeHtml(item.child.org_unit || "") +
+          '" title="' +
+          escapeHtml(item.path || item.name) +
+          '">' +
+          escapeHtml(item.name) +
+          "</button></td>" +
+          "<td>" +
+          escapeHtml(r.numerator != null ? r.numerator : "—") +
+          "</td>" +
+          "<td>" +
+          escapeHtml(r.denominator != null ? r.denominator : "—") +
+          "</td>" +
+          "<td>" +
+          escapeHtml(r.value_text || "—") +
+          "</td>" +
+          "<td>" +
+          escapeHtml(r.source_badge || "—") +
+          "</td>" +
+          "<td>" +
+          escapeHtml(r.validation_status || "—") +
+          "</td>" +
+          "<td>" +
+          escapeHtml((r.last_updated || r.freshness || "—").toString().replace("T", " ").slice(0, 19)) +
+          "</td>" +
+          "</tr>"
+        );
+      })
+      .join("");
+  }
+
+  function exportBreakdownCsv() {
+    var bd = state.breakdown;
+    if (!bd || !bd.children) return;
+    var indicator = (($("hcsc-bd-indicator") && $("hcsc-bd-indicator").value) || "eligible_households");
+    var lines = [
+      "Organisation Unit,UID,Path,Indicator,Numerator,Denominator,Result,Source,Validation,Last Updated,Environment,Period,Geographic Breakdown",
+    ];
+    bd.children.forEach(function (child) {
+      var hit = null;
+      (child.results || []).forEach(function (r) {
+        if (r.indicator_key === indicator) hit = r;
+      });
+      lines.push(
+        [
+          child.org_unit_name,
+          child.org_unit,
+          child.hierarchy_path,
+          indicator,
+          hit && hit.numerator != null ? hit.numerator : "",
+          hit && hit.denominator != null ? hit.denominator : "",
+          hit && hit.value_text != null ? hit.value_text : "",
+          hit && hit.source_badge != null ? hit.source_badge : "",
+          hit && hit.validation_status != null ? hit.validation_status : "",
+          hit && (hit.last_updated || hit.freshness) ? hit.last_updated || hit.freshness : "",
+          ($("hcsc-env") && $("hcsc-env").value) || "",
+          selectedPeriod() || "",
+          selectedGeoBreakdown() || "",
+        ]
+          .map(function (v) {
+            return '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
+          })
+          .join(",")
+      );
+    });
+    copyText(lines.join("\n"));
+  }
+
+
   function selectedOuPath() {
     if (ouPicker && ouPicker.selectedPath) {
       var p = ouPicker.selectedPath();
@@ -226,7 +544,8 @@
     var pe = selectedPeriod() || "";
     var ou = selectedOu() || "";
     var disagg = (($("hcsc-disagg") && $("hcsc-disagg").value) || "none");
-    return env + "|" + pe + "|" + ou + "|" + disagg;
+    var geo = selectedGeoBreakdown() || "none";
+    return env + "|" + pe + "|" + ou + "|" + disagg + "|" + geo;
   }
 
   function isActiveGeneration() {
@@ -294,11 +613,25 @@
       helper = "All required parameters are selected.";
       tone = "ready";
     } else if (phase === GEN.GENERATING) {
-      badge = "Generating report";
-      helper = "Request in progress · " + elapsed;
+      if (state.genSubPhase === "breakdown") {
+        badge = "Generating breakdown";
+        helper =
+          (hasPriorResults()
+            ? "Parent ready, breakdown loading · "
+            : "Request in progress · ") + elapsed;
+      } else if (state.genSubPhase === "parent") {
+        badge = "Generating selected area";
+        helper = "Request in progress · " + elapsed;
+      } else {
+        badge = "Generating report";
+        helper = "Request in progress · " + elapsed;
+      }
       tone = "generating";
     } else if (phase === GEN.SLOW) {
-      badge = "Still generating";
+      badge =
+        state.genSubPhase === "breakdown"
+          ? "Still generating breakdown"
+          : "Still generating";
       helper = "This is taking longer than usual · " + elapsed;
       tone = "slow";
     } else if (phase === GEN.SUCCESS_FRESH) {
@@ -439,6 +772,7 @@
   }
 
   function onScopeMaybeChanged() {
+    fillGeoBreakdown();
     var key = currentScopeKey();
     if (state.scopeKey && state.scopeKey !== key) {
       if (isActiveGeneration()) cancelGeneration(false);
@@ -535,7 +869,6 @@
         pe ||
         "—";
       var path = selectedOuPath() || "—";
-      var disagg = selectedDisaggLabel();
       chips.innerHTML =
         '<span class="hcsc-param-chip"><span class="hcsc-chip-k">Environment</span> ' +
         escapeHtml(envRaw === "live" ? "Live" : "Stage") +
@@ -548,8 +881,11 @@
         '"><span class="hcsc-chip-k">Organisation Unit</span> ' +
         escapeHtml(path) +
         "</span>" +
-        '<span class="hcsc-param-chip"><span class="hcsc-chip-k">Disaggregation</span> ' +
-        escapeHtml(disagg) +
+        '<span class="hcsc-param-chip"><span class="hcsc-chip-k">Population Filter</span> ' +
+        escapeHtml(selectedPopulationLabel()) +
+        "</span>" +
+        '<span class="hcsc-param-chip"><span class="hcsc-chip-k">Geographic Breakdown</span> ' +
+        escapeHtml(selectedGeoLabel()) +
         "</span>";
     }
 
@@ -1436,11 +1772,15 @@
     root.classList.add("is-drawer-open");
   }
 
-  function scopeQuery(force) {
+  function scopeQuery(force, geoOverride) {
     var env = ($("hcsc-env") && $("hcsc-env").value) || "stage";
     var period = selectedPeriod();
     var ou = selectedOu();
     var disagg = ($("hcsc-disagg") && $("hcsc-disagg").value) || "none";
+    var geo =
+      geoOverride != null && geoOverride !== undefined
+        ? geoOverride
+        : selectedGeoBreakdown() || "none";
     return (
       "?environment=" +
       encodeURIComponent(env) +
@@ -1450,6 +1790,8 @@
       encodeURIComponent(ou) +
       "&disaggregation=" +
       encodeURIComponent(disagg) +
+      "&geographicBreakdown=" +
+      encodeURIComponent(geo || "none") +
       (force ? "&fresh=1" : "")
     );
   }
@@ -1780,6 +2122,28 @@
     if (isActiveGeneration()) {
       return;
     }
+    var wantGeo = selectedGeoBreakdown();
+    var est = state.geoEstimate;
+    if (
+      !force &&
+      wantGeo &&
+      wantGeo !== "none" &&
+      est &&
+      est.requires_confirmation &&
+      !state.pendingForceRefresh
+    ) {
+      showGeoConfirm(
+        "This will generate results for " +
+          (est.estimate_label || est.child_count + " organisation units") +
+          " and may take longer.",
+        function () {
+          state.pendingForceRefresh = true;
+          loadReport(force);
+          state.pendingForceRefresh = false;
+        }
+      );
+      return;
+    }
     if (!validateForm({ revealErrors: true })) {
       setGenPhase(GEN.AWAITING, {
         explicitMsg: "Select a valid quarter and organisation unit.",
@@ -1806,7 +2170,6 @@
       return;
     }
 
-    // Supersede any leftover controller and start a tracked request.
     stopActiveRequest("superseded");
     state.requestSeq += 1;
     var requestId = state.requestSeq;
@@ -1819,6 +2182,7 @@
     state.abortController =
       typeof AbortController !== "undefined" ? new AbortController() : null;
     state.updatingBackground = hasPriorResults();
+    state.genSubPhase = wantGeo && wantGeo !== "none" ? "parent" : "";
     setGenPhase(GEN.GENERATING, {
       updatingBackground: hasPriorResults(),
     });
@@ -1838,136 +2202,268 @@
         renderCards(state.results);
       }
     }, SLOW_AFTER_MS);
+    var timeoutMs =
+      wantGeo && wantGeo !== "none"
+        ? Math.max(CLIENT_TIMEOUT_MS, 180000)
+        : CLIENT_TIMEOUT_MS;
     state.timeoutTimer = setTimeout(function () {
       if (state.activeRequestId !== requestId) return;
       stopActiveRequest("timeout");
       state.lastRunOk = false;
       state.errorMessage = "Request timed out";
       state.lastDiagnostics = buildDiagnostics();
+      state.genSubPhase = "";
       setGenPhase(GEN.TIMED_OUT, {
         explicitMsg: "Request timed out.",
         errorMessage: "Request timed out",
       });
       renderCards(state.results);
       validateForm();
-    }, CLIENT_TIMEOUT_MS);
+    }, timeoutMs);
 
-    var url = reportUrl + scopeQuery(force);
-    var fetchOpts = { credentials: "same-origin" };
-    if (state.abortController) fetchOpts.signal = state.abortController.signal;
-
-    fetch(url, fetchOpts)
-      .then(function (r) {
+    function fetchJson(url) {
+      var fetchOpts = { credentials: "same-origin" };
+      if (state.abortController) fetchOpts.signal = state.abortController.signal;
+      return fetch(url, fetchOpts).then(function (r) {
         return r.json().then(function (body) {
           body._status = r.status;
           return body;
         });
-      })
-      .then(function (data) {
-        if (state.activeRequestId !== requestId) return; // late / superseded
-        clearGenTimers();
-        state.abortController = null;
-        state.activeRequestId = null;
-        state.reportInFlight = false;
-        state.updatingBackground = false;
-        state.genCompletedAt = Date.now();
+      });
+    }
 
-        if (!data.ok) {
-          state.lastRunOk = false;
-          state.errorMessage = data.error || "Report failed";
-          state.lastDiagnostics = buildDiagnostics();
-          setGenPhase(GEN.ERROR, {
-            explicitMsg: state.errorMessage,
-            errorMessage: state.errorMessage,
-          });
-          renderCards(state.results);
-          validateForm();
-          return;
-        }
+    function applyParentSuccess(data) {
+      showShellBanner("");
+      state.results = data.results || [];
+      state.sections = data.sections || [];
+      state.retrieval = data.retrieval || data.query || null;
+      state.lastPayload = data;
+      state.generated = true;
+      state.lastRunAt = data.freshness || new Date().toISOString();
+      state.lastRunDurationMs =
+        data.timings && data.timings.total_ms != null
+          ? data.timings.total_ms
+          : Date.now() - state.genStartedAt;
+      state.lastRunOk = true;
+      state.cacheHit = !!(data.cache && data.cache.hit);
+      renderCards(state.results);
+      renderTable();
+      renderMapping();
+      renderLineage();
+      renderValidation();
+      renderRetrieval();
+      var fresh = $("hcsc-freshness");
+      if (fresh) fresh.textContent = "Last updated: " + (data.freshness || "");
+    }
 
-        showShellBanner("");
-        state.results = data.results || [];
-        state.sections = data.sections || [];
-        state.retrieval = data.retrieval || data.query || null;
-        state.lastPayload = data;
-        state.generated = true;
-        state.lastRunAt = data.freshness || new Date().toISOString();
-        state.lastRunDurationMs =
-          data.timings && data.timings.total_ms != null
-            ? data.timings.total_ms
-            : state.genCompletedAt - state.genStartedAt;
-        state.lastRunOk = true;
-        state.cacheHit = !!(data.cache && data.cache.hit);
-        state.lastSuccessScopeKey = currentScopeKey();
-        state.scopeKey = state.lastSuccessScopeKey;
-        state.staleReason = "";
-        state.lastDiagnostics = buildDiagnostics();
-
-        setGenPhase(state.cacheHit ? GEN.SUCCESS_CACHED : GEN.SUCCESS_FRESH, {
-          cacheHit: state.cacheHit,
-        });
-        try {
-          renderCards(state.results);
-          renderTable();
-          renderMapping();
-          renderLineage();
-          renderValidation();
-          renderRetrieval();
-        } catch (renderErr) {
-          state.lastRunOk = false;
-          state.errorMessage =
-            "Report response could not be rendered: " +
-            ((renderErr && renderErr.message) || "unknown error");
-          state.lastDiagnostics = buildDiagnostics();
-          setGenPhase(GEN.ERROR, {
-            explicitMsg: state.errorMessage,
-            errorMessage: state.errorMessage,
-          });
-          validateForm();
-          return;
-        }
-        var openSql = $("hcsc-open-sql");
-        if (openSql) {
-          var showSql =
-            (state.retrieval && state.retrieval.open_sql_workspace) ||
-            (state.results || []).some(function (r) {
-              return r.approved_sql_query_id || r.approved_sql_reference;
-            });
-          openSql.hidden = !showSql;
-        }
-        var fresh = $("hcsc-freshness");
-        if (fresh) fresh.textContent = "Last updated: " + (data.freshness || "");
-        validateForm();
-      })
-      .catch(function (err) {
-        if (state.activeRequestId !== requestId) return;
-        var aborted =
-          (err && (err.name === "AbortError" || err.code === 20)) ||
-          (state.abortController && state.abortController.signal && state.abortController.signal.aborted);
-        clearGenTimers();
-        state.abortController = null;
-        state.activeRequestId = null;
-        state.reportInFlight = false;
-        state.updatingBackground = false;
-        state.genCompletedAt = Date.now();
-        if (aborted) {
-          // cancelGeneration / timeout already set the phase.
-          if (state.genPhase === GEN.GENERATING || state.genPhase === GEN.SLOW) {
-            setGenPhase(GEN.CANCELLED);
-          }
-          renderCards(state.results);
-          validateForm();
-          return;
-        }
+    function finishReportSuccess(data) {
+      clearGenTimers();
+      state.abortController = null;
+      state.activeRequestId = null;
+      state.reportInFlight = false;
+      state.updatingBackground = false;
+      state.genCompletedAt = Date.now();
+      state.genSubPhase = "";
+      showShellBanner("");
+      state.results = data.results || state.results || [];
+      state.sections = data.sections || state.sections || [];
+      state.retrieval = data.retrieval || data.query || state.retrieval;
+      state.lastPayload = data;
+      state.generated = true;
+      state.lastRunAt = data.freshness || new Date().toISOString();
+      state.lastRunDurationMs =
+        data.timings && data.timings.total_ms != null
+          ? data.timings.total_ms
+          : state.genCompletedAt - state.genStartedAt;
+      state.lastRunOk = true;
+      state.cacheHit = !!(data.cache && data.cache.hit);
+      state.lastSuccessScopeKey = currentScopeKey();
+      state.scopeKey = state.lastSuccessScopeKey;
+      state.staleReason = "";
+      state.lastDiagnostics = buildDiagnostics();
+      state.breakdown = data.geographic_breakdown || { mode: "none", children: [] };
+      state.bdPage = 0;
+      setGenPhase(state.cacheHit ? GEN.SUCCESS_CACHED : GEN.SUCCESS_FRESH, {
+        cacheHit: state.cacheHit,
+      });
+      try {
+        renderCards(state.results);
+        renderTable();
+        renderMapping();
+        renderLineage();
+        renderValidation();
+        renderRetrieval();
+        fillBdIndicators();
+        renderBreakdown();
+      } catch (renderErr) {
         state.lastRunOk = false;
-        state.errorMessage = "Report request failed. Check network or DHIS2 connectivity.";
+        state.errorMessage =
+          "Report response could not be rendered: " +
+          ((renderErr && renderErr.message) || "unknown error");
         state.lastDiagnostics = buildDiagnostics();
         setGenPhase(GEN.ERROR, {
           explicitMsg: state.errorMessage,
           errorMessage: state.errorMessage,
         });
+        validateForm();
+        return;
+      }
+      var openSql = $("hcsc-open-sql");
+      if (openSql) {
+        var showSql =
+          (state.retrieval && state.retrieval.open_sql_workspace) ||
+          (state.results || []).some(function (r) {
+            return r.approved_sql_query_id || r.approved_sql_reference;
+          });
+        openSql.hidden = !showSql;
+      }
+      var fresh = $("hcsc-freshness");
+      if (fresh) fresh.textContent = "Last updated: " + (data.freshness || "");
+      validateForm();
+    }
+
+    function failWhole(message) {
+      clearGenTimers();
+      state.abortController = null;
+      state.activeRequestId = null;
+      state.reportInFlight = false;
+      state.updatingBackground = false;
+      state.genCompletedAt = Date.now();
+      state.genSubPhase = "";
+      state.lastRunOk = false;
+      state.errorMessage = message || "Report failed";
+      state.lastDiagnostics = buildDiagnostics();
+      setGenPhase(GEN.ERROR, {
+        explicitMsg: state.errorMessage,
+        errorMessage: state.errorMessage,
+      });
+      renderCards(state.results);
+      validateForm();
+    }
+
+    function failBreakdownOnly(message) {
+      clearGenTimers();
+      state.abortController = null;
+      state.activeRequestId = null;
+      state.reportInFlight = false;
+      state.updatingBackground = false;
+      state.genCompletedAt = Date.now();
+      state.genSubPhase = "";
+      state.lastRunOk = true;
+      state.lastSuccessScopeKey = currentScopeKey();
+      state.scopeKey = state.lastSuccessScopeKey;
+      state.breakdown = {
+        mode: wantGeo,
+        ok: false,
+        loading: false,
+        children: [],
+        label: selectedGeoLabel(),
+        error: message || "Breakdown generation failed",
+      };
+      state.lastDiagnostics = buildDiagnostics();
+      setGenPhase(GEN.SUCCESS_FRESH);
+      fillBdIndicators();
+      renderBreakdown();
+      applyGenUi();
+      validateForm();
+    }
+
+    function handleAbort(err) {
+      if (state.activeRequestId !== requestId) return;
+      var aborted =
+        (err && (err.name === "AbortError" || err.code === 20)) ||
+        (state.abortController &&
+          state.abortController.signal &&
+          state.abortController.signal.aborted);
+      clearGenTimers();
+      state.abortController = null;
+      state.activeRequestId = null;
+      state.reportInFlight = false;
+      state.updatingBackground = false;
+      state.genCompletedAt = Date.now();
+      state.genSubPhase = "";
+      if (aborted) {
+        if (state.genPhase === GEN.GENERATING || state.genPhase === GEN.SLOW) {
+          setGenPhase(GEN.CANCELLED);
+        }
         renderCards(state.results);
         validateForm();
+        return;
+      }
+      failWhole("Report request failed. Check network or DHIS2 connectivity.");
+    }
+
+    if (!wantGeo || wantGeo === "none") {
+      fetchJson(reportUrl + scopeQuery(force, "none"))
+        .then(function (data) {
+          if (state.activeRequestId !== requestId) return;
+          if (!data.ok) {
+            failWhole(data.error || "Report failed");
+            return;
+          }
+          finishReportSuccess(data);
+        })
+        .catch(handleAbort);
+      return;
+    }
+
+    // Two-phase: parent summary first, then breakdown while parent stays visible.
+    fetchJson(reportUrl + scopeQuery(force, "none"))
+      .then(function (parentData) {
+        if (state.activeRequestId !== requestId) return null;
+        if (!parentData.ok) {
+          failWhole(parentData.error || "Report failed");
+          return null;
+        }
+        applyParentSuccess(parentData);
+        state.breakdown = {
+          mode: wantGeo,
+          ok: true,
+          loading: true,
+          children: [],
+          label: selectedGeoLabel(),
+          child_count: (est && est.child_count) || null,
+        };
+        fillBdIndicators();
+        renderBreakdown();
+        state.genSubPhase = "breakdown";
+        if (state.genPhase === GEN.SLOW) setGenPhase(GEN.SLOW);
+        else setGenPhase(GEN.GENERATING);
+        applyGenUi();
+        return fetchJson(reportUrl + scopeQuery(force, wantGeo));
+      })
+      .then(function (data) {
+        if (data == null) return;
+        if (state.activeRequestId !== requestId) return;
+        if (!data.ok) {
+          failBreakdownOnly(data.error || "Breakdown generation failed");
+          return;
+        }
+        var geo = data.geographic_breakdown || {};
+        if (geo.ok === false) {
+          // Parent payload from phase-2 is fine; keep phase-1 parent if needed.
+          if (data.results && data.results.length) applyParentSuccess(data);
+          failBreakdownOnly(geo.error || "Breakdown generation failed");
+          return;
+        }
+        finishReportSuccess(data);
+      })
+      .catch(function (err) {
+        if (state.activeRequestId !== requestId) return;
+        if (state.generated && state.results && state.results.length) {
+          var aborted =
+            (err && (err.name === "AbortError" || err.code === 20)) ||
+            (state.abortController &&
+              state.abortController.signal &&
+              state.abortController.signal.aborted);
+          if (aborted) {
+            handleAbort(err);
+            return;
+          }
+          failBreakdownOnly("Breakdown request failed. Check network or DHIS2 connectivity.");
+          return;
+        }
+        handleAbort(err);
       });
   }
 
@@ -1991,6 +2487,11 @@
     var pe = (qs.get("period") || "").trim();
     var ou = (qs.get("orgUnit") || qs.get("org_unit") || "").trim();
     var disagg = (qs.get("disaggregation") || qs.get("disagg") || "").trim();
+    var geoBd = (
+      qs.get("geographicBreakdown") ||
+      qs.get("geographic_breakdown") ||
+      ""
+    ).trim();
     var changed = false;
     var envSel = $("hcsc-env");
     if (envSel && (env === "live" || env === "stage") && envSel.value !== env) {
@@ -2013,6 +2514,20 @@
       if (has && disSel.value !== disagg) {
         disSel.value = disagg;
         changed = true;
+      }
+    }
+    if (geoBd) {
+      var geoSel = $("hcsc-geo-breakdown");
+      if (geoSel) {
+        // Options may be filled after OU level resolves; stash preferred value.
+        state.geographicBreakdown = geoBd;
+        var hasGeo = Array.prototype.some.call(geoSel.options || [], function (o) {
+          return o.value === geoBd;
+        });
+        if (hasGeo && geoSel.value !== geoBd) {
+          geoSel.value = geoBd;
+          changed = true;
+        }
       }
     }
     if (isValidOuUid(ou) && ouPicker && ouPicker.setSelection) {
@@ -2079,16 +2594,18 @@
   function fillDisagg() {
     var sel = $("hcsc-disagg");
     if (!sel) return;
-    var opts = (boot.disaggregations || []).filter(function (d) {
+    var source = boot.population_filters || boot.disaggregations || [];
+    var opts = source.filter(function (d) {
       return d && !d.disabled;
     });
     if (!opts.length) {
-      sel.innerHTML = '<option value="none">None</option>';
+      sel.innerHTML = '<option value="none">All Households</option>';
       return;
     }
     sel.innerHTML = opts
       .map(function (d) {
-        var label = d.id === "none" ? "None" : d.label || d.id;
+        var label =
+          d.id === "none" ? d.label || "All Households" : d.label || d.id;
         return (
           '<option value="' +
           escapeHtml(d.id) +
@@ -2098,6 +2615,30 @@
         );
       })
       .join("");
+  }
+
+  function fillBdIndicators() {
+    var sel = $("hcsc-bd-indicator");
+    if (!sel) return;
+    var keys = boot.overview_keys || [];
+    var labels = CARD_TITLES || {};
+    var cur = sel.value;
+    if (!keys.length) {
+      sel.innerHTML = '<option value="eligible_households">Eligible Households</option>';
+      return;
+    }
+    sel.innerHTML = keys
+      .map(function (k) {
+        return (
+          '<option value="' +
+          escapeHtml(k) +
+          '">' +
+          escapeHtml(labels[k] || k) +
+          "</option>"
+        );
+      })
+      .join("");
+    if (cur) sel.value = cur;
   }
 
   function exportVisible(kind) {
@@ -2141,6 +2682,7 @@
   function wire() {
     fillPeriods();
     fillDisagg();
+    fillGeoBreakdown();
     wireOuSearch();
     renderCards([]);
     renderTable();
@@ -2302,6 +2844,62 @@
         copyText(text);
       });
     }
+
+
+    var geoSel = $("hcsc-geo-breakdown");
+    if (geoSel) {
+      geoSel.addEventListener("change", function () {
+        state.geographicBreakdown = geoSel.value || "none";
+        refreshGeoEstimate();
+        onScopeMaybeChanged();
+      });
+    }
+    var helpBtn = $("hcsc-geo-help-btn");
+    var help = $("hcsc-geo-help");
+    if (helpBtn && help) {
+      helpBtn.addEventListener("click", function () {
+        help.hidden = !help.hidden;
+        helpBtn.setAttribute("aria-expanded", help.hidden ? "false" : "true");
+      });
+    }
+    ["hcsc-bd-filter", "hcsc-bd-indicator", "hcsc-bd-sort"].forEach(function (id) {
+      var el = $(id);
+      if (el) el.addEventListener("input", function () { state.bdPage = 0; renderBreakdown(); });
+      if (el) el.addEventListener("change", function () { state.bdPage = 0; renderBreakdown(); });
+    });
+    var bdExport = $("hcsc-bd-export-csv");
+    if (bdExport) bdExport.addEventListener("click", exportBreakdownCsv);
+    var bdRetry = $("hcsc-bd-retry");
+    if (bdRetry) {
+      bdRetry.addEventListener("click", function () {
+        loadReport(true);
+      });
+    }
+    var bdPrev = $("hcsc-bd-prev");
+    var bdNext = $("hcsc-bd-next");
+    if (bdPrev) {
+      bdPrev.addEventListener("click", function () {
+        state.bdPage -= 1;
+        renderBreakdown();
+      });
+    }
+    if (bdNext) {
+      bdNext.addEventListener("click", function () {
+        state.bdPage += 1;
+        renderBreakdown();
+      });
+    }
+    root.addEventListener("click", function (ev) {
+      var ouBtn = ev.target.closest(".hcsc-bd-ou-link");
+      if (!ouBtn) return;
+      var uid = ouBtn.getAttribute("data-ou") || "";
+      if (!uid || !ouPicker || !ouPicker.setSelection) return;
+      ouPicker.setSelection(uid, ouBtn.textContent || uid, ouBtn.getAttribute("title") || "");
+      var geo = $("hcsc-geo-breakdown");
+      if (geo) geo.value = "none";
+      fillGeoBreakdown();
+      onScopeMaybeChanged();
+    });
 
     // Restore controls from URL if present — do NOT auto-run analytics.
     // Awaiting selection must not trigger report/analytics endpoints.

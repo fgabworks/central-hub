@@ -52,7 +52,7 @@
     var abortControllers = {};
     var cache = {};
     var selects = [];
-    var committed = { uid: "", name: "", path: "" };
+    var committed = { uid: "", name: "", path: "", level: null };
     var selectionSource = ""; // "cascade" | "search" | ""
     var lastFailed = null;
     var rootsLoaded = false;
@@ -198,25 +198,28 @@
       var parts = [];
       var uid = "";
       var name = "";
-      selects.forEach(function (sel) {
+      var level = null;
+      selects.forEach(function (sel, index) {
         if (!sel || !sel.value) return;
         uid = sel.value;
         name = (sel.selectedOptions[0] && sel.selectedOptions[0].textContent) || "";
+        level = OU_LEVELS[index] ? OU_LEVELS[index].level : null;
         if (name) parts.push(name);
       });
-      return { uid: uid, name: name, path: parts.join(" › ") };
+      return { uid: uid, name: name, path: parts.join(" › "), level: level };
     }
 
-    function commitSelection(uid, name, path, source) {
+    function commitSelection(uid, name, path, source, level) {
       var id = String(uid || "").trim();
       if (!isValidUid(id)) {
-        committed = { uid: "", name: "", path: "" };
+        committed = { uid: "", name: "", path: "", level: null };
         selectionSource = "";
       } else {
         committed = {
           uid: id,
           name: name || id,
           path: path || name || id,
+          level: level != null ? level : committed.level,
         };
         if (source) selectionSource = source;
       }
@@ -234,6 +237,7 @@
           uid: committed.uid,
           name: committed.name || committed.uid,
           path: committed.path || committed.name || committed.uid,
+          level: committed.level,
         };
       }
       var hidden = hiddenEl && String(hiddenEl.value || "").trim();
@@ -242,9 +246,9 @@
           (chipLabel && chipLabel.textContent) ||
           (pathEl && pathEl.textContent) ||
           hidden;
-        return { uid: hidden, name: label, path: label };
+        return { uid: hidden, name: label, path: label, level: committed.level };
       }
-      return { uid: "", name: "", path: "" };
+      return { uid: "", name: "", path: "", level: null };
     }
 
     function selectedUid() {
@@ -256,7 +260,7 @@
       var cascade = cascadeSelection();
       var ou;
       if (isValidUid(cascade.uid)) {
-        ou = commitSelection(cascade.uid, cascade.name, cascade.path, "cascade");
+        ou = commitSelection(cascade.uid, cascade.name, cascade.path, "cascade", cascade.level);
       } else if (selectionSource === "search" && isValidUid(committed.uid)) {
         // Keep search selection while cascade resolve is best-effort / empty.
         ou = committed;

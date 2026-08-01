@@ -33,6 +33,7 @@ def register_hcsc_indicator_routes(app: Flask) -> None:
             "invalid_org_unit": 400,
             "invalid_environment": 400,
             "invalid_disaggregation": 400,
+            "invalid_geographic_breakdown": 400,
             "invalid_section": 400,
             "dhis2_unconfigured": 400,
             "dhis2_error": 502,
@@ -45,6 +46,11 @@ def register_hcsc_indicator_routes(app: Flask) -> None:
             "period": request.args.get("period") or "",
             "org_unit": request.args.get("orgUnit") or request.args.get("org_unit") or "",
             "disagg": request.args.get("disaggregation") or "none",
+            "geographic_breakdown": (
+                request.args.get("geographicBreakdown")
+                or request.args.get("geographic_breakdown")
+                or "none"
+            ),
             "force": request.args.get("fresh") in {"1", "true", "yes"}
             or request.args.get("refresh") in {"1", "true", "yes"},
         }
@@ -116,6 +122,7 @@ def register_hcsc_indicator_routes(app: Flask) -> None:
                 period=p["period"],
                 org_unit=p["org_unit"],
                 disaggregation=p["disagg"],
+                geographic_breakdown=p["geographic_breakdown"],
                 force_refresh=p["force"],
             )
             _audit(
@@ -124,6 +131,7 @@ def register_hcsc_indicator_routes(app: Flask) -> None:
                 detail=(
                     f"Report adapters={payload.get('adapters_used')} "
                     f"dx={payload.get('timings', {}).get('dx_count')} "
+                    f"geo={p['geographic_breakdown']} "
                     f"cache_hit={payload.get('cache', {}).get('hit')}"
                 ),
             )
@@ -135,6 +143,19 @@ def register_hcsc_indicator_routes(app: Flask) -> None:
                 detail=str(exc),
                 ok=False,
             )
+            return _json_error(exc)
+
+    @app.get("/api/dhis2/hcsc-indicators/breakdown-estimate")
+    def api_hcsc_indicators_breakdown_estimate():
+        p = _scope_params()
+        try:
+            payload = _svc().breakdown_estimate(
+                environment=p["env"],
+                org_unit=p["org_unit"],
+                geographic_breakdown=p["geographic_breakdown"],
+            )
+            return jsonify(payload)
+        except ReportSecurityError as exc:
             return _json_error(exc)
 
     @app.get("/api/dhis2/hcsc-indicators/category/<section>")

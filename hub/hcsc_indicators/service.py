@@ -10,6 +10,7 @@ from typing import Any, Callable
 
 from hub.dhis2.client import Dhis2Client, Dhis2Error
 from hub.dhis2_reports.maintenance import environment_availability
+from hub.dhis2_reports.org_unit_store import OrgUnitStore
 from hub.dhis2_reports.security import ReportSecurityError, validate_environment, validate_org_unit
 from hub.hcsc_indicators.adapters import (
     ADAPTER_CAPABILITY,
@@ -18,6 +19,7 @@ from hub.hcsc_indicators.adapters import (
     get_adapters,
     select_adapter,
 )
+from hub.hcsc_indicators.analytics import fetch_analytics_batch, map_indicator_values
 from hub.hcsc_indicators.branding import (
     COMPARE_SOURCES,
     NAV_LABEL,
@@ -37,6 +39,16 @@ from hub.hcsc_indicators.cache import (
     report_cache_key,
 )
 from hub.hcsc_indicators.design_decode import decode_npmo_design
+from hub.hcsc_indicators.geographic_breakdown import (
+    BREAKDOWN_LABELS,
+    BREAKDOWN_NONE,
+    bootstrap_breakdown_meta,
+    breakdown_thresholds,
+    format_estimate,
+    options_for_parent_level,
+    target_level_for_breakdown,
+    validate_breakdown_for_parent,
+)
 from hub.hcsc_indicators.presentation import enrich_result_row
 from hub.hcsc_indicators.query_display import build_retrieval_panel
 from hub.hcsc_indicators.quarters import (
@@ -44,7 +56,12 @@ from hub.hcsc_indicators.quarters import (
     assert_allowed_quarter,
     cycle_periods_payload,
 )
-from hub.hcsc_indicators.registry import SECTION_LABELS, SECTIONS, load_registry
+from hub.hcsc_indicators.registry import (
+    SECTION_LABELS,
+    SECTIONS,
+    collect_analytics_uids,
+    load_registry,
+)
 from hub.hcsc_indicators.validation import validate_row
 
 
@@ -55,10 +72,12 @@ class HcscIndicatorService:
         client_factory: Callable[[str], Dhis2Client],
         registry_path: Path | None = None,
         reports_db_path: Path | None = None,
+        ou_store: OrgUnitStore | None = None,
     ) -> None:
         self._client_factory = client_factory
         self._registry_path = registry_path
         self._reports_db_path = reports_db_path
+        self._ou_store = ou_store or OrgUnitStore()
         self._lock = threading.RLock()
         self._adapters = get_adapters()
 
@@ -99,7 +118,7 @@ class HcscIndicatorService:
             "periods": periods,
             "reporting_cycle": (periods.get("cycle") or {}),
             "disaggregations": [
-                {"id": "none", "label": "None (aggregate)"},
+                {"id": "none", "label": "All Households"},
                 {
                     "id": "ip",
                     "label": "IP / non-IP (planned)",
@@ -107,6 +126,16 @@ class HcscIndicatorService:
                     "note": "No Overview IP/non-IP dual PIs registered yet — do not guess.",
                 },
             ],
+            "population_filters": [
+                {"id": "none", "label": "All Households"},
+                {
+                    "id": "ip",
+                    "label": "IP / non-IP (planned)",
+                    "disabled": True,
+                    "note": "No Overview IP/non-IP dual PIs registered yet — do not guess.",
+                },
+            ],
+            "geographic_breakdown": bootstrap_breakdown_meta(),
             "environments": [
                 {
                     "id": "stage",
@@ -238,6 +267,7 @@ class HcscIndicatorService:
         period: str,
         org_unit: str,
         disaggregation: str = "none",
+        geographic_breakdown: str = "none",
         force_refresh: bool = False,
     ) -> dict[str, Any]:
         """Full Phase 0–2 report: all registry sections in one batched analytics call."""
@@ -247,9 +277,68 @@ class HcscIndicatorService:
             period=period,
             org_unit=org_unit,
             disaggregation=disaggregation,
+            geographic_breakdown=geographic_breakdown,
             force_refresh=force_refresh,
             section=None,
         )
+
+    def breakdown_estimate(
+        self,
+        *,
+        environment: str,
+        org_unit: str,
+        geographic_breakdown: str = "none",
+    ) -> dict[str, Any]:
+        """Estimate child OU count for a geographic breakdown (SQLite cache only)."""
+        env = validate_environment(environment)
+        ou = validate_org_unit(org_unit, required=True)
+        parent = self._ou_store.get(env, ou) or {}
+        parent_level = parent.get("level")
+        bid = validate_breakdown_for_parent(
+            parent_level=parent_level,
+            geographic_breakdown=geographic_breakdown,
+        )
+        thresholds = breakdown_thresholds()
+        options = options_for_parent_level(parent_level)
+        parent_info = {
+            "uid": parent.get("uid") or ou,
+            "name": parent.get("name") or ou,
+            "level": parent_level,
+            "path": parent.get("path") or "",
+        }
+        if bid == BREAKDOWN_NONE:
+            return {
+                "ok": True,
+                "mode": BREAKDOWN_NONE,
+                "label": BREAKDOWN_LABELS[BREAKDOWN_NONE],
+                "count": 0,
+                "child_count": 0,
+                "estimate_label": BREAKDOWN_LABELS[BREAKDOWN_NONE],
+                "requires_confirmation": False,
+                "thresholds": thresholds,
+                "options": options,
+                "parent": parent_info,
+                "target_level": None,
+            }
+        target = target_level_for_breakdown(bid)
+        count = (
+            self._ou_store.count_descendants_at_level(env, ou, int(target))
+            if target is not None
+            else 0
+        )
+        return {
+            "ok": True,
+            "mode": bid,
+            "label": BREAKDOWN_LABELS.get(bid, bid),
+            "count": count,
+            "child_count": count,
+            "estimate_label": format_estimate(count, bid),
+            "requires_confirmation": count >= int(thresholds.get("confirm_at") or 200),
+            "thresholds": thresholds,
+            "options": options,
+            "parent": parent_info,
+            "target_level": target,
+        }
 
     def _cached_fetch(
         self,
@@ -261,6 +350,7 @@ class HcscIndicatorService:
         disaggregation: str,
         force_refresh: bool,
         section: str | None,
+        geographic_breakdown: str = "none",
     ) -> dict[str, Any]:
         env = validate_environment(environment)
         pe = assert_allowed_quarter(period, allowed_quarter_ids(self.registry()))
@@ -270,6 +360,17 @@ class HcscIndicatorService:
             raise ReportSecurityError(
                 "Only disaggregation=none is supported until IP/non-IP definitions are verified.",
                 code="invalid_disaggregation",
+            )
+
+        # Overview / category stay aggregate-only; geo applies to full report scope.
+        if scope in {"overview", "category"}:
+            geo = BREAKDOWN_NONE
+        else:
+            parent_meta = self._ou_store.get(env, ou)
+            parent_level = parent_meta.get("level") if parent_meta else None
+            geo = validate_breakdown_for_parent(
+                parent_level=parent_level,
+                geographic_breakdown=geographic_breakdown,
             )
 
         if scope == "overview":
@@ -289,7 +390,11 @@ class HcscIndicatorService:
         else:
             cache = REPORT_CACHE
             cache_key = report_cache_key(
-                environment=env, period=pe, org_unit=ou, disaggregation=disagg
+                environment=env,
+                period=pe,
+                org_unit=ou,
+                disaggregation=disagg,
+                geographic_breakdown=geo,
             )
 
         if not force_refresh:
@@ -330,6 +435,7 @@ class HcscIndicatorService:
                 disagg=disagg,
                 section=section,
                 cache_key=cache_key,
+                geographic_breakdown=geo,
             )
             cache.set(cache_key, payload)
             return payload
@@ -428,6 +534,7 @@ class HcscIndicatorService:
         disagg: str,
         section: str | None,
         cache_key: str,
+        geographic_breakdown: str = "none",
     ) -> dict[str, Any]:
         started = time.perf_counter()
         reg = self.registry()
@@ -470,6 +577,7 @@ class HcscIndicatorService:
                     raise ReportSecurityError(str(exc), code="dhis2_error") from exc
                 batch = adapter_payloads[ADAPTER_DHIS2].get("batch") or {}
                 analytics_ms = int(batch.get("latency_ms") or 0)
+                http_requests = int(batch.get("http_requests") or 0)
                 dhis2_writes += int(adapter_payloads[ADAPTER_DHIS2].get("dhis2_writes") or 0)
 
             if by_adapter.get(ADAPTER_SQL):
@@ -622,7 +730,7 @@ class HcscIndicatorService:
                 }
             )
 
-        # Fix http_requests: one batched analytics call when dx present.
+        # Prefer batch http_requests; fall back to one call when dx present.
         dx_list = (
             ((adapter_payloads.get(ADAPTER_DHIS2) or {}).get("batch") or {})
             .get("request", {})
@@ -630,7 +738,33 @@ class HcscIndicatorService:
             .get("dx")
             or []
         )
-        http_requests = 1 if dx_list else 0
+        if not http_requests and dx_list:
+            http_requests = 1
+
+        geo_payload: dict[str, Any] = {"mode": BREAKDOWN_NONE, "children": []}
+        if geographic_breakdown and geographic_breakdown != BREAKDOWN_NONE:
+            overview_inds = [
+                r
+                for r in (reg.get("overview_indicators") or [])
+                if select_adapter(r) == ADAPTER_DHIS2
+            ]
+            if not overview_inds:
+                overview_inds = [
+                    r
+                    for r in (reg.get("indicators") or [])
+                    if select_adapter(r) == ADAPTER_DHIS2
+                ]
+            geo_payload = self._build_geographic_breakdown(
+                env=env,
+                pe=pe,
+                ou=ou,
+                breakdown_id=geographic_breakdown,
+                indicators=overview_inds,
+                freshness=freshness,
+            )
+            geo_timings = geo_payload.get("timings") or {}
+            http_requests += int(geo_timings.get("http_requests") or 0)
+            analytics_ms += int(geo_timings.get("analytics_ms") or 0)
 
         total_ms = int((time.perf_counter() - started) * 1000)
         package = export_package_meta(
@@ -644,6 +778,7 @@ class HcscIndicatorService:
                 "npmo_report_uid": reg.get("npmo_report_uid"),
                 "adapters": sorted(adapter_payloads.keys()),
                 "dx_count": len(dx_list),
+                "geographic_breakdown": geographic_breakdown or BREAKDOWN_NONE,
             },
         )
         return {
@@ -654,6 +789,7 @@ class HcscIndicatorService:
             "period": pe,
             "org_unit": ou,
             "disaggregation": disagg,
+            "geographic_breakdown": geo_payload,
             "freshness": freshness,
             "package": package,
             "results": results,
@@ -680,6 +816,189 @@ class HcscIndicatorService:
                 "no_html_scrape": True,
             },
         }
+
+    def _build_geographic_breakdown(
+        self,
+        *,
+        env: str,
+        pe: str,
+        ou: str,
+        breakdown_id: str,
+        indicators: list[dict[str, Any]],
+        freshness: str,
+    ) -> dict[str, Any]:
+        """Batched multi-OU analytics for descendants at a target level (DHIS2 only)."""
+        thresholds = breakdown_thresholds()
+        target = target_level_for_breakdown(breakdown_id)
+        parent = self._ou_store.get(env, ou) or {}
+        parent_info = {
+            "uid": parent.get("uid") or ou,
+            "name": parent.get("name") or ou,
+            "level": parent.get("level"),
+            "path": parent.get("path") or "",
+        }
+        label = BREAKDOWN_LABELS.get(breakdown_id, breakdown_id)
+
+        def _fail(message: str, *, child_count: int = 0) -> dict[str, Any]:
+            return {
+                "ok": False,
+                "mode": breakdown_id,
+                "label": label,
+                "target_level": target,
+                "parent": parent_info,
+                "child_count": child_count,
+                "estimate_label": format_estimate(child_count, breakdown_id),
+                "requires_confirmation": child_count
+                >= int(thresholds.get("confirm_at") or 200),
+                "thresholds": thresholds,
+                "children": [],
+                "rows_flat": [],
+                "timings": {"http_requests": 0, "analytics_ms": 0, "child_count": child_count},
+                "dhis2_writes": 0,
+                "error": message,
+            }
+
+        if target is None:
+            return _fail("Invalid geographic breakdown target.")
+        if not indicators:
+            return _fail("No DHIS2 overview indicators available for geographic breakdown.")
+
+        try:
+            child_count = self._ou_store.count_descendants_at_level(env, ou, int(target))
+            children_meta = self._ou_store.list_descendants_at_level(
+                env,
+                ou,
+                int(target),
+                limit=int(thresholds.get("max_children") or 2500),
+            )
+        except Exception as exc:  # noqa: BLE001
+            return _fail(f"Organisation unit lookup failed: {exc}")
+
+        estimate_label = format_estimate(child_count, breakdown_id)
+        requires_confirmation = child_count >= int(thresholds.get("confirm_at") or 200)
+
+        if not children_meta:
+            return {
+                "ok": True,
+                "mode": breakdown_id,
+                "label": label,
+                "target_level": target,
+                "parent": parent_info,
+                "child_count": child_count,
+                "estimate_label": estimate_label,
+                "requires_confirmation": requires_confirmation,
+                "thresholds": thresholds,
+                "children": [],
+                "rows_flat": [],
+                "timings": {"http_requests": 0, "analytics_ms": 0, "child_count": child_count},
+                "dhis2_writes": 0,
+                "error": None
+                if child_count == 0
+                else "No organisation units found in hub OU cache for this breakdown.",
+            }
+
+        client: Dhis2Client | None = None
+        try:
+            client = self._client_factory(env)
+            if not getattr(client.settings, "is_configured", False):
+                return _fail(f"DHIS2 {env} is not configured.", child_count=child_count)
+            dx = collect_analytics_uids(indicators)
+            child_uids = [c.get("uid") or c.get("id") for c in children_meta if c.get("uid") or c.get("id")]
+            try:
+                batch = fetch_analytics_batch(
+                    client,
+                    dx_uids=dx,
+                    period=pe,
+                    org_unit=child_uids,
+                    include_num_den=True,
+                )
+            except Dhis2Error as exc:
+                return _fail(str(exc), child_count=child_count)
+
+            by_ou = batch.get("by_ou") or {}
+            children_out: list[dict[str, Any]] = []
+            rows_flat: list[dict[str, Any]] = []
+            for child in children_meta:
+                uid = child.get("uid") or child.get("id") or ""
+                bucket = by_ou.get(uid) or {"values": {}, "num_den": {}}
+                results: list[dict[str, Any]] = []
+                for ind in indicators:
+                    mapped = map_indicator_values(
+                        ind,
+                        bucket.get("values") or {},
+                        num_den=bucket.get("num_den") or {},
+                    )
+                    enriched = self._build_result_row(
+                        ind,
+                        mapped=mapped,
+                        freshness=freshness,
+                        adapter_name=ADAPTER_DHIS2,
+                        retrieval_method="DHIS2 Analytics",
+                    )
+                    results.append(enriched)
+                    rows_flat.append(
+                        {
+                            "org_unit": uid,
+                            "org_unit_name": child.get("name") or uid,
+                            "hierarchy_path": child.get("path_label")
+                            or child.get("path")
+                            or "",
+                            "level": child.get("level"),
+                            "indicator_key": enriched.get("indicator_key"),
+                            "display_name": enriched.get("display_name"),
+                            "value_text": enriched.get("value_text"),
+                            "count": enriched.get("count"),
+                            "numerator": enriched.get("numerator"),
+                            "denominator": enriched.get("denominator"),
+                            "percentage": enriched.get("percentage"),
+                            "source_badge": enriched.get("source_badge"),
+                            "validation_status": enriched.get("validation_status"),
+                            "freshness": enriched.get("freshness"),
+                        }
+                    )
+                children_out.append(
+                    {
+                        "org_unit": uid,
+                        "org_unit_name": child.get("name") or uid,
+                        "hierarchy_path": child.get("path_label")
+                        or child.get("path")
+                        or "",
+                        "level": child.get("level"),
+                        "results": results,
+                    }
+                )
+
+            return {
+                "ok": True,
+                "mode": breakdown_id,
+                "label": label,
+                "target_level": target,
+                "parent": parent_info,
+                "child_count": child_count,
+                "estimate_label": estimate_label,
+                "requires_confirmation": requires_confirmation,
+                "thresholds": thresholds,
+                "truncated": len(children_meta) < child_count,
+                "children": children_out,
+                "rows_flat": rows_flat,
+                "timings": {
+                    "http_requests": int(batch.get("http_requests") or 0),
+                    "analytics_ms": int(batch.get("latency_ms") or 0),
+                    "child_count": child_count,
+                    "listed_children": len(children_meta),
+                    "dx_count": len(dx),
+                },
+                "dhis2_writes": 0,
+                "error": None,
+            }
+        except Exception as exc:  # noqa: BLE001
+            return _fail(str(exc), child_count=child_count)
+        finally:
+            if client is not None:
+                try:
+                    client.close()
+                except Exception:  # noqa: BLE001
+                    pass
 
     def validation_workspace(
         self,
