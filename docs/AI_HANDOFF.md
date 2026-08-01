@@ -4,20 +4,19 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**Central Hub HCSC–RF rename + classification grouping (2026-08-02)**
+**HCSC–RF Work sidebar visibility (2026-08-02)**
 
-User-facing module name is **HCSC–RF** (Household Convergence Scorecard and Results Framework).
-Page title: **Central Hub HCSC–RF**. Subtitle: **Indicators, Sources, and Validation**.
-One page/route preserved: `/dhis2/hcsc-indicators` (`dhis2_hcsc_indicators`).
+Root cause: HCSC–RF lived only in `_DHIS2_TOOLS` (DHIS2 Overview tools grid), not in Work sidebar `work_nav`. Added sidebar entry below DHIS2 Reports → `/dhis2/hcsc-indicators` (`dhis2_hcsc_indicators`).
 
-### Prior milestone (still in place)
+Prior: **DHIS2 Run Report parameter pickers** — searchable Period + OU.
 
-**Phase 3 Validation + UI visibility fix**
+### Prior milestone
 
-1. Template used `{% block head %}` but `base.html` only defines `{% block head_extra %}` — **JS never loaded**.
-2. DHIS2 Overview tools grid was **hardcoded** and omitted HCSC (and other `_DHIS2_TOOLS` entries).
-3. Bootstrap JSON lived in a single-quoted HTML attribute (fragile); moved to `<script type="application/json" id="hcsc-bootstrap">`.
-4. Page endpoint renamed to `dhis2_hcsc_indicators` so Work → DHIS2 nav `active_prefix` highlights correctly.
+**DHIS2 Run Report parameter pickers (2026-08-02)**
+
+Run Report Period + Organisation Unit are searchable dropdown/combobox controls (no typed free-text submit). Reuses `/api/dhis2/reports/periods` and `/api/dhis2/reports/org-units`.
+
+Prior: **Central Hub HCSC–RF rename + classification grouping** — see below.
 
 ### Compare Sources (Phase 3)
 
@@ -38,8 +37,10 @@ API: `GET /api/dhis2/hcsc-indicators/validation`, snapshot + investigation notes
 ### Verify
 
 ```powershell
+.\.venv\Scripts\python.exe -m unittest tests.test_dhis2_report_params tests.test_dhis2_reports_bridge -v
 .\.venv\Scripts\python.exe -m unittest tests.test_hcsc_indicators -v
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-Open Work → DHIS2 → HCSC–RF, or `/dhis2/hcsc-indicators` (refresh / back-forward).
+Open Work → DHIS2 → Reports → Run Report, or `/dhis2/reports/run` (hard refresh for JS).
+Open Work → DHIS2 → HCSC–RF, or `/dhis2/hcsc-indicators`.

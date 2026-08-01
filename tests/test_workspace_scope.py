@@ -119,6 +119,10 @@ class WorkspaceNavRouteTests(unittest.TestCase):
         self.assertIn("Repositories", work_html)
         self.assertIn("Work Notebook", work_html)
         self.assertIn("SQL Workspace", work_html)
+        self.assertIn("DHIS2 Reports", work_html)
+        self.assertIn("HCSC–RF", work_html)
+        self.assertIn("/dhis2/hcsc-indicators", work_html)
+        self.assertLess(work_html.index("DHIS2 Reports"), work_html.index("HCSC–RF"))
         self.assertIn(">System<", work_html)
         self.assertIn("Audit", work_html)
         self.assertNotIn("Personal Notebook", work_html)
@@ -133,6 +137,11 @@ class WorkspaceNavRouteTests(unittest.TestCase):
         self.assertIn("Personal Dashboard", personal_html)
         self.assertIn("Personal Notebook", personal_html)
         self.assertIn("Personal Tasks", personal_html)
+        p_side = personal_html[
+            personal_html.find('class="sidebar-nav"') : personal_html.find('class="sidebar-actions"')
+        ]
+        self.assertNotIn("HCSC–RF", p_side)
+        self.assertNotIn("/dhis2/hcsc-indicators", p_side)
         self.assertIn("id=\"qn-panel\"", personal_html)
         self.assertIn('id="ar-notepad"', personal_html)
         self.assertNotIn('href="/personal#quick-notepad"', personal_html)

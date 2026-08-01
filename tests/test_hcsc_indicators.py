@@ -719,8 +719,15 @@ class UiContractTests(unittest.TestCase):
         self.assertIn("dhis2_tools", overview)
         app_src = (ROOT / "app.py").read_text(encoding="utf-8")
         self.assertIn("dhis2_hcsc_indicators", app_src)
-        self.assertEqual(app_src.count('"endpoint": "dhis2_hcsc_indicators"'), 1)
+        # Tools grid + Work sidebar — same endpoint, no duplicate route registration.
+        self.assertEqual(app_src.count('"endpoint": "dhis2_hcsc_indicators"'), 2)
         self.assertIn('"label": "HCSC–RF"', app_src)
+        # Sidebar entry is immediately after DHIS2 Reports in work_nav.
+        reports_idx = app_src.index('"label": "DHIS2 Reports"')
+        hcsc_nav_idx = app_src.index('"label": "HCSC–RF"', reports_idx)
+        jobs_idx = app_src.index('"label": "Jobs"', hcsc_nav_idx)
+        self.assertLess(reports_idx, hcsc_nav_idx)
+        self.assertLess(hcsc_nav_idx, jobs_idx)
         self.assertNotIn("HCSC Indicators", app_src)
         service = (ROOT / "hub" / "hcsc_indicators" / "service.py").read_text(encoding="utf-8")
         self.assertIn("no_formula_engine", service)
@@ -765,8 +772,48 @@ class RouteSmokeTests(unittest.TestCase):
         self.assertIn("HCSC–RF".encode("utf-8"), overview.data)
         self.assertNotIn(b"HCSC Indicators", overview.data)
         self.assertIn(b"/dhis2/hcsc-indicators", overview.data)
-        self.assertEqual(overview.data.count("HCSC–RF".encode("utf-8")), 1)
+        # Sidebar + tools grid both link to the same route (not a duplicate page).
+        self.assertGreaterEqual(overview.data.count(b"/dhis2/hcsc-indicators"), 1)
         self.assertTrue(hasattr(self.app.view_functions.get("dhis2_hcsc_indicators"), "__call__"))
+        # Exactly one view function for the page endpoint (no duplicate routes).
+        hcsc_views = [k for k in self.app.view_functions if k == "dhis2_hcsc_indicators"]
+        self.assertEqual(hcsc_views, ["dhis2_hcsc_indicators"])
+
+        work = self.client.get("/work")
+        self.assertEqual(work.status_code, 200)
+        work_html = work.get_data(as_text=True)
+        self.assertIn("HCSC–RF", work_html)
+        self.assertIn("/dhis2/hcsc-indicators", work_html)
+        self.assertIn("DHIS2 Reports", work_html)
+        # Order: DHIS2 Reports before HCSC–RF in sidebar markup.
+        self.assertLess(
+            work_html.index("DHIS2 Reports"),
+            work_html.index("HCSC–RF"),
+        )
+
+        personal = self.client.get("/personal")
+        self.assertEqual(personal.status_code, 200)
+        personal_html = personal.get_data(as_text=True)
+        # Work-only sidebar: HCSC–RF must not appear in Personal nav entries.
+        p_side_start = personal_html.find('class="sidebar-nav"')
+        p_side_end = personal_html.find('class="sidebar-actions"')
+        personal_sidebar = personal_html[p_side_start:p_side_end]
+        self.assertNotIn("HCSC–RF", personal_sidebar)
+        self.assertNotIn("/dhis2/hcsc-indicators", personal_sidebar)
+
+        # Active nav state on the HCSC–RF page.
+        page_html = page.get_data(as_text=True)
+        self.assertIn("is-active", page_html)
+        self.assertIn('href="/dhis2/hcsc-indicators"', page_html)
+        self.assertRegex(
+            page_html,
+            r'href="/dhis2/hcsc-indicators"\s+class="nav-link is-active"',
+        )
+        # Page still renders shell even when analytics would fail (bootstrap present).
+        self.assertIn("hcsc-bootstrap", page_html)
+        self.assertIn("Central Hub HCSC", page_html)
+        self.assertIn("Indicators, Sources, and Validation", page_html)
+
         detail = self.client.get("/api/dhis2/hcsc-indicators/eligible_households")
         self.assertEqual(detail.status_code, 200)
         overview_api = self.client.get("/api/dhis2/hcsc-indicators/overview")

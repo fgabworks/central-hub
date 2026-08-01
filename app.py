@@ -548,6 +548,12 @@ def create_app() -> Flask:
                 "active_prefix": "dhis2_reports",
             },
             {
+                "endpoint": "dhis2_hcsc_indicators",
+                "label": "HCSC–RF",
+                "icon": "▣",
+                "active_prefix": "dhis2_hcsc",
+            },
+            {
                 "endpoint": "jobs",
                 "label": "Jobs",
                 "icon": "▶",
