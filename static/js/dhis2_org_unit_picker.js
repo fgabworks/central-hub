@@ -258,13 +258,17 @@
       }
       if (chipLabel) {
         if (!ou.uid) {
-          chipLabel.textContent = "";
+          chipLabel.textContent = "No organisation unit selected";
+          chipLabel.classList.add("is-empty");
         } else {
-          // Compact path chip: "Region VII › Cebu › …" (no UID suffix).
+          // Compact path: "Region VII › Cebu › …"
           chipLabel.textContent = ou.path || ou.name || ou.uid;
+          chipLabel.classList.remove("is-empty");
         }
       }
-      if (chipRow) chipRow.hidden = !ou.uid;
+      // Selected box stays visible; only clear is disabled when empty.
+      if (chipRow) chipRow.hidden = false;
+      if (clearBtn) clearBtn.disabled = !ou.uid;
       if (ou.uid) setError("");
       onChange(ou.uid || "");
       if (ou.uid) {

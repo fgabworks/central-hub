@@ -751,13 +751,16 @@ class ParamUiContractTests(unittest.TestCase):
         self.assertIn("hcsc-ou-province", html)
         self.assertIn("hcsc-ou-municipality", html)
         self.assertIn("hcsc-ou-barangay", html)
-        self.assertIn("hcsc-ou-levels", html)
         self.assertIn("hcsc-ou-retry", html)
         self.assertIn("hcsc-ou-search", html)
-        self.assertIn("Refresh OUs", html)
+        self.assertIn("hcsc-ou-selected-box", html)
+        self.assertIn("hcsc-ou-icon-btn", html)
         self.assertIn("hcsc-ou-refresh-meta", html)
-        self.assertIn("hcsc-ou-helper", html)
-        self.assertIn("Select a Region or search for an organisation unit.", html)
+        self.assertIn("hcsc-ou-clear", html)
+        self.assertIn("No organisation unit selected", html)
+        self.assertNotIn("Refresh OUs", html)
+        self.assertNotIn("hcsc-ou-helper", html)
+        self.assertNotIn("hcsc-ou-levels", html)
         self.assertIn("Municipality/City", html)
         self.assertIn("hcsc-status-strip", html)
         self.assertIn("hcsc-status-badge", html)
@@ -765,7 +768,7 @@ class ParamUiContractTests(unittest.TestCase):
         self.assertIn("Select an organisation unit to continue", html)
         self.assertIn("Awaiting selection", html)
         self.assertIn("No report generated yet", html)
-        self.assertIn("is-skeleton", html)
+        self.assertIn("Last refreshed: —", html)
         self.assertIn("Clear Filters", js)
         self.assertNotIn("Filter quarters", html)
         self.assertNotIn('type="month"', html)
@@ -777,7 +780,7 @@ class ParamUiContractTests(unittest.TestCase):
         self.assertIn("onEnvironmentChange", js)
         self.assertIn("updateStatusStrip", js)
         self.assertIn("Ready to generate", js)
-        self.assertIn("Generating report…", js)
+        self.assertIn("Generating report", js)
         self.assertIn("reportInFlight", js)
         self.assertIn("hcsc-filter-validation", html)
         self.assertIn("OU_LEVELS", picker)
@@ -788,7 +791,6 @@ class ParamUiContractTests(unittest.TestCase):
         self.assertIn("lazyRoots", picker)
         self.assertIn("refreshMetadata", picker)
         self.assertIn("SEARCH_DEBOUNCE_MS", picker)
-        self.assertIn("hcsc-ou-refresh-meta", html)
         self.assertIn("Recent / frequent", picker)
         self.assertIn("resolveHierarchyFromPath", picker)
         self.assertIn("commitSelection", picker)
@@ -801,11 +803,10 @@ class ParamUiContractTests(unittest.TestCase):
         self.assertIn("Barangay", picker)
         self.assertIn("hcsc-param-row", css)
         self.assertIn("hcsc-filter-row-primary", css)
-        self.assertIn("hcsc-ou-levels", css)
+        self.assertIn("hcsc-ou-selected-box", css)
         self.assertIn("hcsc-ou-search-results", css)
         self.assertIn("hcsc-status-strip", css)
         self.assertIn("hcsc-status-badge", css)
-        self.assertIn("hcsc-skel", css)
         self.assertIn("hcsc-category-nav", css)
         self.assertIn("has-ad-dock", css)
         self.assertIn("is-wc-open", css)
@@ -1419,7 +1420,7 @@ class OverviewServicePeriodGateTests(unittest.TestCase):
 
 
 class ParamCardLayoutContractTests(unittest.TestCase):
-    """HCSC–RF parameter card layout + deferred validation (no API/registry changes)."""
+    """HCSC–RF parameter card layout matching preview (no API/registry changes)."""
 
     def test_two_row_layout_and_deferred_validation(self):
         html = (ROOT / "templates" / "hcsc_indicator_summary.html").read_text(encoding="utf-8")
@@ -1427,31 +1428,38 @@ class ParamCardLayoutContractTests(unittest.TestCase):
         css = (ROOT / "static" / "css" / "style.css").read_text(encoding="utf-8")
         picker = (ROOT / "static" / "js" / "dhis2_org_unit_picker.js").read_text(encoding="utf-8")
 
-        # Layout: six-field primary row grouping + secondary proportions.
+        # Exact two-row filter: 6 primary + 5 secondary fields.
         self.assertIn("hcsc-filter-row-primary", html)
-        self.assertIn("hcsc-filter-row-secondary", css)
-        self.assertIn("minmax(0, 30%)", css)
+        self.assertIn("hcsc-filter-row-secondary", html)
+        self.assertIn("repeat(6, minmax(0, 1fr))", css)
+        self.assertIn("minmax(0, 25%)", css)
         self.assertIn("minmax(0, 35%)", css)
         self.assertIn("minmax(0, 15%)", css)
         self.assertIn("height: 36px", css)
-        self.assertIn("#hcsc-run:disabled", css)
-        self.assertIn("hcsc-ou-selected-row", html)
-        self.assertIn("hcsc-ou-helper", html)
-        self.assertIn("Select a Region or search for an organisation unit.", html)
+        self.assertIn("hcsc-ou-selected-box", html)
+        self.assertIn("hcsc-ou-icon-btn", html)
+        self.assertIn('id="hcsc-ou-refresh-meta"', html)
+        self.assertIn('id="hcsc-ou-clear"', html)
+        self.assertNotIn("Refresh OUs", html)
+        self.assertNotIn("hcsc-ou-helper", html)
+        self.assertIn("No organisation unit selected", html)
+        self.assertIn("Last refreshed: —", html)
+        self.assertIn("Result Type: All", html)
+        self.assertIn("Source: All", html)
+        self.assertIn("Validation Status: All", html)
 
-        # Initial state: no immediate OU validation error text in JS path.
+        # Deferred validation + Generate/Refresh gating.
         self.assertIn("showFieldErrors", js)
         self.assertIn("revealErrors", js)
         self.assertIn('setFieldError("hcsc-ou-error", "")', js)
-        # Generate gated; Refresh only during in-flight.
         self.assertIn("run.disabled = !(peOk && ouOk)", js)
         self.assertIn("refresh.disabled = !!state.reportInFlight", js)
         self.assertNotIn("refresh.disabled = !(peOk && ouOk)", js)
-
-        # Awaiting selection must not auto-call analytics.
         self.assertIn("do NOT auto-run analytics", js)
-        self.assertIn("Generating report…", js)
+        self.assertIn("Generating report", js)
         self.assertIn("Awaiting selection", html)
+        self.assertIn("hcsc-empty-ico", js)
+        self.assertIn("No organisation unit selected", picker)
 
         # Hierarchy/search sync + parent clears children + lazy/debounce/cancel.
         self.assertIn("selectionSource", picker)
@@ -1462,6 +1470,7 @@ class ParamCardLayoutContractTests(unittest.TestCase):
         self.assertIn("dedupeFetch", picker)
         self.assertIn("lazyRoots", picker)
         self.assertIn('storagePrefix + "cascade." + env()', picker)
+        self.assertIn("clearBtn.disabled = !ou.uid", picker)
 
 
 class UiContractTests(unittest.TestCase):

@@ -4,7 +4,14 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**HCSC–RF parameter card layout refine (2026-08-02)**
+**HCSC–RF preview layout match (2026-08-02)**
+
+Filter card matches preview: Row1 six equal fields (Env/Quarter/Region/Province/Mun/Brgy);
+Row2 Search 25% / Selected 35% (bordered field with refresh+clear icons) / Disagg 15% /
+Generate 15% / Refresh 10%. Deferred validation; no auto analytics; placeholder cards
+with `Last refreshed: —`; status strip unchanged in behavior.
+
+Prior: **HCSC–RF parameter card layout refine (2026-08-02)**
 
 Two-row responsive param card; deferred OU validation; Generate gated on quarter+OU;
 Refresh enabled unless report in-flight; awaiting selection does not auto-call analytics.

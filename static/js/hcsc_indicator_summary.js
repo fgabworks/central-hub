@@ -214,10 +214,10 @@
           ? "Error"
           : resolved === "ready"
             ? "Ready to generate"
-            : "Select an organisation unit to continue");
+            : "Select an organisation unit to continue.");
     var badgeText =
       resolved === "loading"
-        ? "Generating report…"
+        ? "Generating report"
         : resolved === "error"
           ? "Error"
           : resolved === "ready"
@@ -246,7 +246,14 @@
     var emptyOu = $("hcsc-ou-empty");
     if (emptyOu) emptyOu.hidden = !!ou;
     var helper = $("hcsc-ou-helper");
-    if (helper) helper.hidden = !!ou;
+    if (helper) helper.hidden = true;
+    var clearBtn = $("hcsc-ou-clear");
+    if (clearBtn) clearBtn.disabled = !ou;
+    var chipLabel = $("hcsc-ou-chip-label");
+    if (chipLabel && !ou && !(chipLabel.textContent || "").trim()) {
+      chipLabel.textContent = "No organisation unit selected";
+      chipLabel.classList.add("is-empty");
+    }
     var chips = $("hcsc-param-chips");
     if (chips) {
       var envRaw = (($("hcsc-env") && $("hcsc-env").value) || "stage").toLowerCase();
@@ -476,6 +483,10 @@
     var host = $("hcsc-cards");
     if (!host) return;
     var tones = ["is-blue", "is-green", "is-purple", "is-amber", "is-teal"];
+    var rateKeys = {
+      convergence_rate: true,
+      completion_validated_eligible_rate: true,
+    };
     var byKey = {};
     (rows || []).forEach(function (r) {
       byKey[r.indicator_key] = r;
@@ -485,14 +496,21 @@
       var r = byKey[k];
       var title = CARD_TITLES[k] || (r && r.display_name) || k;
       if (!hasData || !r) {
+        var placeholder = rateKeys[k] ? "— %" : "—";
         return (
           '<article class="hcsc-card ' +
           tones[i] +
-          ' hcsc-card-placeholder is-skeleton"><h3>' +
+          ' hcsc-card-placeholder"><h3>' +
           escapeHtml(title) +
-          '</h3><p class="hcsc-card-value hcsc-skel">&nbsp;</p><p class="hcsc-skel hcsc-skel-line">&nbsp;</p></article>'
+          '</h3><p class="hcsc-card-value">' +
+          placeholder +
+          '</p><p class="muted hcsc-card-foot">Last refreshed: —</p></article>'
         );
       }
+      var refreshed =
+        (r.last_updated && String(r.last_updated).replace("T", " ").slice(0, 19)) ||
+        (r.freshness && String(r.freshness).replace("T", " ").slice(0, 19)) ||
+        "—";
       return (
         '<article class="hcsc-card ' +
         tones[i] +
@@ -508,12 +526,9 @@
         sourceBadge(r.source_badge, r.source_badge_label) +
         " " +
         validationCell(r) +
-        (r.last_updated
-          ? ' <span class="muted">' +
-            escapeHtml(String(r.last_updated).replace("T", " ").slice(0, 19)) +
-            "</span>"
-          : "") +
-        "</div></article>"
+        '</div><p class="muted hcsc-card-foot">Last refreshed: ' +
+        escapeHtml(refreshed) +
+        "</p></article>"
       );
     }).join("");
   }
@@ -559,6 +574,7 @@
     }
     return (
       '<tr class="hcsc-empty-row"><td colspan="8"><div class="hcsc-empty">' +
+      '<div class="hcsc-empty-ico" aria-hidden="true">⌕</div>' +
       "<strong>No indicators to display</strong>" +
       '<p class="muted">Select an organisation unit and generate the report.</p>' +
       "</div></td></tr>"
@@ -1493,10 +1509,10 @@
       return;
     }
     ouPicker = window.CentralHubOuPicker.create({
-      root: $("hcsc-ou-picker"),
+      root: $("hcsc-controls") || $("hcsc-ou-picker"),
       hiddenEl: $("hcsc-ou"),
       pathEl: $("hcsc-ou-path"),
-      chipRow: $("hcsc-ou-chip-row"),
+      chipRow: $("hcsc-ou-selected-box"),
       chipLabel: $("hcsc-ou-chip-label"),
       clearBtn: $("hcsc-ou-clear"),
       retryBtn: $("hcsc-ou-retry"),
