@@ -36,6 +36,8 @@
     lastRunOk: null,
     statusMode: "need_ou",
     generated: false,
+    showFieldErrors: false,
+    reportInFlight: false,
   };
   var ouPicker = null;
   var allowedQuarters = {};
@@ -138,7 +140,10 @@
   }
 
   function selectedOu() {
-    if (ouPicker && ouPicker.selectedUid) return ouPicker.selectedUid();
+    if (ouPicker && ouPicker.selectedUid) {
+      var fromPicker = ouPicker.selectedUid();
+      if (fromPicker) return fromPicker;
+    }
     var ou = ($("hcsc-ou") && $("hcsc-ou").value) || "";
     return isValidOuUid(ou) ? ou.trim() : "";
   }
@@ -204,15 +209,15 @@
     var msg =
       explicitMsg ||
       (resolved === "loading"
-        ? "Loading report…"
+        ? "Generating report…"
         : resolved === "error"
           ? "Error"
           : resolved === "ready"
-            ? "All required parameters are selected."
+            ? "Ready to generate"
             : "Select an organisation unit to continue");
     var badgeText =
       resolved === "loading"
-        ? "Loading"
+        ? "Generating report…"
         : resolved === "error"
           ? "Error"
           : resolved === "ready"
@@ -240,6 +245,8 @@
     if (readyMark) readyMark.hidden = !ou;
     var emptyOu = $("hcsc-ou-empty");
     if (emptyOu) emptyOu.hidden = !!ou;
+    var helper = $("hcsc-ou-helper");
+    if (helper) helper.hidden = !!ou;
     var chips = $("hcsc-param-chips");
     if (chips) {
       var envRaw = (($("hcsc-env") && $("hcsc-env").value) || "stage").toLowerCase();
@@ -295,17 +302,26 @@
     }
   }
 
-  function validateForm() {
+  function validateForm(opts) {
+    var options = opts || {};
+    if (options.revealErrors) state.showFieldErrors = true;
     var pe = selectedPeriod();
     var ou = selectedOu();
     var peOk = !!pe;
     var ouOk = !!ou;
-    setFieldError("hcsc-period-error", peOk ? "" : "Select a valid quarter.");
-    setFieldError("hcsc-ou-error", ouOk ? "" : "Select an organisation unit.");
+    // Field errors only after Generate/Refresh attempt or an invalid prior selection.
+    if (state.showFieldErrors) {
+      setFieldError("hcsc-period-error", peOk ? "" : "Select a valid quarter.");
+      setFieldError("hcsc-ou-error", ouOk ? "" : "Select an organisation unit.");
+    } else {
+      setFieldError("hcsc-period-error", "");
+      setFieldError("hcsc-ou-error", "");
+    }
     var run = $("hcsc-run");
-    if (run) run.disabled = !(peOk && ouOk);
+    if (run) run.disabled = !(peOk && ouOk) || state.reportInFlight;
     var refresh = $("hcsc-refresh");
-    if (refresh) refresh.disabled = !(peOk && ouOk);
+    // Refresh stays available without OU; only block during an active report request.
+    if (refresh) refresh.disabled = !!state.reportInFlight;
     if (state.statusMode !== "loading" && state.statusMode !== "error") {
       state.statusMode = peOk && ouOk ? "ready" : "need_ou";
     }
@@ -1329,19 +1345,34 @@
   }
 
   function loadReport(force) {
-    if (!validateForm()) {
+    if (!validateForm({ revealErrors: true })) {
       state.statusMode = "error";
       setStatus("Select a valid quarter and organisation unit.", true);
       return;
     }
-    var env = ($("hcsc-env") && $("hcsc-env").value) || "stage";
     var period = selectedPeriod();
     var ou = selectedOu();
+    if (!isValidOuUid(ou)) {
+      state.showFieldErrors = true;
+      state.statusMode = "error";
+      setStatus("Organisation unit selection was lost. Select it again, then Generate Report.", true);
+      validateForm();
+      return;
+    }
     var started = Date.now();
+    state.reportInFlight = true;
     state.statusMode = "loading";
-    updateStatusStrip("Loading", "loading");
+    updateStatusStrip("Generating report…", "loading");
     showShellBanner("");
+    validateForm();
     var reportUrl = root.getAttribute("data-report-url") || root.getAttribute("data-overview-url");
+    if (!reportUrl) {
+      state.reportInFlight = false;
+      state.statusMode = "error";
+      setStatus("Report API URL is missing from the page.", true);
+      validateForm();
+      return;
+    }
     var url = reportUrl + scopeQuery(force);
     fetch(url, { credentials: "same-origin" })
       .then(function (r) {
@@ -1351,10 +1382,13 @@
         });
       })
       .then(function (data) {
+        state.reportInFlight = false;
         if (!data.ok) {
           state.statusMode = "error";
           state.lastRunOk = false;
+          state.lastRunAt = new Date().toISOString();
           setStatus(data.error || "Report failed", true);
+          validateForm();
           return;
         }
         showShellBanner("");
@@ -1388,17 +1422,69 @@
         updateStatusStrip("Ready to generate", "ready");
         var fresh = $("hcsc-freshness");
         if (fresh) fresh.textContent = "Last updated: " + (data.freshness || "");
+        validateForm();
       })
       .catch(function () {
+        state.reportInFlight = false;
         state.statusMode = "error";
         state.lastRunOk = false;
-        setStatus("Report request failed.", true);
+        state.lastRunAt = new Date().toISOString();
+        setStatus("Report request failed. Check network or DHIS2 connectivity.", true);
+        validateForm();
       });
   }
 
   // Backward-compatible alias used by older hooks/tests.
   function loadOverview(force) {
     loadReport(force);
+  }
+
+  function readQueryParams() {
+    try {
+      return new URLSearchParams(window.location.search || "");
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function hydrateFromQuery() {
+    var qs = readQueryParams();
+    if (!qs) return false;
+    var env = (qs.get("environment") || qs.get("env") || "").trim().toLowerCase();
+    var pe = (qs.get("period") || "").trim();
+    var ou = (qs.get("orgUnit") || qs.get("org_unit") || "").trim();
+    var disagg = (qs.get("disaggregation") || qs.get("disagg") || "").trim();
+    var changed = false;
+    var envSel = $("hcsc-env");
+    if (envSel && (env === "live" || env === "stage") && envSel.value !== env) {
+      envSel.value = env;
+      changed = true;
+      fillPeriods();
+      if (ouPicker && ouPicker.onEnvironmentChange) ouPicker.onEnvironmentChange();
+    }
+    var peSel = $("hcsc-period");
+    if (peSel && pe && allowedQuarters[pe] && peSel.value !== pe) {
+      peSel.value = pe;
+      saveRememberedQuarter(pe);
+      changed = true;
+    }
+    var disSel = $("hcsc-disagg");
+    if (disSel && disagg) {
+      var has = Array.prototype.some.call(disSel.options || [], function (o) {
+        return o.value === disagg;
+      });
+      if (has && disSel.value !== disagg) {
+        disSel.value = disagg;
+        changed = true;
+      }
+    }
+    if (isValidOuUid(ou) && ouPicker && ouPicker.setSelection) {
+      if (selectedOu() !== ou) {
+        ouPicker.setSelection(ou, ou, ou);
+        changed = true;
+      }
+    }
+    return changed || !!(pe || ou || env);
   }
 
   function wireOuSearch() {
@@ -1526,11 +1612,20 @@
     if (form) {
       form.addEventListener("submit", function (ev) {
         ev.preventDefault();
-        loadOverview(false);
+        ev.stopPropagation();
+        loadReport(false);
+        return false;
+      });
+    }
+    var run = $("hcsc-run");
+    if (run) {
+      run.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        loadReport(false);
       });
     }
     var refresh = $("hcsc-refresh");
-    if (refresh) refresh.addEventListener("click", function () { loadOverview(true); });
+    if (refresh) refresh.addEventListener("click", function () { loadReport(true); });
     var periodSel = $("hcsc-period");
     if (periodSel) {
       periodSel.addEventListener("change", function () {
@@ -1644,6 +1739,11 @@
         copyText(text);
       });
     }
+
+    // Restore controls from URL if present — do NOT auto-run analytics.
+    // Awaiting selection must not trigger report/analytics endpoints.
+    hydrateFromQuery();
+    validateForm();
   }
 
   wire();

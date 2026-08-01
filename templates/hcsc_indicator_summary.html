@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{{ page_title }} · {{ app_name }}{% endblock %}
 {% block head_extra %}
-<script src="{{ url_for('static', filename='js/dhis2_org_unit_picker.js') }}?v=ou-sqlite-1" defer></script>
-<script src="{{ url_for('static', filename='js/hcsc_indicator_summary.js') }}?v=hcsc-preview-2" defer></script>
+<script src="{{ url_for('static', filename='js/dhis2_org_unit_picker.js') }}?v=ou-select-fix-3" defer></script>
+<script src="{{ url_for('static', filename='js/hcsc_indicator_summary.js') }}?v=hcsc-preview-ui-1" defer></script>
 {% endblock %}
 {% block content %}
 <section class="page-header page-header-compact hcsc-page-header">
@@ -31,11 +31,12 @@
 
   <div class="hcsc-shell-state" id="hcsc-shell-banner" hidden role="status"></div>
 
-  <form class="hcsc-param-row hcsc-filter-card" id="hcsc-controls">
+  {# Preview two-row filter card — Generate is type=button; no native navigation. #}
+  <form class="hcsc-param-row hcsc-filter-card" id="hcsc-controls" action="#" method="get" onsubmit="return false;">
     <div class="hcsc-filter-row hcsc-filter-row-primary">
       <div class="hcsc-filter-field hcsc-filter-env">
         <label class="hcsc-field-label" for="hcsc-env">Environment</label>
-        <select id="hcsc-env" name="environment" class="hcsc-control" aria-label="Environment">
+        <select id="hcsc-env" class="hcsc-control" aria-label="Environment">
           <option value="live">Live</option>
           <option value="stage">Stage</option>
         </select>
@@ -43,73 +44,84 @@
 
       <div class="hcsc-filter-field hcsc-filter-period">
         <label class="hcsc-field-label" for="hcsc-period">Reporting Quarter</label>
-        <select id="hcsc-period" name="period" class="hcsc-control" aria-describedby="hcsc-period-error" aria-label="Reporting Quarter"></select>
+        <select id="hcsc-period" class="hcsc-control" aria-describedby="hcsc-period-error" aria-label="Reporting Quarter"></select>
         <p class="hcsc-field-error" id="hcsc-period-error" hidden></p>
       </div>
 
-      <div class="hcsc-filter-field hcsc-filter-ou">
-        <label class="hcsc-field-label" id="hcsc-ou-label">Organisation Unit</label>
-        <div class="hcsc-ou-picker" id="hcsc-ou-picker" aria-labelledby="hcsc-ou-label">
-          <div class="hcsc-ou-levels" role="group" aria-label="Organisation unit levels">
-            <select id="hcsc-ou-region" class="hcsc-control hcsc-ou-select" data-ou-level="0" aria-label="Region">
-              <option value="">Region…</option>
-            </select>
-            <select id="hcsc-ou-province" class="hcsc-control hcsc-ou-select" data-ou-level="1" aria-label="Province" disabled>
-              <option value="">Province…</option>
-            </select>
-            <select id="hcsc-ou-municipality" class="hcsc-control hcsc-ou-select" data-ou-level="2" aria-label="Municipality/City" disabled>
-              <option value="">Municipality/City…</option>
-            </select>
-            <select id="hcsc-ou-barangay" class="hcsc-control hcsc-ou-select" data-ou-level="3" aria-label="Barangay" disabled>
-              <option value="">Barangay…</option>
-            </select>
-            <span class="hcsc-ou-ready" id="hcsc-ou-ready" hidden title="Organisation unit selected" aria-hidden="true">✓</span>
-          </div>
-          <input type="hidden" id="hcsc-ou" name="orgUnit" value="">
-          <p class="hcsc-field-error" id="hcsc-ou-error" hidden></p>
-        </div>
+      <div class="hcsc-filter-field hcsc-filter-region">
+        <label class="hcsc-field-label" for="hcsc-ou-region">Region</label>
+        <select id="hcsc-ou-region" class="hcsc-control hcsc-ou-select" data-ou-level="0" aria-label="Region">
+          <option value="">Region…</option>
+        </select>
+      </div>
+
+      <div class="hcsc-filter-field hcsc-filter-province">
+        <label class="hcsc-field-label" for="hcsc-ou-province">Province</label>
+        <select id="hcsc-ou-province" class="hcsc-control hcsc-ou-select" data-ou-level="1" aria-label="Province" disabled>
+          <option value="">Province…</option>
+        </select>
+      </div>
+
+      <div class="hcsc-filter-field hcsc-filter-municipality">
+        <label class="hcsc-field-label" for="hcsc-ou-municipality">Municipality/City</label>
+        <select id="hcsc-ou-municipality" class="hcsc-control hcsc-ou-select" data-ou-level="2" aria-label="Municipality/City" disabled>
+          <option value="">Municipality/City…</option>
+        </select>
+      </div>
+
+      <div class="hcsc-filter-field hcsc-filter-barangay">
+        <label class="hcsc-field-label" for="hcsc-ou-barangay">Barangay</label>
+        <select id="hcsc-ou-barangay" class="hcsc-control hcsc-ou-select" data-ou-level="3" aria-label="Barangay" disabled>
+          <option value="">Barangay…</option>
+        </select>
       </div>
     </div>
 
-    <div class="hcsc-filter-row hcsc-filter-row-secondary">
+    <div class="hcsc-filter-row hcsc-filter-row-secondary" id="hcsc-ou-picker">
       <div class="hcsc-filter-field hcsc-filter-search">
         <label class="hcsc-field-label" for="hcsc-ou-search">Search Organisation Unit</label>
         <div class="hcsc-ou-search-wrap">
-          <input type="search" id="hcsc-ou-search" class="hcsc-control" placeholder="Search name, code, or UID" autocomplete="off" aria-label="Search organisation unit" aria-controls="hcsc-ou-search-results" aria-expanded="false">
+          <span class="hcsc-ou-search-ico" aria-hidden="true">⌕</span>
+          <input type="search" id="hcsc-ou-search" class="hcsc-control hcsc-ou-search-input" placeholder="Search name, code, or UID…" autocomplete="off" aria-label="Search organisation unit" aria-controls="hcsc-ou-search-results" aria-expanded="false">
           <div id="hcsc-ou-search-results" class="hcsc-ou-search-results" hidden role="listbox"></div>
         </div>
       </div>
 
       <div class="hcsc-filter-field hcsc-filter-selected">
-        <label class="hcsc-field-label">Selected Organisation Unit</label>
-        <div class="hcsc-ou-chip-row" id="hcsc-ou-chip-row" hidden>
-          <span class="hcsc-ou-chip">
-            <span id="hcsc-ou-chip-label"></span>
-            <button type="button" class="hcsc-ou-chip-clear" id="hcsc-ou-clear" title="Clear organisation unit" aria-label="Clear organisation unit">×</button>
-          </span>
+        <label class="hcsc-field-label" for="hcsc-ou-selected-box">Selected Organisation Unit</label>
+        <div class="hcsc-ou-selected-box" id="hcsc-ou-selected-box" role="group" aria-label="Selected organisation unit">
+          <span class="hcsc-ou-selected-text is-empty" id="hcsc-ou-chip-label">No organisation unit selected</span>
+          <div class="hcsc-ou-selected-actions">
+            <button type="button" class="hcsc-ou-icon-btn" id="hcsc-ou-refresh-meta" title="Refresh organisation units from DHIS2" aria-label="Refresh organisation units">↻</button>
+            <button type="button" class="hcsc-ou-icon-btn" id="hcsc-ou-clear" title="Clear organisation unit" aria-label="Clear organisation unit" disabled>×</button>
+          </div>
         </div>
+        <input type="hidden" id="hcsc-ou" value="" autocomplete="off">
+        <p class="hcsc-field-error" id="hcsc-ou-error" hidden></p>
         <p class="muted hcsc-ou-path" id="hcsc-ou-path" hidden></p>
-        <p class="muted hcsc-ou-empty" id="hcsc-ou-empty">No organisation unit selected</p>
         <p class="muted hcsc-ou-sync" id="hcsc-ou-sync" hidden></p>
-        <div class="hcsc-ou-meta-actions">
-          <button type="button" class="btn btn-sm" id="hcsc-ou-retry" title="Retry organisation unit load" hidden>Retry</button>
-          <button type="button" class="btn btn-sm" id="hcsc-ou-refresh-meta" title="Refresh organisation units from DHIS2">Refresh Organisation Units</button>
-        </div>
+        <button type="button" class="btn btn-sm" id="hcsc-ou-retry" title="Retry organisation unit load" hidden>Retry</button>
       </div>
 
       <div class="hcsc-filter-field hcsc-filter-disagg">
         <label class="hcsc-field-label" for="hcsc-disagg">Disaggregation</label>
-        <select id="hcsc-disagg" name="disaggregation" class="hcsc-control" aria-label="Disaggregation">
+        <select id="hcsc-disagg" class="hcsc-control" aria-label="Disaggregation">
           <option value="none">None</option>
         </select>
       </div>
 
-      <div class="hcsc-filter-field hcsc-filter-actions">
-        <span class="hcsc-field-label" aria-hidden="true">&nbsp;</span>
-        <div class="hcsc-action-btns">
-          <button type="submit" class="btn btn-sm btn-primary" id="hcsc-run" disabled>Generate Report</button>
-          <button type="button" class="btn btn-sm" id="hcsc-refresh" title="Force refresh" disabled>Refresh</button>
-        </div>
+      <div class="hcsc-filter-field hcsc-filter-generate">
+        <span class="hcsc-field-label hcsc-field-label-spacer" aria-hidden="true">&nbsp;</span>
+        <button type="button" class="btn btn-sm btn-primary hcsc-generate-btn" id="hcsc-run" disabled>
+          <span class="hcsc-btn-ico" aria-hidden="true">▦</span> Generate Report
+        </button>
+      </div>
+
+      <div class="hcsc-filter-field hcsc-filter-refresh">
+        <span class="hcsc-field-label hcsc-field-label-spacer" aria-hidden="true">&nbsp;</span>
+        <button type="button" class="btn btn-sm hcsc-refresh-btn" id="hcsc-refresh" title="Force refresh report">
+          <span class="hcsc-btn-ico" aria-hidden="true">↻</span> Refresh
+        </button>
       </div>
     </div>
   </form>
@@ -119,7 +131,7 @@
       <span class="hcsc-status-kicker">Status</span>
       <div class="hcsc-status-body">
         <span class="hcsc-status-badge" id="hcsc-status-badge">Awaiting selection</span>
-        <p class="hcsc-status-value" id="hcsc-status">Select an organisation unit to continue</p>
+        <p class="hcsc-status-value" id="hcsc-status">Select an organisation unit to continue.</p>
       </div>
     </div>
     <div class="hcsc-status-col">
@@ -138,11 +150,11 @@
   </div>
 
   <section class="hcsc-overview-cards" id="hcsc-cards" aria-label="Overview cards">
-    <article class="hcsc-card is-blue hcsc-card-placeholder is-skeleton"><h3>Eligible Households</h3><p class="hcsc-card-value hcsc-skel">&nbsp;</p><p class="hcsc-skel hcsc-skel-line">&nbsp;</p></article>
-    <article class="hcsc-card is-green hcsc-card-placeholder is-skeleton"><h3>Approved Eligible Households</h3><p class="hcsc-card-value hcsc-skel">&nbsp;</p><p class="hcsc-skel hcsc-skel-line">&nbsp;</p></article>
-    <article class="hcsc-card is-purple hcsc-card-placeholder is-skeleton"><h3>Convergent Households</h3><p class="hcsc-card-value hcsc-skel">&nbsp;</p><p class="hcsc-skel hcsc-skel-line">&nbsp;</p></article>
-    <article class="hcsc-card is-amber hcsc-card-placeholder is-skeleton"><h3>Overall Convergence Rate</h3><p class="hcsc-card-value hcsc-skel">&nbsp;</p><p class="hcsc-skel hcsc-skel-line">&nbsp;</p></article>
-    <article class="hcsc-card is-teal hcsc-card-placeholder is-skeleton"><h3>Completion Rate</h3><p class="hcsc-card-value hcsc-skel">&nbsp;</p><p class="hcsc-skel hcsc-skel-line">&nbsp;</p></article>
+    <article class="hcsc-card is-blue hcsc-card-placeholder"><h3>Eligible Households</h3><p class="hcsc-card-value">—</p><p class="muted hcsc-card-foot">Last refreshed: —</p></article>
+    <article class="hcsc-card is-green hcsc-card-placeholder"><h3>Approved Eligible Households</h3><p class="hcsc-card-value">—</p><p class="muted hcsc-card-foot">Last refreshed: —</p></article>
+    <article class="hcsc-card is-purple hcsc-card-placeholder"><h3>Convergent Households</h3><p class="hcsc-card-value">—</p><p class="muted hcsc-card-foot">Last refreshed: —</p></article>
+    <article class="hcsc-card is-amber hcsc-card-placeholder"><h3>Overall Convergence Rate</h3><p class="hcsc-card-value">— %</p><p class="muted hcsc-card-foot">Last refreshed: —</p></article>
+    <article class="hcsc-card is-teal hcsc-card-placeholder"><h3>Completion Rate</h3><p class="hcsc-card-value">— %</p><p class="muted hcsc-card-foot">Last refreshed: —</p></article>
   </section>
 
   <nav class="hcsc-category-nav" id="hcsc-category-nav" aria-label="Report categories">

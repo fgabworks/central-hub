@@ -4,7 +4,28 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**HCSC–RF preview UI + compact sidebar (2026-07-30)**
+**HCSC–RF parameter card layout refine (2026-08-02)**
+
+Two-row responsive param card; deferred OU validation; Generate gated on quarter+OU;
+Refresh enabled unless report in-flight; awaiting selection does not auto-call analytics.
+Status: Awaiting selection → Ready to generate → Generating report….
+
+Prior: **HCSC–RF Generate Report form fix (2026-08-02)**
+
+Generate was doing a native GET page navigation (`/dhis2/hcsc-indicators?...`) instead of
+fetching `/api/dhis2/hcsc-indicators/report`. Fixed: Generate is `type="button"`, form has
+`onsubmit="return false;"`, named fields removed so Enter cannot navigate, URL hydrate
+restores controls without auto-run. Report API itself was already healthy (Live OK).
+
+Prior: **Shell + SQL Workspace layout fix (2026-08-02)**
+
+Fixed compact-sidebar regression: fixed sidebar must not also reserve a grid column /
+`margin-left`. Desktop shell is `padding-left: var(--sidebar-w)` + full-width `.main-column`
+(`flex: 1`, `min-width: 0`). Sidebar nav/actions scroll in `.sidebar-scroll`; header/switcher/
+collapse stay fixed. SQL Workspace restored to library + editor grid with min widths.
+Workspace Console docks under main only (`left: var(--sidebar-w)`), bounded height when expanded.
+
+Prior: **HCSC–RF preview UI + compact sidebar (2026-07-30)**
 
 Matched the attached HCSC–RF preview: compact filter card (two rows), status strip badges,
 skeleton overview cards, category + technical tabs, toolbar/table/empty states. Left sidebar is

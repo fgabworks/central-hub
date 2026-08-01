@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=shell-sidebar-1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=shell-layout-fix-3">
   {% block head_extra %}{% endblock %}
 </head>
 <body class="theme-{{ workspace|default('work') }}">
@@ -31,6 +31,7 @@
         {% endfor %}
       </div>
 
+      <div class="sidebar-scroll">
       <nav class="sidebar-nav" aria-label="Primary">
         {% for section in nav_sections %}
           {% if section.entries %}
@@ -96,6 +97,7 @@
             <span class="action-link is-disabled" title="{{ action.phase or 'Coming soon' }}">{{ action.label }}</span>
           {% endif %}
         {% endfor %}
+      </div>
       </div>
 
       <div class="sidebar-footer">

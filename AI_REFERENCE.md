@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-07-30 (HCSC–RF OU SQLite cache + quarter cap 2025Q3–2026Q4).
+Last verified: 2026-08-02 (shell + SQL Workspace layout: fixed sidebar via `padding-left`, no double offset).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -37,10 +37,11 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Email Center | Shared Gmail service; accounts assigned Personal/Work; readonly OAuth |
 | Calendar Center | Shared Calendar service + FullCalendar grid (month/week/day) + agenda/upcoming |
 | Google Connections | System page to connect/assign/enable Gmail+Calendar scopes |
-| SQL Workspace | Read-only query library/runner (`/sql`); sqlglot allowlist; Live warning |
+| SQL Workspace | Read-only query library/runner (`/sql`); sqlglot allowlist; Live warning; layout `minmax(260px,320px) | 1fr` under shell |
 | AI Assistant Center | Aira at `/personal/aira`; Okarun at `/work/okarun` (history/management); full-height right dock + fixed composer via topbar + activity rail (`hub/agent_center/dock.py`); Find/Ask/Plan/Review; Codex CLI (Okarun MVP), Claude Code, Cursor, Grok, OpenAI |
-| Workspace Console | Bottom panel under main content (`hub/workspace_console/`); two-row chrome (title + tabs); Problems/Output/Debug/**interactive PTY Terminal**/Ports; Ctrl+J; collapsed by default; does not compress the AI dock |
-| Activity Rail | Far-right icons for AI Assistant, Quick Notepad, Workspace Console (future utilities placeholders) |
+| Workspace Console | Bottom panel under main content only (`left: var(--sidebar-w)`); bounded height; Ctrl+J; collapsed by default |
+| Activity Rail | Far-right icons for AI Assistant, Quick Notepad, Workspace Console (future utilities placeholders); reduces main width only |
+| App shell | Fixed sidebar 210–216px + `padding-left` on `.app-shell`; `.main-column` / `.content` `flex:1; min-width:0`; `.sidebar-scroll` for nav |
 | AI Connections | `/system/ai-connections`; Installed/Authenticated/Version/Last Checked + connect/test/capabilities/disconnect; Codex never stores tokens |
 | DHIS2 | GET client, discovery, UID mapping, preview builder |
 | UID index admin | LP-style controlled update: dry-run → preview → typed confirm → archive/versions/restore |

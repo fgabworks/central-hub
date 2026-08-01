@@ -199,9 +199,16 @@ class PeriodApiCacheTests(unittest.TestCase):
 
 class OrgUnitSearchContractTests(unittest.TestCase):
     def test_search_includes_path_and_caches_by_env(self):
+        import tempfile
+        from pathlib import Path
+
+        from hub.dhis2_reports.org_unit_store import OrgUnitStore
         from hub.dhis2_reports.service import Dhis2ReportsService
 
         ORG_UNIT_CACHE.clear()
+        tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(tmp.cleanup)
+        store = OrgUnitStore(Path(tmp.name) / "ou.db")
 
         class FakeClient:
             def __init__(self, env):
@@ -223,7 +230,11 @@ class OrgUnitSearchContractTests(unittest.TestCase):
                 }
 
         clients = {"stage": FakeClient("stage"), "live": FakeClient("live")}
-        svc = Dhis2ReportsService(store=mock.Mock(), client_factory=lambda env: clients[env])
+        svc = Dhis2ReportsService(
+            store=mock.Mock(),
+            client_factory=lambda env: clients[env],
+            org_unit_store=store,
+        )
         stage = svc.search_org_units("stage", q="Alpha")
         self.assertEqual(stage["org_units"][0]["path"], "/Root/Region/Alpha")
         self.assertEqual(stage["org_units"][0]["code"], "ALP")

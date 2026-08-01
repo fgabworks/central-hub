@@ -262,7 +262,16 @@ class SqlWorkspaceRouteTests(unittest.TestCase):
         html = page.get_data(as_text=True)
         self.assertIn("SQL Workspace", html)
         self.assertIn("Query Library", html)
+        self.assertIn("sql-shell", html)
+        self.assertIn("sql-library", html)
+        self.assertIn("sql-main", html)
         self.assertIn("Live connection selected", html)  # warning markup present (hidden)
+        css = (Path(__file__).resolve().parents[1] / "static" / "css" / "style.css").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("minmax(260px, 320px) minmax(0, 1fr)", css)
+        self.assertIn("padding-left: var(--sidebar-w", css)
+        self.assertNotIn("grid-template-columns: var(--sidebar-w) minmax(0, 1fr)", css)
 
         created = self.client.post(
             "/api/sql/queries",

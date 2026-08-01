@@ -52,6 +52,8 @@
     var abortControllers = {};
     var cache = {};
     var selects = [];
+    var committed = { uid: "", name: "", path: "" };
+    var selectionSource = ""; // "cascade" | "search" | ""
     var lastFailed = null;
     var rootsLoaded = false;
     var rootsLoading = false;
@@ -180,7 +182,7 @@
       return { maintenance: maintenance, message: msg };
     }
 
-    function selectedPath() {
+    function cascadeSelection() {
       var parts = [];
       var uid = "";
       var name = "";
@@ -193,17 +195,74 @@
       return { uid: uid, name: name, path: parts.join(" › ") };
     }
 
+    function commitSelection(uid, name, path, source) {
+      var id = String(uid || "").trim();
+      if (!isValidUid(id)) {
+        committed = { uid: "", name: "", path: "" };
+        selectionSource = "";
+      } else {
+        committed = {
+          uid: id,
+          name: name || id,
+          path: path || name || id,
+        };
+        if (source) selectionSource = source;
+      }
+      if (hiddenEl) hiddenEl.value = committed.uid || "";
+      return committed;
+    }
+
+    function selectedPath() {
+      var cascade = cascadeSelection();
+      if (isValidUid(cascade.uid)) {
+        return cascade;
+      }
+      if (selectionSource === "search" && isValidUid(committed.uid)) {
+        return {
+          uid: committed.uid,
+          name: committed.name || committed.uid,
+          path: committed.path || committed.name || committed.uid,
+        };
+      }
+      var hidden = hiddenEl && String(hiddenEl.value || "").trim();
+      if (isValidUid(hidden) && selectionSource === "search") {
+        var label =
+          (chipLabel && chipLabel.textContent) ||
+          (pathEl && pathEl.textContent) ||
+          hidden;
+        return { uid: hidden, name: label, path: label };
+      }
+      return { uid: "", name: "", path: "" };
+    }
+
     function selectedUid() {
       var ou = selectedPath();
       return isValidUid(ou.uid) ? ou.uid : "";
     }
 
     function syncSelection() {
-      var ou = selectedPath();
-      if (hiddenEl) hiddenEl.value = isValidUid(ou.uid) ? ou.uid : "";
-      if (pathEl) pathEl.textContent = ou.path || "";
+      var cascade = cascadeSelection();
+      var ou;
+      if (isValidUid(cascade.uid)) {
+        ou = commitSelection(cascade.uid, cascade.name, cascade.path, "cascade");
+      } else if (selectionSource === "search" && isValidUid(committed.uid)) {
+        // Keep search selection while cascade resolve is best-effort / empty.
+        ou = committed;
+        if (hiddenEl) hiddenEl.value = ou.uid;
+      } else {
+        ou = commitSelection("", "", "", "");
+      }
+      if (pathEl) {
+        pathEl.textContent = ou.path || "";
+        pathEl.hidden = !ou.path;
+      }
       if (chipLabel) {
-        chipLabel.textContent = ou.uid ? (ou.path || ou.name || ou.uid) : "";
+        if (!ou.uid) {
+          chipLabel.textContent = "";
+        } else {
+          // Compact path chip: "Region VII › Cebu › …" (no UID suffix).
+          chipLabel.textContent = ou.path || ou.name || ou.uid;
+        }
       }
       if (chipRow) chipRow.hidden = !ou.uid;
       if (ou.uid) setError("");
@@ -219,6 +278,7 @@
             province: selects[1] && selects[1].value,
             municipality: selects[2] && selects[2].value,
             barangay: selects[3] && selects[3].value,
+            uid: ou.uid || "",
             path: ou.path,
             at: Date.now(),
           })
@@ -413,6 +473,16 @@
       var opt = sel && sel.selectedOptions && sel.selectedOptions[0];
       resetFrom(index + 1);
       if (!uid) {
+        // Explicit cascade clear — do not keep a prior search UID.
+        if (index === 0) commitSelection("", "", "", "");
+        else {
+          var parent = cascadeSelection();
+          if (isValidUid(parent.uid)) {
+            commitSelection(parent.uid, parent.name, parent.path, "cascade");
+          } else {
+            commitSelection("", "", "", "");
+          }
+        }
         syncSelection();
         return;
       }
@@ -427,6 +497,7 @@
     }
 
     function clearSelection() {
+      commitSelection("", "", "", "");
       if (selects[0]) selects[0].value = "";
       resetFrom(1);
       if (searchEl) searchEl.value = "";
@@ -442,6 +513,7 @@
       rootsLoading = false;
       hideSearchResults();
       if (searchEl) searchEl.value = "";
+      commitSelection("", "", "", "");
       resetFrom(0);
       if (!lazyRoots) {
         ensureRoots(true, false).then(function () { syncSelection(); });
@@ -530,23 +602,16 @@
       if (!isValidUid(id)) return;
       hideSearchResults();
       if (searchEl) searchEl.value = ou.name || id;
-      rememberFrequent({ id: id, uid: id, name: ou.name, path: ou.path });
-      // Prefer path label for chip; keep hidden UID authoritative.
+      var pathLabel = ou.path_label || ou.path || ou.name || id;
+      rememberFrequent({ id: id, uid: id, name: ou.name, path: pathLabel });
+      // Keep committed UID authoritative even while cascade resolve is best-effort.
+      commitSelection(id, ou.name || id, pathLabel, "search");
       resetFrom(0);
       if (selects[0]) {
         selects[0].innerHTML = '<option value="">Region…</option>';
         selects[0].disabled = false;
       }
-      if (hiddenEl) hiddenEl.value = id;
-      var pathLabel = ou.path || ou.name || id;
-      if (chipLabel) chipLabel.textContent = pathLabel;
-      if (chipRow) chipRow.hidden = false;
-      if (pathEl) {
-        pathEl.textContent = pathLabel;
-        pathEl.hidden = true;
-      }
-      setError("");
-      onChange(id);
+      syncSelection();
       rootsLoaded = false;
       // Resolve cascade from path labels when possible (best-effort).
       resolveHierarchyFromPath(pathLabel, id);
@@ -554,10 +619,14 @@
 
     function resolveHierarchyFromPath(pathLabel, leafUid) {
       var parts = String(pathLabel || "")
-        .split(/\s*[›>]\s*/)
+        .split(/\s*[›>/]\s*/)
         .map(function (p) { return p.trim(); })
         .filter(Boolean);
-      if (!parts.length) return;
+      if (!parts.length) {
+        if (leafUid) commitSelection(leafUid, committed.name, committed.path, "search");
+        syncSelection();
+        return;
+      }
       ensureRoots(false, false).then(function () {
         var chain = Promise.resolve();
         parts.forEach(function (name, idx) {
@@ -581,7 +650,20 @@
           });
         });
         return chain.then(function () {
-          if (hiddenEl) hiddenEl.value = leafUid;
+          // Never drop the search-selected UID if cascade resolve was partial.
+          if (leafUid) {
+            var cascade = cascadeSelection();
+            if (isValidUid(cascade.uid) && cascade.uid === leafUid) {
+              commitSelection(cascade.uid, cascade.name, cascade.path, "cascade");
+            } else {
+              commitSelection(
+                leafUid,
+                committed.name || leafUid,
+                committed.path || pathLabel || leafUid,
+                "search"
+              );
+            }
+          }
           syncSelection();
         });
       });
@@ -692,10 +774,24 @@
         if (!String(searchEl.value || "").trim()) runSearch("", false);
       });
       searchEl.addEventListener("keydown", function (ev) {
-        if (ev.key === "Escape") hideSearchResults();
+        if (ev.key === "Escape") {
+          hideSearchResults();
+          return;
+        }
+        // Prevent Enter from submitting the HCSC filter form.
+        if (ev.key === "Enter") {
+          ev.preventDefault();
+          var first =
+            searchResultsEl &&
+            searchResultsEl.querySelector('button[role="option"]:not([disabled])');
+          if (first) first.click();
+        }
       });
       document.addEventListener("click", function (ev) {
-        if (!root || root.contains(ev.target)) return;
+        var t = ev.target;
+        if (root && root.contains(t)) return;
+        if (searchEl && (t === searchEl || searchEl.contains(t))) return;
+        if (searchResultsEl && (t === searchResultsEl || searchResultsEl.contains(t))) return;
         hideSearchResults();
       });
     }
@@ -727,10 +823,8 @@
           clearSelection();
           return;
         }
-        if (hiddenEl) hiddenEl.value = id;
-        if (chipLabel) chipLabel.textContent = (path || name || id) + " · " + id;
-        if (chipRow) chipRow.hidden = false;
-        if (pathEl) pathEl.textContent = path || name || "";
+        commitSelection(id, name || id, path || name || id, "search");
+        syncSelection();
         onChange(id);
       },
     };

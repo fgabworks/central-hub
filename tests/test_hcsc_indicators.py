@@ -743,6 +743,9 @@ class ParamUiContractTests(unittest.TestCase):
         self.assertIn("hcsc-filter-row-primary", html)
         self.assertIn("hcsc-filter-row-secondary", html)
         self.assertIn("Generate Report", html)
+        self.assertIn('type="button"', html)
+        self.assertIn('onsubmit="return false;"', html)
+        self.assertIn("hydrateFromQuery", js)
         self.assertIn("dhis2_org_unit_picker.js", html)
         self.assertIn("hcsc-ou-region", html)
         self.assertIn("hcsc-ou-province", html)
@@ -751,13 +754,16 @@ class ParamUiContractTests(unittest.TestCase):
         self.assertIn("hcsc-ou-levels", html)
         self.assertIn("hcsc-ou-retry", html)
         self.assertIn("hcsc-ou-search", html)
-        self.assertIn("Refresh Organisation Units", html)
+        self.assertIn("Refresh OUs", html)
         self.assertIn("hcsc-ou-refresh-meta", html)
+        self.assertIn("hcsc-ou-helper", html)
+        self.assertIn("Select a Region or search for an organisation unit.", html)
         self.assertIn("Municipality/City", html)
         self.assertIn("hcsc-status-strip", html)
         self.assertIn("hcsc-status-badge", html)
         self.assertIn("hcsc-category-nav", html)
         self.assertIn("Select an organisation unit to continue", html)
+        self.assertIn("Awaiting selection", html)
         self.assertIn("No report generated yet", html)
         self.assertIn("is-skeleton", html)
         self.assertIn("Clear Filters", js)
@@ -766,10 +772,13 @@ class ParamUiContractTests(unittest.TestCase):
         self.assertNotIn("hcsc-pct-only", html)
         self.assertIn("CentralHubOuPicker", js)
         self.assertIn("validateForm", js)
+        self.assertIn("showFieldErrors", js)
         self.assertIn("selectedPeriod", js)
         self.assertIn("onEnvironmentChange", js)
         self.assertIn("updateStatusStrip", js)
         self.assertIn("Ready to generate", js)
+        self.assertIn("Generating report…", js)
+        self.assertIn("reportInFlight", js)
         self.assertIn("hcsc-filter-validation", html)
         self.assertIn("OU_LEVELS", picker)
         self.assertIn("Municipality/City", picker)
@@ -778,9 +787,14 @@ class ParamUiContractTests(unittest.TestCase):
         self.assertIn("ensureRoots", picker)
         self.assertIn("lazyRoots", picker)
         self.assertIn("refreshMetadata", picker)
-        self.assertIn("Refresh Organisation Units", html)
+        self.assertIn("SEARCH_DEBOUNCE_MS", picker)
+        self.assertIn("hcsc-ou-refresh-meta", html)
         self.assertIn("Recent / frequent", picker)
         self.assertIn("resolveHierarchyFromPath", picker)
+        self.assertIn("commitSelection", picker)
+        self.assertIn("selectionSource", picker)
+        self.assertIn('selectionSource === "search"', picker)
+        self.assertIn("Prevent Enter from submitting", picker)
         self.assertIn("Stage is temporarily unavailable due to maintenance.", picker)
         self.assertIn("parent_id", picker)
         self.assertIn("Region", picker)
@@ -814,14 +828,31 @@ class SidebarShellContractTests(unittest.TestCase):
         app_src = (ROOT / "app.py").read_text(encoding="utf-8")
         self.assertIn('id="hub-sidebar"', base)
         self.assertIn("sidebar-collapse-btn", base)
+        self.assertIn("sidebar-scroll", base)
         self.assertIn("nav-group-toggle", base)
         self.assertIn("expandable", app_src)
         self.assertIn('"expand_prefix": "dhis2"', app_src)
         self.assertIn("is-sidebar-collapsed", css)
         self.assertIn("--sidebar-collapsed-w", css)
-        self.assertIn("margin-left: var(--sidebar-w", css)
+        # Fixed sidebar offset via padding-left (not double grid + margin).
+        self.assertIn("padding-left: var(--sidebar-w", css)
+        self.assertNotIn(
+            "grid-template-columns: var(--sidebar-w) minmax(0, 1fr)",
+            css,
+        )
+        self.assertIn(".sidebar-scroll", css)
+        self.assertIn("minmax(260px, 320px)", css)
         # Workspace Console tracks sidebar width (no overlap).
         self.assertIn("left: var(--sidebar-w", css)
+
+    def test_main_column_not_double_offset(self):
+        css = (ROOT / "static" / "css" / "style.css").read_text(encoding="utf-8")
+        # After padding-left on .app-shell, main-column must not also margin-left by sidebar width.
+        main_block_start = css.find("/* Main column")
+        self.assertGreater(main_block_start, 0)
+        main_block = css[main_block_start : main_block_start + 350]
+        self.assertNotIn("margin-left: var(--sidebar-w", main_block)
+        self.assertIn("width: 100%", main_block)
 
 
 class OrgUnitApiReuseTests(unittest.TestCase):
@@ -1387,6 +1418,52 @@ class OverviewServicePeriodGateTests(unittest.TestCase):
         self.assertEqual(boot["boundaries"]["org_unit_source"], "hub_dhis2_reports_org_units")
 
 
+class ParamCardLayoutContractTests(unittest.TestCase):
+    """HCSC–RF parameter card layout + deferred validation (no API/registry changes)."""
+
+    def test_two_row_layout_and_deferred_validation(self):
+        html = (ROOT / "templates" / "hcsc_indicator_summary.html").read_text(encoding="utf-8")
+        js = (ROOT / "static" / "js" / "hcsc_indicator_summary.js").read_text(encoding="utf-8")
+        css = (ROOT / "static" / "css" / "style.css").read_text(encoding="utf-8")
+        picker = (ROOT / "static" / "js" / "dhis2_org_unit_picker.js").read_text(encoding="utf-8")
+
+        # Layout: six-field primary row grouping + secondary proportions.
+        self.assertIn("hcsc-filter-row-primary", html)
+        self.assertIn("hcsc-filter-row-secondary", css)
+        self.assertIn("minmax(0, 30%)", css)
+        self.assertIn("minmax(0, 35%)", css)
+        self.assertIn("minmax(0, 15%)", css)
+        self.assertIn("height: 36px", css)
+        self.assertIn("#hcsc-run:disabled", css)
+        self.assertIn("hcsc-ou-selected-row", html)
+        self.assertIn("hcsc-ou-helper", html)
+        self.assertIn("Select a Region or search for an organisation unit.", html)
+
+        # Initial state: no immediate OU validation error text in JS path.
+        self.assertIn("showFieldErrors", js)
+        self.assertIn("revealErrors", js)
+        self.assertIn('setFieldError("hcsc-ou-error", "")', js)
+        # Generate gated; Refresh only during in-flight.
+        self.assertIn("run.disabled = !(peOk && ouOk)", js)
+        self.assertIn("refresh.disabled = !!state.reportInFlight", js)
+        self.assertNotIn("refresh.disabled = !(peOk && ouOk)", js)
+
+        # Awaiting selection must not auto-call analytics.
+        self.assertIn("do NOT auto-run analytics", js)
+        self.assertIn("Generating report…", js)
+        self.assertIn("Awaiting selection", html)
+
+        # Hierarchy/search sync + parent clears children + lazy/debounce/cancel.
+        self.assertIn("selectionSource", picker)
+        self.assertIn("commitSelection", picker)
+        self.assertIn("resetFrom(index + 1)", picker)
+        self.assertIn("SEARCH_DEBOUNCE_MS", picker)
+        self.assertIn("AbortController", picker)
+        self.assertIn("dedupeFetch", picker)
+        self.assertIn("lazyRoots", picker)
+        self.assertIn('storagePrefix + "cascade." + env()', picker)
+
+
 class UiContractTests(unittest.TestCase):
     def test_result_type_aware_display_and_uid_drawer_hooks(self):
         html = (ROOT / "templates" / "hcsc_indicator_summary.html").read_text(encoding="utf-8")
@@ -1405,6 +1482,11 @@ class UiContractTests(unittest.TestCase):
         self.assertIn("loadValidation", js)
         self.assertIn("hcsc-section-row", js)
         self.assertIn("Generate Report", html)
+        self.assertIn('id="hcsc-run"', html)
+        self.assertIn('type="button"', html)
+        self.assertIn('onsubmit="return false;"', html)
+        self.assertIn("hydrateFromQuery", js)
+        self.assertIn('run.addEventListener("click"', js)
         self.assertIn("dhis2_org_unit_picker.js", html)
         self.assertIn("hcsc-param-row", html)
         self.assertIn("hcsc-status-strip", html)
