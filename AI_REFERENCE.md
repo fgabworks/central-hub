@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-02 (HCSC–RF filter card: stable OU selection height; path/sync off-card).
+Last verified: 2026-08-02 (HCSC–RF report E2E: immediate OU commit on cascade; mocked + Live GET report).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status

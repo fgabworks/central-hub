@@ -526,13 +526,18 @@
         syncSelection();
         return;
       }
+      // Commit the selected UID immediately so Generate/report can use it
+      // without waiting for child options to finish loading.
+      syncSelection();
       var hasChildren = !opt || opt.dataset.hasChildren !== "0";
       if (hasChildren && index + 1 < selects.length) {
-        loadOptions(index + 1, uid, false).then(function () {
-          syncSelection();
-        });
-      } else {
-        syncSelection();
+        loadOptions(index + 1, uid, false)
+          .then(function () {
+            syncSelection();
+          })
+          .catch(function () {
+            syncSelection();
+          });
       }
     }
 

@@ -56,6 +56,7 @@ def report_cache_key(
     period: str,
     org_unit: str,
     disaggregation: str,
+    geographic_breakdown: str = "none",
 ) -> str:
     return "|".join(
         [
@@ -64,5 +65,6 @@ def report_cache_key(
             (period or "").strip(),
             (org_unit or "").strip(),
             (disaggregation or "none").strip().lower(),
+            (geographic_breakdown or "none").strip().lower(),
         ]
     )

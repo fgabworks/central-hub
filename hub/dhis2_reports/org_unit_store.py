@@ -343,6 +343,73 @@ class OrgUnitStore:
             ).fetchall()
         return [self._to_api_row(r) for r in rows]
 
+    def count_descendants_at_level(
+        self, environment: str, parent_uid: str, level: int
+    ) -> int:
+        """Count descendants at an exact DHIS2 level under parent (path-scoped)."""
+        env = (environment or "").strip().lower()
+        parent = self.get(env, parent_uid)
+        if not parent:
+            return 0
+        parent_path = (parent.get("path") or "").rstrip("/")
+        if not parent_path:
+            # Fall back to direct children only when path missing.
+            if int(level) == int(parent.get("level") or 0) + 1:
+                return len(self.list_children(env, parent_uid, limit=500))
+            return 0
+        like = parent_path + "/%"
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT COUNT(*) AS n FROM org_units
+                WHERE environment = ?
+                  AND level = ?
+                  AND path LIKE ? ESCAPE '\\'
+                """,
+                (env, int(level), like),
+            ).fetchone()
+        return int(row["n"] if row else 0)
+
+    def list_descendants_at_level(
+        self,
+        environment: str,
+        parent_uid: str,
+        level: int,
+        *,
+        limit: int = 2500,
+    ) -> list[dict[str, Any]]:
+        """List descendants at an exact level under parent (path-scoped)."""
+        env = (environment or "").strip().lower()
+        parent = self.get(env, parent_uid)
+        if not parent:
+            return []
+        lim = max(1, min(int(limit or 2500), 5000))
+        parent_level = parent.get("level")
+        parent_path = (parent.get("path") or "").rstrip("/")
+        # Direct children shortcut when asking for next level.
+        if (
+            parent_level is not None
+            and int(level) == int(parent_level) + 1
+            and not parent_path
+        ):
+            return self.list_children(env, parent_uid, limit=lim)
+        if not parent_path:
+            return []
+        like = parent_path + "/%"
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM org_units
+                WHERE environment = ?
+                  AND level = ?
+                  AND path LIKE ? ESCAPE '\\'
+                ORDER BY name COLLATE NOCASE
+                LIMIT ?
+                """,
+                (env, int(level), like, lim),
+            ).fetchall()
+        return [self._to_api_row(r) for r in rows]
+
     def list_level(
         self, environment: str, level: int, *, limit: int = 80
     ) -> list[dict[str, Any]]:

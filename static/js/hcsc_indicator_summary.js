@@ -975,6 +975,14 @@
         "</div></td></tr>"
       );
     }
+    if (kind === "empty_result") {
+      return (
+        '<tr class="hcsc-empty-row"><td colspan="8"><div class="hcsc-empty">' +
+        "<strong>Report returned no indicators</strong>" +
+        '<p class="muted">The request succeeded, but no rows were returned for this scope.</p>' +
+        "</div></td></tr>"
+      );
+    }
     return (
       '<tr class="hcsc-empty-row"><td colspan="8"><div class="hcsc-empty">' +
       '<div class="hcsc-empty-ico" aria-hidden="true">⌕</div>' +
@@ -1002,8 +1010,13 @@
   function renderTable() {
     var tbody = $("hcsc-tbody");
     if (!tbody) return;
-    if (!state.generated || !state.results.length) {
+    if (!state.generated) {
       tbody.innerHTML = emptyTableHtml("initial");
+      applyColumnVisibility();
+      return;
+    }
+    if (!state.results.length) {
+      tbody.innerHTML = emptyTableHtml("empty_result");
       applyColumnVisibility();
       return;
     }
@@ -1893,12 +1906,26 @@
         setGenPhase(state.cacheHit ? GEN.SUCCESS_CACHED : GEN.SUCCESS_FRESH, {
           cacheHit: state.cacheHit,
         });
-        renderCards(state.results);
-        renderTable();
-        renderMapping();
-        renderLineage();
-        renderValidation();
-        renderRetrieval();
+        try {
+          renderCards(state.results);
+          renderTable();
+          renderMapping();
+          renderLineage();
+          renderValidation();
+          renderRetrieval();
+        } catch (renderErr) {
+          state.lastRunOk = false;
+          state.errorMessage =
+            "Report response could not be rendered: " +
+            ((renderErr && renderErr.message) || "unknown error");
+          state.lastDiagnostics = buildDiagnostics();
+          setGenPhase(GEN.ERROR, {
+            explicitMsg: state.errorMessage,
+            errorMessage: state.errorMessage,
+          });
+          validateForm();
+          return;
+        }
         var openSql = $("hcsc-open-sql");
         if (openSql) {
           var showSql =
@@ -2131,6 +2158,7 @@
     if (run) {
       run.addEventListener("click", function (ev) {
         ev.preventDefault();
+        ev.stopPropagation();
         loadReport(
           state.genPhase === GEN.SUCCESS_STALE || state.genPhase === GEN.SUCCESS_CACHED
         );

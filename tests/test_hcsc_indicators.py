@@ -1517,7 +1517,7 @@ class FilterCardLayoutStabilityTests(unittest.TestCase):
         self.assertIn('id="hcsc-ou-error"', html)
         self.assertIn(".hcsc-field-error[hidden]", css)
         self.assertIn("minmax(0, 1.4fr)", css)
-        self.assertIn("ou-layout-stable-1", html)
+        self.assertIn("ou-sync-immediate-1", html)
 
 
 class GenStateMachineContractTests(unittest.TestCase):
@@ -1604,8 +1604,8 @@ class GenStateMachineContractTests(unittest.TestCase):
         self.assertIn("#hcsc-cards.is-stale .hcsc-skel", css)
         self.assertIn("animation: none !important", css)
         self.assertIn("@keyframes hcsc-spin", css)
-        self.assertIn("hcsc-status-copy-1", html)
-        self.assertIn("ou-layout-stable-1", html)
+        self.assertIn("hcsc-report-e2e-1", html)
+        self.assertIn("ou-sync-immediate-1", html)
 
 
 class StatusStripCopyTests(unittest.TestCase):
@@ -1640,7 +1640,7 @@ class StatusStripCopyTests(unittest.TestCase):
         self.assertIn("min-height: 5.75rem", css)
         self.assertIn("min-height: 4.5rem", css)
         self.assertIn("hcsc-status-actions-spacer", js)
-        self.assertIn("hcsc-status-copy-1", html)
+        self.assertIn("hcsc-report-e2e-1", html)
         # Initial HTML already has distinct badge + helper
         self.assertIn(">Awaiting selection</span>", html)
         self.assertIn(">Select an organisation unit to continue.</p>", html)

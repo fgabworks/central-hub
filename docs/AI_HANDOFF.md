@@ -4,7 +4,15 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**HCSC–RF status strip copy de-dupe (2026-08-02)**
+**HCSC–RF report generation E2E (2026-08-02)**
+
+Root cause (client): cascade `onLevelChange` deferred `syncSelection` until child OU
+options finished loading, so the hidden OU UID / Generate enablement lagged selection.
+Live report API itself was healthy (GET-only). Fix: commit UID immediately on level
+change; distinguish empty successful reports; catch render exceptions. Added
+`tests/test_hcsc_report_generation_e2e.py` (mocked + optional Live).
+
+Prior: **HCSC–RF status strip copy de-dupe (2026-08-02)**
 
 Badge and helper are distinct per generation phase (`statusTextsForPhase`); Ready no longer
 repeats “Ready to generate”. Helpers carry context/elapsed/freshness; status card min-height
