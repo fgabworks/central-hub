@@ -78,12 +78,6 @@
     }
 
     function setSyncLabel(syncedAt, cacheState, maintenance) {
-      if (!syncEl) return;
-      if (!syncedAt && !maintenance) {
-        syncEl.hidden = true;
-        syncEl.textContent = "";
-        return;
-      }
       var parts = [];
       if (maintenance) parts.push("Stage maintenance");
       if (syncedAt) {
@@ -93,8 +87,26 @@
       } else if (maintenance) {
         parts.push("No cached organisation-unit metadata for Stage");
       }
-      syncEl.textContent = parts.join(" · ");
-      syncEl.hidden = !parts.length;
+      var detail = parts.join(" · ");
+      // Keep sync status out of the filter-card layout (tooltip / diagnostics only).
+      if (refreshMetaBtn) {
+        refreshMetaBtn.title = detail
+          ? "Refresh organisation units from DHIS2\n" + detail
+          : "Refresh organisation units from DHIS2";
+      }
+      if (syncEl) {
+        syncEl.textContent = detail;
+        syncEl.hidden = true;
+      }
+    }
+
+    function setRefreshingMeta(busy) {
+      if (!refreshMetaBtn) return;
+      refreshMetaBtn.classList.toggle("is-spinning", !!busy);
+      refreshMetaBtn.setAttribute("aria-busy", busy ? "true" : "false");
+      if (busy) {
+        refreshMetaBtn.title = "Refreshing organisation units…";
+      }
     }
 
     function cacheGet(key) {
@@ -253,21 +265,37 @@
         ou = commitSelection("", "", "", "");
       }
       if (pathEl) {
+        // Path is shown once in the selected field; never expand the filter card.
         pathEl.textContent = ou.path || "";
-        pathEl.hidden = !ou.path;
+        pathEl.hidden = true;
       }
       if (chipLabel) {
         if (!ou.uid) {
           chipLabel.textContent = "No organisation unit selected";
           chipLabel.classList.add("is-empty");
+          chipLabel.removeAttribute("title");
         } else {
           // Compact path: "Region VII › Cebu › …"
-          chipLabel.textContent = ou.path || ou.name || ou.uid;
+          var pathText = ou.path || ou.name || ou.uid;
+          chipLabel.textContent = pathText;
           chipLabel.classList.remove("is-empty");
+          chipLabel.title = pathText;
         }
       }
       // Selected box stays visible; only clear is disabled when empty.
-      if (chipRow) chipRow.hidden = false;
+      if (chipRow) {
+        chipRow.hidden = false;
+        if (ou.uid && (ou.path || ou.name)) {
+          chipRow.title = ou.path || ou.name;
+          chipRow.setAttribute(
+            "aria-label",
+            "Selected organisation unit: " + (ou.path || ou.name || ou.uid)
+          );
+        } else {
+          chipRow.removeAttribute("title");
+          chipRow.setAttribute("aria-label", "Selected organisation unit");
+        }
+      }
       if (clearBtn) clearBtn.disabled = !ou.uid;
       if (ou.uid) setError("");
       onChange(ou.uid || "");
@@ -418,10 +446,7 @@
       clearEnvCache();
       resetFrom(0);
       setError("", false);
-      if (syncEl) {
-        syncEl.hidden = false;
-        syncEl.textContent = "Refreshing organisation units…";
-      }
+      setRefreshingMeta(true);
       var startRefresh = Promise.resolve({ ok: true });
       if (refreshUrl) {
         var qs = "?environment=" + encodeURIComponent(env()) + "&level=2";
@@ -439,20 +464,31 @@
             return { ok: false };
           });
       }
-      return startRefresh.then(function (meta) {
-        if (meta && meta.maintenance) {
-          setError(meta.maintenance_message || MAINTENANCE_MSG, true);
-        } else if (meta && meta.inflight && !meta.started) {
-          if (syncEl) {
-            syncEl.hidden = false;
-            syncEl.textContent = meta.message || "Organisation unit sync already running.";
+      return startRefresh
+        .then(function (meta) {
+          if (meta && meta.maintenance) {
+            setError(meta.maintenance_message || MAINTENANCE_MSG, true);
+          } else if (meta && meta.inflight && !meta.started) {
+            if (refreshMetaBtn) {
+              refreshMetaBtn.title =
+                "Refresh organisation units from DHIS2\n" +
+                (meta.message || "Organisation unit sync already running.");
+            }
+            if (syncEl) {
+              syncEl.hidden = true;
+              syncEl.textContent = meta.message || "Organisation unit sync already running.";
+            }
           }
-        }
-        // Reload from local cache immediately — do not block the page on DHIS2.
-        return ensureRoots(true, false).then(function () {
-          syncSelection();
+          // Reload from local cache immediately — do not block the page on DHIS2.
+          return ensureRoots(true, false).then(function () {
+            syncSelection();
+          });
+        })
+        .finally(function () {
+          setRefreshingMeta(false);
+          var synced = lastSyncedAt[env()];
+          if (synced) setSyncLabel(synced, "", false);
         });
-      });
     }
 
     function ensureRoots(force, refresh) {

@@ -4,7 +4,30 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**HCSC–RF preview layout match (2026-08-02)**
+**HCSC–RF status strip copy de-dupe (2026-08-02)**
+
+Badge and helper are distinct per generation phase (`statusTextsForPhase`); Ready no longer
+repeats “Ready to generate”. Helpers carry context/elapsed/freshness; status card min-height
+stable; spinner only while a request ID is active.
+
+Prior: **HCSC–RF filter-card OU layout stability (2026-08-02)**
+
+Cause: selecting an OU unhid `#hcsc-ou-path` and `#hcsc-ou-sync` under Selected OU,
+growing that column and shifting Disaggregation / Generate / Refresh. Fix: single-line
+36px Selected OU field with ellipsis + title tooltip; path/sync removed from card
+(sync on refresh-metadata tooltip); `align-items: start`; metadata refresh spins the
+icon in-place without changing field height.
+
+Prior: **HCSC–RF report-generation state machine (2026-08-02)**
+
+One authoritative client generation state machine (`idle` / `awaiting_selection` /
+`ready` / `generating` / `slow` / `success_fresh` / `success_cached` / `success_stale` /
+`cancelled` / `timed_out` / `error`). Animation only while a request ID is active;
+terminal paths stop timers/spinners; late responses ignored; param changes mark results
+stale (not loading); prior values kept under “Updating in background”; Refresh becomes
+Cancel during flight; status strip tones + badges + Retry/Copy Diagnostics.
+
+Prior: **HCSC–RF preview layout match (2026-08-02)**
 
 Filter card matches preview: Row1 six equal fields (Env/Quarter/Region/Province/Mun/Brgy);
 Row2 Search 25% / Selected 35% (bordered field with refresh+clear icons) / Disagg 15% /

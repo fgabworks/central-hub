@@ -22,6 +22,22 @@
     showShellBanner("Bootstrap JSON failed to parse. Shell still usable — reload or check registry.", true);
   }
 
+  var GEN = {
+    IDLE: "idle",
+    AWAITING: "awaiting_selection",
+    READY: "ready",
+    GENERATING: "generating",
+    SLOW: "slow",
+    SUCCESS_FRESH: "success_fresh",
+    SUCCESS_CACHED: "success_cached",
+    SUCCESS_STALE: "success_stale",
+    CANCELLED: "cancelled",
+    TIMED_OUT: "timed_out",
+    ERROR: "error",
+  };
+  var SLOW_AFTER_MS = 12000;
+  var CLIENT_TIMEOUT_MS = 90000;
+
   var state = {
     results: [],
     sections: [],
@@ -38,6 +54,22 @@
     generated: false,
     showFieldErrors: false,
     reportInFlight: false,
+    genPhase: GEN.AWAITING,
+    requestSeq: 0,
+    activeRequestId: null,
+    abortController: null,
+    genStartedAt: null,
+    genCompletedAt: null,
+    elapsedTimer: null,
+    slowTimer: null,
+    timeoutTimer: null,
+    cacheHit: false,
+    staleReason: "",
+    errorMessage: "",
+    scopeKey: "",
+    lastSuccessScopeKey: "",
+    lastDiagnostics: "",
+    updatingBackground: false,
   };
   var ouPicker = null;
   var allowedQuarters = {};
@@ -188,72 +220,310 @@
     return (chip && chip.textContent) || "";
   }
 
-  function updateStatusStrip(explicitMsg, mode) {
-    var el = $("hcsc-status");
-    var badge = $("hcsc-status-badge");
+
+  function currentScopeKey() {
+    var env = (($("hcsc-env") && $("hcsc-env").value) || "stage").toLowerCase();
+    var pe = selectedPeriod() || "";
+    var ou = selectedOu() || "";
+    var disagg = (($("hcsc-disagg") && $("hcsc-disagg").value) || "none");
+    return env + "|" + pe + "|" + ou + "|" + disagg;
+  }
+
+  function isActiveGeneration() {
+    return (
+      !!state.activeRequestId &&
+      (state.genPhase === GEN.GENERATING || state.genPhase === GEN.SLOW)
+    );
+  }
+
+  function clearGenTimers() {
+    if (state.elapsedTimer) {
+      clearInterval(state.elapsedTimer);
+      state.elapsedTimer = null;
+    }
+    if (state.slowTimer) {
+      clearTimeout(state.slowTimer);
+      state.slowTimer = null;
+    }
+    if (state.timeoutTimer) {
+      clearTimeout(state.timeoutTimer);
+      state.timeoutTimer = null;
+    }
+  }
+
+  function formatAge(fromMs) {
+    if (!fromMs) return "";
+    var sec = Math.max(0, Math.round((Date.now() - fromMs) / 1000));
+    if (sec < 60) return sec + "s ago";
+    var min = Math.floor(sec / 60);
+    if (min < 60) return min + "m ago";
+    var hr = Math.floor(min / 60);
+    return hr + "h ago";
+  }
+
+  function formatGeneratedAgo(fromMsOrIso) {
+    var fromMs =
+      typeof fromMsOrIso === "number"
+        ? fromMsOrIso
+        : fromMsOrIso
+          ? Date.parse(fromMsOrIso)
+          : NaN;
+    if (!fromMs || isNaN(fromMs)) return "Generated recently.";
+    var sec = Math.max(0, Math.round((Date.now() - fromMs) / 1000));
+    if (sec < 45) return "Generated just now.";
+    if (sec < 90) return "Generated 1 minute ago.";
+    var min = Math.floor(sec / 60);
+    if (min < 60) return "Generated " + min + " minutes ago.";
+    if (min < 120) return "Generated 1 hour ago.";
+    var hr = Math.floor(min / 60);
+    if (hr < 48) return "Generated " + hr + " hours ago.";
+    var days = Math.floor(hr / 24);
+    return "Generated " + days + " day" + (days === 1 ? "" : "s") + " ago.";
+  }
+
+  function statusTextsForPhase(phase, explicitMsg) {
+    var elapsed = formatDuration(
+      state.genStartedAt ? Date.now() - state.genStartedAt : 0
+    );
+    var badge = "Awaiting selection";
+    var helper = "Select an organisation unit to continue.";
+    var tone = "awaiting";
+
+    if (phase === GEN.READY) {
+      badge = "Ready to generate";
+      helper = "All required parameters are selected.";
+      tone = "ready";
+    } else if (phase === GEN.GENERATING) {
+      badge = "Generating report";
+      helper = "Request in progress · " + elapsed;
+      tone = "generating";
+    } else if (phase === GEN.SLOW) {
+      badge = "Still generating";
+      helper = "This is taking longer than usual · " + elapsed;
+      tone = "slow";
+    } else if (phase === GEN.SUCCESS_FRESH) {
+      badge = "Report ready";
+      helper = "Generated just now.";
+      tone = "fresh";
+    } else if (phase === GEN.SUCCESS_CACHED) {
+      badge = "Cached result";
+      helper = formatGeneratedAgo(state.genCompletedAt || state.lastRunAt);
+      tone = "cached";
+    } else if (phase === GEN.SUCCESS_STALE) {
+      badge = "Stale result";
+      helper = "Parameters changed. Generate the latest result.";
+      tone = "stale";
+    } else if (phase === GEN.CANCELLED) {
+      badge = "Generation cancelled";
+      helper = hasPriorResults()
+        ? "Previous result kept. You can retry."
+        : "No report was generated.";
+      tone = "cancelled";
+    } else if (phase === GEN.TIMED_OUT || phase === GEN.ERROR) {
+      badge = "Generation failed";
+      helper =
+        explicitMsg ||
+        state.errorMessage ||
+        (phase === GEN.TIMED_OUT
+          ? "Request timed out. Retry to try again."
+          : "Report failed. Retry to try again.");
+      tone = phase === GEN.TIMED_OUT ? "timeout" : "error";
+    } else if (explicitMsg && phase === GEN.AWAITING) {
+      helper = explicitMsg;
+    }
+
+    // Never repeat the exact badge text as the helper line.
+    var norm = function (s) {
+      return String(s || "")
+        .replace(/[.…]+$/g, "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase();
+    };
+    if (norm(helper) === norm(badge)) {
+      if (phase === GEN.READY) helper = "All required parameters are selected.";
+      else if (phase === GEN.SUCCESS_CACHED) helper = "Refresh for a fresh pull.";
+      else if (phase === GEN.SUCCESS_STALE) helper = "Generate the latest result.";
+      else if (phase === GEN.ERROR || phase === GEN.TIMED_OUT)
+        helper = "Retry to try again.";
+      else helper = "Select an organisation unit to continue.";
+    }
+    return { badge: badge, helper: helper, tone: tone };
+  }
+
+  function hasPriorResults() {
+    return !!(state.generated && state.results && state.results.length);
+  }
+
+  function deriveIdlePhase() {
     var pe = selectedPeriod();
     var ou = selectedOu();
-    var resolved =
-      mode ||
-      (state.statusMode === "loading"
-        ? "loading"
-        : state.statusMode === "error"
-          ? "error"
-          : !ou
-            ? "need_ou"
-            : pe && ou
-              ? "ready"
-              : "need_ou");
-    if (mode) state.statusMode = mode;
-    else if (resolved === "ready" || resolved === "need_ou") state.statusMode = resolved;
-    var msg =
-      explicitMsg ||
-      (resolved === "loading"
-        ? "Generating report…"
-        : resolved === "error"
-          ? "Error"
-          : resolved === "ready"
-            ? "Ready to generate"
-            : "Select an organisation unit to continue.");
-    var badgeText =
-      resolved === "loading"
-        ? "Generating report"
-        : resolved === "error"
-          ? "Error"
-          : resolved === "ready"
-            ? "Ready to generate"
-            : "Awaiting selection";
-    if (el) {
-      el.textContent = msg;
-      el.classList.toggle("is-error", resolved === "error");
-      el.classList.toggle("is-loading", resolved === "loading");
-      el.classList.toggle("is-ready", resolved === "ready");
+    if (!(pe && ou)) return GEN.AWAITING;
+    if (hasPriorResults() && state.lastSuccessScopeKey && state.lastSuccessScopeKey !== currentScopeKey()) {
+      return GEN.SUCCESS_STALE;
+    }
+    if (hasPriorResults() && state.cacheHit) return GEN.SUCCESS_CACHED;
+    if (hasPriorResults()) return GEN.SUCCESS_FRESH;
+    return GEN.READY;
+  }
+
+  function setGenPhase(phase, opts) {
+    var options = opts || {};
+    state.genPhase = phase;
+    state.statusMode =
+      phase === GEN.AWAITING
+        ? "need_ou"
+        : phase === GEN.GENERATING || phase === GEN.SLOW
+          ? "loading"
+          : phase === GEN.ERROR || phase === GEN.TIMED_OUT
+            ? "error"
+            : "ready";
+    state.reportInFlight = isActiveGeneration();
+    if (options.staleReason != null) state.staleReason = options.staleReason;
+    if (options.errorMessage != null) state.errorMessage = options.errorMessage;
+    if (options.cacheHit != null) state.cacheHit = !!options.cacheHit;
+    if (options.updatingBackground != null) state.updatingBackground = !!options.updatingBackground;
+    applyGenUi(options.explicitMsg || "");
+  }
+
+  function buildDiagnostics() {
+    return [
+      "phase=" + state.genPhase,
+      "requestId=" + (state.activeRequestId || "none"),
+      "scope=" + currentScopeKey(),
+      "lastSuccessScope=" + (state.lastSuccessScopeKey || "none"),
+      "started=" + (state.genStartedAt ? new Date(state.genStartedAt).toISOString() : ""),
+      "completed=" + (state.genCompletedAt ? new Date(state.genCompletedAt).toISOString() : ""),
+      "cacheHit=" + !!state.cacheHit,
+      "staleReason=" + (state.staleReason || ""),
+      "error=" + (state.errorMessage || ""),
+      "resultCount=" + ((state.results && state.results.length) || 0),
+    ].join("\n");
+  }
+
+  function stopActiveRequest(reason) {
+    clearGenTimers();
+    if (state.abortController) {
+      try {
+        state.abortController.abort(reason || "cancelled");
+      } catch (e) {}
+    }
+    state.abortController = null;
+    state.activeRequestId = null;
+    state.reportInFlight = false;
+    state.updatingBackground = false;
+  }
+
+  function cancelGeneration(userInitiated) {
+    if (!isActiveGeneration()) return;
+    stopActiveRequest(userInitiated ? "user_cancel" : "superseded");
+    state.lastDiagnostics = buildDiagnostics();
+    setGenPhase(GEN.CANCELLED);
+    renderCards(state.results);
+    validateForm();
+  }
+
+  function markResultsStale(reason) {
+    if (!hasPriorResults()) {
+      setGenPhase(deriveIdlePhase());
+      return;
+    }
+    if (isActiveGeneration()) {
+      cancelGeneration(false);
+    }
+    setGenPhase(GEN.SUCCESS_STALE, {
+      staleReason: reason || "Parameters changed",
+    });
+    renderCards(state.results);
+    validateForm();
+  }
+
+  function onScopeMaybeChanged() {
+    var key = currentScopeKey();
+    if (state.scopeKey && state.scopeKey !== key) {
+      if (isActiveGeneration()) cancelGeneration(false);
+      if (hasPriorResults() && state.lastSuccessScopeKey && state.lastSuccessScopeKey !== key) {
+        markResultsStale("Parameters changed");
+        state.scopeKey = key;
+        return;
+      }
+    }
+    state.scopeKey = key;
+    if (!isActiveGeneration() && state.genPhase !== GEN.ERROR && state.genPhase !== GEN.TIMED_OUT && state.genPhase !== GEN.CANCELLED) {
+      setGenPhase(deriveIdlePhase());
+    } else if (!isActiveGeneration()) {
+      applyGenUi();
+    }
+    validateForm();
+  }
+
+  function renderStatusActions() {
+    var host = $("hcsc-status-actions");
+    if (!host) return;
+    var phase = state.genPhase;
+    var buttons = [];
+    if (phase === GEN.GENERATING || phase === GEN.SLOW) {
+      buttons.push('<button type="button" class="btn btn-sm" data-gen-action="cancel">Cancel</button>');
+    } else if (phase === GEN.SUCCESS_STALE) {
+      buttons.push('<button type="button" class="btn btn-sm btn-primary" data-gen-action="generate-latest">Generate Latest</button>');
+      buttons.push('<button type="button" class="btn btn-sm" data-gen-action="refresh">Refresh</button>');
+    } else if (phase === GEN.SUCCESS_CACHED) {
+      buttons.push('<button type="button" class="btn btn-sm" data-gen-action="refresh">Refresh</button>');
+    } else if (phase === GEN.ERROR || phase === GEN.TIMED_OUT || phase === GEN.CANCELLED) {
+      buttons.push('<button type="button" class="btn btn-sm btn-primary" data-gen-action="retry">Retry</button>');
+      buttons.push('<button type="button" class="btn btn-sm" data-gen-action="copy-diagnostics">Copy Diagnostics</button>');
+    }
+    // Keep the actions row mounted for stable status-card height.
+    host.hidden = false;
+    host.innerHTML = buttons.length
+      ? buttons.join(" ")
+      : '<span class="hcsc-status-actions-spacer" aria-hidden="true"></span>';
+  }
+
+  function applyGenUi(explicitMsg) {
+    var phase = state.genPhase || GEN.AWAITING;
+    var strip = $("hcsc-status-strip");
+    var el = $("hcsc-status");
+    var badge = $("hcsc-status-badge");
+    var meta = $("hcsc-status-meta");
+    var pe = selectedPeriod();
+    var ou = selectedOu();
+    var texts = statusTextsForPhase(phase, explicitMsg || "");
+    var badgeText = texts.badge;
+    var msg = texts.helper;
+    var tone = texts.tone;
+
+    if (strip) {
+      strip.setAttribute("data-gen-phase", phase);
+      strip.className = "hcsc-status-strip is-" + tone;
     }
     if (badge) {
-      badge.textContent = badgeText;
-      badge.className =
-        "hcsc-status-badge" +
-        (resolved === "ready"
-          ? " is-ready"
-          : resolved === "error"
-            ? " is-error"
-            : resolved === "loading"
-              ? " is-loading"
-              : "");
+      badge.className = "hcsc-status-badge is-" + tone;
+      // Animate only while a request is actively in flight.
+      if (isActiveGeneration()) {
+        badge.innerHTML =
+          '<span class="hcsc-progress-spin" aria-hidden="true"></span> ' +
+          escapeHtml(badgeText);
+      } else {
+        badge.textContent = badgeText;
+      }
     }
+    if (el) {
+      el.textContent = msg;
+      el.className = "hcsc-status-value is-" + tone;
+    }
+    // Keep meta slot present but empty so status-card height stays stable.
+    if (meta) {
+      meta.textContent = "";
+      meta.hidden = true;
+    }
+    renderStatusActions();
+
     var readyMark = $("hcsc-ou-ready");
     if (readyMark) readyMark.hidden = !ou;
-    var emptyOu = $("hcsc-ou-empty");
-    if (emptyOu) emptyOu.hidden = !!ou;
-    var helper = $("hcsc-ou-helper");
-    if (helper) helper.hidden = true;
     var clearBtn = $("hcsc-ou-clear");
     if (clearBtn) clearBtn.disabled = !ou;
-    var chipLabel = $("hcsc-ou-chip-label");
-    if (chipLabel && !ou && !(chipLabel.textContent || "").trim()) {
-      chipLabel.textContent = "No organisation unit selected";
-      chipLabel.classList.add("is-empty");
-    }
+
     var chips = $("hcsc-param-chips");
     if (chips) {
       var envRaw = (($("hcsc-env") && $("hcsc-env").value) || "stage").toLowerCase();
@@ -282,6 +552,7 @@
         escapeHtml(disagg) +
         "</span>";
     }
+
     var last = $("hcsc-last-run");
     var runBadge = $("hcsc-run-badge");
     if (last) {
@@ -301,12 +572,86 @@
             : "");
         if (runBadge) {
           runBadge.hidden = false;
-          runBadge.textContent = state.lastRunOk === false ? "Error" : "Success";
-          runBadge.className =
-            "hcsc-run-badge" + (state.lastRunOk === false ? " is-error" : " is-success");
+          if (phase === GEN.SUCCESS_CACHED) {
+            runBadge.textContent = "Cached";
+            runBadge.className = "hcsc-run-badge is-cached";
+          } else if (phase === GEN.SUCCESS_STALE) {
+            runBadge.textContent = "Stale";
+            runBadge.className = "hcsc-run-badge is-stale";
+          } else if (state.lastRunOk === false) {
+            runBadge.textContent = "Error";
+            runBadge.className = "hcsc-run-badge is-error";
+          } else {
+            runBadge.textContent = "Success";
+            runBadge.className = "hcsc-run-badge is-success";
+          }
         }
       }
     }
+
+    var cards = $("hcsc-cards");
+    if (cards) {
+      cards.classList.toggle("is-updating", isActiveGeneration() && hasPriorResults());
+      cards.classList.toggle("is-generating-empty", isActiveGeneration() && !hasPriorResults());
+      cards.classList.toggle("is-stale", phase === GEN.SUCCESS_STALE);
+      cards.setAttribute(
+        "data-cards-mode",
+        isActiveGeneration() && !hasPriorResults()
+          ? "skeleton"
+          : hasPriorResults()
+            ? "results"
+            : "placeholder"
+      );
+    }
+
+    var run = $("hcsc-run");
+    var refresh = $("hcsc-refresh");
+    var peOk = !!pe;
+    var ouOk = !!ou;
+    if (run) {
+      run.disabled = !(peOk && ouOk) || isActiveGeneration();
+      run.innerHTML = isActiveGeneration()
+        ? '<span class="hcsc-btn-ico hcsc-spin" aria-hidden="true"></span> Generating…'
+        : phase === GEN.SUCCESS_STALE
+          ? '<span class="hcsc-btn-ico" aria-hidden="true">▦</span> Generate Latest'
+          : '<span class="hcsc-btn-ico" aria-hidden="true">▦</span> Generate Report';
+    }
+    if (refresh) {
+      if (isActiveGeneration()) {
+        refresh.disabled = false;
+        refresh.innerHTML = '<span class="hcsc-btn-ico" aria-hidden="true">✕</span> Cancel';
+        refresh.title = "Cancel generation";
+        refresh.setAttribute("data-mode", "cancel");
+      } else {
+        refresh.disabled = false;
+        refresh.innerHTML = '<span class="hcsc-btn-ico" aria-hidden="true">↻</span> Refresh';
+        refresh.title = "Force refresh report";
+        refresh.setAttribute("data-mode", "refresh");
+      }
+    }
+  }
+
+  function updateStatusStrip(explicitMsg, mode) {
+    // Legacy bridge: map old mode strings onto the generation state machine.
+    if (mode === "loading") {
+      if (!isActiveGeneration()) setGenPhase(GEN.GENERATING, { explicitMsg: explicitMsg });
+      else applyGenUi(explicitMsg || "");
+      return;
+    }
+    if (mode === "error") {
+      setGenPhase(GEN.ERROR, {
+        explicitMsg: explicitMsg || state.errorMessage || "Error",
+        errorMessage: explicitMsg || state.errorMessage || "Error",
+      });
+      return;
+    }
+    if (mode === "ready") {
+      if (!isActiveGeneration()) setGenPhase(deriveIdlePhase(), { explicitMsg: explicitMsg });
+      else applyGenUi(explicitMsg || "");
+      return;
+    }
+    if (!isActiveGeneration()) setGenPhase(deriveIdlePhase(), { explicitMsg: explicitMsg });
+    else applyGenUi(explicitMsg || "");
   }
 
   function validateForm(opts) {
@@ -316,7 +661,6 @@
     var ou = selectedOu();
     var peOk = !!pe;
     var ouOk = !!ou;
-    // Field errors only after Generate/Refresh attempt or an invalid prior selection.
     if (state.showFieldErrors) {
       setFieldError("hcsc-period-error", peOk ? "" : "Select a valid quarter.");
       setFieldError("hcsc-ou-error", ouOk ? "" : "Select an organisation unit.");
@@ -324,15 +668,33 @@
       setFieldError("hcsc-period-error", "");
       setFieldError("hcsc-ou-error", "");
     }
-    var run = $("hcsc-run");
-    if (run) run.disabled = !(peOk && ouOk) || state.reportInFlight;
-    var refresh = $("hcsc-refresh");
-    // Refresh stays available without OU; only block during an active report request.
-    if (refresh) refresh.disabled = !!state.reportInFlight;
-    if (state.statusMode !== "loading" && state.statusMode !== "error") {
-      state.statusMode = peOk && ouOk ? "ready" : "need_ou";
+    if (!isActiveGeneration()) {
+      var next = deriveIdlePhase();
+      // Preserve terminal cancelled/error/timeout until user retries or regenerates,
+      // unless selection became incomplete.
+      if (!peOk || !ouOk) {
+        setGenPhase(GEN.AWAITING);
+      } else if (
+        state.genPhase === GEN.ERROR ||
+        state.genPhase === GEN.TIMED_OUT ||
+        state.genPhase === GEN.CANCELLED
+      ) {
+        applyGenUi();
+      } else if (next === GEN.SUCCESS_STALE) {
+        if (state.genPhase !== GEN.SUCCESS_STALE) {
+          setGenPhase(GEN.SUCCESS_STALE, {
+            staleReason: state.staleReason || "Parameters changed",
+          });
+          renderCards(state.results);
+        } else {
+          applyGenUi();
+        }
+      } else {
+        setGenPhase(next);
+      }
+    } else {
+      applyGenUi();
     }
-    updateStatusStrip();
     return peOk && ouOk;
   }
 
@@ -492,45 +854,86 @@
       byKey[r.indicator_key] = r;
     });
     var hasData = CARD_KEYS.some(function (k) { return !!byKey[k]; });
-    host.innerHTML = CARD_KEYS.map(function (k, i) {
-      var r = byKey[k];
-      var title = CARD_TITLES[k] || (r && r.display_name) || k;
-      if (!hasData || !r) {
-        var placeholder = rateKeys[k] ? "— %" : "—";
+    var activeEmpty = isActiveGeneration() && !hasData;
+    var activeUpdating = isActiveGeneration() && hasData;
+    var stale = state.genPhase === GEN.SUCCESS_STALE;
+    var cached = state.genPhase === GEN.SUCCESS_CACHED;
+    var prevBadge =
+      (state.genPhase === GEN.ERROR ||
+        state.genPhase === GEN.TIMED_OUT ||
+        state.genPhase === GEN.CANCELLED) &&
+      hasData;
+
+    var freshnessBadge = "";
+    if (activeUpdating) {
+      freshnessBadge =
+        '<span class="hcsc-freshness-badge is-updating">Updating in background</span>';
+    } else if (stale) {
+      freshnessBadge =
+        '<span class="hcsc-freshness-badge is-stale">Stale result</span>';
+    } else if (cached) {
+      freshnessBadge =
+        '<span class="hcsc-freshness-badge is-cached">Cached result</span>';
+    } else if (prevBadge) {
+      freshnessBadge =
+        '<span class="hcsc-freshness-badge is-previous">Previous result</span>';
+    }
+
+    host.innerHTML =
+      (freshnessBadge
+        ? '<div class="hcsc-cards-banner">' + freshnessBadge + "</div>"
+        : "") +
+      CARD_KEYS.map(function (k, i) {
+        var r = byKey[k];
+        var title = CARD_TITLES[k] || (r && r.display_name) || k;
+        if (activeEmpty) {
+          return (
+            '<article class="hcsc-card ' +
+            tones[i] +
+            ' hcsc-card-skeleton" aria-busy="true"><h3>' +
+            escapeHtml(title) +
+            '</h3><p class="hcsc-card-value hcsc-skel-active">&nbsp;</p>' +
+            '<p class="hcsc-skel-active hcsc-skel-line">&nbsp;</p></article>'
+          );
+        }
+        if (!hasData || !r) {
+          var placeholder = rateKeys[k] ? "— %" : "—";
+          return (
+            '<article class="hcsc-card ' +
+            tones[i] +
+            ' hcsc-card-placeholder"><h3>' +
+            escapeHtml(title) +
+            '</h3><p class="hcsc-card-value">' +
+            placeholder +
+            '</p><p class="muted hcsc-card-foot">Last refreshed: —</p></article>'
+          );
+        }
+        var refreshed =
+          (r.last_updated && String(r.last_updated).replace("T", " ").slice(0, 19)) ||
+          (r.freshness && String(r.freshness).replace("T", " ").slice(0, 19)) ||
+          "—";
         return (
           '<article class="hcsc-card ' +
           tones[i] +
-          ' hcsc-card-placeholder"><h3>' +
+          (stale ? " is-stale-card" : "") +
+          (activeUpdating ? " is-updating-card" : "") +
+          '"><h3>' +
           escapeHtml(title) +
           '</h3><p class="hcsc-card-value">' +
-          placeholder +
-          '</p><p class="muted hcsc-card-foot">Last refreshed: —</p></article>'
+          escapeHtml(r.value_text || "—") +
+          "</p>" +
+          (r.calculation_basis
+            ? '<p class="muted hcsc-basis">' + escapeHtml(r.calculation_basis) + "</p>"
+            : "") +
+          '<div class="hcsc-card-meta">' +
+          sourceBadge(r.source_badge, r.source_badge_label) +
+          " " +
+          validationCell(r) +
+          '</div><p class="muted hcsc-card-foot">Last refreshed: ' +
+          escapeHtml(refreshed) +
+          "</p></article>"
         );
-      }
-      var refreshed =
-        (r.last_updated && String(r.last_updated).replace("T", " ").slice(0, 19)) ||
-        (r.freshness && String(r.freshness).replace("T", " ").slice(0, 19)) ||
-        "—";
-      return (
-        '<article class="hcsc-card ' +
-        tones[i] +
-        '"><h3>' +
-        escapeHtml(title) +
-        '</h3><p class="hcsc-card-value">' +
-        escapeHtml(r.value_text || "—") +
-        "</p>" +
-        (r.calculation_basis
-          ? '<p class="muted hcsc-basis">' + escapeHtml(r.calculation_basis) + "</p>"
-          : "") +
-        '<div class="hcsc-card-meta">' +
-        sourceBadge(r.source_badge, r.source_badge_label) +
-        " " +
-        validationCell(r) +
-        '</div><p class="muted hcsc-card-foot">Last refreshed: ' +
-        escapeHtml(refreshed) +
-        "</p></article>"
-      );
-    }).join("");
+      }).join("");
   }
 
   function categoryMatches(row, category) {
@@ -1361,36 +1764,86 @@
   }
 
   function loadReport(force) {
-    if (!validateForm({ revealErrors: true })) {
-      state.statusMode = "error";
-      setStatus("Select a valid quarter and organisation unit.", true);
+    if (isActiveGeneration()) {
       return;
     }
-    var period = selectedPeriod();
+    if (!validateForm({ revealErrors: true })) {
+      setGenPhase(GEN.AWAITING, {
+        explicitMsg: "Select a valid quarter and organisation unit.",
+      });
+      return;
+    }
     var ou = selectedOu();
     if (!isValidOuUid(ou)) {
       state.showFieldErrors = true;
-      state.statusMode = "error";
-      setStatus("Organisation unit selection was lost. Select it again, then Generate Report.", true);
+      setGenPhase(GEN.ERROR, {
+        errorMessage: "Organisation unit selection was lost. Select it again, then Generate Report.",
+        explicitMsg: "Organisation unit selection was lost. Select it again, then Generate Report.",
+      });
       validateForm();
       return;
     }
-    var started = Date.now();
-    state.reportInFlight = true;
-    state.statusMode = "loading";
-    updateStatusStrip("Generating report…", "loading");
-    showShellBanner("");
-    validateForm();
+
     var reportUrl = root.getAttribute("data-report-url") || root.getAttribute("data-overview-url");
     if (!reportUrl) {
-      state.reportInFlight = false;
-      state.statusMode = "error";
-      setStatus("Report API URL is missing from the page.", true);
-      validateForm();
+      setGenPhase(GEN.ERROR, {
+        errorMessage: "Report API URL is missing from the page.",
+        explicitMsg: "Report API URL is missing from the page.",
+      });
       return;
     }
+
+    // Supersede any leftover controller and start a tracked request.
+    stopActiveRequest("superseded");
+    state.requestSeq += 1;
+    var requestId = state.requestSeq;
+    state.activeRequestId = requestId;
+    state.genStartedAt = Date.now();
+    state.genCompletedAt = null;
+    state.errorMessage = "";
+    state.staleReason = "";
+    state.scopeKey = currentScopeKey();
+    state.abortController =
+      typeof AbortController !== "undefined" ? new AbortController() : null;
+    state.updatingBackground = hasPriorResults();
+    setGenPhase(GEN.GENERATING, {
+      updatingBackground: hasPriorResults(),
+    });
+    showShellBanner("");
+    renderCards(state.results);
+    applyGenUi();
+
+    clearGenTimers();
+    state.elapsedTimer = setInterval(function () {
+      if (state.activeRequestId !== requestId) return;
+      applyGenUi();
+    }, 500);
+    state.slowTimer = setTimeout(function () {
+      if (state.activeRequestId !== requestId) return;
+      if (state.genPhase === GEN.GENERATING) {
+        setGenPhase(GEN.SLOW);
+        renderCards(state.results);
+      }
+    }, SLOW_AFTER_MS);
+    state.timeoutTimer = setTimeout(function () {
+      if (state.activeRequestId !== requestId) return;
+      stopActiveRequest("timeout");
+      state.lastRunOk = false;
+      state.errorMessage = "Request timed out";
+      state.lastDiagnostics = buildDiagnostics();
+      setGenPhase(GEN.TIMED_OUT, {
+        explicitMsg: "Request timed out.",
+        errorMessage: "Request timed out",
+      });
+      renderCards(state.results);
+      validateForm();
+    }, CLIENT_TIMEOUT_MS);
+
     var url = reportUrl + scopeQuery(force);
-    fetch(url, { credentials: "same-origin" })
+    var fetchOpts = { credentials: "same-origin" };
+    if (state.abortController) fetchOpts.signal = state.abortController.signal;
+
+    fetch(url, fetchOpts)
       .then(function (r) {
         return r.json().then(function (body) {
           body._status = r.status;
@@ -1398,15 +1851,27 @@
         });
       })
       .then(function (data) {
+        if (state.activeRequestId !== requestId) return; // late / superseded
+        clearGenTimers();
+        state.abortController = null;
+        state.activeRequestId = null;
         state.reportInFlight = false;
+        state.updatingBackground = false;
+        state.genCompletedAt = Date.now();
+
         if (!data.ok) {
-          state.statusMode = "error";
           state.lastRunOk = false;
-          state.lastRunAt = new Date().toISOString();
-          setStatus(data.error || "Report failed", true);
+          state.errorMessage = data.error || "Report failed";
+          state.lastDiagnostics = buildDiagnostics();
+          setGenPhase(GEN.ERROR, {
+            explicitMsg: state.errorMessage,
+            errorMessage: state.errorMessage,
+          });
+          renderCards(state.results);
           validateForm();
           return;
         }
+
         showShellBanner("");
         state.results = data.results || [];
         state.sections = data.sections || [];
@@ -1415,11 +1880,19 @@
         state.generated = true;
         state.lastRunAt = data.freshness || new Date().toISOString();
         state.lastRunDurationMs =
-          (data.timings && data.timings.total_ms != null
+          data.timings && data.timings.total_ms != null
             ? data.timings.total_ms
-            : Date.now() - started);
+            : state.genCompletedAt - state.genStartedAt;
         state.lastRunOk = true;
-        state.statusMode = "ready";
+        state.cacheHit = !!(data.cache && data.cache.hit);
+        state.lastSuccessScopeKey = currentScopeKey();
+        state.scopeKey = state.lastSuccessScopeKey;
+        state.staleReason = "";
+        state.lastDiagnostics = buildDiagnostics();
+
+        setGenPhase(state.cacheHit ? GEN.SUCCESS_CACHED : GEN.SUCCESS_FRESH, {
+          cacheHit: state.cacheHit,
+        });
         renderCards(state.results);
         renderTable();
         renderMapping();
@@ -1435,17 +1908,38 @@
             });
           openSql.hidden = !showSql;
         }
-        updateStatusStrip("Ready to generate", "ready");
         var fresh = $("hcsc-freshness");
         if (fresh) fresh.textContent = "Last updated: " + (data.freshness || "");
         validateForm();
       })
-      .catch(function () {
+      .catch(function (err) {
+        if (state.activeRequestId !== requestId) return;
+        var aborted =
+          (err && (err.name === "AbortError" || err.code === 20)) ||
+          (state.abortController && state.abortController.signal && state.abortController.signal.aborted);
+        clearGenTimers();
+        state.abortController = null;
+        state.activeRequestId = null;
         state.reportInFlight = false;
-        state.statusMode = "error";
+        state.updatingBackground = false;
+        state.genCompletedAt = Date.now();
+        if (aborted) {
+          // cancelGeneration / timeout already set the phase.
+          if (state.genPhase === GEN.GENERATING || state.genPhase === GEN.SLOW) {
+            setGenPhase(GEN.CANCELLED);
+          }
+          renderCards(state.results);
+          validateForm();
+          return;
+        }
         state.lastRunOk = false;
-        state.lastRunAt = new Date().toISOString();
-        setStatus("Report request failed. Check network or DHIS2 connectivity.", true);
+        state.errorMessage = "Report request failed. Check network or DHIS2 connectivity.";
+        state.lastDiagnostics = buildDiagnostics();
+        setGenPhase(GEN.ERROR, {
+          explicitMsg: state.errorMessage,
+          errorMessage: state.errorMessage,
+        });
+        renderCards(state.results);
         validateForm();
       });
   }
@@ -1511,14 +2005,14 @@
     ouPicker = window.CentralHubOuPicker.create({
       root: $("hcsc-controls") || $("hcsc-ou-picker"),
       hiddenEl: $("hcsc-ou"),
-      pathEl: $("hcsc-ou-path"),
+      pathEl: null,
       chipRow: $("hcsc-ou-selected-box"),
       chipLabel: $("hcsc-ou-chip-label"),
       clearBtn: $("hcsc-ou-clear"),
       retryBtn: $("hcsc-ou-retry"),
       refreshMetaBtn: $("hcsc-ou-refresh-meta"),
       errorEl: $("hcsc-ou-error"),
-      syncEl: $("hcsc-ou-sync"),
+      syncEl: null,
       searchEl: $("hcsc-ou-search"),
       searchResultsEl: $("hcsc-ou-search-results"),
       apiUrl: root.getAttribute("data-org-units-url") || "",
@@ -1528,7 +2022,7 @@
       storagePrefix: "centralhub.hcsc.ou.",
       idPrefix: "hcsc-ou-",
       onChange: function () {
-        validateForm();
+        onScopeMaybeChanged();
       },
       onEnvironmentStatus: function (status) {
         if (status && status.maintenance) {
@@ -1637,26 +2131,51 @@
     if (run) {
       run.addEventListener("click", function (ev) {
         ev.preventDefault();
-        loadReport(false);
+        loadReport(
+          state.genPhase === GEN.SUCCESS_STALE || state.genPhase === GEN.SUCCESS_CACHED
+        );
       });
     }
     var refresh = $("hcsc-refresh");
-    if (refresh) refresh.addEventListener("click", function () { loadReport(true); });
+    if (refresh) {
+      refresh.addEventListener("click", function () {
+        if (refresh.getAttribute("data-mode") === "cancel") {
+          cancelGeneration(true);
+          return;
+        }
+        loadReport(true);
+      });
+    }
+    var statusActions = $("hcsc-status-actions");
+    if (statusActions) {
+      statusActions.addEventListener("click", function (ev) {
+        var btn = ev.target.closest("[data-gen-action]");
+        if (!btn) return;
+        var action = btn.getAttribute("data-gen-action");
+        if (action === "cancel") {
+          cancelGeneration(true);
+        } else if (action === "retry" || action === "refresh" || action === "generate-latest") {
+          loadReport(true);
+        } else if (action === "copy-diagnostics") {
+          copyText(state.lastDiagnostics || buildDiagnostics());
+        }
+      });
+    }
     var periodSel = $("hcsc-period");
     if (periodSel) {
       periodSel.addEventListener("change", function () {
         if (selectedPeriod()) saveRememberedQuarter(selectedPeriod());
-        validateForm();
+        onScopeMaybeChanged();
       });
     }
     var disagg = $("hcsc-disagg");
-    if (disagg) disagg.addEventListener("change", function () { updateStatusStrip(); });
+    if (disagg) disagg.addEventListener("change", function () { onScopeMaybeChanged(); });
     var envSel = $("hcsc-env");
     if (envSel) {
       envSel.addEventListener("change", function () {
         fillPeriods();
         if (ouPicker && ouPicker.onEnvironmentChange) ouPicker.onEnvironmentChange();
-        validateForm();
+        onScopeMaybeChanged();
         showShellBanner("");
         var envs = (boot && boot.environments) || [];
         var meta = envs.filter(function (e) {

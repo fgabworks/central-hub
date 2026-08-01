@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-02 (shell + SQL Workspace layout: fixed sidebar via `padding-left`, no double offset).
+Last verified: 2026-08-02 (HCSC–RF filter card: stable OU selection height; path/sync off-card).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -26,7 +26,7 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Registry management | Add / Edit / Enable / Disable via UI → YAML (`hub/registry/store.py`); no auto-clone |
 | Repository Workspace | Phases 1–2 + Connect + Run Profile Builder + Active Application status card: Overview / Files / Changes / Run / Logs / Settings; process vs HTTP health reconciled (`hub/repository_workspace/run_status.py`); YAML templates + SQLite repo profiles |
 | DHIS2 Reports | `/dhis2/reports` — Phase 1 Standard Report Manager: sync Stage/Live `/api/reports` metadata cache, filters, View / Open in DHIS2 / HTML source / Download / Refresh; period+OU controls; iframe embed with Open-in-DHIS2 fallback. Catalog shortcuts remain for repository/static HTML (`hub/dhis2_reports/`) |
-| Central Hub HCSC–RF | `/dhis2/hcsc-indicators` — Phase 0–3 registry + batched Overview/report/category + Compare Sources (`hub/hcsc_indicators/`); quarters **2025Q3–2026Q4**; OU cascade via env-isolated SQLite cache + DHIS2 GET refresh (`hub/dhis2_reports/org_unit_store.py`); no formula engine |
+| Central Hub HCSC–RF | `/dhis2/hcsc-indicators` — Phase 0–3 registry + batched Overview/report/category + Compare Sources (`hub/hcsc_indicators/`); quarters **2025Q3–2026Q4**; OU cascade via env-isolated SQLite cache + DHIS2 GET refresh (`hub/dhis2_reports/org_unit_store.py`); client generation state machine (fresh/cached/stale/slow/timeout; animate only while request ID active); no formula engine |
 | Health probes | Parallel checks; states: Healthy / Unreachable / Not Cloned / Disabled |
 | Live Processing | `live-processing` (API GET-only) + `live-processing-local` (path + git_url) |
 | Data-Script / Report Template | Registered with GitHub URLs; local path optional (`DATA_SCRIPT_PATH`, `REPORT_TEMPLATE_PATH`) |

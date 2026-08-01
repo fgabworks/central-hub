@@ -1453,7 +1453,9 @@ class ParamCardLayoutContractTests(unittest.TestCase):
         self.assertIn("revealErrors", js)
         self.assertIn('setFieldError("hcsc-ou-error", "")', js)
         self.assertIn("run.disabled = !(peOk && ouOk)", js)
-        self.assertIn("refresh.disabled = !!state.reportInFlight", js)
+        self.assertIn('refresh.setAttribute("data-mode", "cancel")', js)
+        self.assertIn('refresh.setAttribute("data-mode", "refresh")', js)
+        self.assertIn("isActiveGeneration()", js)
         self.assertNotIn("refresh.disabled = !(peOk && ouOk)", js)
         self.assertIn("do NOT auto-run analytics", js)
         self.assertIn("Generating report", js)
@@ -1471,6 +1473,181 @@ class ParamCardLayoutContractTests(unittest.TestCase):
         self.assertIn("lazyRoots", picker)
         self.assertIn('storagePrefix + "cascade." + env()', picker)
         self.assertIn("clearBtn.disabled = !ou.uid", picker)
+
+
+class FilterCardLayoutStabilityTests(unittest.TestCase):
+    """OU selection must not resize/rearrange HCSC–RF filter controls."""
+
+    def test_selected_ou_does_not_expand_filter_card(self):
+        html = (ROOT / "templates" / "hcsc_indicator_summary.html").read_text(encoding="utf-8")
+        js = (ROOT / "static" / "js" / "hcsc_indicator_summary.js").read_text(encoding="utf-8")
+        picker = (ROOT / "static" / "js" / "dhis2_org_unit_picker.js").read_text(encoding="utf-8")
+        css = (ROOT / "static" / "css" / "style.css").read_text(encoding="utf-8")
+
+        # Stable two-row grid + 36px controls
+        self.assertIn("hcsc-filter-row-primary", html)
+        self.assertIn("hcsc-filter-row-secondary", html)
+        self.assertIn("repeat(6, minmax(0, 1fr))", css)
+        self.assertIn("minmax(0, 25%)", css)
+        self.assertIn("minmax(0, 35%)", css)
+        self.assertIn("align-items: start", css)
+        self.assertIn("height: 36px", css)
+        self.assertIn("max-height: 36px", css)
+        self.assertIn(".hcsc-ou-selected-box", css)
+        self.assertIn("text-overflow: ellipsis", css)
+        self.assertIn("white-space: nowrap", css)
+
+        # Single selected path only — no duplicate path / Last synced in card
+        self.assertIn('id="hcsc-ou-chip-label"', html)
+        self.assertIn("No organisation unit selected", html)
+        self.assertNotIn('id="hcsc-ou-path"', html)
+        self.assertNotIn('id="hcsc-ou-sync"', html)
+        self.assertNotIn("Last synced", html)
+        self.assertIn("pathEl: null", js)
+        self.assertIn("syncEl: null", js)
+        self.assertIn("pathEl.hidden = true", picker)
+        self.assertIn("chipLabel.title = pathText", picker)
+        self.assertIn("Refresh organisation units from DHIS2\\n", picker)
+        self.assertIn("setRefreshingMeta", picker)
+        self.assertIn("is-spinning", picker)
+        self.assertIn(".hcsc-ou-icon-btn.is-spinning", css)
+
+        # Feedback only when error shown; actions stay aligned
+        self.assertIn("hcsc-field-feedback", html)
+        self.assertIn('id="hcsc-ou-error"', html)
+        self.assertIn(".hcsc-field-error[hidden]", css)
+        self.assertIn("minmax(0, 1.4fr)", css)
+        self.assertIn("ou-layout-stable-1", html)
+
+
+class GenStateMachineContractTests(unittest.TestCase):
+    """HCSC–RF report generation state machine: distinct visual states, no stuck spinners."""
+
+    def test_generation_state_machine_contract(self):
+        html = (ROOT / "templates" / "hcsc_indicator_summary.html").read_text(encoding="utf-8")
+        js = (ROOT / "static" / "js" / "hcsc_indicator_summary.js").read_text(encoding="utf-8")
+        css = (ROOT / "static" / "css" / "style.css").read_text(encoding="utf-8")
+
+        # Authoritative phase model
+        for phase in (
+            "idle",
+            "awaiting_selection",
+            "ready",
+            "generating",
+            "slow",
+            "success_fresh",
+            "success_cached",
+            "success_stale",
+            "cancelled",
+            "timed_out",
+            "error",
+        ):
+            self.assertIn(phase, js)
+        self.assertIn("var GEN =", js)
+        self.assertIn("setGenPhase", js)
+        self.assertIn("isActiveGeneration", js)
+        self.assertIn("activeRequestId", js)
+        self.assertIn("SLOW_AFTER_MS", js)
+        self.assertIn("CLIENT_TIMEOUT_MS", js)
+
+        # Awaiting / ready: muted placeholders, no spinner
+        self.assertIn("Select an organisation unit to continue.", html)
+        self.assertIn("hcsc-card-placeholder", html)
+        self.assertIn('data-cards-mode="placeholder"', html)
+        self.assertIn("All required parameters are selected.", js)
+        self.assertNotIn("hcsc-skel-active", html)
+
+        # Generating: spinner only while request ID active
+        self.assertIn("Request in progress · ", js)
+        self.assertIn("This is taking longer than usual · ", js)
+        self.assertIn("hcsc-progress-spin", js)
+        self.assertIn("hcsc-skel-active", js)
+        self.assertIn("if (isActiveGeneration())", js)
+        self.assertIn("state.activeRequestId !== requestId", js)
+        self.assertIn("AbortController", js)
+        self.assertIn("cancelGeneration", js)
+        self.assertIn("statusTextsForPhase", js)
+
+        # Cached / stale / previous
+        self.assertIn("Cached result", js)
+        self.assertIn("Stale result", js)
+        self.assertIn("Report ready", js)
+        self.assertIn("Generated just now.", js)
+        self.assertIn("Previous result", js)
+        self.assertIn("Updating in background", js)
+        self.assertIn("markResultsStale", js)
+        self.assertIn("Parameters changed. Generate the latest result.", js)
+        self.assertIn("Generate Latest", js)
+        self.assertIn("Copy Diagnostics", js)
+        self.assertIn("Request timed out", js)
+        self.assertIn("Generation cancelled", js)
+        self.assertIn("Generation failed", js)
+
+        # Terminal paths stop animation / ignore late responses
+        self.assertIn("stopActiveRequest", js)
+        self.assertIn("clearGenTimers", js)
+        self.assertIn("late / superseded", js)
+        self.assertIn('data-mode", "cancel"', js)
+        self.assertIn('data-gen-action="retry"', js)
+        self.assertIn("hcsc-status-meta", html)
+        self.assertIn("hcsc-status-actions", html)
+        self.assertIn('data-gen-phase="awaiting_selection"', html)
+
+        # CSS tones + no shimmer on stale
+        self.assertIn(".hcsc-status-badge.is-generating", css)
+        self.assertIn(".hcsc-status-badge.is-fresh", css)
+        self.assertIn(".hcsc-status-badge.is-cached", css)
+        self.assertIn(".hcsc-status-badge.is-stale", css)
+        self.assertIn(".hcsc-status-badge.is-timeout", css)
+        self.assertIn(".hcsc-status-badge.is-cancelled", css)
+        self.assertIn(".hcsc-freshness-badge.is-stale", css)
+        self.assertIn("#hcsc-cards.is-stale .hcsc-skel", css)
+        self.assertIn("animation: none !important", css)
+        self.assertIn("@keyframes hcsc-spin", css)
+        self.assertIn("hcsc-status-copy-1", html)
+        self.assertIn("ou-layout-stable-1", html)
+
+
+class StatusStripCopyTests(unittest.TestCase):
+    """Badge and helper must never duplicate; helpers are contextual."""
+
+    def test_status_strip_helpers_are_distinct(self):
+        html = (ROOT / "templates" / "hcsc_indicator_summary.html").read_text(encoding="utf-8")
+        js = (ROOT / "static" / "js" / "hcsc_indicator_summary.js").read_text(encoding="utf-8")
+        css = (ROOT / "static" / "css" / "style.css").read_text(encoding="utf-8")
+
+        pairs = [
+            ("Awaiting selection", "Select an organisation unit to continue."),
+            ("Ready to generate", "All required parameters are selected."),
+            ("Generating report", "Request in progress · "),
+            ("Still generating", "This is taking longer than usual · "),
+            ("Report ready", "Generated just now."),
+            ("Cached result", "Generated "),
+            ("Stale result", "Parameters changed. Generate the latest result."),
+            ("Generation failed", "Retry to try again."),
+        ]
+        for badge, helper in pairs:
+            self.assertIn(badge, js if badge != "Awaiting selection" else html + js)
+            self.assertIn(helper, js if helper != "Select an organisation unit to continue." else html + js)
+            # Exact badge string must not also be the helper assignment.
+            self.assertNotIn('helper = "' + badge + '"', js)
+            self.assertNotIn('helper = "' + badge + '."', js)
+
+        self.assertIn("statusTextsForPhase", js)
+        self.assertIn("Never repeat the exact badge text", js)
+        self.assertIn("isActiveGeneration()", js)
+        self.assertIn("hcsc-progress-spin", js)
+        self.assertIn("min-height: 5.75rem", css)
+        self.assertIn("min-height: 4.5rem", css)
+        self.assertIn("hcsc-status-actions-spacer", js)
+        self.assertIn("hcsc-status-copy-1", html)
+        # Initial HTML already has distinct badge + helper
+        self.assertIn(">Awaiting selection</span>", html)
+        self.assertIn(">Select an organisation unit to continue.</p>", html)
+        self.assertNotEqual(
+            "Awaiting selection",
+            "Select an organisation unit to continue.",
+        )
 
 
 class UiContractTests(unittest.TestCase):
@@ -1618,7 +1795,9 @@ class RouteSmokeTests(unittest.TestCase):
         )
         self.assertIn("nav-group is-expanded", page_html)
         self.assertIn("sidebar-collapse-btn", page_html)
-        self.assertIn("is-skeleton", page_html)
+        self.assertIn("hcsc-card-placeholder", page_html)
+        self.assertIn("Last refreshed: —", page_html)
+        self.assertIn("hcsc-ou-selected-box", page_html)
         self.assertIn("hcsc-filter-row-primary", page_html)
         self.assertIn("hcsc-status-badge", page_html)
         # Page still renders shell even when analytics would fail (bootstrap present).

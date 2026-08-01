@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{{ page_title }} · {{ app_name }}{% endblock %}
 {% block head_extra %}
-<script src="{{ url_for('static', filename='js/dhis2_org_unit_picker.js') }}?v=ou-select-fix-3" defer></script>
-<script src="{{ url_for('static', filename='js/hcsc_indicator_summary.js') }}?v=hcsc-preview-ui-1" defer></script>
+<script src="{{ url_for('static', filename='js/dhis2_org_unit_picker.js') }}?v=ou-layout-stable-1" defer></script>
+<script src="{{ url_for('static', filename='js/hcsc_indicator_summary.js') }}?v=hcsc-status-copy-1" defer></script>
 {% endblock %}
 {% block content %}
 <section class="page-header page-header-compact hcsc-page-header">
@@ -89,7 +89,7 @@
 
       <div class="hcsc-filter-field hcsc-filter-selected">
         <label class="hcsc-field-label" for="hcsc-ou-selected-box">Selected Organisation Unit</label>
-        <div class="hcsc-ou-selected-box" id="hcsc-ou-selected-box" role="group" aria-label="Selected organisation unit">
+        <div class="hcsc-ou-selected-box" id="hcsc-ou-selected-box" role="group" tabindex="0" aria-label="Selected organisation unit">
           <span class="hcsc-ou-selected-text is-empty" id="hcsc-ou-chip-label">No organisation unit selected</span>
           <div class="hcsc-ou-selected-actions">
             <button type="button" class="hcsc-ou-icon-btn" id="hcsc-ou-refresh-meta" title="Refresh organisation units from DHIS2" aria-label="Refresh organisation units">↻</button>
@@ -97,10 +97,10 @@
           </div>
         </div>
         <input type="hidden" id="hcsc-ou" value="" autocomplete="off">
-        <p class="hcsc-field-error" id="hcsc-ou-error" hidden></p>
-        <p class="muted hcsc-ou-path" id="hcsc-ou-path" hidden></p>
-        <p class="muted hcsc-ou-sync" id="hcsc-ou-sync" hidden></p>
-        <button type="button" class="btn btn-sm" id="hcsc-ou-retry" title="Retry organisation unit load" hidden>Retry</button>
+        <div class="hcsc-field-feedback" id="hcsc-ou-feedback">
+          <p class="hcsc-field-error" id="hcsc-ou-error" hidden></p>
+          <button type="button" class="btn btn-sm hcsc-ou-retry-btn" id="hcsc-ou-retry" title="Retry organisation unit load" hidden>Retry</button>
+        </div>
       </div>
 
       <div class="hcsc-filter-field hcsc-filter-disagg">
@@ -126,12 +126,14 @@
     </div>
   </form>
 
-  <div class="hcsc-status-strip" id="hcsc-status-strip" aria-live="polite">
+  <div class="hcsc-status-strip" id="hcsc-status-strip" aria-live="polite" data-gen-phase="awaiting_selection">
     <div class="hcsc-status-col">
       <span class="hcsc-status-kicker">Status</span>
       <div class="hcsc-status-body">
         <span class="hcsc-status-badge" id="hcsc-status-badge">Awaiting selection</span>
         <p class="hcsc-status-value" id="hcsc-status">Select an organisation unit to continue.</p>
+        <p class="hcsc-status-meta muted" id="hcsc-status-meta" hidden></p>
+        <div class="hcsc-status-actions" id="hcsc-status-actions" hidden></div>
       </div>
     </div>
     <div class="hcsc-status-col">
@@ -149,7 +151,7 @@
     </div>
   </div>
 
-  <section class="hcsc-overview-cards" id="hcsc-cards" aria-label="Overview cards">
+  <section class="hcsc-overview-cards" id="hcsc-cards" aria-label="Overview cards" data-cards-mode="placeholder">
     <article class="hcsc-card is-blue hcsc-card-placeholder"><h3>Eligible Households</h3><p class="hcsc-card-value">—</p><p class="muted hcsc-card-foot">Last refreshed: —</p></article>
     <article class="hcsc-card is-green hcsc-card-placeholder"><h3>Approved Eligible Households</h3><p class="hcsc-card-value">—</p><p class="muted hcsc-card-foot">Last refreshed: —</p></article>
     <article class="hcsc-card is-purple hcsc-card-placeholder"><h3>Convergent Households</h3><p class="hcsc-card-value">—</p><p class="muted hcsc-card-foot">Last refreshed: —</p></article>
