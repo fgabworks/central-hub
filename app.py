@@ -127,12 +127,12 @@ from hub.dhis2_reports.routes import register_dhis2_reports_routes
 from hub.dhis2_reports.service import Dhis2ReportsService
 from hub.dhis2_reports.store import ReportsStore
 from hub.hcsc_indicators.routes import register_hcsc_indicator_routes
+from hub.hcsc_indicators.service import HcscIndicatorService
 from hub.live_data_export.demo import ensure_export_demo_table
 from hub.live_data_export.routes import register_live_data_export_routes
 from hub.live_data_export.service import LiveDataExportService
 from hub.data_explorer.routes import register_data_explorer_routes
 from hub.data_explorer.service import DataExplorerService
-from hub.hcsc_indicators.service import HcscIndicatorService
 from hub.repository_workspace.service import RepositoryWorkspaceService
 from hub.registry import load_registry
 from hub.registry.git_util import default_search_roots, find_local_checkout, slugify_repo_id
@@ -408,6 +408,11 @@ def create_app() -> Flask:
     app.config["HCSC_INDICATORS"] = HcscIndicatorService(
         client_factory=_dhis2_client_for_env,
     )
+    from hub.hcsc_indicators.progress_compare import ProgressCompareService as _ProgressCompareService
+
+    app.config["HCSC_PROGRESS_COMPARE"] = _ProgressCompareService(
+        client_factory=_dhis2_client_for_env,
+    )
     register_hcsc_indicator_routes(app)
 
     @app.context_processor
@@ -575,6 +580,12 @@ def create_app() -> Flask:
                 "label": "HCSC–RF",
                 "icon": "▣",
                 "active_prefix": "dhis2_hcsc",
+            },
+            {
+                "endpoint": "dhis2_hcsc_progress_compare",
+                "label": "Progress Compare",
+                "icon": "⇄",
+                "active_prefix": "dhis2_hcsc_progress",
             },
         ]
         ai_nav = [

@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}{{ page_title }} · {{ app_name }}{% endblock %}
+{% block head_extra %}
+<script src="{{ url_for('static', filename='js/dhis2_org_unit_picker.js') }}?v=ou-sync-immediate-1" defer></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/hcsc_progress_compare.css') }}?v=pnc-1">
+<script src="{{ url_for('static', filename='js/hcsc_progress_compare.js') }}?v=pnc-1" defer></script>
+{% endblock %}
+{% block content %}
+<script type="application/json" id="pnc-bootstrap">{{ bootstrap | tojson }}</script>
+
+<section class="pnc-page" id="pnc-root"
+  data-compare-url="{{ url_for('api_hcsc_progress_compare_run') }}"
+  data-snapshot-url="{{ url_for('api_hcsc_progress_compare_snapshot') }}"
+  data-export-url="{{ url_for('api_hcsc_progress_compare_export') }}"
+  data-org-units-url="{{ url_for('api_dhis2_report_org_units') }}"
+  data-periods-url="{{ url_for('api_dhis2_report_periods') }}">
+
+  <div class="pnc-crumb muted">Reports &amp; Comparisons › Compare with DHIS2 Report</div>
+  <header class="pnc-header">
+    <div>
+      <h1>{{ page_title }} <span class="pnc-badge">DHIS2 Standard Report</span></h1>
+      <p class="muted">{{ bootstrap.page_subtitle }}</p>
+    </div>
+    <div class="pnc-filters">
+      <label>Environment
+        <select id="pnc-env"><option value="live">Live</option><option value="stage">Stage</option></select>
+      </label>
+      <label>Period
+        <select id="pnc-period"></select>
+      </label>
+      <div class="pnc-ou" id="pnc-ou-block">
+        <label>Organisation Unit
+          <div class="pnc-ou-row">
+            <select id="pnc-ou-region" class="pnc-ou-select" data-ou-level="0"><option value="">Region…</option></select>
+            <select id="pnc-ou-province" class="pnc-ou-select" data-ou-level="1" disabled><option value="">Province…</option></select>
+            <select id="pnc-ou-municipality" class="pnc-ou-select" data-ou-level="2" disabled><option value="">Municipality…</option></select>
+            <select id="pnc-ou-barangay" class="pnc-ou-select" data-ou-level="3" disabled><option value="">Barangay…</option></select>
+          </div>
+          <input type="search" id="pnc-ou-search" placeholder="Search OU…" autocomplete="off">
+          <div id="pnc-ou-search-results" hidden></div>
+          <input type="hidden" id="pnc-ou" value="">
+          <span class="muted" id="pnc-ou-path"></span>
+          <p class="pnc-error" id="pnc-ou-error" hidden></p>
+        </label>
+      </div>
+      <button type="button" class="btn btn-primary" id="pnc-generate" disabled>Generate Comparison</button>
+    </div>
+  </header>
+
+  <nav class="pnc-tabs" role="tablist">
+    <button type="button" class="pnc-tab is-active" data-tab="overview">Overview</button>
+    <button type="button" class="pnc-tab" data-tab="indicators">Indicator Comparison</button>
+    <button type="button" class="pnc-tab" data-tab="diagnostics">Diagnostics</button>
+    <button type="button" class="pnc-tab" data-tab="evidence">Evidence &amp; Lineage</button>
+    <button type="button" class="pnc-tab" data-tab="snapshot">Report Snapshot</button>
+  </nav>
+
+  <div class="pnc-status-bar">
+    <span id="pnc-last">Last compared: —</span>
+    <details class="pnc-export-menu">
+      <summary class="btn btn-sm">Export Comparison</summary>
+      <div class="pnc-export-panel">
+        <button type="button" data-export="csv">CSV</button>
+        <button type="button" data-export="xlsx">XLSX</button>
+        <button type="button" data-export="json">JSON evidence</button>
+      </div>
+    </details>
+  </div>
+  <p class="pnc-error" id="pnc-error" hidden></p>
+
+  <section class="pnc-panel is-active" data-panel="overview">
+    <div class="pnc-cards" id="pnc-cards">
+      <article class="pnc-card"><h3>Overall Match Status</h3><p class="muted">Generate a comparison to begin.</p></article>
+      <article class="pnc-card"><h3>Indicators Compared</h3><p class="muted">—</p></article>
+      <article class="pnc-card"><h3>Population Compatibility</h3><p class="muted">—</p></article>
+      <article class="pnc-card"><h3>Report Generation / Sources</h3><p class="muted">UID {{ bootstrap.report.uid }}</p></article>
+    </div>
+    <div class="pnc-highlights" id="pnc-highlights" hidden>
+      <div><h3>DHIS2 Report Output <span class="pnc-badge">DHIS2</span></h3><div id="pnc-hl-dhis2" class="pnc-hl-row"></div></div>
+      <div><h3>Central Hub HCSC–RF Result <span class="pnc-badge pnc-badge-blue">HCSC-RF</span></h3><div id="pnc-hl-hcsc" class="pnc-hl-row"></div></div>
+    </div>
+  </section>
+
+  <section class="pnc-panel" data-panel="indicators" hidden>
+    <div class="pnc-table-wrap">
+      <table class="pnc-table" id="pnc-table">
+        <thead>
+          <tr>
+            <th>Indicator</th>
+            <th colspan="4">DHIS2</th>
+            <th>Status</th>
+            <th colspan="4">HCSC–RF</th>
+            <th colspan="3">Difference</th>
+          </tr>
+          <tr class="pnc-subhead">
+            <th></th>
+            <th>Num</th><th>Den</th><th>Result</th><th>UID</th>
+            <th></th>
+            <th>Num</th><th>Den</th><th>Result</th><th>UID</th>
+            <th>Result</th><th>Num</th><th>Den</th>
+          </tr>
+        </thead>
+        <tbody id="pnc-tbody"><tr><td colspan="13" class="muted">No comparison yet.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="pnc-panel" data-panel="diagnostics" hidden>
+    <div id="pnc-diagnostics" class="pnc-pre">Generate a comparison to load diagnostics.</div>
+    <aside class="pnc-drawer" id="pnc-drawer" hidden>
+      <header><strong id="pnc-drawer-title">Indicator diagnostics</strong>
+        <button type="button" class="btn btn-sm" id="pnc-drawer-close">Close</button></header>
+      <pre id="pnc-drawer-body" class="pnc-pre"></pre>
+    </aside>
+  </section>
+
+  <section class="pnc-panel" data-panel="evidence" hidden>
+    <div id="pnc-evidence" class="pnc-pre"></div>
+  </section>
+
+  <section class="pnc-panel" data-panel="snapshot" hidden>
+    <p class="muted">Sanitized design HTML (scripts/handlers removed). Not executed.</p>
+    <button type="button" class="btn btn-sm" id="pnc-load-snapshot">Load Snapshot</button>
+    <div id="pnc-snapshot" class="pnc-snapshot"></div>
+  </section>
+</section>
+{% endblock %}

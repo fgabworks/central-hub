@@ -1,0 +1,70 @@
+/* Progress NPMO comparison — layout inspired by comparison mockup */
+.pnc-page { max-width: 1280px; color: #e8eef7; }
+.pnc-page .muted { color: #9aa8bc; }
+.pnc-crumb { font-size: 0.82rem; margin-bottom: 0.35rem; }
+.pnc-header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; margin-bottom: 0.75rem; }
+.pnc-header h1 { margin: 0; font-size: 1.35rem; color: #f4f7fb; }
+.pnc-badge { display: inline-block; font-size: 0.72rem; padding: 0.15rem 0.45rem; border-radius: 999px; background: #6b4eff; color: #fff; vertical-align: middle; }
+.pnc-badge-blue { background: #2f6fed; }
+.pnc-filters { display: flex; flex-wrap: wrap; gap: 0.55rem; align-items: end; }
+.pnc-filters label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.8rem; color: #c5d0de; }
+.pnc-filters select, .pnc-filters input, .pnc-ou-select {
+  background: #1b2433; color: #e8eef7; border: 1px solid #334155; border-radius: 4px;
+  padding: 0.35rem 0.45rem; font: inherit;
+}
+.pnc-ou-row { display: grid; grid-template-columns: repeat(2, minmax(110px, 1fr)); gap: 0.35rem; }
+.pnc-tabs { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.75rem 0; }
+.pnc-tab {
+  border: 1px solid #334155; background: #151c28; color: #c5d0de;
+  padding: 0.35rem 0.7rem; border-radius: 4px; cursor: pointer; font: inherit;
+}
+.pnc-tab.is-active { background: #2f6fed; border-color: #2f6fed; color: #fff; }
+.pnc-status-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; color: #9aa8bc; font-size: 0.85rem; }
+.pnc-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.65rem; }
+.pnc-card {
+  background: #151c28; border: 1px solid #2a3548; border-radius: 8px; padding: 0.75rem;
+}
+.pnc-card h3 { margin: 0 0 0.35rem; font-size: 0.9rem; color: #c5d0de; }
+.pnc-card .pnc-big { font-size: 1.4rem; font-weight: 700; color: #f4f7fb; margin: 0.2rem 0; }
+.pnc-highlights { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 0.85rem; }
+.pnc-hl-row { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+.pnc-hl-item {
+  background: #1b2433; border: 1px solid #2a3548; border-radius: 6px; padding: 0.45rem 0.55rem; min-width: 110px;
+}
+.pnc-hl-item strong { display: block; font-size: 0.78rem; color: #9aa8bc; font-weight: 500; }
+.pnc-table-wrap { overflow: auto; border: 1px solid #2a3548; border-radius: 6px; }
+.pnc-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; background: #121826; }
+.pnc-table th, .pnc-table td { border-bottom: 1px solid #243044; padding: 0.35rem 0.4rem; text-align: left; white-space: nowrap; }
+.pnc-table th { background: #1b2433; color: #c5d0de; position: sticky; top: 0; }
+.pnc-subhead th { font-weight: 500; font-size: 0.72rem; color: #9aa8bc; }
+.pnc-status-pill {
+  display: inline-block; padding: 0.12rem 0.4rem; border-radius: 999px; font-size: 0.72rem;
+  background: #1f3d2f; color: #7ddea0;
+}
+.pnc-status-pill.is-diff { background: #3d2a1f; color: #f0b27a; }
+.pnc-status-pill.is-bad { background: #3d1f28; color: #f0a0a8; }
+.pnc-status-pill.is-muted { background: #2a3140; color: #9aa8bc; }
+.pnc-uid { font-family: ui-monospace, monospace; font-size: 0.72rem; cursor: pointer; color: #8eb6ff; }
+.pnc-pre {
+  background: #121826; border: 1px solid #2a3548; border-radius: 6px;
+  padding: 0.75rem; overflow: auto; max-height: 55vh; white-space: pre-wrap; font-size: 0.78rem; color: #d5deea;
+}
+.pnc-snapshot { margin-top: 0.5rem; max-height: 60vh; overflow: auto; background: #fff; color: #111; padding: 0.5rem; border-radius: 4px; }
+.pnc-error { color: #f0a0a8; }
+.pnc-export-menu { position: relative; }
+.pnc-export-menu summary { list-style: none; cursor: pointer; }
+.pnc-export-panel { position: absolute; right: 0; background: #1b2433; border: 1px solid #334155; border-radius: 4px; padding: 0.35rem; z-index: 5; }
+.pnc-export-panel button { display: block; width: 100%; text-align: left; border: 0; background: transparent; color: #e8eef7; padding: 0.3rem 0.5rem; cursor: pointer; font: inherit; }
+.pnc-drawer {
+  position: fixed; right: 0; top: 0; bottom: 0; width: min(420px, 92vw);
+  background: #151c28; border-left: 1px solid #334155; padding: 0.75rem; z-index: 40; overflow: auto;
+}
+.pnc-drawer header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+body.theme-work .pnc-page, body.theme-personal .pnc-page {
+  background: linear-gradient(180deg, #0f141d 0%, #121826 40%);
+  margin: -0.5rem -0.5rem 0; padding: 1rem 1rem 2rem; border-radius: 8px;
+}
+@media (max-width: 900px) {
+  .pnc-highlights { grid-template-columns: 1fr; }
+  .pnc-header { flex-direction: column; }
+}

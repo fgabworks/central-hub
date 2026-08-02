@@ -4,7 +4,17 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**Data Explorer Phase 1 (2026-08-02)**
+**Progress NPMO report comparison (2026-08-02)**
+
+Read-only compare page `/dhis2/hcsc-indicators/compare/progress-npmo` for DHIS2 report
+**Progress of Data Collection and Validation-(NPMO)** UID **`IKlKwg7ZS07`** vs HCSC–RF.
+Structured analytics extraction (no HTML scrape/OCR). Verified mappings: eligible +
+approved eligible PIs; Partial CLIENT% vs IND `StDJxe7tIiS`; other Progress columns
+Unresolved/Not Comparable. Config `config/hcsc_progress_comparison.yaml`; module
+`hub/hcsc_indicators/progress_compare.py`. Mockup UID `plQxuUO8XJd1` not found.
+Focused tests: `tests/test_hcsc_progress_compare.py`.
+
+Prior: **Data Explorer Phase 1 (2026-08-02)**
 
 New Work-nav module `/data-explorer` — Navicat-like **read-only** browse of configured
 SQL RO connections. Discovers schemas/tables/views/matviews + columns/keys/indexes;

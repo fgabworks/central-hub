@@ -1,0 +1,216 @@
+# Progress of Data Collection and Validation-(NPMO) — comparison registry
+# Verified against REPORT_TEMPLATE HTML + synced design IKlKwg7ZS07 (Stage cache).
+# Do not invent UIDs. Mockup UID plQxuUO8XJd1 was NOT found in hub/synced reports.
+
+report:
+  key: progress_data_collection_validation_npmo
+  display_name: "Progress of Data Collection and Validation – NPMO"
+  dhis2_report_name: "Progress of Data Collection and Validation-(NPMO)"
+  dhis2_report_uid: IKlKwg7ZS07
+  related_uids:
+    - XwX7F69Q1fZ  # Progress of Data Collection and Validation (non-NPMO twin)
+    - XZ5mRQnr9MA  # All Municipalities (NPMO) — shorter dx set
+  owner: DHIS2 Standard Report (NPMO design)
+  repository_evidence:
+    - "c:/PMNP/reports/REPORT_TEMPLATE/Progress of Data Collection and Validation-(NPMO).html"
+    - "data/dhis2_reports.db synced_standard_reports uid=IKlKwg7ZS07 (stage)"
+  extraction_method: structured_analytics
+  html_parse_fallback: false
+  report_version: "IKlKwg7ZS07:design-2026-07-26"
+  analytics:
+    endpoint: /api/analytics.json
+    method: GET
+    period_style: quarter_months  # YYYYQn → YYYYMM;YYYYMM;YYYYMM (matches report JS)
+    ou_filter: selected_org_unit
+    evidence_function: "analyticsQuery / fetchDataValidationReport"
+    evidence_lines: "1539-1568, 1940-2112 (REPORT_TEMPLATE NPMO HTML)"
+
+# Indicators comparable at selected-OU summary scope (not child rank/MIN/MAX table).
+indicators:
+  - key: total_households_registered
+    report_label: Total Households Registered
+    report_section: summary
+    result_type: count
+    dhis2_source_type: PI
+    dhis2_uid: mRQ1mcOrUER
+    numerator: null
+    denominator: null
+    population: Registered households in selected OU
+    filters: Analytics pe + ou from report selections
+    period_scope: selected_quarter_months
+    ou_scope: selected_org_unit
+    rounding: integer locale format (report formatNumber)
+    hcsc_indicator_key: null
+    hcsc_source_uid: null
+    mapping_status: Unresolved
+    evidence: "DX_TOTAL_HHS = mRQ1mcOrUER; STATIC_SINGLE_OU map; HTML th Total Households Registered"
+    notes: No matching HCSC–RF registry key for mRQ1mcOrUER — do not invent.
+
+  - key: eligible_households_current
+    report_label: No. of Eligible HHs current quarter
+    report_section: summary
+    result_type: count
+    dhis2_source_type: PI
+    dhis2_uid: fxmvSiKfEpn
+    numerator: null
+    denominator: null
+    population: Eligible HH (members <5 / PW / PPW per PI)
+    filters: pe + ou
+    period_scope: selected_quarter_months
+    ou_scope: selected_org_unit
+    rounding: integer
+    hcsc_indicator_key: eligible_households
+    hcsc_source_uid: fxmvSiKfEpn
+    mapping_status: Verified
+    evidence: "DX_ELIGIBLE_HHS; Eligible_Households; config/hcsc_indicators.yaml eligible_households"
+
+  - key: approved_eligible_households
+    report_label: Approved Eligible HHs Interview
+    report_section: summary
+    result_type: count
+    dhis2_source_type: PI
+    dhis2_uid: BSqDSIpHhoT
+    numerator: null
+    denominator: null
+    population: Eligible HH with completed/approved interview (PI filter)
+    filters: pe + ou
+    period_scope: selected_quarter_months
+    ou_scope: selected_org_unit
+    rounding: integer
+    hcsc_indicator_key: approved_eligible_households
+    hcsc_source_uid: BSqDSIpHhoT
+    mapping_status: Verified
+    evidence: "DX_APPROVED_HHS; Approved_Eligible_Households; hcsc_indicators.yaml approved_eligible_households"
+
+  - key: percentage_data_validated
+    report_label: Percentage of Data Validated
+    report_section: summary
+    result_type: percentage
+    dhis2_source_type: CLIENT
+    dhis2_uid: null
+    numerator:
+      label: Approved Eligible HHs Interview
+      type: PI
+      uid: BSqDSIpHhoT
+    denominator:
+      label: Eligible HHs current quarter
+      type: PI
+      uid: fxmvSiKfEpn
+    population: Same as eligible/approved PIs
+    filters: pe + ou; CLIENT (approved/eligible)*100
+    period_scope: selected_quarter_months
+    ou_scope: selected_org_unit
+    rounding: "toFixed(2) percent (formatPercentage)"
+    hcsc_indicator_key: completion_validated_eligible_rate
+    hcsc_source_uid: StDJxe7tIiS
+    mapping_status: Partial
+    evidence: "percentageValidated = totalApproved/totalEligible*100 (lines ~2111-2112); HCSC IND StDJxe7tIiS ← BSqDSIpHhoT/fxmvSiKfEpn"
+    notes: "Report uses CLIENT transform; HCSC uses DHIS2 indicator StDJxe7tIiS. Same N/D UIDs — Expected Logic Difference if IND≠CLIENT."
+
+  - key: percentage_coverage
+    report_label: Percentage of Coverage
+    report_section: summary
+    result_type: percentage
+    dhis2_source_type: CLIENT
+    dhis2_uid: null
+    numerator:
+      label: Approved Eligible HHs Interview
+      type: PI
+      uid: BSqDSIpHhoT
+    denominator:
+      label: Eligible HH previous quarter
+      type: PI
+      uid: fxmvSiKfEpn
+      period_offset: previous_quarter
+    population: Prior-quarter eligible vs current approved (Q3 uses validated%)
+    filters: "Q3 → same as percentageValidated; else approved/prevEligible"
+    period_scope: selected_and_previous_quarter
+    ou_scope: selected_org_unit
+    rounding: toFixed(2)
+    hcsc_indicator_key: null
+    hcsc_source_uid: null
+    mapping_status: Not Comparable
+    evidence: "percentCoverage logic lines ~2174-2196; no HCSC registry twin for prev-quarter coverage"
+    notes: Not mapped to an HCSC–RF indicator key.
+
+  - key: prev_eligible_households
+    report_label: No. of eligible HH previous quarter
+    report_section: summary
+    result_type: count
+    dhis2_source_type: PI
+    dhis2_uid: fxmvSiKfEpn
+    numerator: null
+    denominator: null
+    population: Eligible HH prior quarter
+    filters: pe=previous_quarter_months + ou
+    period_scope: previous_quarter_months
+    ou_scope: selected_org_unit
+    rounding: integer
+    hcsc_indicator_key: null
+    hcsc_source_uid: null
+    mapping_status: Partial
+    evidence: "Prev_Eligible_Households from analytics pe=prev (lines ~2085-2090)"
+    notes: Same PI as eligible_households but different period — no separate HCSC key.
+
+  - key: wra_only_households
+    report_label: No. of WRA-only HHs
+    report_section: summary
+    result_type: count
+    dhis2_source_type: PI
+    dhis2_uid: YaQinfH8QpC
+    hcsc_indicator_key: null
+    hcsc_source_uid: null
+    mapping_status: Unresolved
+    evidence: "DX_WRA_ONLY_HHS = YaQinfH8QpC"
+    notes: Not in HCSC–RF registry.
+
+  - key: approved_wra_only_households
+    report_label: No. of Approved WRA-only HHs
+    report_section: summary
+    result_type: count
+    dhis2_source_type: PI
+    dhis2_uid: CgVXYgfxnUP
+    hcsc_indicator_key: null
+    hcsc_source_uid: null
+    mapping_status: Unresolved
+    evidence: "DX_APPROVED_WRA_ONLY_HHS = CgVXYgfxnUP"
+
+  - key: non_eligible_households
+    report_label: No. of Non-Eligible HHs
+    report_section: summary
+    result_type: count
+    dhis2_source_type: PI
+    dhis2_uid: WxYgNXrRLIN
+    hcsc_indicator_key: null
+    hcsc_source_uid: null
+    mapping_status: Unresolved
+    evidence: "DX_NON_ELIGIBLE_HHS = WxYgNXrRLIN"
+
+  - key: approved_non_eligible_households
+    report_label: No. of Approved Non-Eligible HHs
+    report_section: summary
+    result_type: count
+    dhis2_source_type: PI
+    dhis2_uid: kr2A9wtz9kJ
+    hcsc_indicator_key: null
+    hcsc_source_uid: null
+    mapping_status: Unresolved
+    evidence: "DX_APPROVED_NON_ELIGIBLE_HHS = kr2A9wtz9kJ"
+
+  - key: estimated_households
+    report_label: Estimated Households
+    report_section: summary
+    result_type: count
+    dhis2_source_type: unresolved
+    dhis2_uid: null
+    hcsc_indicator_key: null
+    hcsc_source_uid: null
+    mapping_status: Unresolved
+    evidence: "estimatedHHs = 0; TODO Confirm data source (lines ~2104-2105, HTML tooltip)"
+    notes: Report leaves source unresolved — hub must not invent.
+
+not_comparable:
+  - Rank Based on Coverage
+  - Rank Based on Validation
+  - MIN / MAX / MEDIAN child validation rates
+  - Child municipality over/under threshold counts

@@ -9,12 +9,16 @@ from flask import Flask, jsonify, render_template, request
 from hub.audit import actions as audit_actions
 from hub.dhis2_reports.security import ReportSecurityError, redact_report_detail
 from hub.hcsc_indicators.service import HcscIndicatorService
+from hub.hcsc_indicators.progress_compare import ProgressCompareService
 from hub.jobs.auth import current_actor
 
 
 def register_hcsc_indicator_routes(app: Flask) -> None:
     def _svc() -> HcscIndicatorService:
         return app.config["HCSC_INDICATORS"]
+
+    def _progress() -> ProgressCompareService:
+        return app.config["HCSC_PROGRESS_COMPARE"]
 
     def _audit(action: str, *, target: str, detail: str, ok: bool = True) -> None:
         app.config["AUDIT"].append(
@@ -37,6 +41,8 @@ def register_hcsc_indicator_routes(app: Flask) -> None:
             "invalid_section": 400,
             "dhis2_unconfigured": 400,
             "dhis2_error": 502,
+            "duplicate_request": 409,
+            "forbidden": 403,
         }.get(code, 400)
         return jsonify({"ok": False, "error": str(exc), "code": code}), http
 
@@ -251,6 +257,81 @@ def register_hcsc_indicator_routes(app: Flask) -> None:
             return jsonify(payload)
         except ValueError as exc:
             return jsonify({"ok": False, "error": str(exc)}), 400
+
+    @app.get("/dhis2/hcsc-indicators/compare/progress-npmo")
+    def dhis2_hcsc_progress_compare():
+        boot = _progress().bootstrap()
+        _audit(
+            getattr(audit_actions, "HCSC_PROGRESS_COMPARE_VIEW", "HCSC_PROGRESS_COMPARE_VIEW"),
+            target="progress-npmo-compare",
+            detail="Opened Progress NPMO comparison",
+        )
+        return render_template(
+            "hcsc_progress_compare.html",
+            page_title=boot["page_title"],
+            bootstrap=boot,
+            dhis2_instance=app.config.get("DHIS2_INSTANCE"),
+        )
+
+    @app.get("/api/dhis2/hcsc-indicators/compare/progress-npmo/bootstrap")
+    def api_hcsc_progress_compare_bootstrap():
+        return jsonify(_progress().bootstrap())
+
+    @app.post("/api/dhis2/hcsc-indicators/compare/progress-npmo")
+    def api_hcsc_progress_compare_run():
+        data = request.get_json(silent=True) or {}
+        try:
+            payload = _progress().compare(
+                environment=str(data.get("environment") or ""),
+                period=str(data.get("period") or ""),
+                org_unit=str(data.get("orgUnit") or data.get("org_unit") or ""),
+                force_refresh=bool(data.get("fresh") or data.get("force")),
+                request_id=str(data.get("request_id") or ""),
+            )
+            _audit(
+                getattr(audit_actions, "HCSC_PROGRESS_COMPARE_RUN", "HCSC_PROGRESS_COMPARE_RUN"),
+                target=f"progress-npmo:{data.get('environment')}:{data.get('period')}",
+                detail=(
+                    f"overall={payload.get('overall', {}).get('status')} "
+                    f"rows={payload.get('overall', {}).get('total')}"
+                ),
+            )
+            return jsonify(payload)
+        except ReportSecurityError as exc:
+            return _json_error(exc)
+
+    @app.get("/api/dhis2/hcsc-indicators/compare/progress-npmo/snapshot")
+    def api_hcsc_progress_compare_snapshot():
+        env = request.args.get("environment") or "stage"
+        try:
+            return jsonify(_progress().snapshot_html(environment=env))
+        except ReportSecurityError as exc:
+            return _json_error(exc)
+
+    @app.get("/api/dhis2/hcsc-indicators/compare/progress-npmo/export")
+    def api_hcsc_progress_compare_export():
+        from flask import Response
+
+        try:
+            body, filename, mime = _progress().export(
+                environment=str(request.args.get("environment") or ""),
+                period=str(request.args.get("period") or ""),
+                org_unit=str(request.args.get("orgUnit") or request.args.get("org_unit") or ""),
+                format=str(request.args.get("format") or "json"),
+                force_refresh=request.args.get("fresh") in {"1", "true", "yes"},
+            )
+            _audit(
+                getattr(audit_actions, "HCSC_PROGRESS_COMPARE_EXPORT", "HCSC_PROGRESS_COMPARE_EXPORT"),
+                target=filename,
+                detail=f"format={request.args.get('format')}",
+            )
+            return Response(
+                body,
+                mimetype=mime,
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            )
+        except ReportSecurityError as exc:
+            return _json_error(exc)
 
     # Dynamic detail route last so it cannot shadow overview/report/category/validation.
     @app.get("/api/dhis2/hcsc-indicators/<key>")
