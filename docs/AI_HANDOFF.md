@@ -4,7 +4,19 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**Unified Data Explorer (2026-08-02)**
+**Central Hub Process Manager (2026-08-02)**
+
+Extended Repository Workspace process-control primitives into the existing `/health`
+surface. Central Hub now has an atomic PID/identity lock, stale/invalid lock cleanup,
+duplicate-start refusal, owner-only Stop Stale / typed Stop All / Restart Cleanly,
+graceful-then-force exact-PID stopping, port-release verification, detached fixed-argv
+restart, `/api/healthz` validation, new-PID status, and append-only audit. Verified
+end to end: a second startup exited 2, clean restart changed PID, released port 8080,
+returned one listener, and passed health. Focused tests:
+`tests/test_central_hub_process_manager.py`, `tests/test_repository_processes.py`,
+`tests/test_process_polling.py`, and `tests/test_perf_navigation.py`.
+
+Prior: **Unified Data Explorer (2026-08-02)**
 
 Merged Live Data Export into `/data-explorer` with tabs Browse Data / Schema /
 Relationships / Lineage / Export / Export Jobs / History. The duplicate Work sidebar
@@ -12,7 +24,14 @@ item is removed; `/live-data-export` redirects to `?tab=export`; legacy export A
 compatibility aliases for the new `/api/data-explorer/exports*` and `export-jobs*`
 routes. `DataExplorerService` owns the approved-source registry, shared
 `ExplorerStore`, export jobs/history/presets, shared SELECT/security primitives, and
-the shared file export engine. Existing
+the shared file export engine. The environment-isolated SQL connection registry is
+shared with SQL Workspace. Optional Stage/Live SSH forwarders start lazily from
+environment-only settings, require a trusted host key, bind to a dynamic loopback
+port, and stop with the application. PostgreSQL metadata enrichment is catalog-batched
+rather than per-relation, reducing a 390-relation Live inventory from more than 1,500
+SSH round trips to bounded read-only catalog queries. A Live tunnel, connection test,
+and Data Explorer tree response were verified locally on 2026-08-02; no database write
+was performed. Existing
 discovery browsing and allowlisted export behavior remain SELECT-only, masked,
 row-capped, and Stage/Live isolated. Database/tunnel failures are normalized to safe
 JSON API errors so the browser never exposes an HTML/JSON parser failure. Focused tests: `tests/test_data_explorer.py` and

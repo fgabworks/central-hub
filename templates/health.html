@@ -85,6 +85,41 @@
   </div>
 </section>
 
+<section class="panel" data-central-hub-processes="1">
+  <div class="panel-header">
+    <div>
+      <h2>Central Hub Process Manager</h2>
+      <p class="muted">Verified instances only. Generic Python processes are never targeted.</p>
+    </div>
+    <div class="toolbar-row">
+      <button class="btn btn-sm" type="button" id="hub-stop-stale">Stop Stale Instances</button>
+      <button class="btn btn-sm" type="button" id="hub-restart-clean">Restart Cleanly</button>
+      <button class="btn btn-sm btn-danger" type="button" id="hub-stop-all">Stop All Central Hub Instances</button>
+    </div>
+  </div>
+  <p class="muted" id="hub-process-action-status" style="padding:0 1.1rem" aria-live="polite">
+    Inspecting the PID registry, command identity, and port ownershipâ€¦
+  </p>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>PID</th>
+          <th>Status</th>
+          <th>Port</th>
+          <th>Registered</th>
+          <th>Owns port</th>
+          <th>Verification</th>
+          <th>Command</th>
+        </tr>
+      </thead>
+      <tbody id="hub-processes-body">
+        <tr class="empty-row"><td colspan="7">Scanning verified Central Hub instancesâ€¦</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
 <section class="panel"{% if processes_async|default(false) %} data-processes-async="1"{% endif %}>
   <div class="panel-header">
     <h2>Local Process Monitor</h2>

@@ -28,7 +28,7 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | DHIS2 Reports | `/dhis2/reports` — Phase 1 Standard Report Manager: sync Stage/Live `/api/reports` metadata cache, filters, View / Open in DHIS2 / HTML source / Download / Refresh; period+OU controls; iframe embed with Open-in-DHIS2 fallback. Catalog shortcuts remain for repository/static HTML (`hub/dhis2_reports/`) |
 | Central Hub HCSC–RF | `/dhis2/hcsc-indicators` — Phase 0–3 registry + batched Overview/report/category + Compare Sources (`hub/hcsc_indicators/`); quarters **2025Q3–2026Q4**; OU cascade via env-isolated SQLite cache + DHIS2 GET refresh (`hub/dhis2_reports/org_unit_store.py`); optional **Geographic Breakdown** (batched multi-OU analytics below selected level; parent Selected Area Summary retained); Population Filter = All Households; client generation state machine (fresh/cached/stale/slow/timeout; animate only while request ID active); no formula engine |
 | Progress NPMO Compare | `/dhis2/hcsc-indicators/compare/progress-npmo` — DHIS2 report `IKlKwg7ZS07` vs HCSC–RF via structured analytics (`hub/hcsc_indicators/progress_compare.py`, `config/hcsc_progress_comparison.yaml`) |
-| Health probes | Parallel checks; states: Healthy / Unreachable / Not Cloned / Disabled |
+| Health probes | Parallel checks; states: Healthy / Unreachable / Not Cloned / Disabled; owner-gated Central Hub Process Manager |
 | Live Processing | `live-processing` (API GET-only) + `live-processing-local` (path + git_url) |
 | Data-Script / Report Template | Registered with GitHub URLs; local path optional (`DATA_SCRIPT_PATH`, `REPORT_TEMPLATE_PATH`) |
 | Workspaces | Personal / Work switcher (cookie + `hub_prefs`); System nav always visible |
@@ -38,7 +38,7 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Email Center | Shared Gmail service; accounts assigned Personal/Work; readonly OAuth |
 | Calendar Center | Shared Calendar service + FullCalendar grid (month/week/day) + agenda/upcoming |
 | Google Connections | System page to connect/assign/enable Gmail+Calendar scopes |
-| SQL Workspace | Read-only query library/runner (`/sql`); sqlglot allowlist; Live warning; layout `minmax(260px,320px) | 1fr` under shell |
+| SQL Workspace | Read-only query library/runner (`/sql`); sqlglot allowlist; optional trusted-host-key Stage/Live SSH tunnels; Live warning; layout `minmax(260px,320px) | 1fr` under shell |
 | Data Explorer | `/data-explorer` — unified RO schema/data/relationship/lineage browser plus allowlisted CSV/XLSX/csv.gz exports, large jobs, presets, history, masking, and audit. `/live-data-export` redirects to `?tab=export`; one runtime service/store/export engine with shared SELECT/security primitives; no ad-hoc SQL or arbitrary table input; Stage/Live remain isolated |
 | AI Assistant Center | Aira at `/personal/aira`; Okarun at `/work/okarun` (history/management); full-height right dock + fixed composer via topbar + activity rail (`hub/agent_center/dock.py`); Find/Ask/Plan/Review; Codex CLI (Okarun MVP), Claude Code, Cursor, Grok, OpenAI |
 | Workspace Console | Bottom panel under main content only (`left: var(--sidebar-w)`); bounded height; Ctrl+J; collapsed by default |
@@ -153,6 +153,16 @@ Stop only a verified PID tree; Medium external requires typed `STOP PROCESS <PID
 Low is view-only. Start blocks on conflicts / occupied fixed ports and points users
 to Repository Processes (no silent fixed-port switching). Health → Local Process
 Monitor is a read-only cross-repo summary.
+
+**Central Hub Process Manager** extends the same verified-PID, port, graceful-stop,
+and audit patterns on `/health`. `data/central_hub_process/instance.lock.json` is an
+atomic PID/identity registry: startup removes invalid/dead locks, refuses another
+verified active instance, and releases its own token-matched lock on normal shutdown.
+Controls are owner-only: Stop Stale Instances, typed-confirmed Stop All Central Hub
+Instances, and Restart Cleanly. Clean restart uses a detached fixed-argv controller,
+revalidates each PID identity, waits before force-stop, confirms port release, starts
+one absolute `app.py`, probes `/api/healthz`, and records the new listener PID. Generic
+Python processes and relative unregistered `app.py` commands are never targets.
 UI: `/repositories/<id>/settings#run-profiles`, `/run`, `/logs`. State/logs under
 `data/repository_runs/`. Live / write-capable live profiles require
 `REPO_WS_ALLOW_LIVE_RUNS` + confirm. No unrestricted terminal; stop/restart only
@@ -226,6 +236,12 @@ refresh; no push; no create/update/delete/RSVP; **no automatic agent access**.
 
 Local store: `data/sql_workspace.db`. Connections: `config/sql_connections.yaml` + env secrets (`.env.example`).
 Safety: sqlglot AST validation (not regex-only); SELECT / read-only WITH / EXPLAIN only; one statement; RO transaction + statement timeout + row cap; credentials never in UI/logs; Live connections show a strong warning.
+
+Stage and Live profiles can opt into automatic SSH forwarding through
+`ssh_tunnel_env_prefix` in `config/sql_connections.yaml` and matching
+`<PREFIX>_SSH_*` environment settings. Forwarders start lazily on loopback with a
+dynamic local port, require a trusted/pinned SSH host key, remain isolated per
+environment, and are shared by SQL Workspace and Data Explorer.
 
 ## Data Explorer
 

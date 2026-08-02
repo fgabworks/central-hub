@@ -143,6 +143,116 @@
       });
   }
 
+  function refreshCentralHubProcesses() {
+    var tbody = qs("#hub-processes-body");
+    if (!tbody) return Promise.resolve(null);
+    return fetch("/api/health/central-hub-processes", { credentials: "same-origin" })
+      .then(function (response) { return response.json(); })
+      .then(function (data) {
+        var rows = (data && data.instances) || [];
+        if (!rows.length) {
+          tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No verified Central Hub instance found.</td></tr>';
+          return data;
+        }
+        tbody.innerHTML = rows.map(function (item) {
+          return (
+            "<tr><td class=\"mono\">" + escapeHtml(item.pid) +
+            "</td><td>" + escapeHtml(item.status) +
+            "</td><td class=\"mono\">" + escapeHtml(item.port) +
+            "</td><td>" + (item.registered ? "Yes" : "No") +
+            "</td><td>" + (item.owns_port ? "Yes" : "No") +
+            "</td><td class=\"muted\">" + escapeHtml((item.verification_reasons || []).join(", ")) +
+            "</td><td class=\"muted mono\">" + escapeHtml(item.command_redacted) + "</td></tr>"
+          );
+        }).join("");
+        var status = qs("#hub-process-action-status");
+        if (status) status.textContent = rows.length + " verified instance(s); current PID " + (data.current_pid || "unavailable") + ".";
+        return data;
+      })
+      .catch(function () {
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Central Hub process scan unavailable.</td></tr>';
+        return null;
+      });
+  }
+
+  function postHubProcessAction(path, payload) {
+    return fetch(path, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload || {}),
+    }).then(function (response) {
+      return response.json().then(function (data) {
+        if (!response.ok) throw new Error((data && data.error) || "Process action failed.");
+        return data;
+      });
+    });
+  }
+
+  function pollHubAction(actionId, attempts) {
+    var status = qs("#hub-process-action-status");
+    if (!attempts) return Promise.resolve(null);
+    return fetch("/api/health/central-hub-processes/actions/" + encodeURIComponent(actionId), {
+      credentials: "same-origin",
+      cache: "no-store",
+    })
+      .then(function (response) { return response.json(); })
+      .then(function (data) {
+        if (data.status === "completed") {
+          if (status) status.textContent = "Restart complete. New PID " + data.new_pid + "; health check passed.";
+          return refreshCentralHubProcesses();
+        }
+        if (data.status === "failed") throw new Error(data.error || "Clean restart failed.");
+        if (status) status.textContent = "Restart in progress; waiting for one healthy listenerâ€¦";
+        return new Promise(function (resolve) {
+          window.setTimeout(function () { resolve(pollHubAction(actionId, attempts - 1)); }, 1000);
+        });
+      })
+      .catch(function (error) {
+        if (attempts <= 1) {
+          if (status) status.textContent = error.message || "Restart status unavailable.";
+          return null;
+        }
+        return new Promise(function (resolve) {
+          window.setTimeout(function () { resolve(pollHubAction(actionId, attempts - 1)); }, 1000);
+        });
+      });
+  }
+
+  function bindCentralHubProcessActions() {
+    var stale = qs("#hub-stop-stale");
+    var restart = qs("#hub-restart-clean");
+    var stopAll = qs("#hub-stop-all");
+    var status = qs("#hub-process-action-status");
+    if (stale) stale.addEventListener("click", function () {
+      if (!window.confirm("Stop only verified stale Central Hub instances?")) return;
+      postHubProcessAction("/api/health/central-hub-processes/stop-stale", { confirm: true })
+        .then(function (data) {
+          if (status) status.textContent = "Stopped " + data.count + " stale instance(s).";
+          return refreshCentralHubProcesses();
+        })
+        .catch(function (error) { if (status) status.textContent = error.message; });
+    });
+    if (restart) restart.addEventListener("click", function () {
+      if (!window.confirm("Restart Central Hub cleanly and verify one healthy listener?")) return;
+      postHubProcessAction("/api/health/central-hub-processes/restart", { confirm: true })
+        .then(function (data) {
+          if (status) status.textContent = "Restart queued for verified PID(s): " + data.target_pids.join(", ") + ".";
+          return pollHubAction(data.action_id, 45);
+        })
+        .catch(function (error) { if (status) status.textContent = error.message; });
+    });
+    if (stopAll) stopAll.addEventListener("click", function () {
+      var phrase = window.prompt('Type "STOP ALL CENTRAL HUB INSTANCES" to continue.');
+      if (phrase === null) return;
+      postHubProcessAction("/api/health/central-hub-processes/stop-all", {
+        typed_confirmation: phrase,
+      }).then(function (data) {
+        if (status) status.textContent = "Stop-all queued for verified PID(s): " + data.target_pids.join(", ") + ".";
+      }).catch(function (error) { if (status) status.textContent = error.message; });
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     var root = document.body;
     if (!root) return;
@@ -155,6 +265,10 @@
       }
       if (root.getAttribute("data-processes-async") === "1" || qs("[data-processes-async]")) {
         refreshLocalProcesses();
+      }
+      if (qs("[data-central-hub-processes]")) {
+        refreshCentralHubProcesses();
+        bindCentralHubProcessActions();
       }
     };
     if (window.HubPerf && window.HubPerf.whenVisible) window.HubPerf.whenVisible(run);

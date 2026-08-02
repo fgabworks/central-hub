@@ -27,6 +27,7 @@ class SqlConnectionProfile:
     password: str | None = None
     sslmode: str | None = None
     sqlite_path: str | None = None
+    ssh_tunnel_env_prefix: str | None = None
     configured: bool = False
     missing_fields: tuple[str, ...] = ()
 
@@ -52,6 +53,7 @@ class SqlConnectionProfile:
             "sqlite_path": self.sqlite_path,
             "is_live": self.is_live,
             "password_set": bool(self.password),
+            "ssh_tunnel_configured": bool(self.ssh_tunnel_env_prefix),
         }
 
     def secret_values(self) -> list[str]:
@@ -64,8 +66,14 @@ class SqlConnectionProfile:
 
 
 class SqlConnectionRegistry:
-    def __init__(self, profiles: list[SqlConnectionProfile]) -> None:
+    def __init__(
+        self,
+        profiles: list[SqlConnectionProfile],
+        *,
+        tunnel_manager: Any | None = None,
+    ) -> None:
         self._by_id = {p.id: p for p in profiles}
+        self._tunnel_manager = tunnel_manager
 
     def list_public(self) -> list[dict[str, Any]]:
         return [p.public_dict() for p in self._by_id.values() if p.enabled]
@@ -80,7 +88,14 @@ class SqlConnectionRegistry:
         if not profile.configured:
             missing = ", ".join(profile.missing_fields) or "credentials"
             raise LookupError(f"Connection is not configured (missing: {missing}).")
+        if self._tunnel_manager is not None:
+            return self._tunnel_manager.resolve(profile)
         return profile
+
+
+    def shutdown(self) -> None:
+        if self._tunnel_manager is not None:
+            self._tunnel_manager.shutdown()
 
 
 def default_connections_path() -> Path:
@@ -121,6 +136,7 @@ def load_connection_registry(path: Path | None = None) -> SqlConnectionRegistry:
         environment = str(item.get("environment") or "dev").strip().lower()
         label = str(item.get("label") or cid).strip()
         enabled = _as_bool(item.get("enabled"), True)
+        tunnel_prefix = str(item.get("ssh_tunnel_env_prefix") or "").strip().upper()
 
         missing: list[str] = []
         host = port = database = user = password = sslmode = sqlite_path = None
@@ -179,11 +195,14 @@ def load_connection_registry(path: Path | None = None) -> SqlConnectionRegistry:
                 password=password,
                 sslmode=sslmode,
                 sqlite_path=sqlite_path,
+                ssh_tunnel_env_prefix=tunnel_prefix or None,
                 configured=configured,
                 missing_fields=tuple(missing),
             )
         )
-    return SqlConnectionRegistry(profiles)
+    from hub.sql_workspace.tunnels import SshTunnelManager
+
+    return SqlConnectionRegistry(profiles, tunnel_manager=SshTunnelManager())
 
 
 def public_error(message: str, profile: SqlConnectionProfile | None = None) -> str:

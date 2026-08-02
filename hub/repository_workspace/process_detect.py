@@ -679,11 +679,15 @@ def stop_external_process(
     force: bool = False,
     port: int | None = None,
     os_processes: list[RawProcess] | None = None,
+    grace_timeout_seconds: float = 0.8,
+    include_tree: bool = True,
 ) -> dict[str, Any]:
-    """Stop a verified external PID tree only (never broad runtime kills)."""
+    """Stop one verified PID, optionally including its tree, after a grace period."""
     verify_process_identity(pid, identity_token, os_processes=os_processes)
     if os.name == "nt":
-        args = ["taskkill", "/PID", str(int(pid)), "/T"]
+        args = ["taskkill", "/PID", str(int(pid))]
+        if include_tree:
+            args.append("/T")
         if force:
             args.append("/F")
         subprocess.run(
@@ -700,34 +704,24 @@ def stop_external_process(
             os.kill(int(pid), signal.SIGTERM)
         except OSError:
             pass
-        if force:
-            time.sleep(0.4)
-            if _pid_alive(int(pid)):
-                try:
-                    # Prefer process group when pid is session leader
-                    os.killpg(int(pid), signal.SIGKILL)
-                except OSError:
-                    try:
-                        os.kill(int(pid), signal.SIGKILL)
-                    except OSError:
-                        pass
-        else:
-            time.sleep(0.8)
-            if _pid_alive(int(pid)):
-                try:
-                    os.kill(int(pid), signal.SIGKILL)
-                except OSError:
-                    pass
 
-    time.sleep(0.25)
-    # Re-verify identity before a second force pulse if still alive
+    deadline = time.monotonic() + (0.0 if force else max(0.0, grace_timeout_seconds))
     still = _pid_alive(int(pid))
+    while still and time.monotonic() < deadline:
+        time.sleep(min(0.1, max(0.0, deadline - time.monotonic())))
+        still = _pid_alive(int(pid))
+
+    # Re-verify identity before force-stopping after the grace timeout.
     if still:
         try:
             verify_process_identity(pid, identity_token, os_processes=None)
             if os.name == "nt":
+                force_args = ["taskkill", "/PID", str(int(pid))]
+                if include_tree:
+                    force_args.append("/T")
+                force_args.append("/F")
                 subprocess.run(
-                    ["taskkill", "/PID", str(int(pid)), "/T", "/F"],
+                    force_args,
                     shell=False,
                     capture_output=True,
                     check=False,
@@ -737,9 +731,15 @@ def stop_external_process(
                 import signal
 
                 try:
-                    os.kill(int(pid), signal.SIGKILL)
+                    if include_tree:
+                        os.killpg(int(pid), signal.SIGKILL)
+                    else:
+                        os.kill(int(pid), signal.SIGKILL)
                 except OSError:
-                    pass
+                    try:
+                        os.kill(int(pid), signal.SIGKILL)
+                    except OSError:
+                        pass
             time.sleep(0.25)
             still = _pid_alive(int(pid))
         except WorkspaceSecurityError:

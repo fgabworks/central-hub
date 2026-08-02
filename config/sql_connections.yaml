@@ -19,6 +19,7 @@ connections:
     database_env: SQL_WS_STAGE_DATABASE
     user_env: SQL_WS_STAGE_USER
     password_env: SQL_WS_STAGE_PASSWORD
+    ssh_tunnel_env_prefix: STAGE
     sslmode: prefer
     enabled: true
 
@@ -31,5 +32,6 @@ connections:
     database_env: SQL_WS_LIVE_DATABASE
     user_env: SQL_WS_LIVE_USER
     password_env: SQL_WS_LIVE_PASSWORD
+    ssh_tunnel_env_prefix: LIVE
     sslmode: prefer
     enabled: true

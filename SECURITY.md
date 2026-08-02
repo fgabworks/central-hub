@@ -17,7 +17,11 @@ Scope: personal, local-first tool. Canonical agent rules: [AGENTS.md](AGENTS.md)
 - **SQL Workspace:** connection passwords only in `.env`; never returned to UI.
   Dedicated read-only DB roles recommended. Execution uses sqlglot AST allowlist
   (SELECT / read-only WITH / EXPLAIN only), one statement, read-only transaction,
-  statement timeout, and row cap (`hub/sql_workspace/`).
+  statement timeout, and row cap (`hub/sql_workspace/`). Optional Stage/Live SSH
+  tunnels are lazy, environment-isolated, and bound to a dynamic loopback port.
+  Tunnel credentials and private-key paths remain environment-only; a pinned host
+  key (explicitly configured or already trusted in `known_hosts`) is required.
+  Tunnels are closed during application shutdown.
 - **Email Center (Gmail) / Calendar Center (shared Google accounts):**
   - OAuth client id/secret only via `GMAIL_CLIENT_ID` / `GMAIL_CLIENT_SECRET`.
   - Gmail scope is **`gmail.readonly` only** (no modify/send).
@@ -111,6 +115,15 @@ Scope: personal, local-first tool. Canonical agent rules: [AGENTS.md](AGENTS.md)
     ended + port released. Start conflicts / occupied fixed ports block with a
     pointer to the Run tab (no silent fixed-port switch). Audit:
     `REPO_WS_PROCESS_SCAN` / `STOP` / `FORCE_STOP` / `STOP_BLOCKED`.
+  - **Central Hub Process Manager:** extends the same exact-PID identity and port
+    primitives on Health. Startup owns an atomic token-matched lock under
+    `data/central_hub_process/`, cleans only invalid/dead locks, and refuses verified
+    duplicates. Unregistered targets require the absolute Hub `app.py` command plus
+    Hub port ownership; generic/relative Python commands are ignored. Stops revalidate
+    PID identity, signal gracefully, wait five seconds, then force only that PID.
+    Stop All requires typed confirmation. Restart uses a detached fixed-argv helper,
+    requires port release, starts one instance, probes loopback `/api/healthz`, and
+    audits actor/PID/action/time/result. It never kills all Python processes.
   - **Connect Local Workspace:** user-selected folder only; scan is read-only (no
     subprocess, no installs, no secret-file reads). Git remote mismatch and path
     replacement require explicit confirm. Suggested run profiles are untrusted /

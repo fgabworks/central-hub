@@ -87,6 +87,10 @@ Browser ──HTTP──> Flask app (app.py, create_app)
   isolation, hub-tracked PIDs only, redacted logs, and optional health probes.
   **Repository Processes** (`process_detect.py`) inventories related local PIDs and
   stops only verified trees; Health → Local Process Monitor is read-only reuse.
+  `hub_process_manager.py` extends these primitives for the Hub itself: atomic
+  single-instance PID/identity lock, strict absolute-app/port verification,
+  owner-confirmed lifecycle actions, detached clean restart, health/new-PID result,
+  and shared AuditStore records. It is not a second generic process manager.
   Tabs: Overview / Files / Changes / Run / Logs / Settings. Connect Local Workspace
   (`connect_scan.py` / `connect.py`) scans a user-selected folder read-only, queues
   untrusted suggestions into the profile store (never overwrites approved), then

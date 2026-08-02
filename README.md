@@ -63,6 +63,11 @@ python app.py
 
 Open `http://127.0.0.1:8080`.
 
+Direct `app.py` startup is single-instance. Its token-matched PID/identity lock is
+stored under `data/central_hub_process/`; invalid or dead locks are cleaned on startup.
+Health includes owner-gated verified-instance Stop Stale, Stop All, and Restart Cleanly
+controls. The Werkzeug code reloader is disabled to preserve one server process.
+
 Optional sample API for healthy `sample-api` checks:
 
 ```powershell

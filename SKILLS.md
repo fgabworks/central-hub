@@ -10,6 +10,7 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 | Registry Add / Edit / Disable | `/repositories/new`, store writes YAML; no auto-clone |
 | Registry grouping | Optional `repository_group_id` — one UI row for local + API (+ future) adapters; independent Workspace / Application / API statuses (`hub/registry/grouping.py`) |
 | Repository Workspace Phases 1–2 + Connect + Run Profile Builder + Processes + Active Application | `/repositories/<id>` tabs + `/connect` + Settings → Run Profiles + Run → Active Application / History / Processes; Health Local Process Monitor; `hub/repository_workspace/` |
+| Central Hub Process Manager | `/health`; verified PID/command/root/port inventory, atomic instance lock, Stop Stale, typed Stop All, clean restart + health/new PID, audit; reuses `hub/repository_workspace/` process primitives |
 | DHIS2 Reports (Standard Report Manager Phase 1) | `/dhis2/reports` sync/view Stage+Live standard reports; `hub/dhis2_reports/`; catalog shortcuts `config/dhis2_reports.yaml` |
 | Central Hub HCSC–RF (Phase 0–3) | `/dhis2/hcsc-indicators` — registry + Overview/report/category + Compare Sources; evidence packages local-only; no formula engine / no SQL auto-exec |
 | `${VAR:-default}` in registry YAML | `hub/registry/loader.py` |
@@ -52,7 +53,7 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 | Enrichment dry-run preview | In-process until confirm; run progress in SQLite; lost on process restart before apply |
 | UID conflict resolve | Conflicts skipped by default; no per-UID take/keep form yet |
 | Enrichment raw metadata | Not bulk-stored; live GET only when detail `?tab=raw&raw=1` |
-| SQL Workspace | Implemented — SELECT/WITH/EXPLAIN only; Live warning; never auto-run |
+| SQL Workspace | Implemented — SELECT/WITH/EXPLAIN only; optional trusted-host-key Stage/Live SSH tunnels; Live warning; never auto-run |
 | Data Explorer | Implemented — unified RO discovery/browse/schema/relationships/lineage plus allowlisted exports, large jobs, masking, row caps, and history; prod candidates unavailable until verified; Live/Stage need their matching RO profiles; no arbitrary SQL/table input |
 | AI Assistant Center | Implemented — isolated Aira/Okarun profiles; full-height persistent dock + fixed composer; Codex CLI real provider (Okarun, read-only `codex exec --json`); provider switching; Find/Ask/Plan/Review; context preview; streaming/cancel/retry/history; scoped read-only tools; no write/execution; no voice |
 | Workspace Console | Implemented — bottom VS Code-style panel (two-row title/tabs; Problems/Output/Debug/**interactive PTY Terminal**/Ports); xterm.js + ConPTY/`pty` + WebSocket; repo path jail; IDE toolbar (repo/shell/New/tabs/Split/Restart/Kill); empty state; collapsed by default; resize/minimize/maximize; per-workspace prefs (session id, not commands); lazy loads; pauses UI when hidden (PTY keeps running); Ports + process monitor ownership; controlled profile launcher retained; verified process stops only |

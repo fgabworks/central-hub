@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import uuid
 from pathlib import Path
 
@@ -123,6 +124,12 @@ from hub.workspace_console.routes import register_workspace_console_routes
 from hub.workspace_console.terminal import TerminalSessionManager, load_terminal_settings
 from hub.repository_workspace import load_workspace_settings
 from hub.repository_workspace.routes import register_repository_workspace_routes
+from hub.repository_workspace.hub_process_manager import (
+    CentralHubInstanceGuard,
+    CentralHubProcessManager,
+    SingleInstanceError,
+)
+from hub.repository_workspace.hub_process_routes import register_central_hub_process_routes
 from hub.dhis2_reports.routes import register_dhis2_reports_routes
 from hub.dhis2_reports.service import Dhis2ReportsService
 from hub.dhis2_reports.store import ReportsStore
@@ -198,6 +205,11 @@ def create_app() -> Flask:
         else None
     )
     app.config["AUDIT"] = AuditStore(settings.audit_log_path)
+    app.config["CENTRAL_HUB_PROCESSES"] = CentralHubProcessManager(
+        port=settings.port,
+        audit=app.config["AUDIT"],
+    )
+    register_central_hub_process_routes(app)
     instance_store = Dhis2InstanceStore()
     app.config["DHIS2_INSTANCE_STORE"] = instance_store
     profiles = list_dhis2_instance_profiles()
@@ -366,6 +378,12 @@ def create_app() -> Flask:
     import atexit
 
     def _shutdown_terminals() -> None:
+        sql_connections = app.config.get("SQL_WS_CONNECTIONS")
+        if sql_connections is not None:
+            try:
+                sql_connections.shutdown()
+            except Exception:
+                pass
         mgr = app.config.get("WC_TERMINALS")
         if mgr is not None:
             try:
@@ -2083,11 +2101,10 @@ def create_app() -> Flask:
     def api_sql_connection_test(connection_id: str):
         audit: AuditStore = app.config["AUDIT"]
         registry = _sql_connections()
-        profile = registry.get(connection_id)
-        if profile is None or not profile.enabled:
-            return jsonify({"ok": False, "error": "Connection not found."}), 404
-        if not profile.configured:
-            detail = "Connection is not configured."
+        try:
+            profile = registry.get_configured(connection_id)
+        except LookupError as exc:
+            detail = str(exc)
             audit.append(
                 action=audit_actions.SQL_WS_TEST,
                 target=connection_id,
@@ -3980,8 +3997,25 @@ def _repo_to_dict(repo) -> dict:
     }
 
 
+_instance_guard: CentralHubInstanceGuard | None = None
+if __name__ == "__main__":
+    _instance_guard = CentralHubInstanceGuard(port=settings.port)
+    try:
+        _instance_guard.acquire()
+    except SingleInstanceError as exc:
+        print(f"Central Hub startup refused: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
+
+
 app = create_app()
 
 
 if __name__ == "__main__":
-    app.run(host=settings.host, port=settings.port, debug=settings.debug)
+    # Werkzeug's reloader creates a second process and conflicts with the
+    # single-instance registry. Debug diagnostics remain available without it.
+    app.run(
+        host=settings.host,
+        port=settings.port,
+        debug=settings.debug,
+        use_reloader=False,
+    )

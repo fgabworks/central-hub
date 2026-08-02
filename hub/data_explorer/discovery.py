@@ -314,16 +314,9 @@ def _discover_postgres(
         except Exception:  # noqa: BLE001
             log.debug("pg_matviews unavailable", exc_info=True)
 
-        # Enrich columns / keys / stats
-        for obj in objects:
-            obj.columns = _pg_columns(conn, obj.schema, obj.name)
-            obj.keys = _pg_keys(conn, obj.schema, obj.name)
-            obj.indexes = _pg_indexes(conn, obj.schema, obj.name)
-            est, size_b, analyzed, approx = _pg_stats(conn, obj.schema, obj.name, cfg)
-            obj.estimated_rows = est
-            obj.size_bytes = size_b
-            obj.last_analyzed = analyzed
-            obj.approximate = approx
+        # Fetch metadata in bounded catalog-wide queries. Per-object queries made a
+        # 390-relation Live catalog require more than 1,500 SSH round trips.
+        _enrich_postgres_objects(conn, objects)
         conn.commit()
     except Exception:
         try:
@@ -343,6 +336,127 @@ def _discover_postgres(
         fetched_at=time.time(),
         schemas=schemas,
     )
+
+
+def _enrich_postgres_objects(conn: Any, objects: list[ObjectMeta]) -> None:
+    """Populate a catalog using a bounded number of read-only metadata queries."""
+    targets = {(obj.schema, obj.name): obj for obj in objects}
+    if not targets:
+        return
+
+    rows = conn.execute(
+        """
+        SELECT table_schema, table_name, column_name, data_type,
+               is_nullable, column_default, ordinal_position
+        FROM information_schema.columns
+        ORDER BY table_schema, table_name, ordinal_position
+        """
+    ).fetchall()
+    for schema, table, name, data_type, nullable, default, ordinal in rows:
+        obj = targets.get((str(schema), str(table)))
+        if obj is not None:
+            obj.columns.append(
+                ColumnMeta(
+                    name=str(name),
+                    data_type=str(data_type or ""),
+                    nullable=str(nullable).upper() == "YES",
+                    default=None if default is None else str(default)[:200],
+                    ordinal=int(ordinal or 0),
+                )
+            )
+
+    key_lookup: dict[tuple[str, str, str], KeyMeta] = {}
+    rows = conn.execute(
+        """
+        SELECT tc.table_schema, tc.table_name, tc.constraint_name,
+               tc.constraint_type, kcu.column_name, kcu.ordinal_position
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kcu
+          ON tc.constraint_name = kcu.constraint_name
+         AND tc.table_schema = kcu.table_schema
+         AND tc.table_name = kcu.table_name
+        WHERE tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')
+        ORDER BY tc.table_schema, tc.table_name, tc.constraint_name, kcu.ordinal_position
+        """
+    ).fetchall()
+    kinds = {"PRIMARY KEY": "primary", "UNIQUE": "unique", "FOREIGN KEY": "foreign"}
+    for schema, table, name, constraint_type, column, _ordinal in rows:
+        object_key = (str(schema), str(table))
+        obj = targets.get(object_key)
+        if obj is None:
+            continue
+        lookup_key = (*object_key, str(name))
+        key = key_lookup.get(lookup_key)
+        if key is None:
+            key = KeyMeta(
+                name=str(name),
+                kind=kinds.get(str(constraint_type), "unique"),
+                columns=[],
+            )
+            key_lookup[lookup_key] = key
+            obj.keys.append(key)
+        key.columns.append(str(column))
+
+    rows = conn.execute(
+        """
+        SELECT tc.table_schema, tc.table_name, tc.constraint_name,
+               ccu.table_schema, ccu.table_name, ccu.column_name
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.constraint_column_usage ccu
+          ON ccu.constraint_name = tc.constraint_name
+         AND ccu.constraint_schema = tc.table_schema
+        WHERE tc.constraint_type = 'FOREIGN KEY'
+        """
+    ).fetchall()
+    for schema, table, name, ref_schema, ref_table, ref_column in rows:
+        key = key_lookup.get((str(schema), str(table), str(name)))
+        if key is not None:
+            key.referenced_schema = str(ref_schema)
+            key.referenced_table = str(ref_table)
+            key.referenced_columns.append(str(ref_column))
+
+    rows = conn.execute(
+        """
+        SELECT n.nspname, t.relname, i.relname, ix.indisunique,
+               array_agg(a.attname ORDER BY array_position(ix.indkey, a.attnum))
+        FROM pg_class t
+        JOIN pg_namespace n ON n.oid = t.relnamespace
+        JOIN pg_index ix ON t.oid = ix.indrelid
+        JOIN pg_class i ON i.oid = ix.indexrelid
+        JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)
+        WHERE NOT ix.indisprimary
+        GROUP BY n.nspname, t.relname, i.relname, ix.indisunique
+        ORDER BY n.nspname, t.relname, i.relname
+        """
+    ).fetchall()
+    for schema, table, name, unique, columns in rows:
+        obj = targets.get((str(schema), str(table)))
+        if obj is not None:
+            obj.indexes.append(
+                IndexMeta(
+                    name=str(name),
+                    columns=[str(column) for column in (columns or []) if column],
+                    unique=bool(unique),
+                )
+            )
+
+    rows = conn.execute(
+        """
+        SELECT n.nspname, c.relname, c.reltuples::bigint,
+               pg_total_relation_size(c.oid), s.last_analyze::text
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        LEFT JOIN pg_stat_all_tables s ON s.relid = c.oid
+        WHERE c.relkind IN ('r', 'p', 'm', 'v')
+        """
+    ).fetchall()
+    for schema, table, estimated, size_bytes, analyzed in rows:
+        obj = targets.get((str(schema), str(table)))
+        if obj is not None:
+            obj.estimated_rows = None if estimated is None else int(estimated)
+            obj.size_bytes = None if size_bytes is None else int(size_bytes)
+            obj.last_analyzed = analyzed
+            obj.approximate = obj.estimated_rows is not None
 
 
 def _pg_columns(conn: Any, schema: str, table: str) -> list[ColumnMeta]:
