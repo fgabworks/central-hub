@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-02 (HCSC–RF geographic breakdown: Population Filter + batched multi-OU analytics; parent summary preserved).
+Last verified: 2026-08-02 (Data Explorer typed server-side filters, three-state sorting, and URL-restored grid state).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -260,6 +260,22 @@ environment, and are shared by SQL Workspace and Data Explorer.
 
 Connection/discovery failures return redacted JSON errors; raw PostgreSQL connection
 strings and Flask HTML error pages are not exposed to the Data Explorer client.
+
+The /data-explorer UI is data-first: compact header and primary tabs, one control
+toolbar, a 280px searchable explorer, a horizontally scrollable sticky-header grid,
+and a 320px dark metadata/selected-row drawer. The drawer becomes an overlay below
+1280px and the explorer/grid stack below 820px. Loading, error, empty, selected-row,
+and range-aware pagination states are explicit. These are presentation-only changes;
+the existing APIs, permission checks, query builder, export engine, jobs, audit,
+masking, row limits, and Stage/Live isolation remain authoritative.
+
+Browse filtering and sorting operate on the full database result, never only the
+loaded page. The UI supports up to 20 AND filters with removable chips and typed
+operators derived from discovered column metadata. The server revalidates every
+column/operator pair, rejects hidden columns and invalid sort directions, binds
+values as query parameters, and runs the filtered COUNT before paginated SELECT.
+Environment, selected object, page, filters, quick search, sort column, and sort
+direction are restored from the URL; filter/sort changes reset to page 1.
 
 Config/policies: `config/data_explorer.yaml` and the approved-source registry
 `config/live_data_exports.yaml`. Data Explorer owns one `ExplorerStore` at

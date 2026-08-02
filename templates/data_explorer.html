@@ -1,22 +1,27 @@
 {% extends "base.html" %}
 {% block title %}{{ page_title }} · {{ app_name }}{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/data_explorer.css') }}?v=dex-1">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/data_explorer.css') }}?v=dex-redesign-1">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/live_data_export.css') }}?v=lex-1">
 <script src="{{ url_for('static', filename='js/dhis2_org_unit_picker.js') }}?v=ou-sync-immediate-1" defer></script>
-<script src="{{ url_for('static', filename='js/data_explorer.js') }}?v=dex-1" defer></script>
+<script src="{{ url_for('static', filename='js/data_explorer.js') }}?v=dex-filter-sort-1" defer></script>
 <script src="{{ url_for('static', filename='js/live_data_export.js') }}?v=lex-1" defer></script>
 <script src="{{ url_for('static', filename='js/data_explorer_workspace.js') }}?v=dex-merge-1" defer></script>
 {% endblock %}
 {% block content %}
-<section class="page-header page-header-compact">
-  <div>
-    <h1>{{ page_title }}</h1>
-    <p class="muted">{{ subtitle }}</p>
-  </div>
-  <div class="page-meta">
-    <span class="badge badge-info">Read-only</span>
-    <span class="badge">No ad-hoc SQL</span>
+<section class="dex-page-header">
+  <nav class="dex-breadcrumb" aria-label="Breadcrumb">
+    <span>Work</span><span aria-hidden="true">/</span><span aria-current="page">Data Explorer</span>
+  </nav>
+  <div class="dex-title-row">
+    <div>
+      <h1>{{ page_title }}</h1>
+      <p class="muted">{{ subtitle }}</p>
+    </div>
+    <div class="dex-header-status" aria-label="Data access status">
+      <span class="dex-status-badge dex-status-live" id="dex-header-env">Dev</span>
+      <span class="dex-status-badge">Read-only</span>
+    </div>
   </div>
 </section>
 
@@ -47,23 +52,35 @@
      data-audit-url="{{ url_for('api_data_explorer_audit') }}"
      data-sql-workspace-url="{{ url_for('sql_workspace') }}">
 
-  <div class="dex-toolbar">
-    <label>Environment
+  <div class="dex-toolbar" aria-label="Data Explorer controls">
+    <label class="dex-env-control"><span>Environment</span>
       <select id="dex-env">
         <option value="dev">Dev (local demo)</option>
         <option value="stage">Stage</option>
         <option value="live">Live</option>
       </select>
     </label>
-    <button type="button" class="btn btn-sm" id="dex-refresh">Refresh metadata</button>
-    <button type="button" class="btn btn-sm" id="dex-inventory-btn">Inventory</button>
-    <span class="muted" id="dex-conn-status"></span>
+    <label class="dex-search-control">
+      <span class="visually-hidden">Filter selected table data</span>
+      <input type="search" id="dex-search" placeholder="Search the first column of the selected table" aria-label="Filter selected table data">
+    </label>
+    <button type="button" class="btn btn-sm dex-toolbar-btn" id="dex-refresh">Refresh metadata</button>
+    <button type="button" class="btn btn-sm dex-toolbar-btn" id="dex-export-shortcut" disabled>Export</button>
+    <button type="button" class="btn btn-sm dex-icon-btn" id="dex-details-toggle" aria-controls="dex-details" aria-expanded="true" title="Toggle details">Details</button>
+    <span class="muted dex-connection-status" id="dex-conn-status" role="status"></span>
   </div>
   <p class="dex-error" id="dex-error" hidden></p>
 
   <div class="dex-layout">
-    <aside class="dex-left" aria-label="Schema tree">
-      <div class="dex-left-head"><strong>Sources</strong></div>
+    <aside class="dex-left" aria-label="Table explorer">
+      <div class="dex-left-head">
+        <strong>Tables</strong>
+        <button type="button" class="btn btn-sm dex-inventory-btn" id="dex-inventory-btn">Inventory</button>
+      </div>
+      <label class="dex-tree-filter">
+        <span class="visually-hidden">Filter tables</span>
+        <input type="search" id="dex-table-filter" placeholder="Filter tables" aria-label="Filter tables">
+      </label>
       <div id="dex-tree" class="dex-tree"></div>
       <div class="dex-left-section">
         <strong>Favorites</strong>
@@ -77,7 +94,16 @@
 
     <main class="dex-center" aria-label="Data grid">
       <div class="dex-center-head">
-        <h2 id="dex-object-title">Select an object</h2>
+        <div class="dex-object-heading">
+          <div>
+            <h2 id="dex-object-title">Select an object</h2>
+            <p class="muted" id="dex-object-meta">Choose a table or view to inspect its data and metadata.</p>
+          </div>
+          <div class="dex-object-actions">
+            <button type="button" class="btn btn-sm" id="dex-browse-btn" disabled>Refresh data</button>
+            <button type="button" class="btn btn-sm" id="dex-fav-btn" disabled>Favorite</button>
+          </div>
+        </div>
         <div class="dex-tabs" role="tablist">
           <button type="button" class="dex-tab is-active" data-tab="data">Data</button>
           <button type="button" class="dex-tab" data-tab="columns">Columns</button>
@@ -91,21 +117,44 @@
       </div>
 
       <div class="dex-panel is-active" data-panel="data">
-        <div class="dex-grid-toolbar">
-          <input type="search" id="dex-search" placeholder="Filter column contains…" aria-label="Search">
-          <button type="button" class="btn btn-sm" id="dex-browse-btn" disabled>Refresh</button>
-          <button type="button" class="btn btn-sm" id="dex-fav-btn" disabled>★ Favorite</button>
-          <span class="muted" id="dex-row-meta"></span>
+        <form class="dex-filter-builder" id="dex-filter-form">
+          <label>
+            <span>Column</span>
+            <select id="dex-filter-column" disabled>
+              <option value="">Select column</option>
+            </select>
+          </label>
+          <label>
+            <span>Operator</span>
+            <select id="dex-filter-operator" disabled>
+              <option value="">Select operator</option>
+            </select>
+          </label>
+          <label class="dex-filter-value-control">
+            <span>Value</span>
+            <input type="text" id="dex-filter-value" disabled autocomplete="off">
+          </label>
+          <button type="submit" class="btn btn-sm" id="dex-filter-add" disabled>Add filter</button>
+        </form>
+        <div class="dex-filter-summary">
+          <div class="dex-filter-chips" id="dex-filter-chips" aria-label="Active filters"></div>
+          <span class="muted dex-filter-logic" id="dex-filter-logic" hidden>All filters use AND</span>
+          <button type="button" class="btn btn-sm" id="dex-filter-clear" hidden>Clear all</button>
         </div>
-        <div class="dex-table-wrap">
+        <div class="dex-grid-status" id="dex-grid-status" role="status" aria-live="polite">
+          <span class="muted" id="dex-row-meta">No table selected</span>
+          <span class="muted" id="dex-filtered-count"></span>
+        </div>
+        <div class="dex-table-wrap" id="dex-table-wrap">
           <table class="dex-table" id="dex-grid">
             <thead></thead>
             <tbody></tbody>
           </table>
+          <div class="dex-grid-state" id="dex-grid-state">Select a table or view to browse data.</div>
         </div>
         <div class="dex-pager">
           <button type="button" class="btn btn-sm" id="dex-prev" disabled>Previous</button>
-          <span id="dex-page-label" class="muted">Page 1</span>
+          <span id="dex-page-label" class="muted">Page 1 of 1</span>
           <button type="button" class="btn btn-sm" id="dex-next" disabled>Next</button>
         </div>
       </div>
@@ -146,9 +195,17 @@
     </main>
 
     <aside class="dex-right" aria-label="Details" id="dex-details">
-      <h3>Details</h3>
+      <div class="dex-details-head">
+        <h3>Table details</h3>
+        <button type="button" class="dex-drawer-close" id="dex-details-close" aria-label="Close details drawer">&times;</button>
+      </div>
       <p class="muted" id="dex-detail-empty">Select a table or view.</p>
       <dl id="dex-detail-dl" class="dex-dl" hidden></dl>
+      <section class="dex-selected-row" aria-labelledby="dex-selected-row-title">
+        <h3 id="dex-selected-row-title">Selected row</h3>
+        <p class="muted" id="dex-selected-row-empty">Select a row to inspect its values.</p>
+        <dl id="dex-selected-row-list" class="dex-dl" hidden></dl>
+      </section>
     </aside>
   </div>
 

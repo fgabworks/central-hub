@@ -28,9 +28,45 @@
     }
   }
 
+  function readUrlState() {
+    var params = new URLSearchParams(window.location.search);
+    var filters = [];
+    var error = "";
+    if (params.get("filters")) {
+      try {
+        filters = JSON.parse(params.get("filters"));
+        if (!Array.isArray(filters) || filters.length > 20) throw new Error("invalid");
+        filters = filters.map(function (filter) {
+          if (!filter || typeof filter !== "object") throw new Error("invalid");
+          return {
+            column: String(filter.column || ""),
+            op: String(filter.op || ""),
+            value: filter.value == null ? null : filter.value,
+          };
+        });
+      } catch (_error) {
+        filters = [];
+        error = "Invalid filter state in the URL. Clear all filters to continue.";
+      }
+    }
+    var page = Number(params.get("page") || 1);
+    return {
+      environment: params.get("environment") || "",
+      schema: params.get("schema") || "",
+      object: params.get("object") || "",
+      page: Number.isInteger(page) && page > 0 ? page : 1,
+      sortColumn: params.get("sort") || null,
+      sortDir: params.get("dir") === "desc" ? "desc" : "asc",
+      filters: filters,
+      quickSearch: params.get("q") || "",
+      error: error,
+    };
+  }
+
   function init() {
     var root = document.getElementById("dex-root");
     if (!root) return;
+    var urlState = readUrlState();
     var state = {
       boot: boot(),
       selected: null,
@@ -39,13 +75,25 @@
       sortColumn: null,
       sortDir: "asc",
       abort: null,
+      selectedRow: null,
+      filters: urlState.filters,
+      quickSearch: urlState.quickSearch,
+      urlError: urlState.error,
     };
 
     var envSel = $("#dex-env");
     envSel.value = state.boot.environment || "dev";
+    $("#dex-search").value = state.quickSearch;
+    updateEnvironmentBadge();
     updateConnStatus();
     renderTree(state.boot.tree);
     renderFavorites(state.boot.favorites || []);
+    if (urlState.schema && urlState.object) {
+      state.sortColumn = urlState.sortColumn;
+      state.sortDir = urlState.sortDir;
+      state.page = urlState.page;
+      selectObject(urlState.schema, urlState.object, { restore: true });
+    }
 
     $all(".dex-tab", root).forEach(function (tab) {
       tab.addEventListener("click", function () {
@@ -64,6 +112,12 @@
     envSel.addEventListener("change", async function () {
       setError("");
       state.selected = null;
+      state.selectedRow = null;
+      resetGridQuery();
+      updateEnvironmentBadge();
+      clearSelectionDetails();
+      setGridState("Select a table or view to browse data.");
+      syncUrl();
       try {
         var res = await fetch(root.getAttribute("data-tree-url") + "?environment=" + encodeURIComponent(envSel.value));
         var data = await readJson(res);
@@ -117,9 +171,116 @@
     });
     $("#dex-explain").addEventListener("click", runExplain);
     $("#dex-export-btn").addEventListener("click", runExport);
-    $("#dex-search").addEventListener("keydown", function (e) {
-      if (e.key === "Enter") loadGrid(1);
+    $("#dex-export-shortcut").addEventListener("click", function () {
+      activateObjectTab("export");
     });
+    $("#dex-details-toggle").addEventListener("click", toggleDetails);
+    $("#dex-details-close").addEventListener("click", function () { setDetailsOpen(false); });
+    $("#dex-search").addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && state.selected) {
+        state.quickSearch = $("#dex-search").value.trim();
+        applyGridQueryChange();
+      }
+    });
+    $("#dex-table-filter").addEventListener("input", filterTree);
+    $("#dex-filter-column").addEventListener("change", updateFilterOperators);
+    $("#dex-filter-operator").addEventListener("change", updateFilterValueControl);
+    $("#dex-filter-form").addEventListener("submit", addFilter);
+    $("#dex-filter-clear").addEventListener("click", function () {
+      state.filters = [];
+      state.quickSearch = "";
+      $("#dex-search").value = "";
+      state.urlError = "";
+      renderFilterChips();
+      applyGridQueryChange();
+    });
+    window.addEventListener("popstate", function () { window.location.reload(); });
+
+    var compactDetails = window.matchMedia("(max-width: 1280px)");
+    if (compactDetails.matches) setDetailsOpen(false);
+    compactDetails.addEventListener("change", function (event) {
+      if (event.matches) setDetailsOpen(false);
+    });
+
+    function activateObjectTab(name) {
+      var tab = $(".dex-tab[data-tab='" + name + "']", root);
+      if (tab) tab.click();
+    }
+
+    function updateEnvironmentBadge() {
+      var badge = $("#dex-header-env");
+      var label = envSel.options[envSel.selectedIndex];
+      badge.textContent = label ? label.text.replace(" (local demo)", "") : envSel.value;
+      badge.classList.toggle("dex-status-live", envSel.value === "live");
+    }
+
+    function setDetailsOpen(open) {
+      $(".dex-layout", root).classList.toggle("details-collapsed", !open);
+      $("#dex-details-toggle").setAttribute("aria-expanded", String(open));
+    }
+
+    function toggleDetails() {
+      var collapsed = $(".dex-layout", root).classList.contains("details-collapsed");
+      setDetailsOpen(collapsed);
+    }
+
+    function setGridState(message, kind) {
+      var el = $("#dex-grid-state");
+      el.textContent = message || "";
+      el.hidden = !message;
+      el.classList.toggle("is-error", kind === "error");
+      el.classList.toggle("is-invalid", kind === "invalid");
+    }
+
+    function clearSelectionDetails() {
+      $("#dex-selected-row-empty").hidden = false;
+      $("#dex-selected-row-list").hidden = true;
+      $("#dex-selected-row-list").innerHTML = "";
+    }
+
+    function resetGridQuery() {
+      state.page = 1;
+      state.sortColumn = null;
+      state.sortDir = "asc";
+      state.filters = [];
+      state.quickSearch = "";
+      state.urlError = "";
+      $("#dex-search").value = "";
+      renderFilterChips();
+    }
+
+    function syncUrl() {
+      var url = new URL(window.location.href);
+      url.searchParams.set("environment", envSel.value);
+      if (state.selected) {
+        url.searchParams.set("schema", state.selected.schema);
+        url.searchParams.set("object", state.selected.name);
+        url.searchParams.set("page", String(state.page));
+      } else {
+        ["schema", "object", "page"].forEach(function (key) { url.searchParams.delete(key); });
+      }
+      if (state.sortColumn) {
+        url.searchParams.set("sort", state.sortColumn);
+        url.searchParams.set("dir", state.sortDir);
+      } else {
+        url.searchParams.delete("sort");
+        url.searchParams.delete("dir");
+      }
+      if (state.filters.length) {
+        url.searchParams.set("filters", JSON.stringify(state.filters));
+      } else {
+        url.searchParams.delete("filters");
+      }
+      if (state.quickSearch) url.searchParams.set("q", state.quickSearch);
+      else url.searchParams.delete("q");
+      window.history.replaceState(null, "", url.pathname + "?" + url.searchParams.toString());
+    }
+
+    function applyGridQueryChange() {
+      state.page = 1;
+      syncUrl();
+      loadGrid(1);
+    }
 
     function setError(msg) {
       var el = $("#dex-error");
@@ -154,20 +315,49 @@
           selectObject(btn.getAttribute("data-schema"), btn.getAttribute("data-name"));
         });
       });
+      filterTree();
     }
 
     function section(label, items) {
       items = items || [];
       if (!items.length) return "";
       return (
-        "<div class='dex-small'><em>" + esc(label) + "</em></div>" +
+        "<div class='dex-tree-section-label'>" + esc(label) + "</div>" +
         items.map(function (it) {
           return "<button type='button' data-schema='" + esc(it.schema) + "' data-name='" + esc(it.name) + "'>" +
-            esc(it.name) +
-            (it.estimated_rows != null ? " <span class='muted'>(" + it.estimated_rows + ")</span>" : "") +
+            "<span>" + esc(it.name) + "</span>" +
+            (it.estimated_rows != null ? " <span class='dex-tree-count'>" + esc(formatNumber(it.estimated_rows)) + "</span>" : "") +
             "</button>";
         }).join("")
       );
+    }
+
+    function formatNumber(value) {
+      var number = Number(value);
+      return Number.isFinite(number) ? number.toLocaleString() : String(value == null ? "" : value);
+    }
+
+    function filterTree() {
+      var query = ($("#dex-table-filter").value || "").trim().toLowerCase();
+      $all("#dex-tree button[data-name]", root).forEach(function (button) {
+        var value = (button.getAttribute("data-schema") + "." + button.getAttribute("data-name")).toLowerCase();
+        button.hidden = Boolean(query && value.indexOf(query) === -1);
+      });
+      $all("#dex-tree details", root).forEach(function (details) {
+        var visible = $all("button[data-name]", details).some(function (button) { return !button.hidden; });
+        details.hidden = !visible;
+        if (query && visible) details.open = true;
+      });
+    }
+
+    function markSelectedObject() {
+      $all("button[data-schema][data-name]", root).forEach(function (button) {
+        var selected = state.selected &&
+          button.getAttribute("data-schema") === state.selected.schema &&
+          button.getAttribute("data-name") === state.selected.name;
+        button.classList.toggle("is-active", Boolean(selected));
+        button.setAttribute("aria-current", selected ? "true" : "false");
+      });
     }
 
     function renderFavorites(list) {
@@ -182,16 +372,24 @@
           selectObject(btn.getAttribute("data-schema"), btn.getAttribute("data-name"));
         });
       });
+      markSelectedObject();
     }
 
-    async function selectObject(schema, name) {
+    async function selectObject(schema, name, options) {
+      options = options || {};
       setError("");
       state.selected = { schema: schema, name: name };
-      state.page = 1;
+      state.selectedRow = null;
+      if (!options.restore) resetGridQuery();
       $("#dex-object-title").textContent = schema + "." + name;
+      $("#dex-object-meta").textContent = "Loading table metadata…";
       $("#dex-browse-btn").disabled = false;
       $("#dex-fav-btn").disabled = false;
       $("#dex-export-btn").disabled = false;
+      $("#dex-export-shortcut").disabled = false;
+      clearSelectionDetails();
+      markSelectedObject();
+      syncUrl();
       try {
         var url = root.getAttribute("data-object-url") +
           "?environment=" + encodeURIComponent(envSel.value) +
@@ -203,7 +401,14 @@
         state.detail = data;
         renderDetails(data);
         renderMetaTabs(data);
-        await loadGrid(1);
+        renderFilterBuilder((data.object || {}).columns || []);
+        renderFilterChips();
+        if (state.urlError) {
+          setGridState(state.urlError, "invalid");
+          setError(state.urlError);
+          return;
+        }
+        await loadGrid(state.page);
       } catch (err) {
         setError(err.message || String(err));
       }
@@ -213,6 +418,10 @@
       var obj = data.object || {};
       var cls = data.classification || {};
       var dl = $("#dex-detail-dl");
+      var typeLabel = obj.object_type || "object";
+      $("#dex-object-meta").textContent =
+        formatNumber(obj.estimated_rows) + " rows · " + typeLabel +
+        (cls.group ? " · " + cls.group : "");
       $("#dex-detail-empty").hidden = true;
       dl.hidden = false;
       dl.innerHTML =
@@ -251,17 +460,147 @@
       list("#dex-used-exports", lin.used_by_exports, "No Live Data Export sources map here.");
     }
 
+    function renderFilterBuilder(columns) {
+      var select = $("#dex-filter-column");
+      var available = columns.filter(function (column) {
+        return column.filter_operators && column.filter_operators.length;
+      });
+      select.innerHTML = "<option value=''>Select column</option>" +
+        available.map(function (column) {
+          return "<option value='" + esc(column.name) + "'>" +
+            esc(column.name) + " (" + esc(column.data_type) + ")</option>";
+        }).join("");
+      select.disabled = !available.length;
+      $("#dex-filter-operator").innerHTML = "<option value=''>Select operator</option>";
+      $("#dex-filter-operator").disabled = true;
+      $("#dex-filter-value").value = "";
+      $("#dex-filter-value").disabled = true;
+      $("#dex-filter-add").disabled = true;
+    }
+
+    function selectedFilterColumn() {
+      var name = $("#dex-filter-column").value;
+      var columns = state.detail && state.detail.object ? state.detail.object.columns || [] : [];
+      return columns.find(function (column) { return column.name === name; }) || null;
+    }
+
+    function operatorLabel(operator) {
+      return {
+        eq: "equals",
+        neq: "does not equal",
+        contains: "contains",
+        gt: "greater than",
+        gte: "greater than or equal",
+        lt: "less than",
+        lte: "less than or equal",
+        is_null: "is null",
+        not_null: "is not null",
+      }[operator] || operator;
+    }
+
+    function updateFilterOperators() {
+      var column = selectedFilterColumn();
+      var operator = $("#dex-filter-operator");
+      var operators = column ? column.filter_operators || [] : [];
+      operator.innerHTML = "<option value=''>Select operator</option>" +
+        operators.map(function (value) {
+          return "<option value='" + esc(value) + "'>" + esc(operatorLabel(value)) + "</option>";
+        }).join("");
+      operator.disabled = !operators.length;
+      updateFilterValueControl();
+    }
+
+    function updateFilterValueControl() {
+      var operator = $("#dex-filter-operator").value;
+      var noValue = operator === "is_null" || operator === "not_null";
+      var value = $("#dex-filter-value");
+      value.disabled = !operator || noValue;
+      value.required = Boolean(operator && !noValue);
+      if (noValue) value.value = "";
+      $("#dex-filter-add").disabled = !selectedFilterColumn() || !operator;
+    }
+
+    function addFilter(event) {
+      event.preventDefault();
+      var column = selectedFilterColumn();
+      var operator = $("#dex-filter-operator").value;
+      var noValue = operator === "is_null" || operator === "not_null";
+      var value = noValue ? null : $("#dex-filter-value").value;
+      if (!column || !operator || (!noValue && value === "")) {
+        setGridState("Choose a column, operator, and value.", "invalid");
+        return;
+      }
+      if (state.filters.length >= 20) {
+        setGridState("A maximum of 20 filters is allowed.", "invalid");
+        return;
+      }
+      state.filters.push({ column: column.name, op: operator, value: value });
+      state.urlError = "";
+      $("#dex-filter-value").value = "";
+      renderFilterChips();
+      applyGridQueryChange();
+    }
+
+    function renderFilterChips() {
+      var box = $("#dex-filter-chips");
+      var chips = state.filters.map(function (filter, index) {
+        var value = filter.value == null ? "" : " " + String(filter.value);
+        return "<span class='dex-filter-chip'><span>" +
+          esc(filter.column + " " + operatorLabel(filter.op) + value) +
+          "</span><button type='button' data-filter-index='" + index +
+          "' aria-label='Remove filter " + esc(filter.column) + "'>&times;</button></span>";
+      });
+      if (state.quickSearch) {
+        chips.unshift(
+          "<span class='dex-filter-chip'><span>Quick search contains " +
+          esc(state.quickSearch) +
+          "</span><button type='button' data-clear-quick='true' aria-label='Remove quick search'>&times;</button></span>"
+        );
+      }
+      box.innerHTML = chips.join("");
+      $("#dex-filter-logic").hidden = chips.length < 2;
+      $("#dex-filter-clear").hidden = !chips.length && !state.urlError;
+      $all("button[data-filter-index]", box).forEach(function (button) {
+        button.addEventListener("click", function () {
+          state.filters.splice(Number(button.getAttribute("data-filter-index")), 1);
+          state.urlError = "";
+          renderFilterChips();
+          applyGridQueryChange();
+        });
+      });
+      var quick = $("button[data-clear-quick]", box);
+      if (quick) {
+        quick.addEventListener("click", function () {
+          state.quickSearch = "";
+          $("#dex-search").value = "";
+          renderFilterChips();
+          applyGridQueryChange();
+        });
+      }
+    }
+
+    function activeFilters() {
+      var filters = state.filters.slice();
+      var q = state.quickSearch.trim();
+      if (q && state.detail && state.detail.object && state.detail.object.columns) {
+        var first = state.detail.object.columns.find(function (column) {
+          return (column.filter_operators || []).indexOf("contains") !== -1;
+        });
+        if (first) filters.push({ column: first.name, op: "contains", value: q });
+      }
+      return filters;
+    }
+
     async function loadGrid(page) {
       if (!state.selected) return;
       if (state.abort) state.abort.abort();
       state.abort = new AbortController();
       state.page = page;
       setError("");
-      var filters = [];
-      var q = ($("#dex-search").value || "").trim();
-      if (q && state.detail && state.detail.object && state.detail.object.columns && state.detail.object.columns[0]) {
-        filters.push({ column: state.detail.object.columns[0].name, op: "contains", value: q });
-      }
+      setGridState("Loading rows…");
+      $("#dex-grid").setAttribute("aria-busy", "true");
+      var filters = activeFilters();
+      syncUrl();
       try {
         var res = await fetch(root.getAttribute("data-browse-url"), {
           method: "POST",
@@ -278,12 +617,22 @@
           }),
         });
         var data = await readJson(res);
-        if (!res.ok) throw new Error(data.error || "Browse failed");
+        if (!res.ok) {
+          var failure = new Error(data.error || "Browse failed");
+          failure.code = data.code || "browse_error";
+          throw failure;
+        }
         renderGrid(data);
         if (data.safe_query) $("#dex-query").textContent = data.safe_query;
       } catch (err) {
         if (err.name === "AbortError") return;
         setError(err.message || String(err));
+        setGridState(
+          err.message || "Unable to load rows.",
+          err.code === "invalid_filter" || err.code === "invalid_sort" ? "invalid" : "error"
+        );
+      } finally {
+        $("#dex-grid").setAttribute("aria-busy", "false");
       }
     }
 
@@ -293,40 +642,94 @@
       var tbody = table.querySelector("tbody");
       thead.innerHTML = "";
       tbody.innerHTML = "";
+      state.selectedRow = null;
+      clearSelectionDetails();
       var trh = document.createElement("tr");
       (data.columns || []).forEach(function (c) {
         var th = document.createElement("th");
         th.textContent = c;
-        th.title = "Sort by " + c;
+        var activeDirection = state.sortColumn === c ? state.sortDir : null;
+        th.title = activeDirection === "asc" ? "Sort descending" :
+          activeDirection === "desc" ? "Reset sorting" : "Sort ascending";
+        th.setAttribute("aria-sort", activeDirection === "asc" ? "ascending" :
+          activeDirection === "desc" ? "descending" : "none");
+        if (activeDirection) th.setAttribute("data-sort", activeDirection);
+        th.tabIndex = 0;
+        function changeSort() {
+          if (state.sortColumn !== c) {
+            state.sortColumn = c;
+            state.sortDir = "asc";
+          } else if (state.sortDir === "asc") {
+            state.sortDir = "desc";
+          } else {
+            state.sortColumn = null;
+            state.sortDir = "asc";
+          }
+          applyGridQueryChange();
+        }
         th.addEventListener("click", function () {
-          if (state.sortColumn === c) state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
-          else { state.sortColumn = c; state.sortDir = "asc"; }
-          loadGrid(1);
+          changeSort();
+        });
+        th.addEventListener("keydown", function (event) {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            changeSort();
+          }
         });
         trh.appendChild(th);
       });
       thead.appendChild(trh);
       (data.rows || []).forEach(function (row) {
         var tr = document.createElement("tr");
+        tr.tabIndex = 0;
+        tr.setAttribute("aria-selected", "false");
         (data.columns || []).forEach(function (_c, i) {
           var td = document.createElement("td");
           var val = row[i] == null ? "" : String(row[i]);
           td.textContent = val;
           td.title = "Click to copy";
-          td.addEventListener("click", function () {
-            if (navigator.clipboard) navigator.clipboard.writeText(val);
-          });
           tr.appendChild(td);
+        });
+        function chooseRow() {
+          $all("tbody tr", table).forEach(function (candidate) {
+            candidate.classList.toggle("is-selected", candidate === tr);
+            candidate.setAttribute("aria-selected", String(candidate === tr));
+          });
+          state.selectedRow = row;
+          renderSelectedRow(data.columns || [], row);
+          if (window.matchMedia("(max-width: 1280px)").matches) setDetailsOpen(true);
+        }
+        tr.addEventListener("click", chooseRow);
+        tr.addEventListener("keydown", function (event) {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            chooseRow();
+          }
         });
         tbody.appendChild(tr);
       });
       var total = data.total_rows || 0;
       var size = data.page_size || 100;
       var pages = Math.max(1, Math.ceil(total / size));
-      $("#dex-row-meta").textContent = total + " rows · page " + data.page + "/" + pages;
-      $("#dex-page-label").textContent = "Page " + data.page;
+      var start = total ? ((data.page - 1) * size) + 1 : 0;
+      var end = Math.min(total, data.page * size);
+      $("#dex-row-meta").textContent = start + "–" + end + " of " + formatNumber(total) + " rows";
+      $("#dex-filtered-count").textContent = activeFilters().length ?
+        formatNumber(data.filtered_rows == null ? total : data.filtered_rows) + " filtered rows" : "";
+      $("#dex-page-label").textContent = "Page " + data.page + " of " + pages;
       $("#dex-prev").disabled = data.page <= 1;
       $("#dex-next").disabled = data.page >= pages;
+      setGridState((data.rows || []).length ? "" : "No rows match the current filter.");
+    }
+
+    function renderSelectedRow(columns, row) {
+      var list = $("#dex-selected-row-list");
+      $("#dex-selected-row-empty").hidden = true;
+      list.hidden = false;
+      list.innerHTML = columns.map(function (column, index) {
+        var value = row[index] == null ? "" : row[index];
+        return "<dt>" + esc(column) + "</dt><dd>" + esc(value) + "</dd>";
+      }).join("");
     }
 
     async function addFavorite() {
@@ -376,6 +779,7 @@
             name: state.selected.name,
             format: $("#dex-format").value,
             row_limit: Number($("#dex-export-limit").value) || 5000,
+            filters: activeFilters(),
           }),
         });
         var data = await readJson(res);

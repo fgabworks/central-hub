@@ -1,81 +1,851 @@
-/* Data Explorer three-panel layout */
+/* Data Explorer: dark, data-first workspace. */
+
+.dex-root .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.dex-page-header {
+  margin: -.15rem 0 .85rem;
+}
+
+.dex-breadcrumb {
+  display: flex;
+  gap: .55rem;
+  margin-bottom: .55rem;
+  color: var(--muted);
+  font-size: .8rem;
+}
+
+.dex-title-row,
+.dex-header-status,
+.dex-toolbar,
+.dex-left-head,
+.dex-object-heading,
+.dex-object-actions,
+.dex-details-head,
+.dex-pager,
+.dex-actions {
+  display: flex;
+  align-items: center;
+}
+
+.dex-title-row {
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.dex-title-row h1 {
+  margin: 0 0 .2rem;
+  font-size: 1.45rem;
+}
+
+.dex-title-row p {
+  margin: 0;
+}
+
+.dex-header-status {
+  gap: .5rem;
+}
+
+.dex-status-badge {
+  border: 1px solid var(--border);
+  border-radius: .38rem;
+  background: var(--panel-2);
+  padding: .3rem .6rem;
+  color: var(--muted);
+  font-size: .78rem;
+  white-space: nowrap;
+}
+
+.dex-status-live {
+  border-color: rgba(69, 185, 112, .42);
+  background: rgba(34, 110, 62, .28);
+  color: #8ce3aa;
+}
 
 .dex-workspace-tabs {
   display: flex;
-  flex-wrap: wrap;
-  gap: .35rem;
-  margin: 0 0 1rem;
-  border-bottom: 1px solid var(--border-color, #d7dce2);
+  gap: .25rem;
+  margin: 0 -.75rem .75rem;
+  padding: 0 .75rem;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  scrollbar-width: thin;
 }
 
 .dex-workspace-tabs button {
+  flex: 0 0 auto;
   border: 0;
   border-bottom: 2px solid transparent;
   background: transparent;
-  padding: .6rem .75rem;
-  color: inherit;
+  padding: .72rem .75rem;
+  color: var(--muted);
   cursor: pointer;
+  font: inherit;
+  font-size: .84rem;
+}
+
+.dex-workspace-tabs button:hover,
+.dex-workspace-tabs button:focus-visible {
+  color: var(--text);
 }
 
 .dex-workspace-tabs button.is-active {
-  border-bottom-color: var(--accent, #2463a8);
-  font-weight: 600;
+  border-bottom-color: var(--accent);
+  color: var(--text);
+  font-weight: 700;
 }
 
 #dex-export-workspace .lex-tabs [data-tab="jobs"],
 #dex-export-workspace .lex-tabs [data-tab="history"] {
   display: none;
 }
-.dex-root { max-width: 1400px; }
-.dex-toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
-.dex-error { color: #8b1e1e; }
+
+.dex-root {
+  width: 100%;
+  max-width: none;
+}
+
+.dex-toolbar {
+  position: relative;
+  gap: .55rem;
+  margin-bottom: .7rem;
+  border: 1px solid var(--border);
+  border-radius: .48rem;
+  background: rgba(37, 42, 51, .82);
+  padding: .48rem .55rem;
+}
+
+.dex-env-control {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: .8rem;
+}
+
+.dex-env-control select {
+  min-width: 10rem;
+}
+
+.dex-search-control {
+  flex: 1 1 18rem;
+  min-width: 10rem;
+}
+
+.dex-search-control input,
+.dex-tree-filter input {
+  width: 100%;
+  background: var(--charcoal);
+  color: var(--text);
+}
+
+.dex-toolbar-btn {
+  min-height: 2.25rem;
+  white-space: nowrap;
+}
+
+.dex-icon-btn {
+  min-height: 2.25rem;
+}
+
+.dex-connection-status {
+  position: absolute;
+  top: calc(100% + .15rem);
+  right: .25rem;
+  z-index: 4;
+  max-width: 42rem;
+  font-size: .7rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .15s ease;
+}
+
+.dex-toolbar:focus-within .dex-connection-status,
+.dex-toolbar:hover .dex-connection-status {
+  opacity: 1;
+}
+
+.dex-error {
+  margin: 0 0 .65rem;
+  border: 1px solid rgba(248, 113, 113, .42);
+  border-radius: .4rem;
+  background: rgba(127, 29, 29, .3);
+  padding: .55rem .7rem;
+  color: #fecaca;
+}
+
 .dex-layout {
   display: grid;
-  grid-template-columns: minmax(200px, 240px) minmax(0, 1fr) minmax(200px, 260px);
-  gap: 0.75rem;
-  min-height: 70vh;
+  grid-template-columns: 280px minmax(0, 1fr) 320px;
+  gap: .55rem;
+  min-height: 67vh;
 }
-.dex-left, .dex-right, .dex-center {
-  border: 1px solid #e2e5ea;
-  border-radius: 4px;
-  background: #fff;
+
+.dex-left,
+.dex-right,
+.dex-center {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: .48rem;
+  background: linear-gradient(145deg, rgba(27, 39, 51, .96), rgba(20, 31, 42, .96));
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .16);
+}
+
+.dex-left {
+  display: flex;
+  flex-direction: column;
+  max-height: 72vh;
+  overflow: hidden;
+}
+
+.dex-left-head {
+  justify-content: space-between;
+  gap: .5rem;
+  padding: .7rem .75rem .35rem;
+  font-size: 1rem;
+}
+
+.dex-inventory-btn {
+  padding: .18rem .4rem;
+  font-size: .72rem;
+}
+
+.dex-tree-filter {
+  display: block;
+  padding: .35rem .7rem .5rem;
+}
+
+.dex-tree-filter input {
+  min-height: 2.15rem;
+}
+
+.dex-tree {
+  flex: 1;
+  padding: 0 .45rem .65rem;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+.dex-tree details {
+  margin: .2rem 0;
+}
+
+.dex-tree summary {
+  padding: .3rem .25rem;
+  color: var(--text);
+  cursor: pointer;
+  font-size: .82rem;
+  font-weight: 700;
+}
+
+.dex-tree .dex-tree-section-label {
+  padding: .3rem .45rem .16rem;
+  color: var(--muted);
+  font-size: .68rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.dex-tree button,
+.dex-fav-list button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .4rem;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: .3rem;
+  background: transparent;
+  padding: .3rem .45rem;
+  color: #c8d1db;
+  cursor: pointer;
+  font: inherit;
+  font-size: .76rem;
+  text-align: left;
+}
+
+.dex-tree button:hover,
+.dex-fav-list button:hover {
+  background: rgba(255, 255, 255, .05);
+}
+
+.dex-tree button.is-active,
+.dex-fav-list button.is-active {
+  border-color: rgba(239, 68, 68, .5);
+  background: linear-gradient(90deg, #a80712, #7e0a12);
+  color: #fff;
+}
+
+.dex-tree button[hidden] {
+  display: none;
+}
+
+.dex-tree-count {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .09);
+  padding: .06rem .34rem;
+  color: #b8c2cd;
+  font-size: .65rem;
+}
+
+.dex-left-section {
+  border-top: 1px solid var(--border);
+  padding: .55rem .7rem;
+}
+
+.dex-left-section > strong {
+  font-size: .78rem;
+}
+
+.dex-left-section p {
+  margin: .35rem 0 0;
+}
+
+.dex-fav-list {
+  max-height: 7rem;
+  margin-top: .3rem;
+  overflow: auto;
+}
+
+.dex-center {
+  display: flex;
+  flex-direction: column;
+  max-height: 72vh;
+  overflow: hidden;
+}
+
+.dex-center-head {
+  border-bottom: 1px solid var(--border);
+  padding: .7rem .8rem 0;
+}
+
+.dex-object-heading {
+  justify-content: space-between;
+  gap: .75rem;
+}
+
+.dex-object-heading h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.dex-object-heading p {
+  margin: .2rem 0 .45rem;
+  font-size: .72rem;
+}
+
+.dex-object-actions {
+  gap: .35rem;
+}
+
+.dex-tabs {
+  display: flex;
+  gap: .2rem;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.dex-tab {
+  flex: 0 0 auto;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  padding: .48rem .55rem;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: .76rem;
+}
+
+.dex-tab:hover,
+.dex-tab:focus-visible {
+  color: var(--text);
+}
+
+.dex-tab.is-active {
+  border-bottom-color: var(--accent);
+  color: #ff7c7c;
+  font-weight: 700;
+}
+
+.dex-panel {
+  min-height: 0;
+  padding: .7rem .75rem;
+  overflow: auto;
+  flex: 1;
+}
+
+.dex-panel[data-panel="data"] {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.dex-panel[hidden] {
+  display: none;
+}
+
+.dex-filter-builder {
+  display: grid;
+  grid-template-columns: minmax(9rem, 1fr) minmax(8rem, .8fr) minmax(10rem, 1.2fr) auto;
+  gap: .45rem;
+  align-items: end;
+  border-bottom: 1px solid var(--border);
+  padding: .6rem .75rem;
+  background: rgba(13, 23, 33, .4);
+}
+
+.dex-filter-builder label {
+  display: grid;
+  gap: .2rem;
+  min-width: 0;
+  color: var(--muted);
+  font-size: .68rem;
+}
+
+.dex-filter-builder select,
+.dex-filter-builder input {
+  width: 100%;
+  min-width: 0;
+  min-height: 2rem;
+  background: var(--charcoal);
+  color: var(--text);
+}
+
+.dex-filter-summary {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  min-height: 2.25rem;
+  border-bottom: 1px solid var(--border);
+  padding: .35rem .75rem;
+}
+
+.dex-filter-chips {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: .35rem;
   min-width: 0;
 }
-.dex-left, .dex-right { padding: 0.6rem; overflow: auto; max-height: 75vh; }
-.dex-center { display: flex; flex-direction: column; max-height: 75vh; }
-.dex-center-head { padding: 0.55rem 0.65rem 0; border-bottom: 1px solid #eceff3; }
-.dex-center-head h2 { margin: 0 0 0.4rem; font-size: 1rem; }
-.dex-tabs { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-bottom: 0.4rem; }
-.dex-tab {
-  border: 1px solid #c9cdd3; background: #f7f8fa; padding: 0.2rem 0.45rem;
-  border-radius: 3px; cursor: pointer; font: inherit; font-size: 0.8rem;
+
+.dex-filter-logic {
+  flex: 0 0 auto;
+  font-size: .68rem;
+  white-space: nowrap;
 }
-.dex-tab.is-active { background: #1f3a5f; color: #fff; border-color: #1f3a5f; }
-.dex-panel { padding: 0.55rem 0.65rem; overflow: auto; flex: 1; }
-.dex-tree details { margin: 0.2rem 0; }
-.dex-tree summary { cursor: pointer; font-weight: 600; font-size: 0.88rem; }
-.dex-tree button {
-  display: block; width: 100%; text-align: left; border: 0; background: transparent;
-  padding: 0.15rem 0.25rem; cursor: pointer; font: inherit; font-size: 0.82rem;
+
+.dex-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .38rem;
+  max-width: 100%;
+  border: 1px solid rgba(239, 68, 68, .45);
+  border-radius: 999px;
+  background: rgba(127, 29, 29, .28);
+  padding: .2rem .28rem .2rem .55rem;
+  color: #fecaca;
+  font-size: .7rem;
 }
-.dex-tree button.is-active { background: #eef3f8; }
-.dex-table-wrap { overflow: auto; max-height: 48vh; border: 1px solid #eceff3; }
-.dex-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-.dex-table th, .dex-table td { border-bottom: 1px solid #eceff3; padding: 0.25rem 0.4rem; white-space: nowrap; text-align: left; }
-.dex-table th { background: #f4f6f8; position: sticky; top: 0; cursor: pointer; }
-.dex-grid-toolbar, .dex-pager, .dex-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin: 0.4rem 0; }
-.dex-pre { white-space: pre-wrap; font-size: 0.78rem; background: #f7f8fa; padding: 0.5rem; border-radius: 4px; max-height: 50vh; overflow: auto; }
-.dex-dl { display: grid; grid-template-columns: 7rem 1fr; gap: 0.25rem 0.5rem; font-size: 0.85rem; }
-.dex-dl dt { font-weight: 600; color: #445; }
-.dex-small { font-size: 0.78rem; }
-.dex-left-section { margin-top: 0.75rem; padding-top: 0.5rem; border-top: 1px solid #eceff3; }
-.dex-fav-list button { display: block; width: 100%; text-align: left; font: inherit; font-size: 0.8rem; border: 0; background: transparent; padding: 0.15rem 0; cursor: pointer; }
-.dex-dialog { width: min(900px, 92vw); max-height: 80vh; border: 1px solid #c9cdd3; border-radius: 6px; padding: 0; }
-.dex-dialog header { display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0.75rem; border-bottom: 1px solid #eceff3; }
-.dex-inventory-body { padding: 0.75rem; overflow: auto; max-height: 70vh; font-size: 0.85rem; }
-.dex-inv-group { margin-bottom: 0.85rem; }
-.dex-inv-group h4 { margin: 0 0 0.35rem; }
-@media (max-width: 960px) {
-  .dex-layout { grid-template-columns: 1fr; }
-  .dex-left, .dex-right { max-height: none; }
+
+.dex-filter-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dex-filter-chip button {
+  display: grid;
+  width: 1.25rem;
+  height: 1.25rem;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #fecaca;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.dex-filter-chip button:hover,
+.dex-filter-chip button:focus-visible {
+  background: rgba(255, 255, 255, .12);
+  color: #fff;
+}
+
+.dex-grid-status {
+  display: flex;
+  justify-content: space-between;
+  gap: .75rem;
+  min-height: 2rem;
+  padding: .42rem .75rem;
+  font-size: .73rem;
+}
+
+.dex-table-wrap {
+  position: relative;
+  min-height: 13rem;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  flex: 1;
+  scrollbar-color: #68717c #202a34;
+}
+
+.dex-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: .77rem;
+}
+
+.dex-table th,
+.dex-table td {
+  max-width: 24rem;
+  overflow: hidden;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: .55rem .65rem;
+  white-space: nowrap;
+  text-align: left;
+  text-overflow: ellipsis;
+}
+
+.dex-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #182431;
+  color: #e2e8f0;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.dex-table th::after {
+  margin-left: .35rem;
+  color: #ff9a9a;
+  content: "";
+}
+
+.dex-table th[data-sort="asc"]::after {
+  content: "▲";
+}
+
+.dex-table th[data-sort="desc"]::after {
+  content: "▼";
+}
+
+.dex-table th:hover {
+  background: #223241;
+}
+
+.dex-table tbody tr {
+  background: rgba(20, 31, 42, .5);
+  cursor: pointer;
+}
+
+.dex-table tbody tr:nth-child(even) {
+  background: rgba(31, 44, 57, .58);
+}
+
+.dex-table tbody tr:hover {
+  background: rgba(76, 91, 107, .35);
+}
+
+.dex-table tbody tr.is-selected,
+.dex-table tbody tr.is-selected:nth-child(even) {
+  background: rgba(168, 7, 18, .78);
+  color: #fff;
+}
+
+.dex-grid-state {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  background: rgba(20, 31, 42, .72);
+  color: var(--muted);
+  text-align: center;
+}
+
+.dex-grid-state[hidden] {
+  display: none;
+}
+
+.dex-grid-state.is-error {
+  color: #fecaca;
+}
+
+.dex-grid-state.is-invalid {
+  color: #fcd34d;
+}
+
+.dex-pager {
+  justify-content: flex-end;
+  gap: .45rem;
+  min-height: 3.2rem;
+  padding: .55rem .75rem;
+}
+
+.dex-pager #dex-row-range {
+  margin-right: auto;
+}
+
+.dex-pre {
+  max-height: 52vh;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: .4rem;
+  background: #131d27;
+  padding: .65rem;
+  color: #d5dee8;
+  font-size: .76rem;
+  white-space: pre-wrap;
+}
+
+.dex-actions {
+  flex-wrap: wrap;
+  gap: .4rem;
+}
+
+.dex-right {
+  max-height: 72vh;
+  padding: .8rem .85rem;
+  overflow: auto;
+  transition: opacity .16s ease, transform .16s ease;
+}
+
+.dex-layout.details-collapsed {
+  grid-template-columns: 280px minmax(0, 1fr);
+}
+
+.dex-layout.details-collapsed .dex-right {
+  display: none;
+}
+
+.dex-details-head {
+  justify-content: space-between;
+  gap: .5rem;
+  margin-bottom: .75rem;
+}
+
+.dex-details-head h3,
+.dex-selected-row h3 {
+  margin: 0;
+  font-size: .95rem;
+}
+
+.dex-drawer-close {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.dex-drawer-close:hover,
+.dex-drawer-close:focus-visible {
+  color: #fff;
+}
+
+.dex-dl {
+  display: grid;
+  grid-template-columns: minmax(5.5rem, .8fr) minmax(0, 1.3fr);
+  gap: .42rem .55rem;
+  margin: 0;
+  font-size: .76rem;
+}
+
+.dex-dl dt {
+  color: #dbe4ed;
+  font-weight: 650;
+}
+
+.dex-dl dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #aeb9c5;
+}
+
+.dex-selected-row {
+  margin-top: 1rem;
+  border-top: 1px solid var(--border);
+  padding-top: .9rem;
+}
+
+.dex-selected-row h3 {
+  margin-bottom: .7rem;
+}
+
+.dex-small {
+  font-size: .72rem;
+}
+
+.dex-dialog {
+  width: min(900px, 92vw);
+  max-height: 80vh;
+  border: 1px solid var(--border);
+  border-radius: .5rem;
+  background: var(--panel);
+  padding: 0;
+  color: var(--text);
+}
+
+.dex-dialog::backdrop {
+  background: rgba(0, 0, 0, .72);
+}
+
+.dex-dialog header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  padding: .7rem .8rem;
+}
+
+.dex-inventory-body {
+  max-height: 70vh;
+  overflow: auto;
+  padding: .8rem;
+  font-size: .8rem;
+}
+
+.dex-inv-group {
+  margin-bottom: .9rem;
+}
+
+.dex-inv-group h4 {
+  margin: 0 0 .35rem;
+}
+
+.dex-toolbar button:focus-visible,
+.dex-tree button:focus-visible,
+.dex-tab:focus-visible,
+.dex-table tbody tr:focus-visible {
+  outline: 2px solid #ff7c7c;
+  outline-offset: 1px;
+}
+
+@media (max-width: 1280px) {
+  .dex-layout,
+  .dex-layout.details-collapsed {
+    grid-template-columns: 260px minmax(0, 1fr);
+  }
+
+  .dex-right {
+    position: fixed;
+    top: 4.5rem;
+    right: 1rem;
+    bottom: 1rem;
+    z-index: 40;
+    width: min(320px, calc(100vw - 2rem));
+    max-height: none;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, .5);
+  }
+
+  .dex-layout.details-collapsed .dex-right {
+    display: none;
+  }
+}
+
+@media (max-width: 820px) {
+  .dex-title-row {
+    align-items: flex-start;
+  }
+
+  .dex-header-status {
+    flex-direction: column;
+    align-items: flex-end;
+  }
+
+  .dex-toolbar {
+    align-items: stretch;
+  }
+
+  .dex-env-control,
+  .dex-search-control {
+    flex: 1 1 100%;
+  }
+
+  .dex-env-control select {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .dex-layout,
+  .dex-layout.details-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dex-left {
+    max-height: 19rem;
+  }
+
+  .dex-center {
+    min-height: 34rem;
+    max-height: 74vh;
+  }
+
+  .dex-object-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .dex-object-actions {
+    margin-bottom: .4rem;
+  }
+
+  .dex-filter-builder {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 520px) {
+  .dex-title-row {
+    flex-direction: column;
+  }
+
+  .dex-header-status {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .dex-toolbar-btn {
+    flex: 1 1 calc(50% - .3rem);
+  }
+
+  .dex-icon-btn {
+    flex: 1 1 100%;
+  }
+
+  .dex-filter-builder {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dex-pager {
+    justify-content: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dex-right,
+  .dex-connection-status {
+    transition: none;
+  }
 }

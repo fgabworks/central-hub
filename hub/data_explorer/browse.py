@@ -11,9 +11,11 @@ from hub.data_explorer.security import (
     ExplorerSafetyError,
     apply_column_policies,
     assert_safe_identifier,
+    column_action,
     quote_ident,
     validate_filter_ops,
     validate_sort_column,
+    validate_sort_direction,
 )
 
 
@@ -41,6 +43,9 @@ def build_browse_query(
 ) -> BrowseQuery:
     meta_cols = [c.name for c in obj.columns]
     allowed = set(meta_cols)
+    browsable_types = {
+        c.name: c.data_type for c in obj.columns if column_action(c.name) != "hide"
+    }
     if not meta_cols:
         raise ExplorerSafetyError("Object has no discoverable columns")
 
@@ -59,7 +64,7 @@ def build_browse_query(
 
     where_parts: list[str] = []
     params: dict[str, Any] = {}
-    norm_filters = validate_filter_ops(filters or [], allowed)
+    norm_filters = validate_filter_ops(filters or [], browsable_types)
     for f in norm_filters:
         col = quote_ident(f["column"])
         op = f["op"]
@@ -83,10 +88,10 @@ def build_browse_query(
             where_parts.append(f"{col} {sql_op} :{key}")
             params[key] = f["value"]
 
-    sort_col = validate_sort_column(sort_column, allowed)
+    sort_col = validate_sort_column(sort_column, set(browsable_types))
     order_parts: list[str] = []
     if sort_col:
-        direction = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
+        direction = validate_sort_direction(sort_dir).upper()
         order_parts.append(f"{quote_ident(sort_col)} {direction}")
 
     limit = max(1, int(limit))

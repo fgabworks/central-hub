@@ -87,6 +87,109 @@ def test_pagination_and_filters(service: DataExplorerService):
     assert ":quarter" in result["safe_query"] or "quarter" in result["safe_query"].lower()
 
 
+def test_multiple_filters_use_server_side_and_logic(service: DataExplorerService):
+    result = service.browse(
+        environment="dev",
+        schema="main",
+        name="export_demo_household",
+        filters=[
+            {"column": "quarter", "op": "eq", "value": "2025Q1"},
+            {"column": "status", "op": "eq", "value": "Active"},
+        ],
+        page=1,
+        page_size=100,
+        actor="test",
+    )
+    assert result["total_rows"] == 2
+    assert result["filtered_rows"] == 2
+    assert len(result["rows"]) == 2
+    assert " AND " in result["safe_query"]
+    assert "2025Q1" not in result["safe_query"]
+    assert "Active" not in result["safe_query"]
+
+
+def test_server_side_sorting_and_reset_query_shape(service: DataExplorerService):
+    descending = service.browse(
+        environment="dev",
+        schema="main",
+        name="export_demo_household",
+        sort_column="household_id",
+        sort_dir="desc",
+        page=1,
+        page_size=2,
+        actor="test",
+    )
+    assert [row[0] for row in descending["rows"]] == ["HH-008", "HH-007"]
+    assert 'ORDER BY "household_id" DESC' in descending["safe_query"]
+
+    obj = service._require_object("dev", "main", "export_demo_household")
+    reset = build_browse_query(obj, sort_column=None, limit=2, dialect="sqlite")
+    assert "ORDER BY" not in reset.sql
+    with pytest.raises(ExplorerSafetyError, match="direction"):
+        build_browse_query(
+            obj,
+            sort_column="household_id",
+            sort_dir="sideways",
+            limit=2,
+            dialect="sqlite",
+        )
+
+
+def test_filter_operators_are_type_checked_and_hidden_columns_are_rejected(
+    service: DataExplorerService,
+):
+    with pytest.raises(ExplorerSafetyError, match="not valid"):
+        service.browse(
+            environment="dev",
+            schema="main",
+            name="demo_people",
+            filters=[{"column": "id", "op": "contains", "value": "1"}],
+            actor="test",
+        )
+    with pytest.raises(ExplorerSafetyError, match="Numeric"):
+        service.browse(
+            environment="dev",
+            schema="main",
+            name="demo_people",
+            filters=[{"column": "id", "op": "eq", "value": "not-a-number"}],
+            actor="test",
+        )
+    with pytest.raises(ExplorerSafetyError, match="not valid"):
+        service.browse(
+            environment="dev",
+            schema="main",
+            name="demo_people",
+            filters=[{"column": "name", "op": "gt", "value": "Ada"}],
+            actor="test",
+        )
+    hidden = ObjectMeta(
+        schema="main",
+        name="sensitive_demo",
+        object_type="table",
+        columns=[
+            ColumnMeta(name="id", data_type="INTEGER", nullable=False),
+            ColumnMeta(name="password_hash", data_type="TEXT", nullable=True),
+        ],
+    )
+    with pytest.raises(ExplorerSafetyError, match="browsable"):
+        build_browse_query(
+            hidden,
+            filters=[{"column": "password_hash", "op": "eq", "value": "secret"}],
+            dialect="sqlite",
+        )
+
+
+def test_object_detail_exposes_only_type_valid_filter_operators(service: DataExplorerService):
+    detail = service.object_detail(
+        environment="dev", schema="main", name="demo_people", actor="test"
+    )
+    columns = {column["name"]: column for column in detail["object"]["columns"]}
+    assert "contains" in columns["name"]["filter_operators"]
+    assert "gt" not in columns["name"]["filter_operators"]
+    assert "gt" in columns["id"]["filter_operators"]
+    assert "contains" not in columns["id"]["filter_operators"]
+
+
 def test_large_table_safeguards(service: DataExplorerService):
     result = service.browse(
         environment="dev",

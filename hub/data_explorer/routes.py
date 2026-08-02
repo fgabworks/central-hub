@@ -27,7 +27,13 @@ def register_data_explorer_routes(app: Flask) -> None:
         )
 
     def _err(exc: Exception, status: int = 400):
-        return jsonify({"ok": False, "error": str(exc)}), status
+        return jsonify(
+            {
+                "ok": False,
+                "error": str(exc),
+                "code": getattr(exc, "code", "explorer_rejected"),
+            }
+        ), status
 
     @app.get("/data-explorer")
     def data_explorer():

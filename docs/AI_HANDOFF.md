@@ -4,7 +4,36 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**Central Hub Process Manager (2026-08-02)**
+**Data Explorer server-side filtering and sorting (2026-08-02)**
+
+The browse grid now supports three-state header sorting (ascending, descending,
+reset), a typed column/operator/value filter builder, up to 20 removable AND
+filters, Clear all, filtered counts, and URL-restored environment/object/page/sort/
+filter/search state. Filter or sort changes reset to page 1. Object metadata exposes
+only operators valid for each discovered column type; the server independently
+revalidates names, types, operators, sort direction, and hidden-column policy.
+Browse and export reuse the existing parameterized SELECT builder, full-result
+COUNT, masking, access policy, and row caps. Explicit loading, empty, invalid-filter,
+and general error states are rendered. Focused API/UI tests are in
+tests/test_data_explorer.py and tests/test_data_explorer_ui.py.
+
+Prior: **Data Explorer data-first redesign (2026-08-02)**
+
+Redesigned /data-explorer around the existing read-only APIs: compact breadcrumb
+header and status, one primary tab row, one environment/search/refresh/export
+toolbar, a 280px searchable object explorer, flexible sticky-header data grid, and
+a 320px dark contextual details drawer. Rows now have keyboard-accessible selection
+and contextual value details; the grid has explicit loading/error/empty states,
+range-aware pagination, horizontal scrolling, and selected-row highlighting. The
+drawer collapses below 1280px and side panels stack below 820px. Backend query,
+masking, pagination, export/job/history, permission, Stage/Live isolation, and
+SELECT-only behavior are unchanged. Screenshots:
+docs/screenshots/data-explorer-desktop.png and
+docs/screenshots/data-explorer-reduced.png. Focused tests:
+tests/test_data_explorer_ui.py, tests/test_data_explorer.py, and
+tests/test_live_data_export.py (38 passed).
+
+Prior: **Central Hub Process Manager (2026-08-02)**
 
 Extended Repository Workspace process-control primitives into the existing `/health`
 surface. Central Hub now has an atomic PID/identity lock, stale/invalid lock cleanup,

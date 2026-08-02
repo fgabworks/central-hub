@@ -24,6 +24,7 @@ from hub.data_explorer.security import (
     ExplorerSafetyError,
     apply_column_policies,
     column_action,
+    filter_operators_for_type,
     mask_row_values,
     normalize_environment,
 )
@@ -184,6 +185,13 @@ class DataExplorerService:
             limit=min(25, self.config.defaults.page_size),
             dialect="sqlite" if catalog.driver == "sqlite" else "postgres",
         )
+        object_payload = obj.to_dict()
+        for column in object_payload["columns"]:
+            action = col_actions.get(column["name"])
+            column["filter_operators"] = (
+                [] if action == "hide" else filter_operators_for_type(column["data_type"])
+            )
+            column["sortable"] = action != "hide"
         self.store.audit(
             event="object_view",
             actor=actor,
@@ -192,7 +200,7 @@ class DataExplorerService:
             detail={"object_type": obj.object_type, "columns": len(obj.columns)},
         )
         return {
-            "object": obj.to_dict(),
+            "object": object_payload,
             "classification": cls,
             "lineage": lin,
             "column_actions": {k: v for k, v in col_actions.items() if v},
@@ -284,6 +292,10 @@ class DataExplorerService:
             "page": page,
             "page_size": size,
             "total_rows": total,
+            "filtered_rows": total,
+            "filters": filters or [],
+            "sort_column": sort_column,
+            "sort_dir": sort_dir if sort_column else None,
             "warnings": q.warnings,
             "safe_query": generate_safe_query_text(obj, q),
             "classification": cls,
