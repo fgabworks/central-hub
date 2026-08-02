@@ -14,7 +14,8 @@ routes. `DataExplorerService` owns the approved-source registry, shared
 `ExplorerStore`, export jobs/history/presets, shared SELECT/security primitives, and
 the shared file export engine. Existing
 discovery browsing and allowlisted export behavior remain SELECT-only, masked,
-row-capped, and Stage/Live isolated. Focused tests: `tests/test_data_explorer.py` and
+row-capped, and Stage/Live isolated. Database/tunnel failures are normalized to safe
+JSON API errors so the browser never exposes an HTML/JSON parser failure. Focused tests: `tests/test_data_explorer.py` and
 `tests/test_live_data_export.py`.
 
 Prior: **Progress NPMO report comparison (2026-08-02)**

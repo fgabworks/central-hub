@@ -238,6 +238,19 @@ def test_blocked_arbitrary_object(service: DataExplorerService):
         )
 
 
+def test_connection_failure_is_safe_explorer_error(service: DataExplorerService, monkeypatch):
+    def fail_discovery(*args, **kwargs):
+        raise RuntimeError("password=must-not-leak host=private-db")
+
+    monkeypatch.setattr("hub.data_explorer.service.discover_catalog", fail_discovery)
+    with pytest.raises(ExplorerSafetyError) as caught:
+        service.catalog(environment="dev", force=True, actor="test")
+    message = str(caught.value)
+    assert "Unable to connect to the Dev read-only database" in message
+    assert "must-not-leak" not in message
+    assert "private-db" not in message
+
+
 def test_unified_navigation_redirect_and_export_api(tmp_path: Path):
     from app import create_app
 

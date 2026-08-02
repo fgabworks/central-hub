@@ -17,6 +17,17 @@
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
+  async function readJson(response) {
+    var text = await response.text();
+    try {
+      return JSON.parse(text || "{}");
+    } catch (_error) {
+      throw new Error(
+        "Data Explorer received an invalid server response (HTTP " + response.status + ")."
+      );
+    }
+  }
+
   function init() {
     var root = document.getElementById("dex-root");
     if (!root) return;
@@ -55,12 +66,12 @@
       state.selected = null;
       try {
         var res = await fetch(root.getAttribute("data-tree-url") + "?environment=" + encodeURIComponent(envSel.value));
-        var data = await res.json();
+        var data = await readJson(res);
         if (!res.ok) throw new Error(data.error || "Failed to load tree");
         renderTree(data.tree);
         updateConnStatus();
         var favRes = await fetch(root.getAttribute("data-favorites-url") + "?environment=" + encodeURIComponent(envSel.value));
-        var favData = await favRes.json();
+        var favData = await readJson(favRes);
         renderFavorites(favData.favorites || []);
       } catch (err) {
         setError(err.message || String(err));
@@ -76,7 +87,7 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ environment: envSel.value }),
         });
-        var data = await res.json();
+        var data = await readJson(res);
         if (!res.ok) throw new Error(data.error || "Refresh failed");
         renderTree(data.tree);
       } catch (err) {
@@ -87,7 +98,7 @@
     $("#dex-inventory-btn").addEventListener("click", async function () {
       try {
         var res = await fetch(root.getAttribute("data-inventory-url") + "?environment=" + encodeURIComponent(envSel.value));
-        var data = await res.json();
+        var data = await readJson(res);
         if (!res.ok) throw new Error(data.error || "Inventory failed");
         renderInventory(data.inventory);
         document.getElementById("dex-inventory-dialog").showModal();
@@ -187,7 +198,7 @@
           "&schema=" + encodeURIComponent(schema) +
           "&name=" + encodeURIComponent(name);
         var res = await fetch(url);
-        var data = await res.json();
+        var data = await readJson(res);
         if (!res.ok) throw new Error(data.error || "Failed to load object");
         state.detail = data;
         renderDetails(data);
@@ -266,7 +277,7 @@
             filters: filters,
           }),
         });
-        var data = await res.json();
+        var data = await readJson(res);
         if (!res.ok) throw new Error(data.error || "Browse failed");
         renderGrid(data);
         if (data.safe_query) $("#dex-query").textContent = data.safe_query;
@@ -331,7 +342,7 @@
         }),
       });
       var favRes = await fetch(root.getAttribute("data-favorites-url") + "?environment=" + encodeURIComponent(envSel.value));
-      var favData = await favRes.json();
+      var favData = await readJson(favRes);
       renderFavorites(favData.favorites || []);
     }
 
@@ -346,7 +357,7 @@
           name: state.selected.name,
         }),
       });
-      var data = await res.json();
+      var data = await readJson(res);
       var out = $("#dex-explain-out");
       out.hidden = false;
       out.textContent = res.ok ? JSON.stringify(data.rows || data, null, 2) : (data.error || "Explain failed");
@@ -367,7 +378,7 @@
             row_limit: Number($("#dex-export-limit").value) || 5000,
           }),
         });
-        var data = await res.json();
+        var data = await readJson(res);
         if (!res.ok) throw new Error(data.error || "Export failed");
         var html = "Exported " + data.exported_rows + " rows · " + data.file_size + " bytes";
         if (data.download_url) html += " · <a href='" + esc(data.download_url) + "'>Download</a>";

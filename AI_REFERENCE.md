@@ -242,6 +242,9 @@ Safety: sqlglot AST validation (not regex-only); SELECT / read-only WITH / EXPLA
 | `/api/data-explorer/export-jobs*` | Jobs, cancellation, and token+TTL download |
 | `/api/data-explorer/export-history` | Export audit history without row payloads |
 
+Connection/discovery failures return redacted JSON errors; raw PostgreSQL connection
+strings and Flask HTML error pages are not exposed to the Data Explorer client.
+
 Config/policies: `config/data_explorer.yaml` and the approved-source registry
 `config/live_data_exports.yaml`. Data Explorer owns one `ExplorerStore` at
 `data/data_explorer.db` for browse audit, favorites, jobs, presets, and export history;

@@ -114,9 +114,24 @@ class DataExplorerService:
     ) -> CatalogSnapshot:
         env = normalize_environment(environment)
         profile = self._resolve_profile(env)
-        snap = discover_catalog(
-            profile, environment=env, force=force, cfg=self.config
-        )
+        try:
+            snap = discover_catalog(
+                profile, environment=env, force=force, cfg=self.config
+            )
+        except ExplorerSafetyError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            # Never expose credentials or raw connection strings through the API.
+            log.warning(
+                "data_explorer_connection_failed env=%s connection=%s error_type=%s",
+                env,
+                profile.id,
+                type(exc).__name__,
+            )
+            raise ExplorerSafetyError(
+                f"Unable to connect to the {env.title()} read-only database. "
+                "Verify its VPN/SSH tunnel, then test the connection in SQL Workspace."
+            ) from exc
         self.store.audit(
             event="metadata_refresh" if force else "metadata_view",
             actor=actor,
