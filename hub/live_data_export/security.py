@@ -5,24 +5,12 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from hub.data_access import BLOCKED_SCHEMAS, CREDENTIAL_LIKE, normalize_environment as normalize_data_environment, validate_identifier
 from hub.live_data_export.registry import ExportSource, RegistryError
 
-_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _SAFE_FILENAME = re.compile(r"[^A-Za-z0-9._-]+")
-_BLOCKED_SCHEMAS = frozenset(
-    {
-        "pg_catalog",
-        "information_schema",
-        "pg_toast",
-        "mysql",
-        "sys",
-        "performance_schema",
-    }
-)
-_CREDENTIAL_LIKE = re.compile(
-    r"(password|passwd|secret|token|api[_-]?key|credential|private[_-]?key)",
-    re.IGNORECASE,
-)
+_BLOCKED_SCHEMAS = BLOCKED_SCHEMAS
+_CREDENTIAL_LIKE = CREDENTIAL_LIKE
 
 
 class ExportSafetyError(ValueError):
@@ -30,14 +18,12 @@ class ExportSafetyError(ValueError):
 
 
 def assert_safe_identifier(name: str, *, kind: str = "identifier") -> str:
-    value = str(name or "").strip()
-    if not value or not _IDENT.match(value):
-        raise ExportSafetyError(f"Invalid {kind}: {name!r}")
-    if value.lower() in _BLOCKED_SCHEMAS:
-        raise ExportSafetyError(f"Blocked schema/object: {value}")
-    if _CREDENTIAL_LIKE.search(value):
-        raise ExportSafetyError(f"Blocked credential-like {kind}: {value}")
-    return value
+    return validate_identifier(
+        name,
+        kind=kind,
+        error=ExportSafetyError,
+        block_credentials=True,
+    )
 
 
 def quote_ident(name: str, *, dialect: str = "postgres") -> str:
@@ -87,10 +73,7 @@ def sanitize_filename(name: str, *, max_len: int = 120) -> str:
 
 
 def normalize_environment(raw: str) -> str:
-    env = str(raw or "live").strip().lower()
-    if env not in ("live", "stage", "dev"):
-        raise ExportSafetyError(f"Invalid environment: {raw}")
-    return env
+    return normalize_data_environment(raw, default="live", error=ExportSafetyError)
 
 
 def validate_filters(source: ExportSource, filters: dict[str, Any]) -> dict[str, Any]:

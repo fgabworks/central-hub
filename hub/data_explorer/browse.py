@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from hub.data_access import compose_select
 from hub.data_explorer.discovery import ObjectMeta
 from hub.data_explorer.security import (
     ExplorerSafetyError,
@@ -82,24 +83,25 @@ def build_browse_query(
             where_parts.append(f"{col} {sql_op} :{key}")
             params[key] = f["value"]
 
-    where_sql = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
-
     sort_col = validate_sort_column(sort_column, allowed)
-    order_sql = ""
+    order_parts: list[str] = []
     if sort_col:
         direction = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
-        order_sql = f" ORDER BY {quote_ident(sort_col)} {direction}"
+        order_parts.append(f"{quote_ident(sort_col)} {direction}")
 
     limit = max(1, int(limit))
     offset = max(0, int(offset))
     params["row_limit"] = limit
     params["row_offset"] = offset
 
-    data_sql = (
-        f"SELECT {select_list} FROM {from_sql}{where_sql}{order_sql} "
-        f"LIMIT :row_limit OFFSET :row_offset"
+    data_sql, count_sql = compose_select(
+        select_list=select_list,
+        from_sql=from_sql,
+        where_parts=where_parts,
+        order_parts=order_parts,
+        limit_placeholder=":row_limit",
+        offset_placeholder=":row_offset",
     )
-    count_sql = f"SELECT COUNT(*) AS row_count FROM {from_sql}{where_sql}"
     return BrowseQuery(
         sql=data_sql,
         count_sql=count_sql,

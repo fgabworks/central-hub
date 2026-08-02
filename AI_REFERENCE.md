@@ -39,8 +39,7 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Calendar Center | Shared Calendar service + FullCalendar grid (month/week/day) + agenda/upcoming |
 | Google Connections | System page to connect/assign/enable Gmail+Calendar scopes |
 | SQL Workspace | Read-only query library/runner (`/sql`); sqlglot allowlist; Live warning; layout `minmax(260px,320px) | 1fr` under shell |
-| Live Data Export | `/live-data-export` — Phase 1 allowlisted CSV/XLSX/csv.gz from approved sources (`hub/live_data_export/`, `config/live_data_exports.yaml`); preview+jobs; RO connections; unverified prod sources disabled |
-| Data Explorer | `/data-explorer` — Phase 1 RO schema/browse/lineage/inventory (`hub/data_explorer/`, `config/data_explorer.yaml`); no ad-hoc SQL; Live inventory requires configured `live-ro` |
+| Data Explorer | `/data-explorer` — unified RO schema/data/relationship/lineage browser plus allowlisted CSV/XLSX/csv.gz exports, large jobs, presets, history, masking, and audit. `/live-data-export` redirects to `?tab=export`; one runtime service/store/export engine with shared SELECT/security primitives; no ad-hoc SQL or arbitrary table input; Stage/Live remain isolated |
 | AI Assistant Center | Aira at `/personal/aira`; Okarun at `/work/okarun` (history/management); full-height right dock + fixed composer via topbar + activity rail (`hub/agent_center/dock.py`); Find/Ask/Plan/Review; Codex CLI (Okarun MVP), Claude Code, Cursor, Grok, OpenAI |
 | Workspace Console | Bottom panel under main content only (`left: var(--sidebar-w)`); bounded height; Ctrl+J; collapsed by default |
 | Activity Rail | Far-right icons for AI Assistant, Quick Notepad, Workspace Console (future utilities placeholders); reduces main width only |
@@ -228,29 +227,26 @@ refresh; no push; no create/update/delete/RSVP; **no automatic agent access**.
 Local store: `data/sql_workspace.db`. Connections: `config/sql_connections.yaml` + env secrets (`.env.example`).
 Safety: sqlglot AST validation (not regex-only); SELECT / read-only WITH / EXPLAIN only; one statement; RO transaction + statement timeout + row cap; credentials never in UI/logs; Live connections show a strong warning.
 
-## Live Data Export
-
-| Route | Purpose |
-|---|---|
-| `/live-data-export` | New Export / Presets / Jobs / History / Settings |
-| `/api/live-data-export/preview` | Count + sample rows (same filter scope as export) |
-| `/api/live-data-export/export` | Sync or background CSV/XLSX/csv.gz |
-| `/api/live-data-export/jobs/<id>/download` | Token + TTL protected download |
-
-Registry: `config/live_data_exports.yaml`. Store: `data/live_data_export.db` + `data/live_exports/`.
-Uses SQL Workspace RO profiles (`live-ro` / `stage-ro` / `local-demo`). No unrestricted SQL editor.
-
 ## Data Explorer
 
 | Route | Purpose |
 |---|---|
-| `/data-explorer` | Three-panel RO explorer (tree / grid / details) |
+| `/data-explorer` | Browse Data / Schema / Relationships / Lineage / Export / Export Jobs / History |
+| `/live-data-export` | Compatibility redirect to `/data-explorer?tab=export` |
 | `/api/data-explorer/tree` | Cached schema tree |
 | `/api/data-explorer/browse` | Paginated SELECT from discovered objects only |
 | `/api/data-explorer/inventory` | Grouped source inventory |
 | `/api/data-explorer/export` | CSV/XLSX/csv.gz with sensitivity policy |
+| `/api/data-explorer/exports/preview` | Allowlisted source count + masked sample |
+| `/api/data-explorer/exports` | Allowlisted sync/background export |
+| `/api/data-explorer/export-jobs*` | Jobs, cancellation, and token+TTL download |
+| `/api/data-explorer/export-history` | Export audit history without row payloads |
 
-Config: `config/data_explorer.yaml`. Store: `data/data_explorer.db`. SQL Workspace remains the place for approved ad hoc queries.
+Config/policies: `config/data_explorer.yaml` and the approved-source registry
+`config/live_data_exports.yaml`. Data Explorer owns one `ExplorerStore` at
+`data/data_explorer.db` for browse audit, favorites, jobs, presets, and export history;
+artifacts are under `data/data_explorer_exports/`. The legacy API family remains as a
+compatibility alias. SQL Workspace remains the place for approved ad hoc queries.
 
 ## Connected Live Processing
 

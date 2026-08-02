@@ -130,7 +130,6 @@ from hub.hcsc_indicators.routes import register_hcsc_indicator_routes
 from hub.hcsc_indicators.service import HcscIndicatorService
 from hub.live_data_export.demo import ensure_export_demo_table
 from hub.live_data_export.routes import register_live_data_export_routes
-from hub.live_data_export.service import LiveDataExportService
 from hub.data_explorer.routes import register_data_explorer_routes
 from hub.data_explorer.service import DataExplorerService
 from hub.repository_workspace.service import RepositoryWorkspaceService
@@ -239,13 +238,13 @@ def create_app() -> Flask:
         max_rows=int(os.environ.get("SQL_WS_MAX_ROWS") or 1000),
         statement_timeout_ms=int(os.environ.get("SQL_WS_STATEMENT_TIMEOUT_MS") or 15000),
     )
-    app.config["LIVE_DATA_EXPORT"] = LiveDataExportService(
-        connections=app.config["SQL_WS_CONNECTIONS"],
-    )
-    register_live_data_export_routes(app)
     app.config["DATA_EXPLORER"] = DataExplorerService(
         connections=app.config["SQL_WS_CONNECTIONS"],
     )
+    # Backwards-compatible service key for legacy API clients. Both route
+    # families use the single export service owned by Data Explorer.
+    app.config["LIVE_DATA_EXPORT"] = app.config["DATA_EXPLORER"].exports
+    register_live_data_export_routes(app)
     register_data_explorer_routes(app)
     email_db_path = os.environ.get("CENTRAL_HUB_EMAIL_DATABASE") or str(
         ROOT_DIR / "data" / "email.db"
@@ -536,12 +535,6 @@ def create_app() -> Flask:
                 "label": "SQL Workspace",
                 "icon": "▦",
                 "active_prefix": "sql_workspace",
-            },
-            {
-                "endpoint": "live_data_export",
-                "label": "Live Data Export",
-                "icon": "⇩",
-                "active_prefix": "live_data_export",
             },
             {
                 "endpoint": "data_explorer",

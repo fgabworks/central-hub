@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from flask import Flask, jsonify, render_template, request, send_file
+from flask import Flask, jsonify, redirect, request, send_file, url_for
 
 from hub.audit import actions as audit_actions
 from hub.jobs.auth import current_actor
@@ -31,28 +31,25 @@ def register_live_data_export_routes(app: Flask) -> None:
 
     @app.get("/live-data-export")
     def live_data_export():
-        boot = _svc().bootstrap()
         _audit(
             audit_actions.LIVE_EXPORT_VIEW,
             target="live-data-export",
-            detail="Opened Live Data Export",
+            detail="Redirected legacy Live Data Export route to Data Explorer Export",
         )
-        return render_template(
-            "live_data_export.html",
-            page_title=boot["page_title"],
-            subtitle=boot["subtitle"],
-            bootstrap=boot,
-        )
+        return redirect(url_for("data_explorer", tab="export"), code=302)
 
+    @app.get("/api/data-explorer/exports/bootstrap", endpoint="api_data_explorer_export_bootstrap")
     @app.get("/api/live-data-export/bootstrap")
     def api_live_export_bootstrap():
         return jsonify(_svc().bootstrap())
 
+    @app.get("/api/data-explorer/exports/sources", endpoint="api_data_explorer_export_sources")
     @app.get("/api/live-data-export/sources")
     def api_live_export_sources():
         env = request.args.get("environment") or None
         return jsonify({"ok": True, "sources": _svc().list_sources(environment=env)})
 
+    @app.post("/api/data-explorer/exports/preview", endpoint="api_data_explorer_export_preview")
     @app.post("/api/live-data-export/preview")
     def api_live_export_preview():
         data = request.get_json(silent=True) or {}
@@ -81,6 +78,7 @@ def register_live_data_export_routes(app: Flask) -> None:
             )
             return _json_err(exc, 400)
 
+    @app.post("/api/data-explorer/exports", endpoint="api_data_explorer_export_generate")
     @app.post("/api/live-data-export/export")
     def api_live_export_generate():
         data = request.get_json(silent=True) or {}
@@ -113,10 +111,12 @@ def register_live_data_export_routes(app: Flask) -> None:
             )
             return _json_err(exc, 400)
 
+    @app.get("/api/data-explorer/export-jobs", endpoint="api_data_explorer_export_jobs")
     @app.get("/api/live-data-export/jobs")
     def api_live_export_jobs():
         return jsonify({"ok": True, "jobs": _svc().list_jobs()})
 
+    @app.get("/api/data-explorer/export-jobs/<job_id>", endpoint="api_data_explorer_export_job")
     @app.get("/api/live-data-export/jobs/<job_id>")
     def api_live_export_job(job_id: str):
         job = _svc().get_job(job_id)
@@ -124,6 +124,7 @@ def register_live_data_export_routes(app: Flask) -> None:
             return _json_err(ExportSafetyError("Export job not found"), 404)
         return jsonify({"ok": True, "job": job})
 
+    @app.post("/api/data-explorer/export-jobs/<job_id>/cancel", endpoint="api_data_explorer_export_cancel")
     @app.post("/api/live-data-export/jobs/<job_id>/cancel")
     def api_live_export_cancel(job_id: str):
         try:
@@ -137,6 +138,7 @@ def register_live_data_export_routes(app: Flask) -> None:
         except ExportSafetyError as exc:
             return _json_err(exc, 400)
 
+    @app.get("/api/data-explorer/export-jobs/<job_id>/download", endpoint="api_data_explorer_export_download")
     @app.get("/api/live-data-export/jobs/<job_id>/download")
     def api_live_export_download(job_id: str):
         token = request.args.get("token") or ""
@@ -165,14 +167,17 @@ def register_live_data_export_routes(app: Flask) -> None:
             status = 410 if "expired" in str(exc).lower() else 403
             return _json_err(exc, status)
 
+    @app.get("/api/data-explorer/export-history", endpoint="api_data_explorer_export_history")
     @app.get("/api/live-data-export/history")
     def api_live_export_history():
         return jsonify({"ok": True, "history": _svc().store.list_history(limit=50)})
 
+    @app.get("/api/data-explorer/export-presets", endpoint="api_data_explorer_export_presets")
     @app.get("/api/live-data-export/presets")
     def api_live_export_presets():
         return jsonify({"ok": True, "presets": _svc().store.list_presets(limit=50)})
 
+    @app.post("/api/data-explorer/export-presets", endpoint="api_data_explorer_export_preset_save")
     @app.post("/api/live-data-export/presets")
     def api_live_export_preset_save():
         data = request.get_json(silent=True) or {}
@@ -195,6 +200,7 @@ def register_live_data_export_routes(app: Flask) -> None:
         )
         return jsonify({"ok": True, "preset": preset})
 
+    @app.delete("/api/data-explorer/export-presets/<preset_id>", endpoint="api_data_explorer_export_preset_delete")
     @app.delete("/api/live-data-export/presets/<preset_id>")
     def api_live_export_preset_delete(preset_id: str):
         ok = _svc().store.delete_preset(preset_id)

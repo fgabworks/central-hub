@@ -236,3 +236,92 @@ def test_blocked_arbitrary_object(service: DataExplorerService):
             name="not_a_real_table_zzz",
             actor="test",
         )
+
+
+def test_unified_navigation_redirect_and_export_api(tmp_path: Path):
+    from app import create_app
+
+    app = create_app()
+    unified = DataExplorerService(
+        connections=load_connection_registry(),
+        store=ExplorerStore(
+            db_path=tmp_path / "unified.db",
+            artifacts_root=tmp_path / "exports",
+        ),
+        config=load_explorer_config(),
+    )
+    app.config["DATA_EXPLORER"] = unified
+    app.config["LIVE_DATA_EXPORT"] = unified.exports
+    client = app.test_client()
+
+    legacy = client.get("/live-data-export")
+    assert legacy.status_code == 302
+    assert legacy.headers["Location"].endswith("/data-explorer?tab=export")
+
+    page = client.get("/data-explorer?tab=export")
+    assert page.status_code == 200
+    html = page.get_data(as_text=True)
+    assert ">Live Data Export<" not in html
+    for label in (
+        "Browse Data",
+        "Schema",
+        "Relationships",
+        "Lineage",
+        "Export",
+        "Export Jobs",
+        "History",
+    ):
+        assert f'>{label}<' in html
+    assert app.config["LIVE_DATA_EXPORT"] is app.config["DATA_EXPLORER"].exports
+
+    preview = client.post(
+        "/api/data-explorer/exports/preview",
+        json={
+            "source_key": "demo_household_linelist",
+            "filters": {"environment": "dev", "quarter": "2025Q1", "row_limit": 2},
+            "columns": ["household_id", "quarter"],
+        },
+    )
+    assert preview.status_code == 200
+    assert preview.get_json()["estimated_rows"] >= 1
+
+    generated = client.post(
+        "/api/data-explorer/exports",
+        json={
+            "source_key": "demo_household_linelist",
+            "filters": {"environment": "dev", "quarter": "2025Q1", "row_limit": 2},
+            "columns": ["household_id", "quarter"],
+            "format": "csv",
+        },
+    )
+    assert generated.status_code == 200
+    payload = generated.get_json()
+    assert payload["job"]["status"] == "ready"
+    assert client.get("/api/data-explorer/export-jobs").status_code == 200
+    assert client.get("/api/data-explorer/export-history").status_code == 200
+
+
+def test_unified_export_api_rejects_arbitrary_table_input(tmp_path: Path):
+    from app import create_app
+
+    app = create_app()
+    unified = DataExplorerService(
+        connections=load_connection_registry(),
+        store=ExplorerStore(db_path=tmp_path / "safety.db"),
+        config=load_explorer_config(),
+    )
+    app.config["DATA_EXPLORER"] = unified
+    app.config["LIVE_DATA_EXPORT"] = unified.exports
+    response = app.test_client().post(
+        "/api/data-explorer/exports/preview",
+        json={
+            "source_key": "demo_household_linelist",
+            "filters": {
+                "environment": "dev",
+                "quarter": "2025Q1",
+                "table": "pg_catalog.pg_user",
+            },
+        },
+    )
+    assert response.status_code == 400
+    assert "not allowed" in response.get_json()["error"]

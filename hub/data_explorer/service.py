@@ -28,8 +28,9 @@ from hub.data_explorer.security import (
     normalize_environment,
 )
 from hub.data_explorer.store import ExplorerStore
-from hub.live_data_export.formats import write_csv, write_csv_gz, write_xlsx
+from hub.export_engine import write_export
 from hub.live_data_export.demo import ensure_export_demo_table
+from hub.live_data_export.service import LiveDataExportService
 from hub.sql_workspace.connections import SqlConnectionProfile, SqlConnectionRegistry
 from hub.sql_workspace.demo import ensure_demo_database
 from hub.settings import ROOT_DIR
@@ -45,11 +46,21 @@ class DataExplorerService:
         store: ExplorerStore | None = None,
         config: ExplorerConfig | None = None,
         runner: ExplorerRunner | None = None,
+        export_service: LiveDataExportService | None = None,
     ) -> None:
         self.connections = connections
         self.store = store or ExplorerStore()
         self.config = config or get_explorer_config()
         self.runner = runner or ExplorerRunner()
+        # Data Explorer owns the approved-source registry, export engine, job store,
+        # presets, and export history. LIVE_DATA_EXPORT remains only as a
+        # compatibility alias at the Flask boundary.
+        self.exports = export_service or LiveDataExportService(
+            connections=connections,
+            store=self.store,
+        )
+        self.export_registry = self.exports.registry
+        self.export_store = self.exports.store
         self._lock = threading.Lock()
         self._inflight: set[str] = set()
         self._export_root = ROOT_DIR / "data" / "data_explorer_exports"
@@ -73,6 +84,7 @@ class DataExplorerService:
                 inventory = self.inventory(environment=env, actor="system")
             except Exception as exc:  # noqa: BLE001
                 error = str(exc)
+        export_boot = self.exports.bootstrap()
         return {
             "page_title": "Central Hub Data Explorer",
             "subtitle": "Inspect database sources, report lineage, and export approved data",
@@ -94,6 +106,7 @@ class DataExplorerService:
             "error": error,
             "live_configured": self._connection_status("live")["configured"],
             "stage_configured": self._connection_status("stage")["configured"],
+            "approved_exports": export_boot,
         }
 
     def catalog(
@@ -123,7 +136,9 @@ class DataExplorerService:
 
     def inventory(self, *, environment: str, actor: str = "owner") -> dict[str, Any]:
         catalog = self.catalog(environment=environment, actor=actor)
-        lineage = build_lineage_index(catalog.objects)
+        lineage = build_lineage_index(
+            catalog.objects, export_registry=self.export_registry
+        )
         inv = build_inventory(catalog.objects, lineage_by_object=lineage, cfg=self.config)
         inv["environment"] = normalize_environment(environment)
         inv["connection_id"] = catalog.connection_id
@@ -143,7 +158,9 @@ class DataExplorerService:
         obj = self._require_object(environment, schema, name)
         cls = classify_object(obj, self.config)
         catalog = self.catalog(environment=environment, actor=actor)
-        lineage_idx = build_lineage_index(catalog.objects)
+        lineage_idx = build_lineage_index(
+            catalog.objects, export_registry=self.export_registry
+        )
         lin = lineage_for_object(obj, lineage_idx)
         col_actions = {c.name: column_action(c.name, self.config) for c in obj.columns}
         browse = build_browse_query(
@@ -330,15 +347,9 @@ class DataExplorerService:
         out_dir = self._export_root / env
         out_dir.mkdir(parents=True, exist_ok=True)
         safe_name = f"{obj.schema}_{obj.name}".replace(".", "_")
-        if fmt == "xlsx":
-            path = out_dir / f"{safe_name}.xlsx"
-            size = write_xlsx(path, q.columns, rows)
-        elif fmt == "csv_gz":
-            path = out_dir / f"{safe_name}.csv.gz"
-            size = write_csv_gz(path, q.columns, rows)
-        else:
-            path = out_dir / f"{safe_name}.csv"
-            size = write_csv(path, q.columns, rows)
+        suffix = {"xlsx": ".xlsx", "csv_gz": ".csv.gz", "csv": ".csv"}[fmt]
+        path = out_dir / f"{safe_name}{suffix}"
+        size = write_export(path, q.columns, rows, format=fmt)
 
         # Never log row contents
         log.info(

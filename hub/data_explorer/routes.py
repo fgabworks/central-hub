@@ -43,6 +43,8 @@ def register_data_explorer_routes(app: Flask) -> None:
             page_title=boot["page_title"],
             subtitle=boot["subtitle"],
             bootstrap=boot,
+            export_bootstrap=boot["approved_exports"],
+            initial_tab=(request.args.get("tab") or "browse").strip().lower(),
         )
 
     @app.get("/api/data-explorer/bootstrap")

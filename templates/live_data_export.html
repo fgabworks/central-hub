@@ -1,34 +1,15 @@
-{% extends "base.html" %}
-{% block title %}{{ page_title }} · {{ app_name }}{% endblock %}
-{% block head_extra %}
-<script src="{{ url_for('static', filename='js/dhis2_org_unit_picker.js') }}?v=ou-sync-immediate-1" defer></script>
-<script src="{{ url_for('static', filename='js/live_data_export.js') }}?v=lex-1" defer></script>
-<link rel="stylesheet" href="{{ url_for('static', filename='css/live_data_export.css') }}?v=lex-1">
-{% endblock %}
-{% block content %}
-<section class="page-header page-header-compact">
-  <div>
-    <h1>{{ page_title }}</h1>
-    <p class="muted">{{ subtitle }}</p>
-  </div>
-  <div class="page-meta">
-    <span class="badge badge-info">Read-only</span>
-    <span class="badge">Allowlisted sources</span>
-  </div>
-</section>
-
 <script type="application/json" id="lex-bootstrap">{{ bootstrap | tojson }}</script>
 
 <div id="lex-root"
      class="lex-root"
-     data-preview-url="{{ url_for('api_live_export_preview') }}"
-     data-export-url="{{ url_for('api_live_export_generate') }}"
-     data-jobs-url="{{ url_for('api_live_export_jobs') }}"
-     data-job-url="{{ url_for('api_live_export_job', job_id='__ID__') }}"
-     data-cancel-url="{{ url_for('api_live_export_cancel', job_id='__ID__') }}"
-     data-download-url="{{ url_for('api_live_export_download', job_id='__ID__') }}"
-     data-presets-url="{{ url_for('api_live_export_presets') }}"
-     data-history-url="{{ url_for('api_live_export_history') }}"
+     data-preview-url="{{ url_for('api_data_explorer_export_preview') }}"
+     data-export-url="{{ url_for('api_data_explorer_export_generate') }}"
+     data-jobs-url="{{ url_for('api_data_explorer_export_jobs') }}"
+     data-job-url="{{ url_for('api_data_explorer_export_job', job_id='__ID__') }}"
+     data-cancel-url="{{ url_for('api_data_explorer_export_cancel', job_id='__ID__') }}"
+     data-download-url="{{ url_for('api_data_explorer_export_download', job_id='__ID__') }}"
+     data-presets-url="{{ url_for('api_data_explorer_export_presets') }}"
+     data-history-url="{{ url_for('api_data_explorer_export_history') }}"
      data-org-units-url="{{ url_for('api_dhis2_report_org_units') }}"
      data-periods-url="{{ url_for('api_dhis2_report_periods') }}">
 
@@ -160,11 +141,13 @@
   </section>
 
   <section class="lex-panel" data-panel="history" hidden>
+    <h2>Export history</h2>
     <div id="lex-history" class="lex-list"></div>
+    <h2>Browse and security audit</h2>
+    <div id="dex-audit-history" class="lex-list"></div>
   </section>
 
   <section class="lex-panel" data-panel="settings" hidden>
     <div class="lex-settings" id="lex-settings"></div>
   </section>
 </div>
-{% endblock %}

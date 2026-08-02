@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from hub.data_access import compose_select
 from hub.live_data_export.registry import ExportSource
 from hub.live_data_export.security import (
     ExportSafetyError,
@@ -92,8 +93,6 @@ def build_select(
         where_parts.append(f"{ic} = {_param_placeholder('ip_flag', dialect)}")
         params["ip_flag"] = norm_filters["ip_flag"]
 
-    where_sql = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
-
     order_parts: list[str] = []
     allowed = set(source.allowed_columns)
     for spec in source.default_sort:
@@ -101,18 +100,18 @@ def build_select(
             continue
         direction = "DESC" if spec.direction == "desc" else "ASC"
         order_parts.append(f"{quote_ident(spec.column, dialect=dialect)} {direction}")
-    order_sql = (" ORDER BY " + ", ".join(order_parts)) if order_parts else ""
-
     limit = int(norm_filters["row_limit"])
     if for_preview:
         limit = min(limit, int(preview_limit))
     params["row_limit"] = limit
 
-    data_sql = (
-        f"SELECT {select_list} FROM {from_sql}{where_sql}{order_sql} "
-        f"LIMIT {_param_placeholder('row_limit', dialect)}"
+    data_sql, count_sql = compose_select(
+        select_list=select_list,
+        from_sql=from_sql,
+        where_parts=where_parts,
+        order_parts=order_parts,
+        limit_placeholder=_param_placeholder("row_limit", dialect),
     )
-    count_sql = f"SELECT COUNT(*) AS row_count FROM {from_sql}{where_sql}"
     # count does not need row_limit
     count_params = {k: v for k, v in params.items() if k != "row_limit"}
 

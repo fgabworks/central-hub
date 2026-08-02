@@ -4,7 +4,20 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**Progress NPMO report comparison (2026-08-02)**
+**Unified Data Explorer (2026-08-02)**
+
+Merged Live Data Export into `/data-explorer` with tabs Browse Data / Schema /
+Relationships / Lineage / Export / Export Jobs / History. The duplicate Work sidebar
+item is removed; `/live-data-export` redirects to `?tab=export`; legacy export APIs are
+compatibility aliases for the new `/api/data-explorer/exports*` and `export-jobs*`
+routes. `DataExplorerService` owns the approved-source registry, shared
+`ExplorerStore`, export jobs/history/presets, shared SELECT/security primitives, and
+the shared file export engine. Existing
+discovery browsing and allowlisted export behavior remain SELECT-only, masked,
+row-capped, and Stage/Live isolated. Focused tests: `tests/test_data_explorer.py` and
+`tests/test_live_data_export.py`.
+
+Prior: **Progress NPMO report comparison (2026-08-02)**
 
 Read-only compare page `/dhis2/hcsc-indicators/compare/progress-npmo` for DHIS2 report
 **Progress of Data Collection and Validation-(NPMO)** UID **`IKlKwg7ZS07`** vs HCSC–RF.

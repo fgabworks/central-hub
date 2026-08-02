@@ -2,22 +2,12 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
+from hub.data_access import BLOCKED_SCHEMAS, normalize_environment as normalize_data_environment, validate_identifier
 from hub.data_explorer.config import ExplorerConfig, get_explorer_config
 
-_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-_BLOCKED_SCHEMAS = frozenset(
-    {
-        "pg_catalog",
-        "information_schema",
-        "pg_toast",
-        "mysql",
-        "sys",
-        "performance_schema",
-    }
-)
+_BLOCKED_SCHEMAS = BLOCKED_SCHEMAS
 
 
 class ExplorerSafetyError(ValueError):
@@ -25,19 +15,11 @@ class ExplorerSafetyError(ValueError):
 
 
 def normalize_environment(raw: str) -> str:
-    env = str(raw or "dev").strip().lower()
-    if env not in ("live", "stage", "dev"):
-        raise ExplorerSafetyError(f"Invalid environment: {raw}")
-    return env
+    return normalize_data_environment(raw, default="dev", error=ExplorerSafetyError)
 
 
 def assert_safe_identifier(name: str, *, kind: str = "identifier") -> str:
-    value = str(name or "").strip()
-    if not value or not _IDENT.match(value):
-        raise ExplorerSafetyError(f"Invalid {kind}: {name!r}")
-    if value.lower() in _BLOCKED_SCHEMAS:
-        raise ExplorerSafetyError(f"Blocked {kind}: {value}")
-    return value
+    return validate_identifier(name, kind=kind, error=ExplorerSafetyError)
 
 
 def quote_ident(name: str) -> str:

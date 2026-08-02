@@ -1,4 +1,31 @@
 /* Data Explorer three-panel layout */
+
+.dex-workspace-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+  margin: 0 0 1rem;
+  border-bottom: 1px solid var(--border-color, #d7dce2);
+}
+
+.dex-workspace-tabs button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  padding: .6rem .75rem;
+  color: inherit;
+  cursor: pointer;
+}
+
+.dex-workspace-tabs button.is-active {
+  border-bottom-color: var(--accent, #2463a8);
+  font-weight: 600;
+}
+
+#dex-export-workspace .lex-tabs [data-tab="jobs"],
+#dex-export-workspace .lex-tabs [data-tab="history"] {
+  display: none;
+}
 .dex-root { max-width: 1400px; }
 .dex-toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
 .dex-error { color: #8b1e1e; }

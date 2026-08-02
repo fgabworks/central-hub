@@ -2,7 +2,11 @@
 {% block title %}{{ page_title }} · {{ app_name }}{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/data_explorer.css') }}?v=dex-1">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/live_data_export.css') }}?v=lex-1">
+<script src="{{ url_for('static', filename='js/dhis2_org_unit_picker.js') }}?v=ou-sync-immediate-1" defer></script>
 <script src="{{ url_for('static', filename='js/data_explorer.js') }}?v=dex-1" defer></script>
+<script src="{{ url_for('static', filename='js/live_data_export.js') }}?v=lex-1" defer></script>
+<script src="{{ url_for('static', filename='js/data_explorer_workspace.js') }}?v=dex-merge-1" defer></script>
 {% endblock %}
 {% block content %}
 <section class="page-header page-header-compact">
@@ -18,6 +22,18 @@
 
 <script type="application/json" id="dex-bootstrap">{{ bootstrap | tojson }}</script>
 
+<nav class="dex-workspace-tabs" role="tablist" aria-label="Data Explorer">
+  <button type="button" data-workspace-tab="browse">Browse Data</button>
+  <button type="button" data-workspace-tab="schema">Schema</button>
+  <button type="button" data-workspace-tab="relationships">Relationships</button>
+  <button type="button" data-workspace-tab="lineage">Lineage</button>
+  <button type="button" data-workspace-tab="export">Export</button>
+  <button type="button" data-workspace-tab="jobs">Export Jobs</button>
+  <button type="button" data-workspace-tab="history">History</button>
+</nav>
+
+<div id="dex-browse-workspace" data-workspace-panel="browse" data-initial-tab="{{ initial_tab }}">
+
 <div id="dex-root"
      class="dex-root"
      data-tree-url="{{ url_for('api_data_explorer_tree') }}"
@@ -28,6 +44,7 @@
      data-export-url="{{ url_for('api_data_explorer_export') }}"
      data-inventory-url="{{ url_for('api_data_explorer_inventory') }}"
      data-favorites-url="{{ url_for('api_data_explorer_favorites') }}"
+     data-audit-url="{{ url_for('api_data_explorer_audit') }}"
      data-sql-workspace-url="{{ url_for('sql_workspace') }}">
 
   <div class="dex-toolbar">
@@ -141,5 +158,12 @@
       <div id="dex-inventory-body" class="dex-inventory-body"></div>
     </form>
   </dialog>
+</div>
+</div>
+
+<div id="dex-export-workspace" data-workspace-panel="export" hidden>
+  {% with bootstrap=export_bootstrap %}
+    {% include "live_data_export.html" %}
+  {% endwith %}
 </div>
 {% endblock %}

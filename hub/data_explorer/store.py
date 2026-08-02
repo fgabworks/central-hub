@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from hub.live_data_export.store import LiveExportStore
 from hub.settings import ROOT_DIR
 
 
@@ -16,18 +17,26 @@ def utcnow() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-class ExplorerStore:
-    def __init__(self, db_path: Path | None = None) -> None:
-        self.db_path = db_path or (ROOT_DIR / "data" / "data_explorer.db")
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._init()
+class ExplorerStore(LiveExportStore):
+    """Single Data Explorer store for favorites, audits, exports, jobs, and history."""
+
+    def __init__(
+        self,
+        db_path: Path | None = None,
+        *,
+        artifacts_root: Path | None = None,
+    ) -> None:
+        path = db_path or (ROOT_DIR / "data" / "data_explorer.db")
+        artifacts = artifacts_root or (path.parent / "data_explorer_exports" / "jobs")
+        super().__init__(db_path=path, artifacts_root=artifacts)
+        self._init_explorer_schema()
 
     def connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(str(self.db_path), timeout=30)
         conn.row_factory = sqlite3.Row
         return conn
 
-    def _init(self) -> None:
+    def _init_explorer_schema(self) -> None:
         with self.connect() as conn:
             conn.executescript(
                 """

@@ -20,8 +20,7 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 | Personal Dashboard + Tasks + Quick Notepad | `/personal`, `/personal/tasks` |
 | Repository Notebook (scoped personal\|work notes) | `/personal/notebook`, `/work/notebook`, `hub/notebook/` |
 | SQL Workspace (read-only query library/runner) | `/sql`, `hub/sql_workspace/`, `data/sql_workspace.db` |
-| Live Data Export (allowlisted RO exports) | `/live-data-export`, `hub/live_data_export/`, `config/live_data_exports.yaml`, `data/live_data_export.db` |
-| Data Explorer (RO schema browse + lineage) | `/data-explorer`, `hub/data_explorer/`, `config/data_explorer.yaml`, `data/data_explorer.db` |
+| Data Explorer (RO browse + lineage + allowlisted exports/jobs/history) | `/data-explorer`; legacy `/live-data-export` redirects to Export; `hub/data_explorer/`, `config/data_explorer.yaml`, `config/live_data_exports.yaml`, `data/data_explorer.db` |
 | AI Assistant Center (read-only) | `/personal/aira`, `/work/okarun`, dock on all pages via `templates/partials/assistant_dock_panel.html` + `static/js/assistant_dock.js`, `hub/agent_center/`, `config/agents.yaml`, `data/agent_center.db` |
 | Workspace Console | Bottom dock on all pages via `templates/partials/workspace_console_panel.html` + `static/js/workspace_console.js`, `hub/workspace_console/` — reuses repo runner / process monitor / jobs / audit |
 | AI Connections | `/system/ai-connections` — Installed/Authenticated/Version/Last Checked; connect uses visible provider login; Codex CLI first real provider (Okarun MVP) |
@@ -54,8 +53,7 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 | UID conflict resolve | Conflicts skipped by default; no per-UID take/keep form yet |
 | Enrichment raw metadata | Not bulk-stored; live GET only when detail `?tab=raw&raw=1` |
 | SQL Workspace | Implemented — SELECT/WITH/EXPLAIN only; Live warning; never auto-run |
-| Live Data Export | Implemented (Phase 1) — allowlisted sources only; demo verified; prod candidates unavailable until verified; no arbitrary SQL |
-| Data Explorer | Implemented (Phase 1) — RO discovery/browse/lineage/inventory; Live/Stage need RO env; no ad-hoc SQL writes |
+| Data Explorer | Implemented — unified RO discovery/browse/schema/relationships/lineage plus allowlisted exports, large jobs, masking, row caps, and history; prod candidates unavailable until verified; Live/Stage need their matching RO profiles; no arbitrary SQL/table input |
 | AI Assistant Center | Implemented — isolated Aira/Okarun profiles; full-height persistent dock + fixed composer; Codex CLI real provider (Okarun, read-only `codex exec --json`); provider switching; Find/Ask/Plan/Review; context preview; streaming/cancel/retry/history; scoped read-only tools; no write/execution; no voice |
 | Workspace Console | Implemented — bottom VS Code-style panel (two-row title/tabs; Problems/Output/Debug/**interactive PTY Terminal**/Ports); xterm.js + ConPTY/`pty` + WebSocket; repo path jail; IDE toolbar (repo/shell/New/tabs/Split/Restart/Kill); empty state; collapsed by default; resize/minimize/maximize; per-workspace prefs (session id, not commands); lazy loads; pauses UI when hidden (PTY keeps running); Ports + process monitor ownership; controlled profile launcher retained; verified process stops only |
 | Activity Rail / VS Code shell | Implemented — far-right activity rail; AI dock via topbar; Assistant Center history layout; notepad from rail (no floating pill); compact dashboard summary tiles |

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from hub.live_data_export.demo import ensure_export_demo_table
-from hub.live_data_export.formats import write_csv, write_csv_gz, write_xlsx
+from hub.export_engine import write_export
 from hub.live_data_export.query import build_select, estimate_export_bytes
 from hub.live_data_export.registry import (
     ExportSource,
@@ -368,15 +368,9 @@ class LiveDataExportService:
             art_dir.mkdir(parents=True, exist_ok=True)
             safe = sanitize_filename(f"{source.source_key}_{job['environment']}")
             fmt = job["format"]
-            if fmt == "xlsx":
-                out = art_dir / f"export_{safe}.xlsx"
-                size = write_xlsx(out, columns, rows)
-            elif fmt == "csv_gz":
-                out = art_dir / f"export_{safe}.csv.gz"
-                size = write_csv_gz(out, columns, rows)
-            else:
-                out = art_dir / f"export_{safe}.csv"
-                size = write_csv(out, columns, rows)
+            suffix = {"xlsx": ".xlsx", "csv_gz": ".csv.gz", "csv": ".csv"}[fmt]
+            out = art_dir / f"export_{safe}{suffix}"
+            size = write_export(out, columns, rows, format=fmt)
 
             # Never log row contents — metadata only
             log.info(
