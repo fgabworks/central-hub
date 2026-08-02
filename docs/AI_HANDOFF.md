@@ -104,6 +104,9 @@ approved eligible PIs; Partial CLIENT% vs IND `StDJxe7tIiS`; other Progress colu
 Unresolved/Not Comparable. Config `config/hcsc_progress_comparison.yaml`; module
 `hub/hcsc_indicators/progress_compare.py`. Mockup UID `plQxuUO8XJd1` not found.
 Focused tests: `tests/test_hcsc_progress_compare.py`.
+UI label: **Report Comparison**. The route uses a compact **Report Output Comparison**
+header and a responsive setup panel that identifies **DHIS2 Report Output** vs
+**Central Hub HCSC–RF Result**; comparison semantics and endpoints are unchanged.
 
 Prior: **Data Explorer Phase 1 (2026-08-02)**
 

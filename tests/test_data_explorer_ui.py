@@ -49,6 +49,8 @@ class DataExplorerUiTests(unittest.TestCase):
             "dex-table-filter",
             "dex-tree",
             "dex-grid",
+            "dex-browse-spinner",
+            "dex-browse-retry",
             "dex-filter-form",
             "dex-filter-column",
             "dex-filter-operator",
@@ -81,7 +83,10 @@ class DataExplorerUiTests(unittest.TestCase):
             'addEventListener("click", runExport)',
             'classList.toggle("is-selected"',
             'renderSelectedRow(data.columns || [], row)',
-            'setGridState("Loading rows…")',
+            '"Loading " + tableLabel + "…"',
+            "setBrowseLoading",
+            "browseInflight",
+            "dex-browse-retry",
             '"No rows match the current filter."',
             '"Page " + data.page + " of " + pages',
             'state.filters.push({ column: column.name, op: operator, value: value })',
@@ -91,6 +96,19 @@ class DataExplorerUiTests(unittest.TestCase):
             'data-filter-index',
         ):
             self.assertIn(behavior, self.js)
+
+    def test_browse_loading_feedback_is_status_only_without_skeleton_or_polling(self) -> None:
+        self.assertIn("dex-browse-spinner", self.js)
+        self.assertIn("setBrowseLoading", self.js)
+        self.assertIn("setBrowseError", self.js)
+        self.assertIn("state.browseInflight.key === key", self.js)
+        self.assertIn("selectGen !== state.selectGen", self.js)
+        self.assertIn("@keyframes dex-spin", self.css)
+        self.assertIn(".dex-spinner", self.css)
+        self.assertNotIn("skeleton", self.js.lower())
+        self.assertNotIn("setInterval", self.js)
+        self.assertNotIn("setTimeout", self.js)
+        self.assertNotIn('setGridState("Loading rows…")', self.js)
 
     def test_data_grid_and_responsive_drawer_styles_are_present(self) -> None:
         for style in (

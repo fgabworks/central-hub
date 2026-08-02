@@ -594,7 +594,7 @@ def create_app() -> Flask:
             },
             {
                 "endpoint": "dhis2_hcsc_progress_compare",
-                "label": "Progress Compare",
+                "label": "Report Comparison",
                 "icon": "⇄",
                 "active_prefix": "dhis2_hcsc_progress",
             },

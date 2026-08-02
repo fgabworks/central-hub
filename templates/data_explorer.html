@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% block title %}{{ page_title }} · {{ app_name }}{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/data_explorer.css') }}?v=dex-redesign-1">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/data_explorer.css') }}?v=dex-loading-1">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/live_data_export.css') }}?v=lex-1">
 <script src="{{ url_for('static', filename='js/dhis2_org_unit_picker.js') }}?v=ou-sync-immediate-1" defer></script>
-<script src="{{ url_for('static', filename='js/data_explorer.js') }}?v=dex-filter-sort-1" defer></script>
+<script src="{{ url_for('static', filename='js/data_explorer.js') }}?v=dex-loading-1" defer></script>
 <script src="{{ url_for('static', filename='js/live_data_export.js') }}?v=lex-1" defer></script>
 <script src="{{ url_for('static', filename='js/data_explorer_workspace.js') }}?v=dex-merge-1" defer></script>
 {% endblock %}
@@ -137,8 +137,12 @@
           <button type="button" class="btn btn-sm" id="dex-filter-clear" hidden>Clear all</button>
         </div>
         <div class="dex-grid-status" id="dex-grid-status" role="status" aria-live="polite">
-          <span class="muted" id="dex-row-meta">No table selected</span>
+          <span class="dex-grid-status-main">
+            <span class="dex-spinner" id="dex-browse-spinner" hidden aria-hidden="true"></span>
+            <span class="muted" id="dex-row-meta">No table selected</span>
+          </span>
           <span class="muted" id="dex-filtered-count"></span>
+          <button type="button" class="btn btn-sm" id="dex-browse-retry" hidden>Retry</button>
         </div>
         <div class="dex-table-wrap" id="dex-table-wrap">
           <table class="dex-table" id="dex-grid">

@@ -120,7 +120,7 @@
       } finally {
         if (reqId === state.requestId) {
           updateGenerate();
-          generateBtn.textContent = "Generate Comparison";
+          generateBtn.textContent = "Run Comparison";
         }
       }
     });
@@ -274,7 +274,7 @@
 
     $all("[data-export]", root).forEach(function (btn) {
       btn.addEventListener("click", function () {
-        if (!state.lastPayload) { setError("Generate a comparison before export."); return; }
+        if (!state.lastPayload) { setError("Run a comparison before export."); return; }
         var fmt = btn.getAttribute("data-export");
         var url = root.getAttribute("data-export-url") +
           "?environment=" + encodeURIComponent(envSel.value) +

@@ -7,6 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from app import create_app
+
 from hub.hcsc_indicators.progress_compare import (
     COMPARE_CACHE,
     ProgressCompareService,
@@ -195,3 +197,36 @@ def test_no_write_methods_in_extraction():
     analytics = (meta.raw.get("report") or {}).get("analytics") or {}
     assert analytics.get("method") == "GET"
     assert analytics.get("endpoint") == "/api/analytics.json"
+
+
+def test_report_output_comparison_ui_contract():
+    app = create_app()
+    client = app.test_client()
+
+    response = client.get("/dhis2/hcsc-indicators/compare/progress-npmo")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Report Output Comparison" in html
+    assert "Progress of Data Collection and Validation" in html
+    assert "DHIS2 Report Output" in html
+    assert "Central Hub HCSC&ndash;RF Result" in html
+    assert "Run Comparison" in html
+    assert "Generate Comparison" not in html
+    assert "Comparison Setup" in html
+    assert 'class="pnc-source-compare"' in html
+    assert 'class="pnc-results"' in html
+    assert "data-section-header" in html
+    assert "pnc-crumb" not in html
+    assert "pnc-header" not in html
+    assert html.count('id="pnc-env"') == 1
+    assert html.count('id="pnc-period"') == 1
+    assert html.count('id="pnc-ou"') == 1
+    assert html.count('id="pnc-generate"') == 1
+
+    css = (
+        Path(app.root_path)
+        / "static"
+        / "css"
+        / "hcsc_progress_compare.css"
+    ).read_text(encoding="utf-8")

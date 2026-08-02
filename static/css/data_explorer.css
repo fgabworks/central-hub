@@ -500,11 +500,51 @@
 
 .dex-grid-status {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: .75rem;
   min-height: 2rem;
   padding: .42rem .75rem;
   font-size: .73rem;
+}
+
+.dex-grid-status-main {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  min-width: 0;
+}
+
+.dex-spinner {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: .85rem;
+  height: .85rem;
+  border: 2px solid rgba(226, 232, 240, .28);
+  border-top-color: #e2e8f0;
+  border-radius: 50%;
+  animation: dex-spin .6s linear infinite;
+}
+
+.dex-spinner[hidden] {
+  display: none;
+}
+
+@keyframes dex-spin {
+  to { transform: rotate(360deg); }
+}
+
+.dex-grid-status.is-loading #dex-row-meta {
+  color: #cbd5e1;
+}
+
+.dex-grid-status.is-error #dex-row-meta {
+  color: #fecaca;
+}
+
+#dex-browse-retry {
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
 .dex-table-wrap {

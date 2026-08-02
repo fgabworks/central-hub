@@ -79,6 +79,11 @@
       filters: urlState.filters,
       quickSearch: urlState.quickSearch,
       urlError: urlState.error,
+      selectGen: 0,
+      browseGen: 0,
+      objectLoad: null,
+      browseInflight: null,
+      loadingLabel: "",
     };
 
     var envSel = $("#dex-env");
@@ -113,9 +118,19 @@
       setError("");
       state.selected = null;
       state.selectedRow = null;
+      state.selectGen += 1;
+      state.browseGen += 1;
+      if (state.abort) state.abort.abort();
+      state.abort = null;
+      state.objectLoad = null;
+      state.browseInflight = null;
       resetGridQuery();
       updateEnvironmentBadge();
       clearSelectionDetails();
+      clearBrowseStatusClasses();
+      $("#dex-row-meta").textContent = "No table selected";
+      $("#dex-filtered-count").textContent = "";
+      setBrowseBusy(false);
       setGridState("Select a table or view to browse data.");
       syncUrl();
       try {
@@ -162,6 +177,7 @@
     });
 
     $("#dex-browse-btn").addEventListener("click", function () { loadGrid(1); });
+    $("#dex-browse-retry").addEventListener("click", function () { loadGrid(state.page); });
     $("#dex-prev").addEventListener("click", function () { if (state.page > 1) loadGrid(state.page - 1); });
     $("#dex-next").addEventListener("click", function () { loadGrid(state.page + 1); });
     $("#dex-fav-btn").addEventListener("click", addFavorite);
@@ -230,6 +246,57 @@
       el.hidden = !message;
       el.classList.toggle("is-error", kind === "error");
       el.classList.toggle("is-invalid", kind === "invalid");
+    }
+
+    function setBrowseBusy(busy) {
+      $("#dex-browse-btn").disabled = !state.selected || busy;
+      $("#dex-grid").setAttribute("aria-busy", busy ? "true" : "false");
+    }
+
+    function setBrowseLoading(tableLabel) {
+      state.loadingLabel = tableLabel || "";
+      var status = $("#dex-grid-status");
+      status.classList.add("is-loading");
+      status.classList.remove("is-error");
+      $("#dex-browse-spinner").hidden = false;
+      $("#dex-row-meta").textContent = "Loading " + tableLabel + "…";
+      $("#dex-filtered-count").textContent = "";
+      $("#dex-browse-retry").hidden = true;
+      // Keep existing grid visible — loading feedback lives in the status row only.
+      setGridState("");
+      setBrowseBusy(true);
+    }
+
+    function setBrowseError(message) {
+      var status = $("#dex-grid-status");
+      status.classList.remove("is-loading");
+      status.classList.add("is-error");
+      $("#dex-browse-spinner").hidden = true;
+      $("#dex-row-meta").textContent = message || "Unable to load rows.";
+      $("#dex-filtered-count").textContent = "";
+      $("#dex-browse-retry").hidden = false;
+      setGridState("");
+      setBrowseBusy(false);
+    }
+
+    function clearBrowseStatusClasses() {
+      var status = $("#dex-grid-status");
+      status.classList.remove("is-loading", "is-error");
+      $("#dex-browse-spinner").hidden = true;
+      $("#dex-browse-retry").hidden = true;
+      state.loadingLabel = "";
+    }
+
+    function browseFingerprint(page) {
+      return JSON.stringify({
+        environment: envSel.value,
+        schema: state.selected.schema,
+        name: state.selected.name,
+        page: page,
+        sort_column: state.sortColumn,
+        sort_dir: state.sortDir,
+        filters: activeFilters(),
+      });
     }
 
     function clearSelectionDetails() {
@@ -377,41 +444,73 @@
 
     async function selectObject(schema, name, options) {
       options = options || {};
+      var objectKey = schema + "." + name;
+      if (
+        !options.restore &&
+        state.objectLoad &&
+        state.objectLoad.key === objectKey &&
+        state.selected &&
+        state.selected.schema === schema &&
+        state.selected.name === name
+      ) {
+        setBrowseLoading(objectKey);
+        return state.objectLoad.promise;
+      }
+
       setError("");
+      var selectGen = ++state.selectGen;
+      if (state.abort) state.abort.abort();
+      state.abort = null;
+      state.browseInflight = null;
       state.selected = { schema: schema, name: name };
       state.selectedRow = null;
       if (!options.restore) resetGridQuery();
-      $("#dex-object-title").textContent = schema + "." + name;
+      $("#dex-object-title").textContent = objectKey;
       $("#dex-object-meta").textContent = "Loading table metadata…";
-      $("#dex-browse-btn").disabled = false;
       $("#dex-fav-btn").disabled = false;
       $("#dex-export-btn").disabled = false;
       $("#dex-export-shortcut").disabled = false;
       clearSelectionDetails();
       markSelectedObject();
+      setBrowseLoading(objectKey);
       syncUrl();
-      try {
-        var url = root.getAttribute("data-object-url") +
-          "?environment=" + encodeURIComponent(envSel.value) +
-          "&schema=" + encodeURIComponent(schema) +
-          "&name=" + encodeURIComponent(name);
-        var res = await fetch(url);
-        var data = await readJson(res);
-        if (!res.ok) throw new Error(data.error || "Failed to load object");
-        state.detail = data;
-        renderDetails(data);
-        renderMetaTabs(data);
-        renderFilterBuilder((data.object || {}).columns || []);
-        renderFilterChips();
-        if (state.urlError) {
-          setGridState(state.urlError, "invalid");
-          setError(state.urlError);
-          return;
+
+      var promise = (async function () {
+        try {
+          var url = root.getAttribute("data-object-url") +
+            "?environment=" + encodeURIComponent(envSel.value) +
+            "&schema=" + encodeURIComponent(schema) +
+            "&name=" + encodeURIComponent(name);
+          var res = await fetch(url);
+          var data = await readJson(res);
+          if (selectGen !== state.selectGen) return;
+          if (!res.ok) throw new Error(data.error || "Failed to load object");
+          state.detail = data;
+          renderDetails(data);
+          renderMetaTabs(data);
+          renderFilterBuilder((data.object || {}).columns || []);
+          renderFilterChips();
+          if (state.urlError) {
+            clearBrowseStatusClasses();
+            setBrowseBusy(false);
+            setGridState(state.urlError, "invalid");
+            setError(state.urlError);
+            return;
+          }
+          await loadGrid(state.page);
+        } catch (err) {
+          if (selectGen !== state.selectGen) return;
+          setError(err.message || String(err));
+          setBrowseError(err.message || "Unable to load table.");
+        } finally {
+          if (state.objectLoad && state.objectLoad.gen === selectGen) {
+            state.objectLoad = null;
+          }
         }
-        await loadGrid(state.page);
-      } catch (err) {
-        setError(err.message || String(err));
-      }
+      })();
+
+      state.objectLoad = { key: objectKey, gen: selectGen, promise: promise };
+      return promise;
     }
 
     function renderDetails(data) {
@@ -593,47 +692,66 @@
 
     async function loadGrid(page) {
       if (!state.selected) return;
+      var tableLabel = state.selected.schema + "." + state.selected.name;
+      var key = browseFingerprint(page);
+      if (state.browseInflight && state.browseInflight.key === key) {
+        setBrowseLoading(tableLabel);
+        return state.browseInflight.promise;
+      }
       if (state.abort) state.abort.abort();
       state.abort = new AbortController();
+      var browseGen = ++state.browseGen;
+      var selectGen = state.selectGen;
+      var abort = state.abort;
       state.page = page;
       setError("");
-      setGridState("Loading rows…");
-      $("#dex-grid").setAttribute("aria-busy", "true");
-      var filters = activeFilters();
+      setBrowseLoading(tableLabel);
       syncUrl();
-      try {
-        var res = await fetch(root.getAttribute("data-browse-url"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          signal: state.abort.signal,
-          body: JSON.stringify({
-            environment: envSel.value,
-            schema: state.selected.schema,
-            name: state.selected.name,
-            page: page,
-            sort_column: state.sortColumn,
-            sort_dir: state.sortDir,
-            filters: filters,
-          }),
-        });
-        var data = await readJson(res);
-        if (!res.ok) {
-          var failure = new Error(data.error || "Browse failed");
-          failure.code = data.code || "browse_error";
-          throw failure;
+
+      var promise = (async function () {
+        try {
+          var res = await fetch(root.getAttribute("data-browse-url"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            signal: abort.signal,
+            body: JSON.stringify({
+              environment: envSel.value,
+              schema: state.selected.schema,
+              name: state.selected.name,
+              page: page,
+              sort_column: state.sortColumn,
+              sort_dir: state.sortDir,
+              filters: activeFilters(),
+            }),
+          });
+          var data = await readJson(res);
+          if (browseGen !== state.browseGen || selectGen !== state.selectGen) return;
+          if (!res.ok) {
+            var failure = new Error(data.error || "Browse failed");
+            failure.code = data.code || "browse_error";
+            throw failure;
+          }
+          clearBrowseStatusClasses();
+          renderGrid(data);
+          setBrowseBusy(false);
+          if (data.safe_query) $("#dex-query").textContent = data.safe_query;
+        } catch (err) {
+          if (err.name === "AbortError") return;
+          if (browseGen !== state.browseGen || selectGen !== state.selectGen) return;
+          setError(err.message || String(err));
+          setBrowseError(err.message || "Unable to load rows.");
+        } finally {
+          if (state.browseInflight && state.browseInflight.browseGen === browseGen) {
+            state.browseInflight = null;
+          }
+          if (browseGen === state.browseGen && !state.loadingLabel) {
+            $("#dex-grid").setAttribute("aria-busy", "false");
+          }
         }
-        renderGrid(data);
-        if (data.safe_query) $("#dex-query").textContent = data.safe_query;
-      } catch (err) {
-        if (err.name === "AbortError") return;
-        setError(err.message || String(err));
-        setGridState(
-          err.message || "Unable to load rows.",
-          err.code === "invalid_filter" || err.code === "invalid_sort" ? "invalid" : "error"
-        );
-      } finally {
-        $("#dex-grid").setAttribute("aria-busy", "false");
-      }
+      })();
+
+      state.browseInflight = { key: key, promise: promise, browseGen: browseGen };
+      return promise;
     }
 
     function renderGrid(data) {
@@ -719,6 +837,7 @@
       $("#dex-page-label").textContent = "Page " + data.page + " of " + pages;
       $("#dex-prev").disabled = data.page <= 1;
       $("#dex-next").disabled = data.page >= pages;
+      clearBrowseStatusClasses();
       setGridState((data.rows || []).length ? "" : "No rows match the current filter.");
     }
 
