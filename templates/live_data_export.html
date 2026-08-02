@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}{{ page_title }} · {{ app_name }}{% endblock %}
+{% block head_extra %}
+<script src="{{ url_for('static', filename='js/dhis2_org_unit_picker.js') }}?v=ou-sync-immediate-1" defer></script>
+<script src="{{ url_for('static', filename='js/live_data_export.js') }}?v=lex-1" defer></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/live_data_export.css') }}?v=lex-1">
+{% endblock %}
+{% block content %}
+<section class="page-header page-header-compact">
+  <div>
+    <h1>{{ page_title }}</h1>
+    <p class="muted">{{ subtitle }}</p>
+  </div>
+  <div class="page-meta">
+    <span class="badge badge-info">Read-only</span>
+    <span class="badge">Allowlisted sources</span>
+  </div>
+</section>
+
+<script type="application/json" id="lex-bootstrap">{{ bootstrap | tojson }}</script>
+
+<div id="lex-root"
+     class="lex-root"
+     data-preview-url="{{ url_for('api_live_export_preview') }}"
+     data-export-url="{{ url_for('api_live_export_generate') }}"
+     data-jobs-url="{{ url_for('api_live_export_jobs') }}"
+     data-job-url="{{ url_for('api_live_export_job', job_id='__ID__') }}"
+     data-cancel-url="{{ url_for('api_live_export_cancel', job_id='__ID__') }}"
+     data-download-url="{{ url_for('api_live_export_download', job_id='__ID__') }}"
+     data-presets-url="{{ url_for('api_live_export_presets') }}"
+     data-history-url="{{ url_for('api_live_export_history') }}"
+     data-org-units-url="{{ url_for('api_dhis2_report_org_units') }}"
+     data-periods-url="{{ url_for('api_dhis2_report_periods') }}">
+
+  <div class="lex-tabs" role="tablist">
+    <button type="button" class="lex-tab is-active" data-tab="new" role="tab" aria-selected="true">New Export</button>
+    <button type="button" class="lex-tab" data-tab="presets" role="tab">Saved Presets</button>
+    <button type="button" class="lex-tab" data-tab="jobs" role="tab">Export Jobs</button>
+    <button type="button" class="lex-tab" data-tab="history" role="tab">History</button>
+    <button type="button" class="lex-tab" data-tab="settings" role="tab">Settings</button>
+  </div>
+
+  <p class="lex-state" id="lex-state" role="status">Ready to preview</p>
+  <p class="lex-error" id="lex-error" hidden></p>
+
+  <section class="lex-panel is-active" data-panel="new" aria-label="New Export">
+    <form class="lex-form" id="lex-form" action="#" method="post" onsubmit="return false;">
+      <div class="lex-grid">
+        <label class="lex-field">
+          <span>Approved source</span>
+          <select id="lex-source" required></select>
+        </label>
+        <label class="lex-field">
+          <span>Environment</span>
+          <select id="lex-env">
+            <option value="dev">Dev (local demo)</option>
+            <option value="stage">Stage</option>
+            <option value="live">Live</option>
+          </select>
+        </label>
+        <label class="lex-field" data-filter="quarter">
+          <span>Quarter</span>
+          <select id="lex-quarter"></select>
+        </label>
+        <label class="lex-field" data-filter="status">
+          <span>Status</span>
+          <select id="lex-status">
+            <option value="">Any</option>
+            <option value="Active">Active</option>
+            <option value="Inactive">Inactive</option>
+          </select>
+        </label>
+        <label class="lex-field" data-filter="ip_flag">
+          <span>IP / Non-IP</span>
+          <select id="lex-ip">
+            <option value="">Any</option>
+            <option value="IP">IP</option>
+            <option value="Non-IP">Non-IP</option>
+          </select>
+        </label>
+        <label class="lex-field" data-filter="row_limit">
+          <span>Row limit</span>
+          <input type="number" id="lex-row-limit" min="1" step="1" value="1000">
+        </label>
+        <label class="lex-field">
+          <span>Format</span>
+          <select id="lex-format">
+            <option value="csv">CSV</option>
+            <option value="xlsx">XLSX</option>
+            <option value="csv_gz">Compressed CSV (.csv.gz)</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="lex-ou" data-filter="organisation_unit" id="lex-ou-block">
+        <div class="lex-ou-row">
+          <label class="lex-field"><span>Region</span><select id="lex-ou-region" class="lex-ou-select" data-ou-level="0"><option value="">Region…</option></select></label>
+          <label class="lex-field"><span>Province</span><select id="lex-ou-province" class="lex-ou-select" data-ou-level="1" disabled><option value="">Province…</option></select></label>
+          <label class="lex-field"><span>Municipality/City</span><select id="lex-ou-municipality" class="lex-ou-select" data-ou-level="2" disabled><option value="">Municipality/City…</option></select></label>
+          <label class="lex-field"><span>Barangay</span><select id="lex-ou-barangay" class="lex-ou-select" data-ou-level="3" disabled><option value="">Barangay…</option></select></label>
+        </div>
+        <div class="lex-ou-search-wrap">
+          <input type="search" id="lex-ou-search" placeholder="Search organisation unit…" autocomplete="off">
+          <div id="lex-ou-search-results" hidden></div>
+          <input type="hidden" id="lex-ou" value="">
+          <span class="muted" id="lex-ou-path"></span>
+          <button type="button" class="btn btn-sm" id="lex-ou-clear" disabled>Clear OU</button>
+          <button type="button" class="btn btn-sm" id="lex-ou-refresh-meta" title="Refresh organisation units">↻</button>
+        </div>
+        <p class="lex-field-error" id="lex-ou-error" hidden></p>
+        <p class="muted" id="lex-ou-sync"></p>
+      </div>
+
+      <div class="lex-date-row" data-filter="date_range" hidden>
+        <label class="lex-field"><span>Date from</span><input type="date" id="lex-date-from"></label>
+        <label class="lex-field"><span>Date to</span><input type="date" id="lex-date-to"></label>
+      </div>
+
+      <fieldset class="lex-columns" data-filter="columns">
+        <legend>Columns</legend>
+        <div id="lex-column-list" class="lex-column-list"></div>
+      </fieldset>
+
+      <p class="muted" id="lex-source-desc"></p>
+
+      <div class="lex-actions">
+        <button type="button" class="btn" id="lex-preview-btn">Preview</button>
+        <button type="button" class="btn btn-primary" id="lex-export-btn" disabled>Generate Export</button>
+        <button type="button" class="btn btn-sm" id="lex-save-preset-btn">Save as preset</button>
+      </div>
+    </form>
+
+    <div class="lex-preview" id="lex-preview" hidden>
+      <h2>Preview</h2>
+      <ul class="lex-preview-meta" id="lex-preview-meta"></ul>
+      <div class="lex-warnings" id="lex-warnings" hidden></div>
+      <div class="lex-table-wrap">
+        <table class="lex-table" id="lex-preview-table">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="lex-download" id="lex-download" hidden>
+      <a class="btn btn-primary" id="lex-download-link" href="#">Download</a>
+      <span class="muted" id="lex-download-meta"></span>
+    </div>
+  </section>
+
+  <section class="lex-panel" data-panel="presets" hidden>
+    <div id="lex-presets" class="lex-list"></div>
+  </section>
+
+  <section class="lex-panel" data-panel="jobs" hidden>
+    <div class="lex-actions">
+      <button type="button" class="btn btn-sm" id="lex-refresh-jobs">Refresh</button>
+    </div>
+    <div id="lex-jobs" class="lex-list"></div>
+  </section>
+
+  <section class="lex-panel" data-panel="history" hidden>
+    <div id="lex-history" class="lex-list"></div>
+  </section>
+
+  <section class="lex-panel" data-panel="settings" hidden>
+    <div class="lex-settings" id="lex-settings"></div>
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}{{ page_title }} · {{ app_name }}{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/data_explorer.css') }}?v=dex-1">
+<script src="{{ url_for('static', filename='js/data_explorer.js') }}?v=dex-1" defer></script>
+{% endblock %}
+{% block content %}
+<section class="page-header page-header-compact">
+  <div>
+    <h1>{{ page_title }}</h1>
+    <p class="muted">{{ subtitle }}</p>
+  </div>
+  <div class="page-meta">
+    <span class="badge badge-info">Read-only</span>
+    <span class="badge">No ad-hoc SQL</span>
+  </div>
+</section>
+
+<script type="application/json" id="dex-bootstrap">{{ bootstrap | tojson }}</script>
+
+<div id="dex-root"
+     class="dex-root"
+     data-tree-url="{{ url_for('api_data_explorer_tree') }}"
+     data-refresh-url="{{ url_for('api_data_explorer_refresh') }}"
+     data-object-url="{{ url_for('api_data_explorer_object') }}"
+     data-browse-url="{{ url_for('api_data_explorer_browse') }}"
+     data-explain-url="{{ url_for('api_data_explorer_explain') }}"
+     data-export-url="{{ url_for('api_data_explorer_export') }}"
+     data-inventory-url="{{ url_for('api_data_explorer_inventory') }}"
+     data-favorites-url="{{ url_for('api_data_explorer_favorites') }}"
+     data-sql-workspace-url="{{ url_for('sql_workspace') }}">
+
+  <div class="dex-toolbar">
+    <label>Environment
+      <select id="dex-env">
+        <option value="dev">Dev (local demo)</option>
+        <option value="stage">Stage</option>
+        <option value="live">Live</option>
+      </select>
+    </label>
+    <button type="button" class="btn btn-sm" id="dex-refresh">Refresh metadata</button>
+    <button type="button" class="btn btn-sm" id="dex-inventory-btn">Inventory</button>
+    <span class="muted" id="dex-conn-status"></span>
+  </div>
+  <p class="dex-error" id="dex-error" hidden></p>
+
+  <div class="dex-layout">
+    <aside class="dex-left" aria-label="Schema tree">
+      <div class="dex-left-head"><strong>Sources</strong></div>
+      <div id="dex-tree" class="dex-tree"></div>
+      <div class="dex-left-section">
+        <strong>Favorites</strong>
+        <div id="dex-favorites" class="dex-fav-list"></div>
+      </div>
+      <div class="dex-left-section">
+        <strong>Report Sources</strong>
+        <p class="muted dex-small">Lineage from hub registries only (no invented DB maps).</p>
+      </div>
+    </aside>
+
+    <main class="dex-center" aria-label="Data grid">
+      <div class="dex-center-head">
+        <h2 id="dex-object-title">Select an object</h2>
+        <div class="dex-tabs" role="tablist">
+          <button type="button" class="dex-tab is-active" data-tab="data">Data</button>
+          <button type="button" class="dex-tab" data-tab="columns">Columns</button>
+          <button type="button" class="dex-tab" data-tab="relationships">Relationships</button>
+          <button type="button" class="dex-tab" data-tab="indexes">Indexes</button>
+          <button type="button" class="dex-tab" data-tab="usedby">Used By</button>
+          <button type="button" class="dex-tab" data-tab="lineage">Lineage</button>
+          <button type="button" class="dex-tab" data-tab="query">Query</button>
+          <button type="button" class="dex-tab" data-tab="export">Export</button>
+        </div>
+      </div>
+
+      <div class="dex-panel is-active" data-panel="data">
+        <div class="dex-grid-toolbar">
+          <input type="search" id="dex-search" placeholder="Filter column contains…" aria-label="Search">
+          <button type="button" class="btn btn-sm" id="dex-browse-btn" disabled>Refresh</button>
+          <button type="button" class="btn btn-sm" id="dex-fav-btn" disabled>★ Favorite</button>
+          <span class="muted" id="dex-row-meta"></span>
+        </div>
+        <div class="dex-table-wrap">
+          <table class="dex-table" id="dex-grid">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="dex-pager">
+          <button type="button" class="btn btn-sm" id="dex-prev" disabled>Previous</button>
+          <span id="dex-page-label" class="muted">Page 1</span>
+          <button type="button" class="btn btn-sm" id="dex-next" disabled>Next</button>
+        </div>
+      </div>
+
+      <div class="dex-panel" data-panel="columns" hidden><pre id="dex-columns" class="dex-pre"></pre></div>
+      <div class="dex-panel" data-panel="relationships" hidden><pre id="dex-rels" class="dex-pre"></pre></div>
+      <div class="dex-panel" data-panel="indexes" hidden><pre id="dex-indexes" class="dex-pre"></pre></div>
+      <div class="dex-panel" data-panel="usedby" hidden>
+        <h3>Used By Indicators</h3>
+        <div id="dex-used-indicators"></div>
+        <h3>Used By Reports</h3>
+        <div id="dex-used-reports"></div>
+        <h3>Used By Exports</h3>
+        <div id="dex-used-exports"></div>
+      </div>
+      <div class="dex-panel" data-panel="lineage" hidden><pre id="dex-lineage" class="dex-pre"></pre></div>
+      <div class="dex-panel" data-panel="query" hidden>
+        <pre id="dex-query" class="dex-pre"></pre>
+        <div class="dex-actions">
+          <button type="button" class="btn btn-sm" id="dex-copy-query">Copy Query</button>
+          <a class="btn btn-sm" id="dex-open-sql" href="{{ url_for('sql_workspace') }}">Open in SQL Workspace</a>
+          <button type="button" class="btn btn-sm" id="dex-explain">Explain Query</button>
+        </div>
+        <pre id="dex-explain-out" class="dex-pre" hidden></pre>
+      </div>
+      <div class="dex-panel" data-panel="export" hidden>
+        <label>Format
+          <select id="dex-format">
+            <option value="csv">CSV</option>
+            <option value="xlsx">XLSX</option>
+            <option value="csv_gz">Compressed CSV</option>
+          </select>
+        </label>
+        <label>Row limit <input type="number" id="dex-export-limit" min="1" value="5000"></label>
+        <button type="button" class="btn btn-primary btn-sm" id="dex-export-btn" disabled>Export</button>
+        <div id="dex-export-result" class="muted"></div>
+      </div>
+    </main>
+
+    <aside class="dex-right" aria-label="Details" id="dex-details">
+      <h3>Details</h3>
+      <p class="muted" id="dex-detail-empty">Select a table or view.</p>
+      <dl id="dex-detail-dl" class="dex-dl" hidden></dl>
+    </aside>
+  </div>
+
+  <dialog id="dex-inventory-dialog" class="dex-dialog">
+    <form method="dialog">
+      <header><strong>Source inventory</strong><button value="cancel" class="btn btn-sm">Close</button></header>
+      <div id="dex-inventory-body" class="dex-inventory-body"></div>
+    </form>
+  </dialog>
+</div>
+{% endblock %}

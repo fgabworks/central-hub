@@ -1,0 +1,95 @@
+# Central Hub Data Explorer — browse/sensitivity/classification rules (Phase 1)
+# Live/Stage object inventory comes from read-only discovery at runtime.
+# Pattern rules classify names only; they do not invent verified mappings.
+
+defaults:
+  page_size: 100
+  max_page_size: 500
+  max_export_rows: 50000
+  max_rows_sync: 5000
+  metadata_cache_ttl_seconds: 300
+  approximate_count_threshold: 100000
+  connection_by_environment:
+    live: live-ro
+    stage: stage-ro
+    dev: local-demo
+  excluded_schemas:
+    - pg_catalog
+    - information_schema
+    - pg_toast
+    - pg_temp_1
+    - mysql
+    - sys
+    - performance_schema
+  formats: [csv, xlsx, csv_gz]
+
+# Column policy (applied when names match; case-insensitive)
+column_policies:
+  - match: "(?i)(password|passwd|secret|token|api[_-]?key|credential|private[_-]?key|auth[_-]?header)"
+    action: hide
+  - match: "(?i)(email|phone|mobile|ssn|national[_-]?id)"
+    action: mask
+  - match: "(?i)(connection[_-]?string|connstr)"
+    action: export_prohibit
+
+# Object-level defaults by classification group
+group_policies:
+  Linelist:
+    sensitivity: medium
+    browse: allow
+    export: allow_with_limits
+  Tracker:
+    sensitivity: high
+    browse: allow
+    export: restricted
+  Analytics:
+    sensitivity: low
+    browse: allow
+    export: allow_with_limits
+  Reporting:
+    sensitivity: medium
+    browse: allow
+    export: allow_with_limits
+  HCSC/RF:
+    sensitivity: medium
+    browse: allow
+    export: allow_with_limits
+  Organisation Units:
+    sensitivity: low
+    browse: allow
+    export: allow
+  Application/Internal:
+    sensitivity: low
+    browse: allow
+    export: allow
+  Unknown:
+    sensitivity: unresolved
+    browse: preview_only
+    export: deny
+
+# Name-pattern classifiers (first match wins). confidence: pattern | verified
+classification_patterns:
+  - group: Linelist
+    pattern: "(?i)(^_?pmnp_linelist_|linelist)"
+    likely_role: Household/member linelist table or view
+  - group: Tracker
+    pattern: "(?i)^(trackedentityinstance|programinstance|programstageinstance|trackedentityattributevalue)$"
+    likely_role: DHIS2 tracker operational table
+  - group: Organisation Units
+    pattern: "(?i)^(organisationunit|orgunit|_?ou_)"
+    likely_role: Organisation unit hierarchy
+  - group: Analytics
+    pattern: "(?i)(analytics|_agg_|_fact_)"
+    likely_role: Analytics / aggregate fact source
+  - group: HCSC/RF
+    pattern: "(?i)(hcsc|results?_?framework|convergence)"
+    likely_role: HCSC / Results Framework related source
+  - group: Reporting
+    pattern: "(?i)(report|masterlist|summary|eligible)"
+    likely_role: Reporting / summary view
+  - group: Application/Internal
+    pattern: "(?i)^(demo_|export_demo_|sql_)"
+    likely_role: Hub-local demo or application table
+
+# Optional explicit object overrides (schema.object) — empty until Live verified
+object_overrides: []

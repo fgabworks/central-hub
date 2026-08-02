@@ -1,0 +1,54 @@
+/* Data Explorer three-panel layout */
+.dex-root { max-width: 1400px; }
+.dex-toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
+.dex-error { color: #8b1e1e; }
+.dex-layout {
+  display: grid;
+  grid-template-columns: minmax(200px, 240px) minmax(0, 1fr) minmax(200px, 260px);
+  gap: 0.75rem;
+  min-height: 70vh;
+}
+.dex-left, .dex-right, .dex-center {
+  border: 1px solid #e2e5ea;
+  border-radius: 4px;
+  background: #fff;
+  min-width: 0;
+}
+.dex-left, .dex-right { padding: 0.6rem; overflow: auto; max-height: 75vh; }
+.dex-center { display: flex; flex-direction: column; max-height: 75vh; }
+.dex-center-head { padding: 0.55rem 0.65rem 0; border-bottom: 1px solid #eceff3; }
+.dex-center-head h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+.dex-tabs { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-bottom: 0.4rem; }
+.dex-tab {
+  border: 1px solid #c9cdd3; background: #f7f8fa; padding: 0.2rem 0.45rem;
+  border-radius: 3px; cursor: pointer; font: inherit; font-size: 0.8rem;
+}
+.dex-tab.is-active { background: #1f3a5f; color: #fff; border-color: #1f3a5f; }
+.dex-panel { padding: 0.55rem 0.65rem; overflow: auto; flex: 1; }
+.dex-tree details { margin: 0.2rem 0; }
+.dex-tree summary { cursor: pointer; font-weight: 600; font-size: 0.88rem; }
+.dex-tree button {
+  display: block; width: 100%; text-align: left; border: 0; background: transparent;
+  padding: 0.15rem 0.25rem; cursor: pointer; font: inherit; font-size: 0.82rem;
+}
+.dex-tree button.is-active { background: #eef3f8; }
+.dex-table-wrap { overflow: auto; max-height: 48vh; border: 1px solid #eceff3; }
+.dex-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+.dex-table th, .dex-table td { border-bottom: 1px solid #eceff3; padding: 0.25rem 0.4rem; white-space: nowrap; text-align: left; }
+.dex-table th { background: #f4f6f8; position: sticky; top: 0; cursor: pointer; }
+.dex-grid-toolbar, .dex-pager, .dex-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin: 0.4rem 0; }
+.dex-pre { white-space: pre-wrap; font-size: 0.78rem; background: #f7f8fa; padding: 0.5rem; border-radius: 4px; max-height: 50vh; overflow: auto; }
+.dex-dl { display: grid; grid-template-columns: 7rem 1fr; gap: 0.25rem 0.5rem; font-size: 0.85rem; }
+.dex-dl dt { font-weight: 600; color: #445; }
+.dex-small { font-size: 0.78rem; }
+.dex-left-section { margin-top: 0.75rem; padding-top: 0.5rem; border-top: 1px solid #eceff3; }
+.dex-fav-list button { display: block; width: 100%; text-align: left; font: inherit; font-size: 0.8rem; border: 0; background: transparent; padding: 0.15rem 0; cursor: pointer; }
+.dex-dialog { width: min(900px, 92vw); max-height: 80vh; border: 1px solid #c9cdd3; border-radius: 6px; padding: 0; }
+.dex-dialog header { display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0.75rem; border-bottom: 1px solid #eceff3; }
+.dex-inventory-body { padding: 0.75rem; overflow: auto; max-height: 70vh; font-size: 0.85rem; }
+.dex-inv-group { margin-bottom: 0.85rem; }
+.dex-inv-group h4 { margin: 0 0 0.35rem; }
+@media (max-width: 960px) {
+  .dex-layout { grid-template-columns: 1fr; }
+  .dex-left, .dex-right { max-height: none; }
+}

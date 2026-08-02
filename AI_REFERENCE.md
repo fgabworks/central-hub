@@ -38,6 +38,8 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Calendar Center | Shared Calendar service + FullCalendar grid (month/week/day) + agenda/upcoming |
 | Google Connections | System page to connect/assign/enable Gmail+Calendar scopes |
 | SQL Workspace | Read-only query library/runner (`/sql`); sqlglot allowlist; Live warning; layout `minmax(260px,320px) | 1fr` under shell |
+| Live Data Export | `/live-data-export` — Phase 1 allowlisted CSV/XLSX/csv.gz from approved sources (`hub/live_data_export/`, `config/live_data_exports.yaml`); preview+jobs; RO connections; unverified prod sources disabled |
+| Data Explorer | `/data-explorer` — Phase 1 RO schema/browse/lineage/inventory (`hub/data_explorer/`, `config/data_explorer.yaml`); no ad-hoc SQL; Live inventory requires configured `live-ro` |
 | AI Assistant Center | Aira at `/personal/aira`; Okarun at `/work/okarun` (history/management); full-height right dock + fixed composer via topbar + activity rail (`hub/agent_center/dock.py`); Find/Ask/Plan/Review; Codex CLI (Okarun MVP), Claude Code, Cursor, Grok, OpenAI |
 | Workspace Console | Bottom panel under main content only (`left: var(--sidebar-w)`); bounded height; Ctrl+J; collapsed by default |
 | Activity Rail | Far-right icons for AI Assistant, Quick Notepad, Workspace Console (future utilities placeholders); reduces main width only |
@@ -224,6 +226,30 @@ refresh; no push; no create/update/delete/RSVP; **no automatic agent access**.
 
 Local store: `data/sql_workspace.db`. Connections: `config/sql_connections.yaml` + env secrets (`.env.example`).
 Safety: sqlglot AST validation (not regex-only); SELECT / read-only WITH / EXPLAIN only; one statement; RO transaction + statement timeout + row cap; credentials never in UI/logs; Live connections show a strong warning.
+
+## Live Data Export
+
+| Route | Purpose |
+|---|---|
+| `/live-data-export` | New Export / Presets / Jobs / History / Settings |
+| `/api/live-data-export/preview` | Count + sample rows (same filter scope as export) |
+| `/api/live-data-export/export` | Sync or background CSV/XLSX/csv.gz |
+| `/api/live-data-export/jobs/<id>/download` | Token + TTL protected download |
+
+Registry: `config/live_data_exports.yaml`. Store: `data/live_data_export.db` + `data/live_exports/`.
+Uses SQL Workspace RO profiles (`live-ro` / `stage-ro` / `local-demo`). No unrestricted SQL editor.
+
+## Data Explorer
+
+| Route | Purpose |
+|---|---|
+| `/data-explorer` | Three-panel RO explorer (tree / grid / details) |
+| `/api/data-explorer/tree` | Cached schema tree |
+| `/api/data-explorer/browse` | Paginated SELECT from discovered objects only |
+| `/api/data-explorer/inventory` | Grouped source inventory |
+| `/api/data-explorer/export` | CSV/XLSX/csv.gz with sensitivity policy |
+
+Config: `config/data_explorer.yaml`. Store: `data/data_explorer.db`. SQL Workspace remains the place for approved ad hoc queries.
 
 ## Connected Live Processing
 

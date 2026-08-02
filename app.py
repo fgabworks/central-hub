@@ -127,6 +127,11 @@ from hub.dhis2_reports.routes import register_dhis2_reports_routes
 from hub.dhis2_reports.service import Dhis2ReportsService
 from hub.dhis2_reports.store import ReportsStore
 from hub.hcsc_indicators.routes import register_hcsc_indicator_routes
+from hub.live_data_export.demo import ensure_export_demo_table
+from hub.live_data_export.routes import register_live_data_export_routes
+from hub.live_data_export.service import LiveDataExportService
+from hub.data_explorer.routes import register_data_explorer_routes
+from hub.data_explorer.service import DataExplorerService
 from hub.hcsc_indicators.service import HcscIndicatorService
 from hub.repository_workspace.service import RepositoryWorkspaceService
 from hub.registry import load_registry
@@ -225,6 +230,7 @@ def create_app() -> Flask:
     )
     app.config["NOTEBOOK"] = NotebookStore()
     ensure_demo_database()
+    ensure_export_demo_table()
     sql_store = SqlWorkspaceStore()
     app.config["SQL_WS_STORE"] = sql_store
     app.config["SQL_WS_CONNECTIONS"] = load_connection_registry()
@@ -233,6 +239,14 @@ def create_app() -> Flask:
         max_rows=int(os.environ.get("SQL_WS_MAX_ROWS") or 1000),
         statement_timeout_ms=int(os.environ.get("SQL_WS_STATEMENT_TIMEOUT_MS") or 15000),
     )
+    app.config["LIVE_DATA_EXPORT"] = LiveDataExportService(
+        connections=app.config["SQL_WS_CONNECTIONS"],
+    )
+    register_live_data_export_routes(app)
+    app.config["DATA_EXPLORER"] = DataExplorerService(
+        connections=app.config["SQL_WS_CONNECTIONS"],
+    )
+    register_data_explorer_routes(app)
     email_db_path = os.environ.get("CENTRAL_HUB_EMAIL_DATABASE") or str(
         ROOT_DIR / "data" / "email.db"
     )
@@ -435,13 +449,15 @@ def create_app() -> Flask:
             "repository_edit",
             "repository_detail",
             "sql_workspace",
+            "live_data_export",
+            "data_explorer",
             "agent_center",
             "work_okarun",
             "dhis2",
             "jobs",
             "job_detail",
             "health",
-        } or (ep.startswith("dhis2") if ep else False) or (ep.startswith("repository") if ep else False) or (ep.startswith("sql_") if ep else False) or (ep.startswith("api_agent") if ep else False) or (ep.startswith("api_agents") if ep else False) or (ep.startswith("api_context") if ep else False) or (ep.startswith("api_prompts") if ep else False):
+        } or (ep.startswith("dhis2") if ep else False) or (ep.startswith("repository") if ep else False) or (ep.startswith("sql_") if ep else False) or (ep.startswith("api_live_export") if ep else False) or (ep.startswith("live_data") if ep else False) or (ep.startswith("api_data_explorer") if ep else False) or (ep.startswith("data_explorer") if ep else False) or (ep.startswith("api_agent") if ep else False) or (ep.startswith("api_agents") if ep else False) or (ep.startswith("api_context") if ep else False) or (ep.startswith("api_prompts") if ep else False):
             workspace = "work"
         elif ep in {
             "personal_dashboard",
@@ -515,6 +531,18 @@ def create_app() -> Flask:
                 "label": "SQL Workspace",
                 "icon": "▦",
                 "active_prefix": "sql_workspace",
+            },
+            {
+                "endpoint": "live_data_export",
+                "label": "Live Data Export",
+                "icon": "⇩",
+                "active_prefix": "live_data_export",
+            },
+            {
+                "endpoint": "data_explorer",
+                "label": "Data Explorer",
+                "icon": "▤",
+                "active_prefix": "data_explorer",
             },
             {
                 "endpoint": "jobs",

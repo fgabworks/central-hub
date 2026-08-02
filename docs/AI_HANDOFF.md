@@ -4,7 +4,29 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**HCSC–RF geographic breakdown (2026-08-02)**
+**Data Explorer Phase 1 (2026-08-02)**
+
+New Work-nav module `/data-explorer` — Navicat-like **read-only** browse of configured
+SQL RO connections. Discovers schemas/tables/views/matviews + columns/keys/indexes;
+classifies into Linelist/Tracker/Analytics/Reporting/HCSC·RF/OU/Application/Unknown via
+name patterns only (no invented Live mappings). Lineage from HCSC registry + Live Data
+Export allowlist; DHIS2 Standard Reports have no DB table maps (unresolved). Live/Stage
+RO were not configured at build time — inventory today is local-demo. Package
+`hub/data_explorer/`, config `config/data_explorer.yaml`. Focused tests:
+`tests/test_data_explorer.py`.
+
+Prior: **Live Data Export Phase 1 (2026-08-02)**
+
+New Work-nav module `/live-data-export` — allowlisted CSV/XLSX/csv.gz exports from
+approved Live DB sources only (no arbitrary SQL/tables). Config registry
+`config/live_data_exports.yaml`; package `hub/live_data_export/`. Preview → Generate;
+sync under `max_rows_sync` (5000), background job otherwise; token+TTL downloads;
+audit without row payloads. Verified source today: local demo household linelist.
+Production candidates (household linelist, member linelist, eligible HH view, HCSC
+summary, beneficiary masterlist, saved SQL) are registered but **unavailable** until
+object/columns are verified. Focused tests: `tests/test_live_data_export.py`.
+
+Prior: **HCSC–RF geographic breakdown (2026-08-02)**
 
 Optional child-OU breakdown on the same HCSC–RF page (one Generate Report). Renamed
 Disaggregation → **Population Filter** (`All Households` only). Added **Geographic

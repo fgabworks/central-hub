@@ -1,0 +1,208 @@
+# Central Hub Live Data Export — approved source registry (Phase 1)
+# Users cannot type arbitrary tables/SQL. Only keys listed here are selectable.
+# status: verified | unverified | disabled
+# Unverified sources stay unavailable until object names and columns are confirmed.
+
+defaults:
+  max_rows_sync: 5000
+  max_rows_hard: 100000
+  preview_rows: 25
+  download_ttl_seconds: 86400
+  large_export_rows: 5000
+  formats: [csv, xlsx, csv_gz]
+  connection_by_environment:
+    live: live-ro
+    stage: stage-ro
+    dev: local-demo
+
+sources:
+  # --- Local demo (verified for hub tests / offline) ---
+  - source_key: demo_household_linelist
+    display_name: Demo Household Linelist
+    source_type: table
+    status: verified
+    enabled: true
+    description: Hub-local demo table for Live Data Export smoke tests (not production data).
+    source_owner: central-hub
+    repository: central-hub
+    connection_id: local-demo
+    schema: main
+    object_name: export_demo_household
+    description_short: Demo household rows
+    allowed_columns:
+      - household_id
+      - org_unit_uid
+      - org_unit_name
+      - quarter
+      - status
+      - ip_flag
+      - created_at
+    default_columns:
+      - household_id
+      - org_unit_name
+      - quarter
+      - status
+      - ip_flag
+    sensitive_columns: []
+    excluded_columns:
+      - internal_notes
+    required_filters:
+      - quarter
+    filters_supported:
+      - environment
+      - quarter
+      - organisation_unit
+      - status
+      - ip_flag
+      - columns
+      - row_limit
+    quarter_column: quarter
+    organisation_unit_column: org_unit_uid
+    date_column: created_at
+    status_column: status
+    ip_column: ip_flag
+    maximum_rows: 10000
+    supported_formats: [csv, xlsx, csv_gz]
+    default_sort:
+      - column: household_id
+        direction: asc
+    enabled_environments: [dev, stage, live]
+
+  # --- Production candidates (unverified — unavailable until confirmed) ---
+  - source_key: household_linelist
+    display_name: Household Linelist
+    source_type: view
+    status: unverified
+    enabled: false
+    description: Frequent reporting household linelist. Unavailable until schema/object and columns are verified.
+    source_owner: live-processing
+    repository: live-processing
+    schema: ""
+    object_name: ""
+    allowed_columns: []
+    default_columns: []
+    sensitive_columns: []
+    excluded_columns: []
+    required_filters: [quarter]
+    filters_supported: [environment, quarter, organisation_unit, columns, row_limit]
+    quarter_column: ""
+    organisation_unit_column: ""
+    date_column: ""
+    maximum_rows: 50000
+    supported_formats: [csv, xlsx, csv_gz]
+    default_sort: []
+    enabled_environments: [live, stage]
+    unavailable_reason: Object name and columns not yet verified in Central Hub registry.
+
+  - source_key: household_member_linelist
+    display_name: Household-Member Linelist
+    source_type: view
+    status: unverified
+    enabled: false
+    description: Member-level linelist. Unavailable until verified.
+    source_owner: live-processing
+    repository: live-processing
+    schema: ""
+    object_name: ""
+    allowed_columns: []
+    default_columns: []
+    sensitive_columns: []
+    excluded_columns: []
+    required_filters: [quarter]
+    filters_supported: [environment, quarter, organisation_unit, columns, row_limit]
+    maximum_rows: 100000
+    supported_formats: [csv, xlsx, csv_gz]
+    default_sort: []
+    enabled_environments: [live, stage]
+    unavailable_reason: Object name and columns not yet verified in Central Hub registry.
+
+  - source_key: approved_eligible_household_view
+    display_name: Approved Eligible Household View
+    source_type: view
+    status: unverified
+    enabled: false
+    description: Approved eligible household reporting view. Unavailable until verified.
+    source_owner: live-processing
+    repository: live-processing
+    schema: ""
+    object_name: ""
+    allowed_columns: []
+    default_columns: []
+    sensitive_columns: []
+    excluded_columns: []
+    required_filters: [quarter]
+    filters_supported: [environment, quarter, organisation_unit, columns, row_limit]
+    maximum_rows: 50000
+    supported_formats: [csv, xlsx, csv_gz]
+    default_sort: []
+    enabled_environments: [live, stage]
+    unavailable_reason: Object name and columns not yet verified in Central Hub registry.
+
+  - source_key: hcsc_reporting_summary
+    display_name: HCSC / Reporting Summary Views
+    source_type: view
+    status: unverified
+    enabled: false
+    description: HCSC reporting summary views. Unavailable until verified.
+    source_owner: live-processing
+    repository: live-processing
+    schema: ""
+    object_name: ""
+    allowed_columns: []
+    default_columns: []
+    sensitive_columns: []
+    excluded_columns: []
+    required_filters: [quarter]
+    filters_supported: [environment, quarter, organisation_unit, columns, row_limit]
+    maximum_rows: 50000
+    supported_formats: [csv, xlsx, csv_gz]
+    default_sort: []
+    enabled_environments: [live, stage]
+    unavailable_reason: Object name and columns not yet verified in Central Hub registry.
+
+  - source_key: beneficiary_masterlist
+    display_name: Beneficiary Masterlist
+    source_type: view
+    status: unverified
+    enabled: false
+    description: Beneficiary masterlist. Unavailable until verified.
+    source_owner: live-processing
+    repository: live-processing
+    schema: ""
+    object_name: ""
+    allowed_columns: []
+    default_columns: []
+    sensitive_columns: []
+    excluded_columns: []
+    required_filters: [quarter]
+    filters_supported: [environment, quarter, organisation_unit, columns, row_limit]
+    maximum_rows: 100000
+    supported_formats: [csv, xlsx, csv_gz]
+    default_sort: []
+    enabled_environments: [live, stage]
+    unavailable_reason: Object name and columns not yet verified in Central Hub registry.
+
+  - source_key: hcsc_rf_approved_sql_lineage
+    display_name: HCSC RF Approved SQL (reference)
+    source_type: saved_query
+    status: unverified
+    enabled: false
+    description: >
+      Points at a SQL Workspace saved query ID from the HCSC registry.
+      Remains unavailable until the saved query exists locally and columns are allowlisted.
+    source_owner: data_scripts
+    repository: data_scripts
+    saved_query_id: 4c4f5fe8d6a14eee8777ca4496676640
+    schema: ""
+    object_name: ""
+    allowed_columns: []
+    default_columns: []
+    sensitive_columns: []
+    excluded_columns: []
+    required_filters: []
+    filters_supported: [environment, columns, row_limit]
+    maximum_rows: 5000
+    supported_formats: [csv, xlsx]
+    default_sort: []
+    enabled_environments: [live, stage, dev]
+    unavailable_reason: Saved query must exist in SQL Workspace and columns must be allowlisted before enablement.
