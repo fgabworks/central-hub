@@ -1,18 +1,15 @@
 {% extends "base.html" %}
 {% block title %}{{ profile.name }} · Assistant Center · {{ app_name }}{% endblock %}
 {% block content %}
-<div class="page-header ac-page-header">
-  <div>
-    <h1>Assistant Center</h1>
-    <p class="page-sub">{{ profile.name }} history and run management · {{ profile.workspace }} workspace</p>
-  </div>
-  <div class="ac-header-actions">
-    <button type="button" class="ac-lock-badge" id="ac-lock-toggle" aria-expanded="false" aria-controls="ac-safety-details" title="Read-only safeguards">
-      🔒 Read-only
-    </button>
-    <button type="button" class="btn btn-sm btn-primary" id="ac-open-dock" title="Open {{ profile.name }} dock">+ {{ profile.name }}</button>
-  </div>
-</div>
+{% set sh_title = "Assistant Center" %}
+{% set sh_info = profile.name ~ " history and run management · " ~ profile.workspace ~ " workspace" %}
+{% set sh_meta %}
+  <button type="button" class="ac-lock-badge" id="ac-lock-toggle" aria-expanded="false" aria-controls="ac-safety-details" title="Read-only safeguards">
+    🔒 Read-only
+  </button>
+  <button type="button" class="btn btn-sm btn-primary" id="ac-open-dock" title="Open {{ profile.name }} dock">+ {{ profile.name }}</button>
+{% endset %}
+{% include "partials/section_header.html" %}
 
 <details class="ac-safety-details" id="ac-safety-details">
   <summary class="sr-only">Read-only details</summary>

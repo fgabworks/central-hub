@@ -143,34 +143,71 @@
       });
   }
 
+  function hubProcessRow(item) {
+    var actions = "—";
+    if (item.hub_owned && item.stoppable) {
+      actions =
+        '<button type="button" class="btn btn-sm hub-proc-stop" data-pid="' + escapeHtml(item.pid) +
+        '" data-identity="' + escapeHtml(item.identity_token || "") +
+        '" data-ownership="' + escapeHtml(item.ownership_token || "") +
+        '">Stop</button> ';
+      if (item.role === "server" || item.current) {
+        actions +=
+          '<button type="button" class="btn btn-sm hub-proc-restart" data-pid="' + escapeHtml(item.pid) +
+          '" data-identity="' + escapeHtml(item.identity_token || "") +
+          '" data-ownership="' + escapeHtml(item.ownership_token || "") +
+          '">Restart</button>';
+      }
+    } else {
+      actions = '<span class="muted">Not stoppable</span>';
+    }
+    return (
+      "<tr>" +
+      "<td><div class=\"cell-title\">" + escapeHtml(item.label || "Python") + "</div>" +
+      "<div class=\"cell-sub\">" + escapeHtml(item.role || "") + (item.orphan ? " · orphan" : "") + "</div></td>" +
+      "<td>" + escapeHtml(item.status || "—") + "<div class=\"cell-sub\">" + escapeHtml(item.health || "") + "</div></td>" +
+      "<td class=\"mono\">" + escapeHtml(item.pid) + "<div class=\"cell-sub\">ppid " + escapeHtml(item.ppid == null ? "—" : item.ppid) + "</div></td>" +
+      "<td class=\"mono\">" + escapeHtml(item.script_module || "—") + "</td>" +
+      "<td class=\"mono\">" + escapeHtml(item.listening_port == null ? "—" : item.listening_port) + "</td>" +
+      "<td class=\"mono muted\" style=\"max-width:12rem;word-break:break-word\">" + escapeHtml(item.cwd || "—") + "</td>" +
+      "<td class=\"muted\">" + escapeHtml(item.started_at || "—") + "<div class=\"cell-sub\">" + escapeHtml(item.runtime_label || "—") + "</div></td>" +
+      "<td>" + (item.hub_owned ? "Yes" : "No") + "</td>" +
+      "<td class=\"muted mono\" style=\"max-width:18rem;word-break:break-word\">" + escapeHtml(item.command_redacted || "") + "</td>" +
+      "<td>" + actions + "</td>" +
+      "</tr>"
+    );
+  }
+
   function refreshCentralHubProcesses() {
     var tbody = qs("#hub-processes-body");
+    var otherBody = qs("#hub-other-python-body");
     if (!tbody) return Promise.resolve(null);
     return fetch("/api/health/central-hub-processes", { credentials: "same-origin" })
       .then(function (response) { return response.json(); })
       .then(function (data) {
-        var rows = (data && data.instances) || [];
-        if (!rows.length) {
-          tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No verified Central Hub instance found.</td></tr>';
-          return data;
+        var hubRows = (data && data.hub_processes) || (data && data.instances) || [];
+        var otherRows = (data && data.other_python) || [];
+        tbody.innerHTML = hubRows.length
+          ? hubRows.map(hubProcessRow).join("")
+          : '<tr class="empty-row"><td colspan="10">No Central Hub-owned process found.</td></tr>';
+        if (otherBody) {
+          otherBody.innerHTML = otherRows.length
+            ? otherRows.map(hubProcessRow).join("")
+            : '<tr class="empty-row"><td colspan="10">No other Python processes detected.</td></tr>';
         }
-        tbody.innerHTML = rows.map(function (item) {
-          return (
-            "<tr><td class=\"mono\">" + escapeHtml(item.pid) +
-            "</td><td>" + escapeHtml(item.status) +
-            "</td><td class=\"mono\">" + escapeHtml(item.port) +
-            "</td><td>" + (item.registered ? "Yes" : "No") +
-            "</td><td>" + (item.owns_port ? "Yes" : "No") +
-            "</td><td class=\"muted\">" + escapeHtml((item.verification_reasons || []).join(", ")) +
-            "</td><td class=\"muted mono\">" + escapeHtml(item.command_redacted) + "</td></tr>"
-          );
-        }).join("");
         var status = qs("#hub-process-action-status");
-        if (status) status.textContent = rows.length + " verified instance(s); current PID " + (data.current_pid || "unavailable") + ".";
+        if (status) {
+          status.textContent =
+            hubRows.length + " Central Hub process(es), " + otherRows.length +
+            " other Python; current PID " + (data.current_pid || "unavailable") + ".";
+        }
         return data;
       })
       .catch(function () {
-        tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Central Hub process scan unavailable.</td></tr>';
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="10">Central Hub process scan unavailable.</td></tr>';
+        if (otherBody) {
+          otherBody.innerHTML = '<tr class="empty-row"><td colspan="10">Other Python scan unavailable.</td></tr>';
+        }
         return null;
       });
   }
@@ -199,18 +236,22 @@
       .then(function (response) { return response.json(); })
       .then(function (data) {
         if (data.status === "completed") {
-          if (status) status.textContent = "Restart complete. New PID " + data.new_pid + "; health check passed.";
+          if (status) {
+            status.textContent = data.action === "restart"
+              ? ("Restart complete. New PID " + data.new_pid + "; health check passed.")
+              : ("Action complete for PID(s): " + ((data.target_pids || []).join(", ") || "n/a") + ".");
+          }
           return refreshCentralHubProcesses();
         }
-        if (data.status === "failed") throw new Error(data.error || "Clean restart failed.");
-        if (status) status.textContent = "Restart in progress; waiting for one healthy listenerâ€¦";
+        if (data.status === "failed") throw new Error(data.error || "Process action failed.");
+        if (status) status.textContent = "Action in progress…";
         return new Promise(function (resolve) {
           window.setTimeout(function () { resolve(pollHubAction(actionId, attempts - 1)); }, 1000);
         });
       })
       .catch(function (error) {
         if (attempts <= 1) {
-          if (status) status.textContent = error.message || "Restart status unavailable.";
+          if (status) status.textContent = error.message || "Action status unavailable.";
           return null;
         }
         return new Promise(function (resolve) {
@@ -223,7 +264,11 @@
     var stale = qs("#hub-stop-stale");
     var restart = qs("#hub-restart-clean");
     var stopAll = qs("#hub-stop-all");
+    var stopHub = qs("#hub-stop-central");
+    var refresh = qs("#hub-refresh-processes");
     var status = qs("#hub-process-action-status");
+    var root = qs("[data-central-hub-processes]");
+    if (refresh) refresh.addEventListener("click", function () { refreshCentralHubProcesses(); });
     if (stale) stale.addEventListener("click", function () {
       if (!window.confirm("Stop only verified stale Central Hub instances?")) return;
       postHubProcessAction("/api/health/central-hub-processes/stop-stale", { confirm: true })
@@ -242,6 +287,16 @@
         })
         .catch(function (error) { if (status) status.textContent = error.message; });
     });
+    if (stopHub) stopHub.addEventListener("click", function () {
+      var phrase = window.prompt('Type "STOP CENTRAL HUB" to terminate the complete owned process tree.');
+      if (phrase === null) return;
+      postHubProcessAction("/api/health/central-hub-processes/stop-central-hub", {
+        typed_confirmation: phrase,
+      }).then(function (data) {
+        if (status) status.textContent = "Stop Central Hub queued for PID(s): " + data.target_pids.join(", ") + ".";
+        return pollHubAction(data.action_id, 45);
+      }).catch(function (error) { if (status) status.textContent = error.message; });
+    });
     if (stopAll) stopAll.addEventListener("click", function () {
       var phrase = window.prompt('Type "STOP ALL CENTRAL HUB INSTANCES" to continue.');
       if (phrase === null) return;
@@ -250,6 +305,38 @@
       }).then(function (data) {
         if (status) status.textContent = "Stop-all queued for verified PID(s): " + data.target_pids.join(", ") + ".";
       }).catch(function (error) { if (status) status.textContent = error.message; });
+    });
+    if (root) root.addEventListener("click", function (event) {
+      var stopBtn = event.target.closest(".hub-proc-stop");
+      var restartBtn = event.target.closest(".hub-proc-restart");
+      if (stopBtn) {
+        if (!window.confirm("Stop Central Hub-owned PID " + stopBtn.getAttribute("data-pid") + "?")) return;
+        postHubProcessAction("/api/health/central-hub-processes/stop", {
+          confirm: true,
+          pid: Number(stopBtn.getAttribute("data-pid")),
+          identity_token: stopBtn.getAttribute("data-identity"),
+          ownership_token: stopBtn.getAttribute("data-ownership"),
+        }).then(function (data) {
+          if (data.queued) {
+            if (status) status.textContent = "Stop queued for PID " + stopBtn.getAttribute("data-pid") + ".";
+            return pollHubAction(data.action_id, 45);
+          }
+          if (status) status.textContent = data.ok ? ("Stopped PID " + stopBtn.getAttribute("data-pid") + ".") : "Stop failed.";
+          return refreshCentralHubProcesses();
+        }).catch(function (error) { if (status) status.textContent = error.message; });
+      }
+      if (restartBtn) {
+        if (!window.confirm("Restart Central Hub Server PID " + restartBtn.getAttribute("data-pid") + "?")) return;
+        postHubProcessAction("/api/health/central-hub-processes/restart-one", {
+          confirm: true,
+          pid: Number(restartBtn.getAttribute("data-pid")),
+          identity_token: restartBtn.getAttribute("data-identity"),
+          ownership_token: restartBtn.getAttribute("data-ownership"),
+        }).then(function (data) {
+          if (status) status.textContent = "Restart queued.";
+          return pollHubAction(data.action_id, 45);
+        }).catch(function (error) { if (status) status.textContent = error.message; });
+      }
     });
   }
 

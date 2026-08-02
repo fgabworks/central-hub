@@ -1,23 +1,19 @@
 {% extends "base.html" %}
 {% block title %}UID & Mapping Explorer · DHIS2 · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-header">
-  <div>
-    <p class="muted-2" style="margin:0 0 0.35rem"><a href="{{ url_for('dhis2') }}">DHIS2</a> / UID Explorer</p>
-    <h1>UID &amp; Data Mapping Explorer</h1>
-    <p>Search the local repository UID index. Live DHIS2 compare stays read-only (GET).</p>
-  </div>
-  <div class="page-meta">
-    {% if total %}
-      <span>{{ range_start }}–{{ range_end }} of {{ matched }} matched · {{ total }}{% if mode == 'enrichment' %} enriched{% else %} indexed{% endif %}</span>
-    {% else %}
-      <span>0 indexed</span>
-    {% endif %}
-    <span class="badge badge-env">{{ mode or 'repository' }}</span>
-    <a class="btn btn-sm" href="{{ url_for('dhis2_enrichment') }}">Enrichment</a>
-    <a class="btn btn-sm" href="{{ url_for('dhis2_uid_index_manage') }}">Manage index</a>
-  </div>
-</section>
+{% set sh_title = "UID & Data Mapping Explorer" %}
+{% set sh_info = "Search the local repository UID index. Live DHIS2 compare stays read-only (GET)." %}
+{% set sh_meta %}
+  {% if total %}
+    <span>{{ range_start }}–{{ range_end }} of {{ matched }} matched · {{ total }}{% if mode == 'enrichment' %} enriched{% else %} indexed{% endif %}</span>
+  {% else %}
+    <span>0 indexed</span>
+  {% endif %}
+  <span class="badge badge-env">{{ mode or 'repository' }}</span>
+  <a class="btn btn-sm" href="{{ url_for('dhis2_enrichment') }}">Enrichment</a>
+  <a class="btn btn-sm" href="{{ url_for('dhis2_uid_index_manage') }}">Manage index</a>
+{% endset %}
+{% include "partials/section_header.html" %}
 
 {% if total == 0 %}
 <section class="panel panel-body">

@@ -1,12 +1,9 @@
 {% extends "base.html" %}
 {% block title %}AI Connections - {{ app_name }}{% endblock %}
 {% block content %}
-<div class="page-header">
-  <div>
-    <h1>AI Connections</h1>
-    <p class="page-sub">Connect provider tools once, then select them from Aira or Okarun.</p>
-  </div>
-</div>
+{% set sh_title = "AI Connections" %}
+{% set sh_info = "Connect provider tools once, then select them from Aira or Okarun." %}
+{% include "partials/section_header.html" %}
 
 <div class="agent-safety" role="status">
   Credentials remain in provider-managed CLI storage or server environment variables. Central Hub never accepts passwords, browser cookies, private sessions, or API keys on this page.

@@ -2,23 +2,19 @@
 {% from "macros.html" import status_badge %}
 {% block title %}Metadata Lookup · DHIS2 · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-header">
-  <div>
-    <p class="muted-2" style="margin:0 0 0.35rem"><a href="{{ url_for('dhis2') }}">DHIS2</a> / Lookup</p>
-    <h1>Metadata Lookup</h1>
-    <p>Read-only search by UID or name. Writes are disabled.</p>
-  </div>
-  <div class="page-meta">
-    {% if status and status.ok %}
-      {{ status_badge('online') }}
-    {% elif not config.configured %}
-      {{ status_badge('disabled') }}
-    {% else %}
-      {{ status_badge('offline') }}
-    {% endif %}
-    <a class="btn btn-sm" href="{{ url_for('dhis2_lookup', check=1) }}">Check status</a>
-  </div>
-</section>
+{% set sh_title = "Metadata Lookup" %}
+{% set sh_info = "Read-only search by UID or name. Writes are disabled." %}
+{% set sh_meta %}
+  {% if status and status.ok %}
+    {{ status_badge('online') }}
+  {% elif not config.configured %}
+    {{ status_badge('disabled') }}
+  {% else %}
+    {{ status_badge('offline') }}
+  {% endif %}
+  <a class="btn btn-sm" href="{{ url_for('dhis2_lookup', check=1) }}">Check status</a>
+{% endset %}
+{% include "partials/section_header.html" %}
 
 {% if error %}
   <div class="banner banner-error">{{ error }}</div>

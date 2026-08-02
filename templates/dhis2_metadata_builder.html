@@ -2,17 +2,13 @@
 {% from "macros.html" import status_badge %}
 {% block title %}Metadata Builder · DHIS2 · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-header">
-  <div>
-    <p class="muted-2" style="margin:0 0 0.35rem"><a href="{{ url_for('dhis2') }}">DHIS2</a> / Metadata Builder</p>
-    <h1>Unified Metadata Builder</h1>
-    <p>Catalog-driven validation and exact payload preview. Nothing is sent to DHIS2.</p>
-  </div>
-  <div class="page-meta">
-    {{ status_badge('disabled') }}
-    <span class="muted-2">Create · Update · Delete · Import disabled</span>
-  </div>
-</section>
+{% set sh_title = "Unified Metadata Builder" %}
+{% set sh_info = "Catalog-driven validation and exact payload preview. Nothing is sent to DHIS2." %}
+{% set sh_meta %}
+  {{ status_badge('disabled') }}
+  <span class="muted-2">Create · Update · Delete · Import disabled</span>
+{% endset %}
+{% include "partials/section_header.html" %}
 
 {% if flash_error %}<div class="banner banner-error">{{ flash_error }}</div>{% endif %}
 {% if flash_notice %}<div class="banner banner-info">{{ flash_notice }}</div>{% endif %}

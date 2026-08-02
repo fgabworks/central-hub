@@ -1,16 +1,14 @@
 {% extends "base.html" %}
 {% block title %}HTML source · {{ page_title }} · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-header page-header-compact">
-  <div>
-    <h1>HTML design source</h1>
-    <p class="muted">Read-only designContent from DHIS2 (or local cache). Not a full parameterised render.</p>
-  </div>
-  <div class="page-meta">
-    <a class="btn btn-sm" href="{{ url_for('dhis2_reports_library') }}">Library</a>
-  </div>
-</section>
-{% include "partials/dhis2_reports_tabs.html" %}
+{% set sh_title = "HTML design source" %}
+{% set sh_info = "Read-only designContent from DHIS2 (or local cache). Not a full parameterised render." %}
+{% set sh_tabs %}{% include "partials/dhis2_reports_tabs.html" %}{% endset %}
+{% set sh_meta %}
+  {% if dhis2_instance %}<span class="badge">Active: {{ dhis2_instance }}</span>{% endif %}
+  <a class="btn btn-sm" href="{{ url_for('dhis2_reports_library') }}">Library</a>
+{% endset %}
+{% include "partials/section_header.html" %}
 
 {% if confirm_required %}
 <div class="banner banner-error" style="margin-top:0.85rem">

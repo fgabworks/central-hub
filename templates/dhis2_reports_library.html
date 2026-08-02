@@ -1,16 +1,13 @@
 {% extends "base.html" %}
 {% block title %}{{ page_title }} · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-header page-header-compact">
-  <div>
-    <h1>{{ page_title }}</h1>
-    <p class="muted">Phase 1 — synchronize and view DHIS2 standard reports. DHIS2 remains the source of truth; the hub caches metadata only.</p>
-  </div>
-  <div class="page-meta">
-    {% if dhis2_instance %}<span class="badge">Active: {{ dhis2_instance }}</span>{% endif %}
-  </div>
-</section>
-{% include "partials/dhis2_reports_tabs.html" %}
+{% set sh_title = page_title %}
+{% set sh_info = "Phase 1 — synchronize and view DHIS2 standard reports. DHIS2 remains the source of truth; the hub caches metadata only." %}
+{% set sh_tabs %}{% include "partials/dhis2_reports_tabs.html" %}{% endset %}
+{% set sh_meta %}
+  {% if dhis2_instance %}<span class="badge">Active: {{ dhis2_instance }}</span>{% endif %}
+{% endset %}
+{% include "partials/section_header.html" %}
 
 <form method="get" class="nb-filters" style="margin-top:0.85rem">
   <label>Search <input type="search" name="q" value="{{ filters.q }}" placeholder="name or UID"></label>

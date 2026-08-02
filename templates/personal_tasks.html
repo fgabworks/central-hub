@@ -3,19 +3,16 @@
 {% block content %}
 <div class="dash-workspace">
 <div class="dash-workspace-main">
-<section class="page-header">
-  <div>
-    <h1>Personal Tasks</h1>
-    <p>Open personal notes and tasks — no repository required.</p>
-  </div>
-  <div class="page-actions">
-    <form method="post" action="{{ url_for(notebook_endpoint) }}">
-      <input type="hidden" name="action" value="new">
-      <input type="hidden" name="new_type" value="task">
-      <button class="btn btn-primary" type="submit">+ New Task</button>
-    </form>
-  </div>
-</section>
+{% set sh_title = "Personal Tasks" %}
+{% set sh_info = "Open personal notes and tasks — no repository required." %}
+{% set sh_meta %}
+  <form method="post" action="{{ url_for(notebook_endpoint) }}">
+    <input type="hidden" name="action" value="new">
+    <input type="hidden" name="new_type" value="task">
+    <button class="btn btn-primary btn-sm" type="submit">+ New Task</button>
+  </form>
+{% endset %}
+{% include "partials/section_header.html" %}
 
 <section class="panel panel-queue">
   <div class="panel-header">

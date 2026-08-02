@@ -10,7 +10,7 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 | Registry Add / Edit / Disable | `/repositories/new`, store writes YAML; no auto-clone |
 | Registry grouping | Optional `repository_group_id` — one UI row for local + API (+ future) adapters; independent Workspace / Application / API statuses (`hub/registry/grouping.py`) |
 | Repository Workspace Phases 1–2 + Connect + Run Profile Builder + Processes + Active Application | `/repositories/<id>` tabs + `/connect` + Settings → Run Profiles + Run → Active Application / History / Processes; Health Local Process Monitor; `hub/repository_workspace/` |
-| Central Hub Process Manager | `/health`; verified PID/command/root/port inventory, atomic instance lock, Stop Stale, typed Stop All, clean restart + health/new PID, audit; reuses `hub/repository_workspace/` process primitives |
+| Central Hub Process Manager | `/health`; psutil inventory; owned registry + orphan recovery; Stop/Restart owned only; typed Stop Central Hub tree; launcher Ctrl+C cleanup; audit |
 | DHIS2 Reports (Standard Report Manager Phase 1) | `/dhis2/reports` sync/view Stage+Live standard reports; `hub/dhis2_reports/`; catalog shortcuts `config/dhis2_reports.yaml` |
 | Central Hub HCSC–RF (Phase 0–3) | `/dhis2/hcsc-indicators` — registry + Overview/report/category + Compare Sources; evidence packages local-only; no formula engine / no SQL auto-exec |
 | `${VAR:-default}` in registry YAML | `hub/registry/loader.py` |

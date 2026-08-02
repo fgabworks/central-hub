@@ -2,20 +2,17 @@
 {% from "macros.html" import status_badge, type_badge %}
 {% block title %}Health · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-header">
-  <div>
-    <h1>Health</h1>
-    <p>Repository and service health probes.</p>
-  </div>
-  <div class="page-meta">
-    <span>{{ healthy_count }} healthy</span>
-    <span>·</span>
-    <span>{{ offline_count }} offline</span>
-    <span>·</span>
-    <span>{{ disabled_count }} disabled</span>
-    <a class="btn btn-sm" href="{{ url_for('health', fresh=1) }}">Re-check</a>
-  </div>
-</section>
+{% set sh_title = "Health" %}
+{% set sh_info = "Repository and service health probes." %}
+{% set sh_meta %}
+  <span>{{ healthy_count }} healthy</span>
+  <span>·</span>
+  <span>{{ offline_count }} offline</span>
+  <span>·</span>
+  <span>{{ disabled_count }} disabled</span>
+  <a class="btn btn-sm" href="{{ url_for('health', fresh=1) }}">Re-check</a>
+{% endset %}
+{% include "partials/section_header.html" %}
 
 <section class="summary-grid" style="grid-template-columns:repeat(3,minmax(0,1fr))">
   <article class="stat-card">
@@ -89,32 +86,62 @@
   <div class="panel-header">
     <div>
       <h2>Central Hub Process Manager</h2>
-      <p class="muted">Verified instances only. Generic Python processes are never targeted.</p>
+      <p class="muted">Owned Central Hub processes can be stopped or restarted. Unrelated Python processes are visible only.</p>
     </div>
     <div class="toolbar-row">
+      <button class="btn btn-sm" type="button" id="hub-refresh-processes">Refresh</button>
       <button class="btn btn-sm" type="button" id="hub-stop-stale">Stop Stale Instances</button>
       <button class="btn btn-sm" type="button" id="hub-restart-clean">Restart Cleanly</button>
+      <button class="btn btn-sm btn-danger" type="button" id="hub-stop-central">Stop Central Hub</button>
       <button class="btn btn-sm btn-danger" type="button" id="hub-stop-all">Stop All Central Hub Instances</button>
     </div>
   </div>
   <p class="muted" id="hub-process-action-status" style="padding:0 1.1rem" aria-live="polite">
-    Inspecting the PID registry, command identity, and port ownershipâ€¦
+    Inspecting the ownership registry, command identity, start time, and port ownership…
   </p>
+
+  <h3 class="muted" style="padding:0.35rem 1.1rem 0;margin:0;font-size:0.85rem">Central Hub processes</h3>
   <div class="table-wrap">
     <table class="data">
       <thead>
         <tr>
-          <th>PID</th>
-          <th>Status</th>
+          <th>Label</th>
+          <th>Status / Health</th>
+          <th>PID / Parent</th>
+          <th>Script</th>
           <th>Port</th>
-          <th>Registered</th>
-          <th>Owns port</th>
-          <th>Verification</th>
+          <th>CWD</th>
+          <th>Start / Runtime</th>
+          <th>Owned</th>
           <th>Command</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody id="hub-processes-body">
-        <tr class="empty-row"><td colspan="7">Scanning verified Central Hub instancesâ€¦</td></tr>
+        <tr class="empty-row"><td colspan="10">Scanning Central Hub processes…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="muted" style="padding:0.85rem 1.1rem 0;margin:0;font-size:0.85rem">Other Python processes (view only)</h3>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Label</th>
+          <th>Status / Health</th>
+          <th>PID / Parent</th>
+          <th>Script</th>
+          <th>Port</th>
+          <th>CWD</th>
+          <th>Start / Runtime</th>
+          <th>Owned</th>
+          <th>Command</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="hub-other-python-body">
+        <tr class="empty-row"><td colspan="10">Scanning other Python processes…</td></tr>
       </tbody>
     </table>
   </div>
@@ -164,6 +191,6 @@
 </section>
 {% if health_async|default(false) or processes_async|default(false) %}
 <script src="{{ url_for('static', filename='js/hub_perf.js') }}?v=perf-1"></script>
-<script src="{{ url_for('static', filename='js/nav_async.js') }}?v=perf-1"></script>
+<script src="{{ url_for('static', filename='js/nav_async.js') }}?v=hub-pm-2"></script>
 {% endif %}
 {% endblock %}

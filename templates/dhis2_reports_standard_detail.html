@@ -1,16 +1,14 @@
 {% extends "base.html" %}
 {% block title %}{{ report.name }} · {{ page_title }} · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-header page-header-compact">
-  <div>
-    <h1>{{ report.name }}</h1>
-    <p class="muted">{{ report.environment|title }} · {{ report.type }} · DHIS2 source of truth</p>
-  </div>
-  <div class="page-meta">
-    <a class="btn btn-sm" href="{{ url_for('dhis2_reports_library') }}">Library</a>
-  </div>
-</section>
-{% include "partials/dhis2_reports_tabs.html" %}
+{% set sh_title = report.name %}
+{% set sh_info = report.environment|title ~ " · " ~ report.type ~ " · DHIS2 source of truth" %}
+{% set sh_tabs %}{% include "partials/dhis2_reports_tabs.html" %}{% endset %}
+{% set sh_meta %}
+  {% if dhis2_instance %}<span class="badge">Active: {{ dhis2_instance }}</span>{% endif %}
+  <a class="btn btn-sm" href="{{ url_for('dhis2_reports_library') }}">Library</a>
+{% endset %}
+{% include "partials/section_header.html" %}
 
 {% if error %}
 <div class="banner banner-error" style="margin-top:0.85rem">{{ error }}</div>

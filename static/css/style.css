@@ -541,26 +541,6 @@ code, .mono { font-family: var(--mono); font-size: 12px; }
   color: #fecaca;
 }
 
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: flex-start;
-  margin-bottom: 1.1rem;
-}
-
-.page-header h1 {
-  margin: 0 0 0.25rem;
-  font-size: 1.7rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-
-.page-header p {
-  margin: 0;
-  color: var(--muted);
-}
-
 .page-meta {
   display: flex;
   align-items: center;
@@ -568,6 +548,229 @@ code, .mono { font-family: var(--mono); font-size: 12px; }
   color: var(--muted-2);
   font-size: 12px;
   white-space: nowrap;
+}
+
+/* Shared page header — 48px title row; optional 36px tabs row */
+.section-header-shell {
+  margin: 0 0 8px;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  box-sizing: border-box;
+  height: 48px;
+  min-height: 48px;
+  max-height: 48px;
+  margin: 0;
+  padding: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.section-header-start {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+  flex: 1 1 auto;
+  height: 100%;
+}
+
+.section-header-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 24px;
+  color: var(--text);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.section-header-info {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.section-header-info-btn {
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+}
+
+.section-header-info-btn::-webkit-details-marker {
+  display: none;
+}
+
+.section-header-info-btn:hover,
+.section-header-info-btn:focus-visible {
+  color: var(--accent-text);
+  border-color: var(--accent-border);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-ring);
+}
+
+.section-header-info-icon {
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-style: italic;
+  text-transform: lowercase;
+}
+
+.section-header-info-panel {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  z-index: 40;
+  min-width: 16rem;
+  max-width: min(28rem, 70vw);
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.section-header-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  flex: 0 0 auto;
+  max-width: 55%;
+  overflow: hidden;
+  color: var(--muted-2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.section-header-meta .btn,
+.section-header-meta .icon-btn {
+  flex: 0 0 auto;
+}
+
+.section-header-meta form {
+  display: inline-flex;
+  margin: 0;
+}
+
+.section-header-tabs {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 36px;
+  min-height: 36px;
+  max-height: 36px;
+  margin: 0;
+  padding: 0;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  scrollbar-width: thin;
+}
+
+.section-header-tabs .rw-tabs,
+.section-header-tabs .section-tabs,
+.section-header-tabs .dex-workspace-tabs,
+.section-header-tabs .pnc-tabs {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  height: 100%;
+  width: 100%;
+}
+
+.section-header-tabs .rw-tab,
+.section-header-tabs .section-tab,
+.section-header-tabs .dex-workspace-tabs button,
+.section-header-tabs .pnc-tab {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 0.7rem;
+  border-radius: 0;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  box-sizing: border-box;
+}
+
+.section-header-tabs .rw-tab:hover,
+.section-header-tabs .section-tab:hover,
+.section-header-tabs .dex-workspace-tabs button:hover,
+.section-header-tabs .pnc-tab:hover,
+.section-header-tabs .rw-tab:focus-visible,
+.section-header-tabs .section-tab:focus-visible,
+.section-header-tabs .dex-workspace-tabs button:focus-visible,
+.section-header-tabs .pnc-tab:focus-visible {
+  color: var(--text);
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent-ring);
+}
+
+.section-header-tabs .rw-tab.is-active,
+.section-header-tabs .section-tab.is-active,
+.section-header-tabs .dex-workspace-tabs button.is-active,
+.section-header-tabs .pnc-tab.is-active {
+  color: var(--accent-text);
+  background: transparent;
+  border-bottom-color: var(--crimson);
+  box-shadow: none;
+}
+
+@media (max-width: 900px) {
+  .section-header {
+    height: auto;
+    max-height: none;
+    min-height: 48px;
+    padding: 0.25rem 0;
+    flex-wrap: wrap;
+  }
+
+  .section-header-meta {
+    max-width: none;
+  }
+
+  .section-header-tabs {
+    max-height: none;
+    height: auto;
+    min-height: 36px;
+  }
+}
+
+@media (max-width: 640px) {
+  .section-header-meta {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
 }
 
 /* Badges */
@@ -3999,12 +4202,6 @@ body.qn-maximized .qn-history[open] {
 }
 
 /* Assistant Center ? history / management layout */
-.ac-page-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: flex-start;
-}
 .ac-header-actions {
   display: flex;
   gap: 0.5rem;
@@ -4382,7 +4579,6 @@ body.qn-maximized .qn-history[open] {
   background: var(--accent-soft);
   box-shadow: inset 0 -2px 0 var(--crimson);
 }
-.page-header-compact h1 { font-size: 1.35rem; margin: 0; }
 .rw-shell {
   margin-top: 0.85rem;
   display: flex;
@@ -6597,14 +6793,6 @@ body.qn-maximized .qn-history[open] {
   color: #7f8a96;
   margin-right: 0.2rem;
   font-weight: 600;
-}
-.hcsc-page-header h1 {
-  margin: 0 0 0.25rem;
-  font-size: 1.35rem;
-}
-.hcsc-page-header #hcsc-subtitle {
-  margin: 0;
-  max-width: 48rem;
 }
 .hcsc-skel {
   display: block;

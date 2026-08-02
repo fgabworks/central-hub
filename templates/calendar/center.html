@@ -7,17 +7,14 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fullcalendar/list@6.1.15/index.css">
 {% endblock %}
 {% block content %}
-<div class="page-header">
-  <div>
-    <h1>{{ page_title }}</h1>
-    <p class="page-sub">
-      Read-only Google Calendar for the {{ workspace_labels[workspace] }} workspace.
-      Month / week / day grid via FullCalendar. Scopes
-      <code>calendar.calendarlist.readonly</code> and <code>calendar.events.readonly</code> only.
-      No create / edit / delete / drag / resize / RSVP. No agent access.
-    </p>
-  </div>
-</div>
+{% set sh_title = page_title %}
+{% set sh_info %}
+Read-only Google Calendar for the {{ workspace_labels[workspace] }} workspace.
+Month / week / day grid via FullCalendar. Scopes
+<code>calendar.calendarlist.readonly</code> and <code>calendar.events.readonly</code> only.
+No create / edit / delete / drag / resize / RSVP. No agent access.
+{% endset %}
+{% include "partials/section_header.html" %}
 
 {% if not oauth.configured %}
 <div class="banner banner-error">

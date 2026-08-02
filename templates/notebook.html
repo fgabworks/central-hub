@@ -1,18 +1,15 @@
 {% extends "base.html" %}
 {% block title %}{{ page_title }} · {{ app_name }}{% endblock %}
 {% block content %}
-<div class="page-header">
-  <div>
-    <h1>{{ page_title }}</h1>
-    <p class="page-sub">{{ page_sub }}</p>
-  </div>
-  <div class="page-actions">
-    <form method="post" action="{{ url_for(notebook_endpoint) }}">
-      <input type="hidden" name="action" value="new">
-      <button class="btn btn-primary" type="submit">+ New Note</button>
-    </form>
-  </div>
-</div>
+{% set sh_title = page_title %}
+{% set sh_info = page_sub %}
+{% set sh_meta %}
+  <form method="post" action="{{ url_for(notebook_endpoint) }}">
+    <input type="hidden" name="action" value="new">
+    <button class="btn btn-primary btn-sm" type="submit">+ New Note</button>
+  </form>
+{% endset %}
+{% include "partials/section_header.html" %}
 
 {% if flash %}<div class="banner" style="background:var(--success-soft);border-color:rgba(34,197,94,.35)">{{ flash }}</div>{% endif %}
 {% if error %}<div class="banner banner-error">{{ error }}</div>{% endif %}

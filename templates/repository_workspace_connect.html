@@ -2,21 +2,15 @@
 {% from "macros.html" import status_badge, type_badge %}
 {% block title %}Connect · {{ repository.name }} · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-header page-header-compact">
-  <div>
-    <p class="muted-2" style="margin:0 0 0.35rem">
-      <a href="{{ url_for('repositories') }}">Repositories</a> /
-      <a href="{{ url_for('repository_detail', repo_id=repository.id) }}">{{ repository.id }}</a> / connect
-    </p>
-    <h1>Connect Local Workspace</h1>
-    <p class="muted">Scan a local folder, review the preview, then confirm. Nothing is saved until you confirm.</p>
-  </div>
-  <div class="page-meta">
-    {{ type_badge(repository.type) }}
-    {{ status_badge(status) }}
-  </div>
-</section>
-{% include "partials/repository_tabs.html" %}
+{% set sh_title = repository.name %}
+{% set sh_info = "Scan a local folder, review the preview, then confirm. Nothing is saved until you confirm." %}
+{% set inline_section_tabs = true %}
+{% set sh_tabs %}{% include "partials/repository_tabs.html" %}{% endset %}
+{% set sh_meta %}
+  {{ type_badge(repository.type) }}
+  {{ status_badge(status) }}
+{% endset %}
+{% include "partials/section_header.html" %}
 
 <section class="panel rw-connect" style="margin-top:0.85rem"
          id="rw-connect"

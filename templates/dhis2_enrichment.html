@@ -1,19 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Refresh UID Details · DHIS2 · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-header">
-  <div>
-    <p class="muted-2" style="margin:0 0 0.35rem"><a href="{{ url_for('dhis2') }}">DHIS2</a> / Refresh UID Details</p>
-    <h1>Refresh UID Details</h1>
-    <p>Fetch read-only configuration + relationships for repository UIDs. Saves a local versioned snapshot only — never writes to DHIS2 or Live Processing.</p>
-  </div>
-  <div class="page-meta">
-    <span class="badge badge-env">READ-ONLY GET</span>
-    <a class="btn btn-sm" href="{{ url_for('dhis2_uid_explorer') }}">Open explorer</a>
-    <a class="btn btn-sm" href="{{ url_for('dhis2_uid_index_manage') }}">UID Index</a>
-    <a class="btn btn-sm" href="{{ url_for('dhis2_uid_find_missing') }}">Find Missing UIDs</a>
-  </div>
-</section>
+{% set sh_title = "Refresh UID Details" %}
+{% set sh_info = "Fetch read-only configuration + relationships for repository UIDs. Saves a local versioned snapshot only — never writes to DHIS2 or Live Processing." %}
+{% set sh_meta %}
+  <span class="badge badge-env">READ-ONLY GET</span>
+  <a class="btn btn-sm" href="{{ url_for('dhis2_uid_explorer') }}">Open explorer</a>
+  <a class="btn btn-sm" href="{{ url_for('dhis2_uid_index_manage') }}">UID Index</a>
+  <a class="btn btn-sm" href="{{ url_for('dhis2_uid_find_missing') }}">Find Missing UIDs</a>
+{% endset %}
+{% include "partials/section_header.html" %}
 
 {% if flash_error %}<div class="banner banner-error">{{ flash_error }}</div>{% endif %}
 {% if flash_notice %}<div class="banner" style="background:rgba(59,130,246,0.12);border-color:rgba(59,130,246,0.35);color:#93c5fd">{{ flash_notice }}</div>{% endif %}

@@ -2,22 +2,14 @@
 {% from "macros.html" import status_badge %}
 {% block title %}{{ detail.item.name or detail.item.id }} · DHIS2 · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-header">
-  <div>
-    <p class="muted-2" style="margin:0 0 0.35rem">
-      <a href="{{ url_for('dhis2') }}">DHIS2</a> /
-      {{ detail.resource_label }} /
-      {{ detail.item.id }}
-    </p>
-    <h1>{{ detail.item.name or detail.item.id }}</h1>
-    <p>Read-only metadata detail. No write actions.</p>
-  </div>
-  <div class="page-meta">
-    <span class="badge badge-api">{{ detail.resource_label }}</span>
-    {{ status_badge('disabled') }}
-    <span class="muted-2">writes off</span>
-  </div>
-</section>
+{% set sh_title = detail.item.name or detail.item.id %}
+{% set sh_info = "Read-only metadata detail. No write actions." %}
+{% set sh_meta %}
+  <span class="badge badge-api">{{ detail.resource_label }}</span>
+  {{ status_badge('disabled') }}
+  <span class="muted-2">writes off</span>
+{% endset %}
+{% include "partials/section_header.html" %}
 
 <section class="panel panel-body">
   <dl class="detail-list">

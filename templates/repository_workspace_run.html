@@ -2,23 +2,19 @@
 {% from "macros.html" import status_badge, type_badge %}
 {% block title %}Run · {{ repository.name }} · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-header page-header-compact">
-  <div>
-    <p class="muted-2" style="margin:0 0 0.35rem">
-      <a href="{{ url_for('repositories') }}">Repositories</a> / {{ repository.id }}
-    </p>
-    <h1>{{ repository.name }}</h1>
-  </div>
-  <div class="page-meta">
-    {{ type_badge(repository.type) }}
-    {{ status_badge(status) }}
-  </div>
-</section>
-{% include "partials/repository_tabs.html" %}
+{% set sh_title = repository.name %}
+{% set inline_section_tabs = true %}
+{% set sh_tabs %}{% include "partials/repository_tabs.html" %}{% endset %}
+{% set sh_meta %}
+  {{ type_badge(repository.type) }}
+  {{ status_badge(status) }}
+{% endset %}
+{% include "partials/section_header.html" %}
+{% if workspace and not workspace.available and active_tab != 'overview' and active_tab != 'settings' and active_tab != 'connect' %}
+  {% include "partials/repository_connect_cta.html" %}
+{% endif %}
 
-{% if not workspace.available %}
-  {# Connect CTA is shown in the tab bar partial #}
-{% else %}
+{% if workspace.available %}
 <section class="panel rw-run" style="margin-top:0.85rem"
          id="rw-run"
          data-repo-id="{{ repository.id }}"

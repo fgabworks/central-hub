@@ -1,12 +1,9 @@
 {% extends "base.html" %}
 {% block title %}SQL Workspace · {{ app_name }}{% endblock %}
 {% block content %}
-<div class="page-header">
-  <div>
-    <h1>SQL Workspace</h1>
-    <p class="page-sub">Save, organize, and run safe read-only SQL against configured connections. Never auto-runs saved queries.</p>
-  </div>
-</div>
+{% set sh_title = "SQL Workspace" %}
+{% set sh_info = "Save, organize, and run safe read-only SQL against configured connections. Never auto-runs saved queries." %}
+{% include "partials/section_header.html" %}
 
 <div class="sql-live-warn" id="sql-live-warn" hidden>
   <strong>Live connection selected.</strong>

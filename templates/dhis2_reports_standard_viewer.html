@@ -1,29 +1,26 @@
 {% extends "base.html" %}
 {% block title %}{% if viewer %}{{ viewer.report_name or 'Report' }}{% else %}Confirm Live{% endif %} · {{ page_title }} · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-header page-header-compact">
-  <div>
-    <h1>{% if viewer %}{{ viewer.report_name or 'Standard report' }}{% else %}Live report confirmation{% endif %}</h1>
-    {% if viewer %}
-    <p class="muted">
-      Credentialed viewer · {{ viewer.report.environment|title }} · <code>{{ viewer.report.uid }}</code>
-      {% if viewer.period %} · period {{ viewer.period }}{% endif %}
-      {% if viewer.org_unit %} · OU {{ viewer.org_unit }}{% endif %}
-    </p>
-    {% else %}
-    <p class="muted">Live DHIS2 HTML requires an explicit confirmation before the hub fetches it with .env credentials.</p>
-    {% endif %}
-  </div>
-  <div class="page-meta">
-    {% if viewer %}
-    <a class="btn btn-sm" href="{{ url_for('dhis2_reports_standard_detail', environment=viewer.report.environment, uid=viewer.report.uid, period=viewer.period, org_unit=viewer.org_unit) }}">Details</a>
-    <a class="btn btn-sm" href="{{ viewer.open_url }}" target="_blank" rel="noopener">Open in DHIS2</a>
-    {% else %}
-    <a class="btn btn-sm" href="{{ url_for('dhis2_reports_library') }}">Library</a>
-    {% endif %}
-  </div>
-</section>
-{% include "partials/dhis2_reports_tabs.html" %}
+{% if viewer %}
+{% set sh_title = viewer.report_name or 'Standard report' %}
+{% set sh_info %}
+Credentialed viewer · {{ viewer.report.environment|title }} · {{ viewer.report.uid }}{% if viewer.period %} · period {{ viewer.period }}{% endif %}{% if viewer.org_unit %} · OU {{ viewer.org_unit }}{% endif %}
+{% endset %}
+{% else %}
+{% set sh_title = "Live report confirmation" %}
+{% set sh_info = "Live DHIS2 HTML requires an explicit confirmation before the hub fetches it with .env credentials." %}
+{% endif %}
+{% set sh_tabs %}{% include "partials/dhis2_reports_tabs.html" %}{% endset %}
+{% set sh_meta %}
+  {% if dhis2_instance %}<span class="badge">Active: {{ dhis2_instance }}</span>{% endif %}
+  {% if viewer %}
+  <a class="btn btn-sm" href="{{ url_for('dhis2_reports_standard_detail', environment=viewer.report.environment, uid=viewer.report.uid, period=viewer.period, org_unit=viewer.org_unit) }}">Details</a>
+  <a class="btn btn-sm" href="{{ viewer.open_url }}" target="_blank" rel="noopener">Open in DHIS2</a>
+  {% else %}
+  <a class="btn btn-sm" href="{{ url_for('dhis2_reports_library') }}">Library</a>
+  {% endif %}
+{% endset %}
+{% include "partials/section_header.html" %}
 
 {% if confirm_required %}
 <div class="banner banner-error" style="margin-top:0.85rem">

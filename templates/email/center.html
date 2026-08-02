@@ -1,15 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Email Center · {{ workspace_labels[workspace] }} · {{ app_name }}{% endblock %}
 {% block content %}
-<div class="page-header">
-  <div>
-    <h1>Email Center</h1>
-    <p class="page-sub">
-      Read-only Gmail for the {{ workspace_labels[workspace] }} workspace.
-      Scope <code>gmail.readonly</code> only — no send, reply, delete, or mark-read.
-    </p>
-  </div>
-</div>
+{% set sh_title = "Email Center" %}
+{% set sh_info %}
+Read-only Gmail for the {{ workspace_labels[workspace] }} workspace.
+Scope <code>gmail.readonly</code> only — no send, reply, delete, or mark-read.
+{% endset %}
+{% include "partials/section_header.html" %}
 
 {% if not oauth.configured %}
 <div class="banner banner-error">

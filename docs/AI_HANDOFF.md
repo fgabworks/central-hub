@@ -4,7 +4,36 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**Data Explorer server-side filtering and sorting (2026-08-02)**
+**Shared 48px page-header standardization (2026-08-02)**
+
+All hub pages use `templates/partials/section_header.html`: 48px title row
+(20px/semibold title + info tooltip + right badges/actions), optional separate
+36px tab row, 8px gap to content. Inventory: `docs/HEADER_INVENTORY.md`.
+Screenshots: `docs/screenshots/header-standard/`. Tests:
+`tests/test_section_header_ui.py`.
+
+Prior: **Central Hub Process Manager ownership upgrade (2026-08-02)**
+
+Process Manager on `/health` now inventories all Python processes via `psutil`,
+groups Central Hub-owned PIDs (labeling `app.py` as **Central Hub Server**) separately
+from unrelated Python (view-only), tracks owned identities in
+`data/central_hub_process/owned_processes.json` with PID/command/script/cwd/start-time
+validation, and supports owner-only Stop / Restart / typed **Stop Central Hub**
+(detached supervisor for self-termination). Launcher:
+`python scripts/run_central_hub.py`. Tests: `tests/test_central_hub_process_manager.py`.
+Screenshots: `docs/screenshots/process-manager/`.
+
+Prior: **Compact shared section header (2026-08-02)**
+
+All hub pages now use one shared compact header
+(`templates/partials/section_header.html` + `.section-header` in `style.css`):
+a 44px row with small title, optional info tooltip, optional inline section tabs,
+and right-side status/access badges or compact actions. Large
+breadcrumb/title/description blocks are removed. Toolbars and content start
+immediately below. Top bar and sidebar are unchanged. Screenshots:
+`docs/screenshots/section-header/`. Tests: `tests/test_section_header_ui.py`.
+
+Prior: **Data Explorer server-side filtering and sorting (2026-08-02)**
 
 The browse grid now supports three-state header sorting (ascending, descending,
 reset), a typed column/operator/value filter builder, up to 20 removable AND

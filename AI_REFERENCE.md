@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-02 (Data Explorer typed server-side filters, three-state sorting, and URL-restored grid state).
+Last verified: 2026-08-02 (shared compact section header across hub pages).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -156,13 +156,14 @@ Monitor is a read-only cross-repo summary.
 
 **Central Hub Process Manager** extends the same verified-PID, port, graceful-stop,
 and audit patterns on `/health`. `data/central_hub_process/instance.lock.json` is an
-atomic PID/identity registry: startup removes invalid/dead locks, refuses another
-verified active instance, and releases its own token-matched lock on normal shutdown.
-Controls are owner-only: Stop Stale Instances, typed-confirmed Stop All Central Hub
-Instances, and Restart Cleanly. Clean restart uses a detached fixed-argv controller,
-revalidates each PID identity, waits before force-stop, confirms port release, starts
-one absolute `app.py`, probes `/api/healthz`, and records the new listener PID. Generic
-Python processes and relative unregistered `app.py` commands are never targets.
+atomic PID/identity registry; `owned_processes.json` tracks owned PIDs with
+PID/command/script/cwd/start-time ownership tokens and reconciles against live
+`psutil` inventory on scan/startup. Controls are owner-only: per-process Stop/Restart
+(owned only), Stop Stale Instances, typed **Stop Central Hub** (complete owned tree),
+typed Stop All Central Hub Instances, and Restart Cleanly. Self-stop/restart uses a
+detached fixed-argv supervisor. Launcher: `python scripts/run_central_hub.py` (Ctrl+C /
+terminal-close cleanup; orphans remain stoppable in Process Manager). Generic /
+unrelated Python processes are visible but never stoppable.
 UI: `/repositories/<id>/settings#run-profiles`, `/run`, `/logs`. State/logs under
 `data/repository_runs/`. Live / write-capable live profiles require
 `REPO_WS_ALLOW_LIVE_RUNS` + confirm. No unrestricted terminal; stop/restart only

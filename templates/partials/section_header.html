@@ -1,0 +1,38 @@
+{# Shared compact page header — 48px title row; optional 36px tabs row below.
+   Set before include:
+     sh_title  (required) – page/section title
+     sh_info   (optional) – description shown in info tooltip only
+     sh_tabs   (optional) – HTML for section tabs (rendered in a row below)
+     sh_meta   (optional) – badges / status / compact actions on the right
+     sh_id     (optional) – element id
+     sh_class  (optional) – extra classes on the header shell
+#}
+<div class="section-header-shell{% if sh_class %} {{ sh_class }}{% endif %}"{% if sh_id %} id="{{ sh_id }}"{% endif %}>
+  <header class="section-header" data-section-header>
+    <div class="section-header-start">
+      <h1 class="section-header-title">{{ sh_title }}</h1>
+      {% if sh_info %}
+      <details class="section-header-info">
+        <summary class="section-header-info-btn"
+                 title="{{ sh_info|striptags|e }}"
+                 aria-label="About this page">
+          <span class="section-header-info-icon" aria-hidden="true">i</span>
+        </summary>
+        <div class="section-header-info-panel" role="note">{{ sh_info|safe }}</div>
+      </details>
+      {% endif %}
+    </div>
+    {% if sh_meta %}
+    <div class="section-header-meta">{{ sh_meta|safe }}</div>
+    {% endif %}
+  </header>
+  {% if sh_tabs %}
+  <div class="section-header-tabs" data-section-tabs>{{ sh_tabs|safe }}</div>
+  {% endif %}
+</div>
+{% set sh_title = none %}
+{% set sh_info = none %}
+{% set sh_tabs = none %}
+{% set sh_meta = none %}
+{% set sh_id = none %}
+{% set sh_class = none %}

@@ -10,8 +10,13 @@ from unittest import mock
 
 from flask import Flask
 
+from hub.repository_workspace.hub_owned_registry import (
+    OwnedProcessRegistry,
+    ownership_token,
+)
 from hub.repository_workspace.hub_process_manager import (
     STOP_ALL_CONFIRMATION,
+    STOP_CENTRAL_HUB_CONFIRMATION,
     CentralHubInstanceGuard,
     CentralHubProcessManager,
     SingleInstanceError,
@@ -20,7 +25,7 @@ from hub.repository_workspace.hub_process_routes import register_central_hub_pro
 from hub.repository_workspace.process_detect import RawProcess, _identity_token
 
 
-def _raw(pid: int, root: Path, *, absolute: bool = True) -> RawProcess:
+def _raw(pid: int, root: Path, *, absolute: bool = True, ppid: int | None = None) -> RawProcess:
     app = str(root / "app.py") if absolute else "app.py"
     return RawProcess(
         pid=pid,
@@ -29,6 +34,9 @@ def _raw(pid: int, root: Path, *, absolute: bool = True) -> RawProcess:
         command_line=f'"C:\\Python\\python.exe" "{app}"',
         cwd=str(root),
         started_at="2026-08-02T00:00:00+00:00",
+        ppid=ppid,
+        listening_ports=(8080,) if pid in {10, 20} else (),
+        status="running",
     )
 
 
@@ -46,6 +54,7 @@ class InstanceGuardTests(unittest.TestCase):
             )
             guard.acquire()
             self.assertIn("invalid_lock_cleaned", (state / "guard.jsonl").read_text(encoding="utf-8"))
+            self.assertTrue((state / "owned_processes.json").is_file())
             guard.release()
 
     def test_acquire_release_and_stale_lock_cleanup(self) -> None:
@@ -99,9 +108,15 @@ class InstanceGuardTests(unittest.TestCase):
 class ProcessInventoryTests(unittest.TestCase):
     def _manager(self, root: Path, state: Path, stopped: list[dict]) -> CentralHubProcessManager:
         current, stale = _raw(10, root), _raw(20, root)
+        worker = RawProcess(
+            pid=11, name="python.exe", executable=r"C:\Python\python.exe",
+            command_line=r'"C:\Python\python.exe" -c worker', cwd=str(root),
+            started_at="2026-08-02T00:00:01+00:00", ppid=10, status="running",
+        )
         unrelated = RawProcess(
             pid=30, name="python.exe", executable=r"C:\Python\python.exe",
-            command_line="python -m http.server 8080", cwd=str(root),
+            command_line="python -m http.server 9000", cwd=r"C:\elsewhere",
+            started_at="2026-08-02T00:00:02+00:00", status="running",
         )
         record = {
             "pid": 10,
@@ -112,6 +127,11 @@ class ProcessInventoryTests(unittest.TestCase):
         }
         state.mkdir(parents=True, exist_ok=True)
         (state / "instance.lock.json").write_text(json.dumps(record), encoding="utf-8")
+        registry = OwnedProcessRegistry(state / "owned_processes.json")
+        registry.register(
+            raw=current, role="server", label="Central Hub Server",
+            script_path=str(root / "app.py"), port=8080,
+        )
 
         def stopper(**kwargs):
             stopped.append(kwargs)
@@ -119,8 +139,8 @@ class ProcessInventoryTests(unittest.TestCase):
 
         return CentralHubProcessManager(
             root=root, state_dir=state,
-            process_loader=lambda: [current, stale, unrelated],
-            listener_loader=lambda _ports: {8080: [10, 20, 30]},
+            process_loader=lambda: [current, worker, stale, unrelated],
+            listener_loader=lambda _ports: {8080: [10, 20]},
             stopper=stopper,
         )
 
@@ -135,6 +155,85 @@ class ProcessInventoryTests(unittest.TestCase):
             self.assertTrue(instances[0].registered)
             self.assertTrue(instances[1].stale)
             self.assertNotIn(30, [item.pid for item in instances])
+
+    def test_inventory_groups_hub_and_other_python(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, state = Path(tmp) / "hub", Path(tmp) / "state"
+            root.mkdir()
+            manager = self._manager(root, state, [])
+            inventory = manager.inventory()
+            hub_pids = [item["pid"] for item in inventory["hub_processes"]]
+            other_pids = [item["pid"] for item in inventory["other_python"]]
+            self.assertIn(10, hub_pids)
+            self.assertIn(11, hub_pids)  # child worker
+            self.assertIn(20, hub_pids)  # stale/orphan server candidate
+            self.assertIn(30, other_pids)
+            server = next(item for item in inventory["hub_processes"] if item["pid"] == 10)
+            self.assertEqual(server["label"], "Central Hub Server")
+            self.assertTrue(server["hub_owned"])
+            self.assertTrue(server["stoppable"])
+            other = next(item for item in inventory["other_python"] if item["pid"] == 30)
+            self.assertFalse(other["hub_owned"])
+            self.assertFalse(other["stoppable"])
+
+    def test_stop_owned_refuses_unrelated_and_stale_token(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, state, calls = Path(tmp) / "hub", Path(tmp) / "state", []
+            root.mkdir()
+            manager = self._manager(root, state, calls)
+            inventory = manager.inventory()
+            other = next(item for item in inventory["other_python"] if item["pid"] == 30)
+            with self.assertRaises(ValueError):
+                manager.stop_owned(
+                    pid=30,
+                    identity_token=other["identity_token"],
+                    ownership_token_value="",
+                    actor="owner",
+                    confirm=True,
+                )
+            worker = next(item for item in inventory["hub_processes"] if item["pid"] == 11)
+            with self.assertRaises(ValueError):
+                manager.stop_owned(
+                    pid=11,
+                    identity_token="deadbeef",
+                    ownership_token_value=worker["ownership_token"],
+                    actor="owner",
+                    confirm=True,
+                )
+            result = manager.stop_owned(
+                pid=11,
+                identity_token=worker["identity_token"],
+                ownership_token_value=worker["ownership_token"],
+                actor="owner",
+                confirm=True,
+            )
+            self.assertTrue(result["ok"])
+            self.assertEqual(calls[-1]["pid"], 11)
+
+    def test_stale_start_time_blocks_stop(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, state, calls = Path(tmp) / "hub", Path(tmp) / "state", []
+            root.mkdir()
+            manager = self._manager(root, state, calls)
+            inventory = manager.inventory()
+            worker = next(item for item in inventory["hub_processes"] if item["pid"] == 11)
+            # Forge a mismatched ownership token as if PID was reused with new start time.
+            with self.assertRaises(ValueError):
+                manager.stop_owned(
+                    pid=11,
+                    identity_token=worker["identity_token"],
+                    ownership_token_value=ownership_token(
+                        pid=11,
+                        executable=r"C:\Python\python.exe",
+                        command_line=r'"C:\Python\python.exe" -c worker',
+                        script_path="python-worker",
+                        cwd=str(root),
+                        started_at="1999-01-01T00:00:00+00:00",
+                    ),
+                    actor="owner",
+                    confirm=True,
+                )
+            self.assertEqual(calls, [])
 
     def test_stop_stale_revalidates_one_pid_and_preserves_current(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -169,12 +268,38 @@ class ProcessInventoryTests(unittest.TestCase):
             stop_status = manager.queue_control(
                 action="stop_all", actor="owner", typed_confirmation=STOP_ALL_CONFIRMATION
             )
+            hub_status = manager.queue_control(
+                action="stop_central_hub",
+                actor="owner",
+                typed_confirmation=STOP_CENTRAL_HUB_CONFIRMATION,
+            )
             restart_status = manager.queue_control(action="restart", actor="owner", confirm=True)
-            self.assertEqual(len(launched), 2)
+            self.assertEqual(len(launched), 3)
             self.assertFalse(launched[0][1]["shell"])
             self.assertIn("hub.repository_workspace.hub_process_manager", launched[0][0])
             self.assertEqual(manager.action_status(stop_status["action_id"])["status"], "queued")
+            self.assertEqual(hub_status["action"], "stop_central_hub")
             self.assertEqual(manager.action_status(restart_status["action_id"])["action"], "restart")
+
+    def test_registry_drops_reused_pid(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, state = Path(tmp) / "hub", Path(tmp) / "state"
+            root.mkdir()
+            state.mkdir()
+            first = _raw(40, root)
+            registry = OwnedProcessRegistry(state / "owned_processes.json")
+            registry.register(
+                raw=first, role="server", label="Central Hub Server",
+                script_path=str(root / "app.py"), port=8080,
+            )
+            reused = RawProcess(
+                pid=40, name="python.exe", executable=r"C:\Python\python.exe",
+                command_line="python -m http.server", cwd=r"C:\other",
+                started_at="2026-08-03T00:00:00+00:00",
+            )
+            result = registry.reconcile([reused], root=root, app_path=root / "app.py")
+            self.assertEqual(result["removed_count"], 1)
+            self.assertEqual(result["entries"], [])
 
 
 class RouteTests(unittest.TestCase):
@@ -184,6 +309,31 @@ class RouteTests(unittest.TestCase):
                 return None
 
         class Manager:
+            def inventory(self):
+                return {
+                    "hub_processes": [{
+                        "pid": 10, "label": "Central Hub Server", "hub_owned": True,
+                        "stoppable": True, "role": "server", "current": True,
+                        "identity_token": "abc", "ownership_token": "own",
+                        "status": "Current", "health": "listening", "ppid": 1,
+                        "script_module": "app.py", "listening_port": 8080,
+                        "cwd": "C:/hub", "started_at": "2026-08-02T00:00:00+00:00",
+                        "runtime_label": "1m", "command_redacted": "python app.py",
+                    }],
+                    "other_python": [{
+                        "pid": 30, "label": "http.server", "hub_owned": False,
+                        "stoppable": False, "role": "unrelated",
+                        "identity_token": "x", "ownership_token": "",
+                        "status": "running", "health": "running", "ppid": 1,
+                        "script_module": "http.server", "listening_port": 9000,
+                        "cwd": "C:/tmp", "started_at": None, "runtime_label": "—",
+                        "command_redacted": "python -m http.server",
+                    }],
+                    "instances": [{"pid": 10, "current": True}],
+                    "current_pid": 10,
+                    "registry": {"count": 1, "removed_stale": 0, "orphans": 0},
+                }
+
             def scan(self):
                 return []
 
@@ -192,12 +342,26 @@ class RouteTests(unittest.TestCase):
                     raise ValueError("Explicit confirmation is required.")
                 return {"ok": True, "count": 0, "results": []}
 
-            def queue_control(self, *, action, actor, confirm=False, typed_confirmation=""):
+            def stop_owned(self, **kwargs):
+                if not kwargs.get("confirm"):
+                    raise ValueError("Explicit confirmation is required.")
+                if int(kwargs.get("pid") or 0) == 30:
+                    raise ValueError("Process is not a verified Central Hub-owned target.")
+                return {"ok": True, "queued": False, "pid": kwargs["pid"]}
+
+            def restart_owned(self, **kwargs):
+                if not kwargs.get("confirm"):
+                    raise ValueError("Explicit confirmation is required.")
+                return {"action_id": "abc123", "status": "queued", "target_pids": [10]}
+
+            def queue_control(self, *, action, actor, confirm=False, typed_confirmation="", target_snapshot=None):
                 if action == "stop_all" and typed_confirmation != STOP_ALL_CONFIRMATION:
+                    raise ValueError("confirmation required")
+                if action == "stop_central_hub" and typed_confirmation != STOP_CENTRAL_HUB_CONFIRMATION:
                     raise ValueError("confirmation required")
                 if action == "restart" and not confirm:
                     raise ValueError("confirmation required")
-                return {"action_id": "abc123", "status": "queued", "target_pids": [10]}
+                return {"action_id": "abc123", "status": "queued", "target_pids": [10], "action": action}
 
             def action_status(self, action_id):
                 return {"action_id": action_id, "status": "completed", "new_pid": 11}
@@ -209,10 +373,35 @@ class RouteTests(unittest.TestCase):
         self.client = app.test_client()
 
     def test_routes_require_confirmations_and_return_action_status(self) -> None:
-        self.assertEqual(self.client.get("/api/health/central-hub-processes").status_code, 200)
+        scan = self.client.get("/api/health/central-hub-processes")
+        self.assertEqual(scan.status_code, 200)
+        body = scan.get_json()
+        self.assertEqual(body["hub_processes"][0]["label"], "Central Hub Server")
+        self.assertFalse(body["other_python"][0]["stoppable"])
         self.assertEqual(
             self.client.post("/api/health/central-hub-processes/stop-stale", json={}).status_code,
             400,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/health/central-hub-processes/stop",
+                json={"confirm": True, "pid": 30, "identity_token": "x"},
+            ).status_code,
+            400,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/health/central-hub-processes/stop",
+                json={"confirm": True, "pid": 10, "identity_token": "abc", "ownership_token": "own"},
+            ).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/health/central-hub-processes/stop-central-hub",
+                json={"typed_confirmation": STOP_CENTRAL_HUB_CONFIRMATION},
+            ).status_code,
+            202,
         )
         self.assertEqual(
             self.client.post(

@@ -1,22 +1,18 @@
 {% extends "base.html" %}
 {% block title %}UID Index · DHIS2 · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-header">
-  <div>
-    <p class="muted-2" style="margin:0 0 0.35rem"><a href="{{ url_for('dhis2') }}">DHIS2</a> / UID Index</p>
-    <h1>UID Index</h1>
-    <p>Controlled update of the hub’s local UID index (dry-run → review → typed confirm → versioned backup). Does not write DHIS2 or LP’s CSV. Use <a href="{{ url_for('dhis2_uid_find_missing') }}">Find Missing UIDs</a> to import DHIS2-only objects.</p>
-  </div>
-  <div class="page-meta">
-    <span class="badge badge-env">ADMIN · CONTROLLED UPDATE</span>
-    <a class="btn btn-sm" href="{{ url_for('dhis2_uid_find_missing') }}">Find Missing UIDs</a>
-    <a class="btn btn-sm" href="{{ url_for('dhis2_uid_explorer') }}">Open explorer</a>
-    {% if index_meta %}
-      <a class="btn btn-sm" href="{{ url_for('dhis2_uid_index_export') }}">Export JSON</a>
-      <a class="btn btn-sm" href="{{ url_for('dhis2_uid_index_export_source_csv') }}">Export DHIS2→CSV updates</a>
-    {% endif %}
-  </div>
-</section>
+{% set sh_title = "UID Index" %}
+{% set sh_info = "Controlled update of the hub's local UID index (dry-run → review → typed confirm → versioned backup). Does not write DHIS2 or LP's CSV. Use Find Missing UIDs to import DHIS2-only objects." %}
+{% set sh_meta %}
+  <span class="badge badge-env">ADMIN · CONTROLLED UPDATE</span>
+  <a class="btn btn-sm" href="{{ url_for('dhis2_uid_find_missing') }}">Find Missing UIDs</a>
+  <a class="btn btn-sm" href="{{ url_for('dhis2_uid_explorer') }}">Open explorer</a>
+  {% if index_meta %}
+    <a class="btn btn-sm" href="{{ url_for('dhis2_uid_index_export') }}">Export JSON</a>
+    <a class="btn btn-sm" href="{{ url_for('dhis2_uid_index_export_source_csv') }}">Export DHIS2→CSV updates</a>
+  {% endif %}
+{% endset %}
+{% include "partials/section_header.html" %}
 
 {% if flash_error %}<div class="banner banner-error">{{ flash_error }}</div>{% endif %}
 {% if flash_notice %}<div class="banner" style="background:rgba(59,130,246,0.12);border-color:rgba(59,130,246,0.35);color:#93c5fd">{{ flash_notice }}</div>{% endif %}

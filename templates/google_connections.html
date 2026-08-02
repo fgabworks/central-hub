@@ -1,17 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Google Connections · {{ app_name }}{% endblock %}
 {% block content %}
-<div class="page-header">
-  <div>
-    <h1>Google Connections</h1>
-    <p class="page-sub">
-      Shared Google accounts for Email and Calendar. Tokens are encrypted server-side.
-      Grant Gmail (<code>gmail.readonly</code>) and Calendar
-      (<code>calendar.calendarlist.readonly</code>, <code>calendar.events.readonly</code>) incrementally.
-      Assign each account to Personal or Work. No passwords stored. No agent access to mail or calendar content.
-    </p>
-  </div>
-</div>
+{% set sh_title = "Google Connections" %}
+{% set sh_info %}
+Shared Google accounts for Email and Calendar. Tokens are encrypted server-side.
+Grant Gmail (<code>gmail.readonly</code>) and Calendar
+(<code>calendar.calendarlist.readonly</code>, <code>calendar.events.readonly</code>) incrementally.
+Assign each account to Personal or Work. No passwords stored. No agent access to mail or calendar content.
+{% endset %}
+{% include "partials/section_header.html" %}
 
 {% if not oauth.configured %}
 <div class="banner banner-error">

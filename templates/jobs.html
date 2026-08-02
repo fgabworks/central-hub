@@ -2,16 +2,13 @@
 {% from "macros.html" import status_badge %}
 {% block title %}Jobs · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-header">
-  <div>
-    <h1>Jobs</h1>
-    <p>Submit allowlisted repository capabilities. Dry-run by default; confirm required for apply.</p>
-  </div>
-  <div class="page-meta">
-    <span>{{ jobs|length }} shown</span>
-    <span class="badge badge-phase">Phases 2–6</span>
-  </div>
-</section>
+{% set sh_title = "Jobs" %}
+{% set sh_info = "Submit allowlisted repository capabilities. Dry-run by default; confirm required for apply." %}
+{% set sh_meta %}
+  <span>{{ jobs|length }} shown</span>
+  <span class="badge badge-phase">Phases 2–6</span>
+{% endset %}
+{% include "partials/section_header.html" %}
 
 {% if flash_error %}<div class="banner banner-error">{{ flash_error }}</div>{% endif %}
 {% if flash_notice %}<div class="banner" style="background:rgba(59,130,246,0.12);border-color:rgba(59,130,246,0.35);color:#93c5fd">{{ flash_notice }}</div>{% endif %}

@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% block title %}Settings · {{ page_title }} · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-header page-header-compact">
-  <div>
-    <h1>{{ page_title }}</h1>
-    <p class="muted">Catalog and output roots. Credentials never appear here.</p>
-  </div>
-</section>
-{% include "partials/dhis2_reports_tabs.html" %}
+{% set sh_title = page_title %}
+{% set sh_info = "Catalog and output roots. Credentials never appear here." %}
+{% set sh_tabs %}{% include "partials/dhis2_reports_tabs.html" %}{% endset %}
+{% set sh_meta %}
+  {% if dhis2_instance %}<span class="badge">Active: {{ dhis2_instance }}</span>{% endif %}
+{% endset %}
+{% include "partials/section_header.html" %}
 
 <section class="panel panel-body" style="margin-top:0.85rem">
   <h2 style="font-size:14px;margin:0 0 0.75rem">Configuration</h2>

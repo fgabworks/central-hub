@@ -1,17 +1,13 @@
 {% extends "base.html" %}
 {% block title %}Metadata Type Catalog · DHIS2 · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-header">
-  <div>
-    <p class="muted-2" style="margin:0 0 0.35rem"><a href="{{ url_for('dhis2') }}">DHIS2</a> / Catalog</p>
-    <h1>Metadata Type Catalog</h1>
-    <p>Discovered schemas from the connected DHIS2 instance (not a hardcoded shortlist).</p>
-  </div>
-  <div class="page-meta">
-    <span>{{ types|length }} shown</span>
-    <a class="btn btn-sm" href="{{ url_for('dhis2_discover') }}">Re-discover</a>
-  </div>
-</section>
+{% set sh_title = "Metadata Type Catalog" %}
+{% set sh_info = "Discovered schemas from the connected DHIS2 instance (not a hardcoded shortlist)." %}
+{% set sh_meta %}
+  <span>{{ types|length }} shown</span>
+  <a class="btn btn-sm" href="{{ url_for('dhis2_discover') }}">Re-discover</a>
+{% endset %}
+{% include "partials/section_header.html" %}
 
 {% if not catalog %}
   <section class="panel panel-body">

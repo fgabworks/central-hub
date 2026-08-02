@@ -1,16 +1,14 @@
 {% extends "base.html" %}
 {% block title %}{{ message.subject }} · Email · {{ app_name }}{% endblock %}
 {% block content %}
-<div class="page-header">
-  <div>
-    <p class="page-sub"><a href="{{ email_base }}?account={{ account.id }}">← Email Center</a>
-      {% if message.thread_id %}
-      · <a href="{{ url_for('email_thread_detail', account_id=account.id, thread_id=message.thread_id) }}">View thread</a>
-      {% endif %}
-    </p>
-    <h1>{{ message.subject }}</h1>
-  </div>
-</div>
+{% set sh_title = message.subject %}
+{% set sh_meta %}
+  <a class="quiet" href="{{ email_base }}?account={{ account.id }}">← Email Center</a>
+  {% if message.thread_id %}
+  <a class="quiet" href="{{ url_for('email_thread_detail', account_id=account.id, thread_id=message.thread_id) }}">View thread</a>
+  {% endif %}
+{% endset %}
+{% include "partials/section_header.html" %}
 
 <div class="email-detail card">
   <dl class="email-meta">

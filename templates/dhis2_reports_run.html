@@ -4,13 +4,13 @@
 <script src="{{ url_for('static', filename='js/dhis2_reports_run.js') }}?v=params-picker-2" defer></script>
 {% endblock %}
 {% block content %}
-<section class="page-header page-header-compact">
-  <div>
-    <h1>{{ page_title }}</h1>
-    <p class="muted">Generate &amp; View populated HTML inside Central Hub using server-side DHIS2 credentials. Live requires one confirmation per run.</p>
-  </div>
-</section>
-{% include "partials/dhis2_reports_tabs.html" %}
+{% set sh_title = page_title %}
+{% set sh_info = "Generate & View populated HTML inside Central Hub using server-side DHIS2 credentials. Live requires one confirmation per run." %}
+{% set sh_tabs %}{% include "partials/dhis2_reports_tabs.html" %}{% endset %}
+{% set sh_meta %}
+  {% if dhis2_instance %}<span class="badge">Active: {{ dhis2_instance }}</span>{% endif %}
+{% endset %}
+{% include "partials/section_header.html" %}
 
 <section class="panel dr-run-panel" style="margin-top:0.85rem" id="dr-run"
          data-catalog-url="{{ url_for('api_dhis2_report_run_catalog') }}"

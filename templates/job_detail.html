@@ -2,17 +2,13 @@
 {% from "macros.html" import status_badge %}
 {% block title %}{{ job.id }} · Jobs · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-header">
-  <div>
-    <p class="muted-2" style="margin:0 0 0.35rem"><a href="{{ url_for('jobs') }}">Jobs</a> / {{ job.id }}</p>
-    <h1>{{ job.capability_id }}</h1>
-    <p class="muted">{{ job.repository_id }} · {% if job.dry_run %}dry-run{% else %}apply{% endif %}</p>
-  </div>
-  <div class="page-meta">
-    {{ status_badge(job.status) }}
-    <a class="btn btn-sm" href="{{ url_for('jobs') }}">Back</a>
-  </div>
-</section>
+{% set sh_title = job.capability_id %}
+{% set sh_info = job.repository_id ~ " · " ~ ("dry-run" if job.dry_run else "apply") %}
+{% set sh_meta %}
+  {{ status_badge(job.status) }}
+  <a class="btn btn-sm" href="{{ url_for('jobs') }}">Back</a>
+{% endset %}
+{% include "partials/section_header.html" %}
 
 {% if flash_error %}<div class="banner banner-error">{{ flash_error }}</div>{% endif %}
 {% if flash_notice %}<div class="banner" style="background:rgba(59,130,246,0.12);border-color:rgba(59,130,246,0.35);color:#93c5fd">{{ flash_notice }}</div>{% endif %}

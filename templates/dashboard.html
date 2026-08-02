@@ -6,16 +6,13 @@
 {% set dash_ep = dashboard_endpoint %}
 <div class="dash-workspace">
 <div class="dash-workspace-main">
-<section class="page-header">
-  <div>
-    <h1>{{ page_title }}</h1>
-    <p>{{ page_sub }}</p>
-  </div>
-  <div class="page-meta">
-    <span>Last updated: {{ last_updated }}</span>
-    <a class="icon-btn" href="{{ url_for(dash_ep, queue=work_queue.tab) }}" title="Refresh" aria-label="Refresh">↻</a>
-  </div>
-</section>
+{% set sh_title = page_title %}
+{% set sh_info = page_sub %}
+{% set sh_meta %}
+  <span>Last updated: {{ last_updated }}</span>
+  <a class="icon-btn" href="{{ url_for(dash_ep, queue=work_queue.tab) }}" title="Refresh" aria-label="Refresh">↻</a>
+{% endset %}
+{% include "partials/section_header.html" %}
 
 <section class="summary-grid summary-cols-{{ summary_cards|length }} summary-compact">
   {% for card in summary_cards %}

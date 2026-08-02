@@ -15,38 +15,9 @@
   data-org-units-url="{{ url_for('api_dhis2_report_org_units') }}"
   data-periods-url="{{ url_for('api_dhis2_report_periods') }}">
 
-  <div class="pnc-crumb muted">Reports &amp; Comparisons › Compare with DHIS2 Report</div>
-  <header class="pnc-header">
-    <div>
-      <h1>{{ page_title }} <span class="pnc-badge">DHIS2 Standard Report</span></h1>
-      <p class="muted">{{ bootstrap.page_subtitle }}</p>
-    </div>
-    <div class="pnc-filters">
-      <label>Environment
-        <select id="pnc-env"><option value="live">Live</option><option value="stage">Stage</option></select>
-      </label>
-      <label>Period
-        <select id="pnc-period"></select>
-      </label>
-      <div class="pnc-ou" id="pnc-ou-block">
-        <label>Organisation Unit
-          <div class="pnc-ou-row">
-            <select id="pnc-ou-region" class="pnc-ou-select" data-ou-level="0"><option value="">Region…</option></select>
-            <select id="pnc-ou-province" class="pnc-ou-select" data-ou-level="1" disabled><option value="">Province…</option></select>
-            <select id="pnc-ou-municipality" class="pnc-ou-select" data-ou-level="2" disabled><option value="">Municipality…</option></select>
-            <select id="pnc-ou-barangay" class="pnc-ou-select" data-ou-level="3" disabled><option value="">Barangay…</option></select>
-          </div>
-          <input type="search" id="pnc-ou-search" placeholder="Search OU…" autocomplete="off">
-          <div id="pnc-ou-search-results" hidden></div>
-          <input type="hidden" id="pnc-ou" value="">
-          <span class="muted" id="pnc-ou-path"></span>
-          <p class="pnc-error" id="pnc-ou-error" hidden></p>
-        </label>
-      </div>
-      <button type="button" class="btn btn-primary" id="pnc-generate" disabled>Generate Comparison</button>
-    </div>
-  </header>
-
+  {% set sh_title = page_title %}
+  {% set sh_info = bootstrap.page_subtitle %}
+  {% set sh_tabs %}
   <nav class="pnc-tabs" role="tablist">
     <button type="button" class="pnc-tab is-active" data-tab="overview">Overview</button>
     <button type="button" class="pnc-tab" data-tab="indicators">Indicator Comparison</button>
@@ -54,6 +25,36 @@
     <button type="button" class="pnc-tab" data-tab="evidence">Evidence &amp; Lineage</button>
     <button type="button" class="pnc-tab" data-tab="snapshot">Report Snapshot</button>
   </nav>
+  {% endset %}
+  {% set sh_meta %}
+  <span class="pnc-badge">DHIS2 Standard Report</span>
+  {% endset %}
+  {% include "partials/section_header.html" %}
+
+  <div class="pnc-filters">
+    <label>Environment
+      <select id="pnc-env"><option value="live">Live</option><option value="stage">Stage</option></select>
+    </label>
+    <label>Period
+      <select id="pnc-period"></select>
+    </label>
+    <div class="pnc-ou" id="pnc-ou-block">
+      <label>Organisation Unit
+        <div class="pnc-ou-row">
+          <select id="pnc-ou-region" class="pnc-ou-select" data-ou-level="0"><option value="">Region…</option></select>
+          <select id="pnc-ou-province" class="pnc-ou-select" data-ou-level="1" disabled><option value="">Province…</option></select>
+          <select id="pnc-ou-municipality" class="pnc-ou-select" data-ou-level="2" disabled><option value="">Municipality…</option></select>
+          <select id="pnc-ou-barangay" class="pnc-ou-select" data-ou-level="3" disabled><option value="">Barangay…</option></select>
+        </div>
+        <input type="search" id="pnc-ou-search" placeholder="Search OU…" autocomplete="off">
+        <div id="pnc-ou-search-results" hidden></div>
+        <input type="hidden" id="pnc-ou" value="">
+        <span class="muted" id="pnc-ou-path"></span>
+        <p class="pnc-error" id="pnc-ou-error" hidden></p>
+      </label>
+    </div>
+    <button type="button" class="btn btn-primary" id="pnc-generate" disabled>Generate Comparison</button>
+  </div>
 
   <div class="pnc-status-bar">
     <span id="pnc-last">Last compared: —</span>

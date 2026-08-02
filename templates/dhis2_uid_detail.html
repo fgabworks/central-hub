@@ -1,26 +1,14 @@
 {% extends "base.html" %}
 {% block title %}{{ uid }} · UID Mapping · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-header">
-  <div>
-    <p class="muted-2" style="margin:0 0 0.35rem">
-      <a href="{{ url_for('dhis2') }}">DHIS2</a> /
-      <a href="{{ url_for('dhis2_uid_explorer') }}">UID Explorer</a> /
-      {{ uid }}
-    </p>
-    <h1>{{ primary.name or uid }}</h1>
-    <p class="muted">
-      {{ primary.object_type or 'unknown type' }}
-      · {{ audit_profile.answer.label if audit_profile and audit_profile.answer else (primary.value_type or 'unknown answer') }}
-      · {{ primary.source_repository or 'unknown source' }}
-    </p>
-  </div>
-  <div class="page-meta">
-    <button class="btn btn-sm btn-primary" type="button" id="copy-uid" data-uid="{{ uid }}">Copy UID</button>
-    <a class="btn btn-sm" href="{{ url_for('dhis2_enrichment') }}">Enrichment</a>
-    <a class="btn btn-sm" href="{{ url_for('dhis2_uid_explorer') }}">Back</a>
-  </div>
-</section>
+{% set sh_title = primary.name or uid %}
+{% set sh_info = (primary.object_type or 'unknown type') ~ " · " ~ (audit_profile.answer.label if audit_profile and audit_profile.answer else (primary.value_type or 'unknown answer')) ~ " · " ~ (primary.source_repository or 'unknown source') %}
+{% set sh_meta %}
+  <button class="btn btn-sm btn-primary" type="button" id="copy-uid" data-uid="{{ uid }}">Copy UID</button>
+  <a class="btn btn-sm" href="{{ url_for('dhis2_enrichment') }}">Enrichment</a>
+  <a class="btn btn-sm" href="{{ url_for('dhis2_uid_explorer') }}">Back</a>
+{% endset %}
+{% include "partials/section_header.html" %}
 
 <nav class="btn-row" style="margin-bottom:1rem;flex-wrap:wrap">
   {% for t, label in [

@@ -117,13 +117,15 @@ Scope: personal, local-first tool. Canonical agent rules: [AGENTS.md](AGENTS.md)
     `REPO_WS_PROCESS_SCAN` / `STOP` / `FORCE_STOP` / `STOP_BLOCKED`.
   - **Central Hub Process Manager:** extends the same exact-PID identity and port
     primitives on Health. Startup owns an atomic token-matched lock under
-    `data/central_hub_process/`, cleans only invalid/dead locks, and refuses verified
-    duplicates. Unregistered targets require the absolute Hub `app.py` command plus
-    Hub port ownership; generic/relative Python commands are ignored. Stops revalidate
-    PID identity, signal gracefully, wait five seconds, then force only that PID.
-    Stop All requires typed confirmation. Restart uses a detached fixed-argv helper,
-    requires port release, starts one instance, probes loopback `/api/healthz`, and
-    audits actor/PID/action/time/result. It never kills all Python processes.
+    `data/central_hub_process/`, plus `owned_processes.json` with
+    PID/command/script/cwd/start-time ownership tokens reconciled via `psutil`.
+    Unrelated Python processes are visible but never stoppable. Stops revalidate
+    ownership before signaling; self-stop/restart and **Stop Central Hub** use a
+    detached fixed-argv supervisor. Stop Central Hub requires typed `STOP CENTRAL HUB`.
+    Launcher `scripts/run_central_hub.py` handles Ctrl+C / terminal-close cleanup;
+    orphans remain stoppable after failed cleanup. Audits start/stop/restart/
+    failed-stop/orphan-recovery. Owner-gated (`require_owner`). Never kills all
+    Python processes.
   - **Connect Local Workspace:** user-selected folder only; scan is read-only (no
     subprocess, no installs, no secret-file reads). Git remote mismatch and path
     replacement require explicit confirm. Suggested run profiles are untrusted /

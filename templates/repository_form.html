@@ -1,15 +1,12 @@
 {% extends "base.html" %}
 {% block title %}{{ title }} · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-header">
-  <div>
-    <h1>{{ title }}</h1>
-    <p>{{ subtitle }}</p>
-  </div>
-  <div class="page-meta">
-    <a class="btn btn-sm" href="{{ url_for('repositories') }}">← Registry</a>
-  </div>
-</section>
+{% set sh_title = title %}
+{% set sh_info = subtitle %}
+{% set sh_meta %}
+  <a class="btn btn-sm" href="{{ url_for('repositories') }}">← Registry</a>
+{% endset %}
+{% include "partials/section_header.html" %}
 
 {% if error %}<div class="banner banner-error">{{ error }}</div>{% endif %}
 {% if notice %}<div class="banner" style="background:var(--info-soft);border-color:rgba(59,130,246,.35)">{{ notice }}</div>{% endif %}

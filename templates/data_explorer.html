@@ -9,24 +9,9 @@
 <script src="{{ url_for('static', filename='js/data_explorer_workspace.js') }}?v=dex-merge-1" defer></script>
 {% endblock %}
 {% block content %}
-<section class="dex-page-header">
-  <nav class="dex-breadcrumb" aria-label="Breadcrumb">
-    <span>Work</span><span aria-hidden="true">/</span><span aria-current="page">Data Explorer</span>
-  </nav>
-  <div class="dex-title-row">
-    <div>
-      <h1>{{ page_title }}</h1>
-      <p class="muted">{{ subtitle }}</p>
-    </div>
-    <div class="dex-header-status" aria-label="Data access status">
-      <span class="dex-status-badge dex-status-live" id="dex-header-env">Dev</span>
-      <span class="dex-status-badge">Read-only</span>
-    </div>
-  </div>
-</section>
-
-<script type="application/json" id="dex-bootstrap">{{ bootstrap | tojson }}</script>
-
+{% set sh_title = page_title %}
+{% set sh_info = subtitle %}
+{% set sh_tabs %}
 <nav class="dex-workspace-tabs" role="tablist" aria-label="Data Explorer">
   <button type="button" data-workspace-tab="browse">Browse Data</button>
   <button type="button" data-workspace-tab="schema">Schema</button>
@@ -36,6 +21,16 @@
   <button type="button" data-workspace-tab="jobs">Export Jobs</button>
   <button type="button" data-workspace-tab="history">History</button>
 </nav>
+{% endset %}
+{% set sh_meta %}
+<div class="dex-header-status" aria-label="Data access status">
+  <span class="dex-status-badge dex-status-live" id="dex-header-env">Dev</span>
+  <span class="dex-status-badge">Read-only</span>
+</div>
+{% endset %}
+{% include "partials/section_header.html" %}
+
+<script type="application/json" id="dex-bootstrap">{{ bootstrap | tojson }}</script>
 
 <div id="dex-browse-workspace" data-workspace-panel="browse" data-initial-tab="{{ initial_tab }}">
 

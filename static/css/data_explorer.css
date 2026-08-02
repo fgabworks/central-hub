@@ -81,6 +81,19 @@
   scrollbar-width: thin;
 }
 
+/* Nested in shared section header tab row */
+.section-header-tabs .dex-workspace-tabs {
+  margin: 0;
+  padding: 0;
+  border-bottom: none;
+}
+
+.section-header-tabs .dex-workspace-tabs button {
+  padding: 0 0.7rem;
+  height: 100%;
+  border-bottom-width: 2px;
+}
+
 .dex-workspace-tabs button {
   flex: 0 0 auto;
   border: 0;

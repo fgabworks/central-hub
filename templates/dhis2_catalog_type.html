@@ -2,23 +2,15 @@
 {% from "macros.html" import status_badge %}
 {% block title %}{{ item.schema_name }} · Catalog · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-header">
-  <div>
-    <p class="muted-2" style="margin:0 0 0.35rem">
-      <a href="{{ url_for('dhis2') }}">DHIS2</a> /
-      <a href="{{ url_for('dhis2_catalog') }}">Catalog</a> /
-      {{ item.id }}
-    </p>
-    <h1>{{ item.schema_name or item.singular }}</h1>
-    <p>Schema-driven capability details from discovery (read-only).</p>
-  </div>
-  <div class="page-meta">
-    <span class="badge badge-phase">{{ item.category }}</span>
-    <span class="badge badge-api">{{ item.builder_mode }}</span>
-    {% if enrich_error %}<span class="muted">{{ enrich_error }}</span>{% endif %}
-    <a class="btn btn-sm" href="{{ url_for('dhis2_catalog_type', type_id=item.id, enrich=1) }}">Fetch count/sample</a>
-  </div>
-</section>
+{% set sh_title = item.schema_name or item.singular %}
+{% set sh_info = "Schema-driven capability details from discovery (read-only)." %}
+{% set sh_meta %}
+  <span class="badge badge-phase">{{ item.category }}</span>
+  <span class="badge badge-api">{{ item.builder_mode }}</span>
+  {% if enrich_error %}<span class="muted">{{ enrich_error }}</span>{% endif %}
+  <a class="btn btn-sm" href="{{ url_for('dhis2_catalog_type', type_id=item.id, enrich=1) }}">Fetch count/sample</a>
+{% endset %}
+{% include "partials/section_header.html" %}
 
 <section class="dash-grid">
   <div class="stack">

@@ -63,10 +63,19 @@ python app.py
 
 Open `http://127.0.0.1:8080`.
 
-Direct `app.py` startup is single-instance. Its token-matched PID/identity lock is
-stored under `data/central_hub_process/`; invalid or dead locks are cleaned on startup.
-Health includes owner-gated verified-instance Stop Stale, Stop All, and Restart Cleanly
-controls. The Werkzeug code reloader is disabled to preserve one server process.
+Direct `app.py` startup is single-instance. Prefer the launcher for terminal cleanup:
+
+```powershell
+python scripts/run_central_hub.py
+```
+
+Its token-matched PID/identity lock and owned-process registry live under
+`data/central_hub_process/`; invalid or dead locks are cleaned on startup.
+Health → Central Hub Process Manager lists owned hub processes (including `app.py`
+labeled **Central Hub Server**) and other Python processes (view-only). Owner-gated
+controls: per-process Stop/Restart, Stop Stale, typed **Stop Central Hub** (full owned
+tree via detached supervisor), Stop All, and Restart Cleanly. The Werkzeug code
+reloader is disabled to preserve one server process.
 
 Optional sample API for healthy `sample-api` checks:
 

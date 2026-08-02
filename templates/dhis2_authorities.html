@@ -1,17 +1,13 @@
 {% extends "base.html" %}
 {% block title %}Authorities · DHIS2 · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-header">
-  <div>
-    <p class="muted-2" style="margin:0 0 0.35rem"><a href="{{ url_for('dhis2') }}">DHIS2</a> / Authorities</p>
-    <h1>Permissions / Authorities</h1>
-    <p>Authorities from <code>/api/me/authorization</code> for the authenticated Stage user.</p>
-  </div>
-  <div class="page-meta">
-    <span>{{ authorities|length }} authorities</span>
-    <a class="btn btn-sm" href="{{ url_for('dhis2_discover') }}">Re-discover</a>
-  </div>
-</section>
+{% set sh_title = "Permissions / Authorities" %}
+{% set sh_info = "Authorities from /api/me/authorization for the authenticated Stage user." %}
+{% set sh_meta %}
+  <span>{{ authorities|length }} authorities</span>
+  <a class="btn btn-sm" href="{{ url_for('dhis2_discover') }}">Re-discover</a>
+{% endset %}
+{% include "partials/section_header.html" %}
 
 <form method="get" class="builder-controls" style="grid-template-columns:1fr auto;margin-bottom:1rem">
   <label>

@@ -70,6 +70,9 @@ class RawProcess:
     command_line: str
     cwd: str | None = None
     started_at: str | None = None
+    ppid: int | None = None
+    listening_ports: tuple[int, ...] = ()
+    status: str | None = None
 
 
 @dataclass
@@ -154,10 +157,99 @@ def _profile_ports(profiles: Iterable[RunProfile]) -> set[int]:
 
 
 def list_os_processes(*, timeout_seconds: float = 12.0) -> list[RawProcess]:
-    """Best-effort local process inventory (no psutil dependency)."""
+    """Best-effort local process inventory via psutil, with OS fallbacks."""
+    try:
+        return _list_processes_psutil()
+    except Exception:  # noqa: BLE001
+        pass
     if os.name == "nt":
         return _list_windows_processes(timeout_seconds=timeout_seconds)
     return _list_unix_processes()
+
+
+def _list_processes_psutil() -> list[RawProcess]:
+    import psutil  # local import keeps module importable without psutil in edge cases
+
+    out: list[RawProcess] = []
+    attrs = ["pid", "ppid", "name", "exe", "cmdline", "cwd", "create_time", "status"]
+    for proc in psutil.process_iter(attrs=attrs):
+        try:
+            info = proc.info
+            pid = int(info.get("pid") or 0)
+            if pid <= 0:
+                continue
+            cmdline_parts = info.get("cmdline") or []
+            if isinstance(cmdline_parts, (list, tuple)):
+                command = subprocess.list2cmdline([str(part) for part in cmdline_parts]) if os.name == "nt" else " ".join(
+                    str(part) for part in cmdline_parts
+                )
+            else:
+                command = str(cmdline_parts or "")
+            started = None
+            create_time = info.get("create_time")
+            if create_time:
+                try:
+                    started = datetime.fromtimestamp(float(create_time), tz=timezone.utc).isoformat()
+                except (TypeError, ValueError, OSError):
+                    started = None
+            # Skip per-process net_connections here — it is too expensive for full
+            # inventory. Listening ports are attached selectively by callers.
+            out.append(
+                RawProcess(
+                    pid=pid,
+                    name=str(info.get("name") or ""),
+                    executable=str(info.get("exe") or info.get("name") or ""),
+                    command_line=command or str(info.get("exe") or ""),
+                    cwd=str(info.get("cwd") or "") or None,
+                    started_at=started,
+                    ppid=int(info["ppid"]) if info.get("ppid") is not None else None,
+                    listening_ports=(),
+                    status=str(info.get("status") or "") or None,
+                )
+            )
+        except (psutil.Error, PermissionError, OSError):
+            continue
+    return out
+
+
+def attach_listening_ports(processes: list[RawProcess], *, pids: set[int] | None = None) -> list[RawProcess]:
+    """Attach listening ports for selected PIDs using psutil (best effort)."""
+    if not processes:
+        return processes
+    try:
+        import psutil
+    except Exception:  # noqa: BLE001
+        return processes
+    wanted = pids if pids is not None else {item.pid for item in processes}
+    updated: list[RawProcess] = []
+    for item in processes:
+        if item.pid not in wanted:
+            updated.append(item)
+            continue
+        ports: list[int] = []
+        try:
+            proc = psutil.Process(item.pid)
+            for conn in proc.net_connections(kind="inet"):
+                if getattr(conn, "status", None) == psutil.CONN_LISTEN and getattr(conn, "laddr", None):
+                    port = int(getattr(conn.laddr, "port", 0) or 0)
+                    if port > 0:
+                        ports.append(port)
+        except (psutil.Error, PermissionError, OSError):
+            ports = list(item.listening_ports or ())
+        updated.append(
+            RawProcess(
+                pid=item.pid,
+                name=item.name,
+                executable=item.executable,
+                command_line=item.command_line,
+                cwd=item.cwd,
+                started_at=item.started_at,
+                ppid=item.ppid,
+                listening_ports=tuple(sorted(set(ports))),
+                status=item.status,
+            )
+        )
+    return updated
 
 
 def _list_windows_processes(*, timeout_seconds: float) -> list[RawProcess]:

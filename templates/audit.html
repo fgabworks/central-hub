@@ -1,15 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Audit · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-header">
-  <div>
-    <h1>Audit</h1>
-    <p>Operator actions recorded by Central Hub (no secrets).</p>
-  </div>
-  <div class="page-meta">
-    <span>{{ events|length }} recent</span>
-  </div>
-</section>
+{% set sh_title = "Audit" %}
+{% set sh_info = "Operator actions recorded by Central Hub (no secrets)." %}
+{% set sh_meta %}
+  <span>{{ events|length }} recent</span>
+{% endset %}
+{% include "partials/section_header.html" %}
 
 <section class="panel">
   <div class="panel-header"><h2>Audit log</h2></div>

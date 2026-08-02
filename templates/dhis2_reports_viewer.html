@@ -1,21 +1,19 @@
 {% extends "base.html" %}
 {% block title %}{{ viewer.report_name or 'Report' }} · {{ page_title }} · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-header page-header-compact">
-  <div>
-    <h1>{{ viewer.report_name or 'Report viewer' }}</h1>
-    <p class="muted">Sandboxed HTML view. External navigation and top-level escapes are blocked.</p>
-  </div>
-  <div class="page-meta">
-    <a class="btn btn-sm" href="{{ url_for('dhis2_reports_history') }}">History</a>
-    {% if viewer.kind == 'html' %}
-      <a class="btn btn-sm" href="{{ url_for('dhis2_reports_file', path=viewer.path) }}" target="_blank" rel="noopener">Open in Browser</a>
-    {% elif viewer.kind == 'external' and viewer.url %}
-      <a class="btn btn-sm btn-primary" href="{{ viewer.url }}" target="_blank" rel="noopener">Open in DHIS2</a>
-    {% endif %}
-  </div>
-</section>
-{% include "partials/dhis2_reports_tabs.html" %}
+{% set sh_title = viewer.report_name or 'Report viewer' %}
+{% set sh_info = "Sandboxed HTML view. External navigation and top-level escapes are blocked." %}
+{% set sh_tabs %}{% include "partials/dhis2_reports_tabs.html" %}{% endset %}
+{% set sh_meta %}
+  {% if dhis2_instance %}<span class="badge">Active: {{ dhis2_instance }}</span>{% endif %}
+  <a class="btn btn-sm" href="{{ url_for('dhis2_reports_history') }}">History</a>
+  {% if viewer.kind == 'html' %}
+    <a class="btn btn-sm" href="{{ url_for('dhis2_reports_file', path=viewer.path) }}" target="_blank" rel="noopener">Open in Browser</a>
+  {% elif viewer.kind == 'external' and viewer.url %}
+    <a class="btn btn-sm btn-primary" href="{{ viewer.url }}" target="_blank" rel="noopener">Open in DHIS2</a>
+  {% endif %}
+{% endset %}
+{% include "partials/section_header.html" %}
 
 {% if viewer.kind == 'external' %}
   <div class="banner" style="margin-top:0.85rem">

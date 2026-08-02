@@ -2,16 +2,12 @@
 {% from "macros.html" import status_badge %}
 {% block title %}Instance Details · DHIS2 · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-header">
-  <div>
-    <p class="muted-2" style="margin:0 0 0.35rem"><a href="{{ url_for('dhis2') }}">DHIS2</a> / Instance</p>
-    <h1>Instance Details</h1>
-    <p>Server identity and authenticated user from the last discovery / status check.</p>
-  </div>
-  <div class="page-meta">
-    <a class="btn btn-sm" href="{{ url_for('dhis2_discover') }}">Refresh discovery</a>
-  </div>
-</section>
+{% set sh_title = "Instance Details" %}
+{% set sh_info = "Server identity and authenticated user from the last discovery / status check." %}
+{% set sh_meta %}
+  <a class="btn btn-sm" href="{{ url_for('dhis2_discover') }}">Refresh discovery</a>
+{% endset %}
+{% include "partials/section_header.html" %}
 
 {% if not catalog %}
   <section class="panel panel-body">

@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% block title %}History · {{ page_title }} · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-header page-header-compact">
-  <div>
-    <h1>{{ page_title }}</h1>
-    <p class="muted">Report generation history with redacted diagnostics.</p>
-  </div>
-</section>
-{% include "partials/dhis2_reports_tabs.html" %}
+{% set sh_title = page_title %}
+{% set sh_info = "Report generation history with redacted diagnostics." %}
+{% set sh_tabs %}{% include "partials/dhis2_reports_tabs.html" %}{% endset %}
+{% set sh_meta %}
+  {% if dhis2_instance %}<span class="badge">Active: {{ dhis2_instance }}</span>{% endif %}
+{% endset %}
+{% include "partials/section_header.html" %}
 
 <form method="get" class="nb-filters" style="margin-top:0.85rem">
   <label>Status

@@ -1,13 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Thread · Email · {{ app_name }}{% endblock %}
 {% block content %}
-<div class="page-header">
-  <div>
-    <p class="page-sub"><a href="{{ email_base }}?account={{ account.id }}">← Email Center</a></p>
-    <h1>Thread</h1>
-    <p class="page-sub muted mono">{{ thread_id }}</p>
-  </div>
-</div>
+{% set sh_title = "Thread" %}
+{% set sh_info = thread_id %}
+{% set sh_meta %}
+  <a class="quiet" href="{{ email_base }}?account={{ account.id }}">← Email Center</a>
+{% endset %}
+{% include "partials/section_header.html" %}
 
 <div class="email-thread">
   {% for message in messages %}

@@ -1,12 +1,11 @@
 {% extends "base.html" %}
 {% block title %}{{ event.summary }} · Calendar · {{ app_name }}{% endblock %}
 {% block content %}
-<div class="page-header">
-  <div>
-    <p class="page-sub"><a href="{{ calendar_base }}?account={{ account.id }}">← {{ 'Calendar' if workspace == 'personal' else 'Work Calendar' }}</a></p>
-    <h1>{{ event.summary }}</h1>
-  </div>
-</div>
+{% set sh_title = event.summary %}
+{% set sh_meta %}
+  <a class="quiet" href="{{ calendar_base }}?account={{ account.id }}">← {{ 'Calendar' if workspace == 'personal' else 'Work Calendar' }}</a>
+{% endset %}
+{% include "partials/section_header.html" %}
 
 <div class="email-detail card">
   <dl class="email-meta">

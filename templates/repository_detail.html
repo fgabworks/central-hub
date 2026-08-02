@@ -2,22 +2,16 @@
 {% from "macros.html" import status_badge, type_badge %}
 {% block title %}{{ repository.name }} · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-header">
-  <div>
-    <p class="muted-2" style="margin:0 0 0.35rem">
-      <a href="{{ url_for('repositories') }}">Repositories</a> / {{ repository.id }}
-    </p>
-    <h1>{{ repository.name }}</h1>
-    <p>{{ repository.description or "No description provided." }}</p>
-  </div>
-  <div class="page-meta">
-    {{ type_badge(repository.type) }}
-    {{ status_badge(status) }}
-    <a class="btn btn-sm" href="{{ url_for('repository_edit', repo_id=repository.id) }}">Edit</a>
-  </div>
-</section>
-
-{% include "partials/repository_tabs.html" %}
+{% set sh_title = repository.name %}
+{% set sh_info = repository.description or "No description provided." %}
+{% set inline_section_tabs = true %}
+{% set sh_tabs %}{% include "partials/repository_tabs.html" %}{% endset %}
+{% set sh_meta %}
+  {{ type_badge(repository.type) }}
+  {{ status_badge(status) }}
+  <a class="btn btn-sm" href="{{ url_for('repository_edit', repo_id=repository.id) }}">Edit</a>
+{% endset %}
+{% include "partials/section_header.html" %}
 
 <section class="dash-grid" style="margin-top:0.85rem">
   <section class="panel panel-body">

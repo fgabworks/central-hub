@@ -5,6 +5,8 @@
        href="{{ url_for(tab.endpoint, repo_id=repository.id) }}">{{ tab.label }}</a>
   {% endfor %}
 </nav>
+{% if not inline_section_tabs|default(false) %}
 {% if workspace and not workspace.available and active_tab != 'overview' and active_tab != 'settings' and active_tab != 'connect' %}
   {% include "partials/repository_connect_cta.html" %}
+{% endif %}
 {% endif %}
