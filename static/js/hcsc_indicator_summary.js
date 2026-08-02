@@ -77,6 +77,7 @@
     bdPageSize: 50,
     pendingForceRefresh: false,
     genSubPhase: "",
+    bdLineage: null,
   };
   var ouPicker = null;
   var allowedQuarters = {};
@@ -372,6 +373,341 @@
     cancel.addEventListener("click", onCancel);
   }
 
+  function registryIndicator(key) {
+    var list = boot.indicators || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && list[i].key === key) return list[i];
+    }
+    return null;
+  }
+
+  function findIndicatorByValueUid(uid) {
+    if (!uid) return null;
+    var list = boot.indicators || [];
+    for (var i = 0; i < list.length; i++) {
+      var u = list[i] && list[i].dhis2_uids && list[i].dhis2_uids.value;
+      if (u && u === uid) return list[i];
+    }
+    return null;
+  }
+
+  function badgeCodeForSourceType(sourceType, sourceOwner) {
+    var st = String(sourceType || "").toLowerCase();
+    if (st === "program_indicator") return "PI";
+    if (st === "indicator" || st === "aggregate_indicator") return "IND";
+    if (st === "data_element") return "DE";
+    if (st === "approved_sql" || st === "sql") return "SQL";
+    if (st.indexOf("live_processing") >= 0) return "LP";
+    var owner = String(sourceOwner || "").toLowerCase();
+    if (owner.indexOf("live processing") >= 0) return "LP";
+    if (owner.indexOf("sql") >= 0 || owner.indexOf("data_scripts") >= 0) return "SQL";
+    return "";
+  }
+
+  function displayTypeOf(meta) {
+    if (!meta) return "Count";
+    if (meta.display_result_type) return meta.display_result_type;
+    var rt = String(meta.result_type || "").toLowerCase();
+    if (rt === "count") return "Count";
+    if (rt === "ratio") return "Ratio";
+    if (rt === "status" || rt === "derived_status") return "Status";
+    if (
+      rt === "percentage" ||
+      rt === "numerator_denominator_percentage"
+    ) {
+      return "Percentage";
+    }
+    if (rt === "disaggregation") return "Disaggregation";
+    return "Count";
+  }
+
+  function selectedBreakdownMeta() {
+    var key =
+      ($("hcsc-bd-indicator") && $("hcsc-bd-indicator").value) ||
+      "eligible_households";
+    var fromBoot = registryIndicator(key);
+    var sample = null;
+    var bd = state.breakdown;
+    if (bd && bd.children) {
+      for (var i = 0; i < bd.children.length; i++) {
+        var results = bd.children[i].results || [];
+        for (var j = 0; j < results.length; j++) {
+          if (results[j].indicator_key === key) {
+            sample = results[j];
+            break;
+          }
+        }
+        if (sample) break;
+      }
+    }
+    var base = Object.assign({}, fromBoot || {}, sample || {});
+    base.indicator_key = key;
+    base.display_name =
+      (sample && sample.display_name) ||
+      (fromBoot && fromBoot.display_name) ||
+      CARD_TITLES[key] ||
+      key;
+    return base;
+  }
+
+  function lineagePart(role, meta) {
+    var uids = meta.dhis2_uids || {};
+    var uid =
+      role === "num"
+        ? uids.numerator
+        : role === "den"
+          ? uids.denominator
+          : uids.value || meta.source_uid;
+    var label =
+      role === "num"
+        ? meta.numerator_label
+        : role === "den"
+          ? meta.denominator_label
+          : meta.display_name;
+    var companion = role === "result" ? null : findIndicatorByValueUid(uid);
+    var sourceType =
+      role === "result"
+        ? meta.source_type
+        : companion
+          ? companion.source_type
+          : null;
+    var sourceOwner =
+      role === "result"
+        ? meta.source_owner
+        : companion
+          ? companion.source_owner
+          : meta.source_owner;
+    var unresolved = !uid || (role !== "result" && !(label || "").trim());
+    var badge =
+      role === "result"
+        ? meta.source_badge || badgeCodeForSourceType(sourceType, sourceOwner)
+        : badgeCodeForSourceType(sourceType, sourceOwner);
+    var sourceUnresolved =
+      !!unresolved || (role !== "result" && !!uid && !companion);
+    return {
+      role: role,
+      label: label || (unresolved ? "Unresolved" : "—"),
+      uid: uid || "",
+      badge: badge,
+      source_type: sourceType || "",
+      source_type_label:
+        sourceUnresolved && !badge
+          ? "Unresolved"
+          : badge === "PI"
+            ? "Program Indicator"
+            : badge === "IND"
+              ? "Aggregate Indicator"
+              : badge === "DE"
+                ? "Data Element"
+                : badge === "SQL"
+                  ? "Approved query"
+                  : badge === "LP"
+                    ? "Live Processing capability"
+                    : sourceType || "—",
+      source_name:
+        (companion && companion.display_name) ||
+        label ||
+        (role === "result" ? meta.display_name : "") ||
+        "—",
+      aggregation:
+        (companion && companion.organisation_unit_rule) ||
+        meta.organisation_unit_rule ||
+        "DHIS2 Analytics ou/pe dimensions",
+      population:
+        (companion && companion.population_definition_reference) ||
+        (role === "result"
+          ? meta.population_definition_reference
+          : null) ||
+        "—",
+      source_object:
+        (companion && companion.source_table_view_reference) ||
+        (role === "result" ? meta.source_table_view_reference : null) ||
+        "—",
+      indicator_key:
+        (companion && companion.key) ||
+        (role === "result" ? meta.indicator_key || meta.key : "") ||
+        "",
+      unresolved: sourceUnresolved,
+    };
+  }
+
+  function readableFormula(meta) {
+    var dtype = displayTypeOf(meta);
+    if (dtype !== "Percentage" && dtype !== "Ratio") return "";
+    var n = (meta.numerator_label || "").trim();
+    var d = (meta.denominator_label || "").trim();
+    if (n && d) {
+      return dtype === "Ratio" ? n + " ÷ " + d : n + " ÷ " + d + " × 100";
+    }
+    if (meta.percentage_formula_reference) {
+      return String(meta.percentage_formula_reference);
+    }
+    return "Unresolved";
+  }
+
+  function breakdownColumnMode(meta) {
+    var dtype = displayTypeOf(meta);
+    if (dtype === "Percentage" || dtype === "Ratio") return "percentage";
+    if (dtype === "Status") return "status";
+    return "count";
+  }
+
+  function hideBdTip() {
+    var tip = $("hcsc-bd-tip");
+    if (tip) tip.hidden = true;
+  }
+
+  function showBdTip(anchor, part) {
+    var tip = $("hcsc-bd-tip");
+    if (!tip || !part) return;
+    var uid = part.uid || "";
+    tip.innerHTML =
+      '<div class="hcsc-bd-tip-head">' +
+      escapeHtml(part.label || "Unresolved") +
+      (part.unresolved
+        ? ' <span class="hcsc-badge is-unresolved">Unresolved</span>'
+        : "") +
+      "</div>" +
+      '<dl class="hcsc-bd-tip-dl">' +
+      "<div><dt>Source type</dt><dd>" +
+      escapeHtml(part.source_type_label || "—") +
+      "</dd></div>" +
+      "<div><dt>UID</dt><dd><code>" +
+      escapeHtml(uid || "—") +
+      "</code></dd></div>" +
+      "<div><dt>Source name</dt><dd>" +
+      escapeHtml(part.source_name || "—") +
+      "</dd></div>" +
+      "<div><dt>Aggregation</dt><dd>" +
+      escapeHtml(part.aggregation || "—") +
+      "</dd></div>" +
+      "<div><dt>Population</dt><dd>" +
+      escapeHtml(part.population || "—") +
+      "</dd></div>" +
+      "</dl>" +
+      '<div class="hcsc-bd-tip-actions">' +
+      '<button type="button" class="btn btn-sm" data-bd-copy-uid="' +
+      escapeHtml(uid) +
+      '"' +
+      (uid ? "" : " disabled") +
+      ">Copy UID</button>" +
+      '<button type="button" class="btn btn-sm" data-bd-open-map="' +
+      escapeHtml(part.indicator_key || "") +
+      '"' +
+      (part.indicator_key ? "" : " disabled") +
+      ">Open Mapping</button>" +
+      '<button type="button" class="btn btn-sm" data-bd-tip-close>Close</button>' +
+      "</div>";
+    tip.hidden = false;
+    if (anchor && anchor.getBoundingClientRect) {
+      var rect = anchor.getBoundingClientRect();
+      var panel = $("hcsc-breakdown-panel");
+      var pref = panel ? panel.getBoundingClientRect() : { top: 0, left: 0 };
+      tip.style.top = Math.max(8, rect.bottom - pref.top + 6) + "px";
+      tip.style.left =
+        Math.max(8, Math.min(rect.left - pref.left, (panel ? panel.clientWidth : 400) - 280)) +
+        "px";
+    }
+  }
+
+  function renderBreakdownFormula(meta) {
+    var host = $("hcsc-bd-formula");
+    if (!host) return;
+    if (!meta || !state.breakdown || state.breakdown.mode === "none") {
+      host.hidden = true;
+      host.innerHTML = "";
+      return;
+    }
+    var mode = breakdownColumnMode(meta);
+    var num = lineagePart("num", meta);
+    var den = lineagePart("den", meta);
+    var res = lineagePart("result", meta);
+    var formula = readableFormula(meta);
+    var lines =
+      '<div class="hcsc-bd-formula-title">' +
+      escapeHtml(meta.display_name || meta.indicator_key || "") +
+      "</div>";
+    if (mode === "percentage") {
+      lines +=
+        '<div class="hcsc-bd-formula-expr">' +
+        escapeHtml(formula || "Unresolved") +
+        "</div>";
+      lines +=
+        '<div class="hcsc-bd-formula-parts">' +
+        '<span class="hcsc-bd-formula-part">N: ' +
+        (num.badge
+          ? sourceBadge(num.badge, num.source_type_label)
+          : '<span class="hcsc-badge is-unresolved">Unresolved</span>') +
+        " <code>" +
+        escapeHtml(num.uid || "—") +
+        "</code> · " +
+        escapeHtml(num.label) +
+        "</span>" +
+        '<span class="hcsc-bd-formula-part">D: ' +
+        (den.badge
+          ? sourceBadge(den.badge, den.source_type_label)
+          : '<span class="hcsc-badge is-unresolved">Unresolved</span>') +
+        " <code>" +
+        escapeHtml(den.uid || "—") +
+        "</code> · " +
+        escapeHtml(den.label) +
+        "</span>" +
+        '<span class="hcsc-bd-formula-part">Result: ' +
+        (res.badge
+          ? sourceBadge(res.badge, res.source_type_label)
+          : '<span class="hcsc-badge is-unresolved">Unresolved</span>') +
+        " <code>" +
+        escapeHtml(res.uid || "—") +
+        "</code></span>" +
+        "</div>";
+    } else if (mode === "status") {
+      lines +=
+        '<div class="hcsc-bd-formula-expr muted">Status indicator — no numerator/denominator lineage.</div>';
+      lines +=
+        '<div class="hcsc-bd-formula-parts"><span class="hcsc-bd-formula-part">Result: ' +
+        (res.badge
+          ? sourceBadge(res.badge, res.source_type_label)
+          : '<span class="hcsc-badge is-unresolved">Unresolved</span>') +
+        " <code>" +
+        escapeHtml(res.uid || "—") +
+        "</code></span></div>";
+    } else {
+      lines +=
+        '<div class="hcsc-bd-formula-expr muted">Count indicator — numerator/denominator columns hidden.</div>';
+      lines +=
+        '<div class="hcsc-bd-formula-parts"><span class="hcsc-bd-formula-part">Result: ' +
+        (res.badge
+          ? sourceBadge(res.badge, res.source_type_label)
+          : '<span class="hcsc-badge is-unresolved">Unresolved</span>') +
+        " <code>" +
+        escapeHtml(res.uid || "—") +
+        "</code></span></div>";
+    }
+    lines +=
+      '<div class="hcsc-bd-formula-actions">' +
+      '<button type="button" class="btn btn-sm" data-bd-copy-uid="' +
+      escapeHtml(res.uid || "") +
+      '"' +
+      (res.uid ? "" : " disabled") +
+      ">Copy UID</button>" +
+      '<button type="button" class="btn btn-sm" data-bd-open-map="' +
+      escapeHtml(meta.indicator_key || meta.key || "") +
+      '">Open Mapping</button>' +
+      "</div>";
+    host.innerHTML = lines;
+    host.hidden = false;
+  }
+
+  function applyBreakdownColumnVisibility(mode) {
+    var table = $("hcsc-breakdown-table");
+    if (!table) return;
+    table.setAttribute("data-bd-mode", mode || "count");
+    var resultH = $("hcsc-bd-result-h");
+    if (resultH) {
+      resultH.textContent = mode === "status" ? "Status" : "Result";
+    }
+  }
+
   function renderBreakdown() {
     var panel = $("hcsc-breakdown-panel");
     var tbody = $("hcsc-breakdown-tbody");
@@ -382,6 +718,12 @@
     var bd = state.breakdown;
     if (!bd || bd.mode === "none") {
       panel.hidden = true;
+      hideBdTip();
+      var formula = $("hcsc-bd-formula");
+      if (formula) {
+        formula.hidden = true;
+        formula.innerHTML = "";
+      }
       return;
     }
     panel.hidden = false;
@@ -403,8 +745,21 @@
       }
     }
     if (retry) retry.hidden = !(bd.ok === false && !bd.loading);
-    var indicator = (($("hcsc-bd-indicator") && $("hcsc-bd-indicator").value) || "eligible_households");
-    var q = (($("hcsc-bd-filter") && $("hcsc-bd-filter").value) || "").trim().toLowerCase();
+
+    var meta = selectedBreakdownMeta();
+    var mode = breakdownColumnMode(meta);
+    var showND = mode === "percentage";
+    applyBreakdownColumnVisibility(mode);
+    renderBreakdownFormula(meta);
+    var numPart = lineagePart("num", meta);
+    var denPart = lineagePart("den", meta);
+
+    var indicator =
+      (($("hcsc-bd-indicator") && $("hcsc-bd-indicator").value) ||
+        "eligible_households");
+    var q = (($("hcsc-bd-filter") && $("hcsc-bd-filter").value) || "")
+      .trim()
+      .toLowerCase();
     var sort = (($("hcsc-bd-sort") && $("hcsc-bd-sort").value) || "name_asc");
     var rows = (bd.children || []).map(function (child) {
       var hit = null;
@@ -449,14 +804,35 @@
     var pageLabel = $("hcsc-bd-page-label");
     if (pager) pager.hidden = rows.length <= pageSize;
     if (pageLabel) pageLabel.textContent = "Page " + (state.bdPage + 1) + " / " + pages;
+    var colCount = showND ? 7 : 5;
     if (!pageRows.length) {
       tbody.innerHTML =
-        '<tr class="hcsc-empty-row"><td colspan="7"><div class="hcsc-empty"><strong>No breakdown rows</strong></div></td></tr>';
+        '<tr class="hcsc-empty-row"><td colspan="' +
+        colCount +
+        '"><div class="hcsc-empty"><strong>No breakdown rows</strong></div></td></tr>';
       return;
     }
     tbody.innerHTML = pageRows
       .map(function (item) {
         var r = item.row || {};
+        var resultCell =
+          mode === "status"
+            ? escapeHtml(r.value_text || r.notes || "—")
+            : escapeHtml(r.value_text || "—");
+        var numCell = showND
+          ? "<td class=\"hcsc-bd-col-num\">" +
+            '<span class="hcsc-bd-nd-val">' +
+            escapeHtml(r.numerator != null ? r.numerator : "—") +
+            '</span> <button type="button" class="hcsc-bd-info" data-bd-tip="num" title="Numerator lineage" aria-label="Numerator lineage">ⓘ</button>' +
+            "</td>"
+          : "";
+        var denCell = showND
+          ? "<td class=\"hcsc-bd-col-den\">" +
+            '<span class="hcsc-bd-nd-val">' +
+            escapeHtml(r.denominator != null ? r.denominator : "—") +
+            '</span> <button type="button" class="hcsc-bd-info" data-bd-tip="den" title="Denominator lineage" aria-label="Denominator lineage">ⓘ</button>' +
+            "</td>"
+          : "";
         return (
           "<tr>" +
           '<td><button type="button" class="hcsc-bd-ou-link" data-ou="' +
@@ -466,58 +842,80 @@
           '">' +
           escapeHtml(item.name) +
           "</button></td>" +
-          "<td>" +
-          escapeHtml(r.numerator != null ? r.numerator : "—") +
+          numCell +
+          denCell +
+          "<td class=\"hcsc-bd-col-result\">" +
+          resultCell +
           "</td>" +
           "<td>" +
-          escapeHtml(r.denominator != null ? r.denominator : "—") +
-          "</td>" +
-          "<td>" +
-          escapeHtml(r.value_text || "—") +
-          "</td>" +
-          "<td>" +
-          escapeHtml(r.source_badge || "—") +
+          (r.source_badge
+            ? sourceBadge(r.source_badge, r.source_badge_label)
+            : "—") +
           "</td>" +
           "<td>" +
           escapeHtml(r.validation_status || "—") +
           "</td>" +
           "<td>" +
-          escapeHtml((r.last_updated || r.freshness || "—").toString().replace("T", " ").slice(0, 19)) +
+          escapeHtml(
+            (r.last_updated || r.freshness || "—")
+              .toString()
+              .replace("T", " ")
+              .slice(0, 19)
+          ) +
           "</td>" +
           "</tr>"
         );
       })
       .join("");
+    // Keep tip parts for header/value info clicks.
+    state.bdLineage = { num: numPart, den: denPart, result: lineagePart("result", meta), mode: mode };
   }
 
   function exportBreakdownCsv() {
     var bd = state.breakdown;
     if (!bd || !bd.children) return;
-    var indicator = (($("hcsc-bd-indicator") && $("hcsc-bd-indicator").value) || "eligible_households");
-    var lines = [
-      "Organisation Unit,UID,Path,Indicator,Numerator,Denominator,Result,Source,Validation,Last Updated,Environment,Period,Geographic Breakdown",
-    ];
+    var meta = selectedBreakdownMeta();
+    var mode = breakdownColumnMode(meta);
+    var showND = mode === "percentage";
+    var indicator =
+      (($("hcsc-bd-indicator") && $("hcsc-bd-indicator").value) ||
+        "eligible_households");
+    var header = showND
+      ? "Organisation Unit,UID,Path,Indicator,Numerator,Denominator,Result,Source,Validation,Last Updated,Environment,Period,Geographic Breakdown,Formula"
+      : "Organisation Unit,UID,Path,Indicator,Result,Source,Validation,Last Updated,Environment,Period,Geographic Breakdown";
+    var lines = [header];
+    var formula = readableFormula(meta);
     bd.children.forEach(function (child) {
       var hit = null;
       (child.results || []).forEach(function (r) {
         if (r.indicator_key === indicator) hit = r;
       });
-      lines.push(
-        [
-          child.org_unit_name,
-          child.org_unit,
-          child.hierarchy_path,
-          indicator,
+      var base = [
+        child.org_unit_name,
+        child.org_unit,
+        child.hierarchy_path,
+        indicator,
+      ];
+      if (showND) {
+        base.push(
           hit && hit.numerator != null ? hit.numerator : "",
-          hit && hit.denominator != null ? hit.denominator : "",
-          hit && hit.value_text != null ? hit.value_text : "",
-          hit && hit.source_badge != null ? hit.source_badge : "",
-          hit && hit.validation_status != null ? hit.validation_status : "",
-          hit && (hit.last_updated || hit.freshness) ? hit.last_updated || hit.freshness : "",
-          ($("hcsc-env") && $("hcsc-env").value) || "",
-          selectedPeriod() || "",
-          selectedGeoBreakdown() || "",
-        ]
+          hit && hit.denominator != null ? hit.denominator : ""
+        );
+      }
+      base.push(
+        hit && hit.value_text != null ? hit.value_text : "",
+        hit && hit.source_badge != null ? hit.source_badge : "",
+        hit && hit.validation_status != null ? hit.validation_status : "",
+        hit && (hit.last_updated || hit.freshness)
+          ? hit.last_updated || hit.freshness
+          : "",
+        ($("hcsc-env") && $("hcsc-env").value) || "",
+        selectedPeriod() || "",
+        selectedGeoBreakdown() || ""
+      );
+      if (showND) base.push(formula || "");
+      lines.push(
+        base
           .map(function (v) {
             return '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
           })
@@ -526,6 +924,7 @@
     });
     copyText(lines.join("\n"));
   }
+
 
 
   function selectedOuPath() {
@@ -2894,6 +3293,45 @@
         loadReport(true);
       });
     }
+    var bdPanel = $("hcsc-breakdown-panel");
+    if (bdPanel) {
+      bdPanel.addEventListener("click", function (ev) {
+        var copyBtn = ev.target.closest("[data-bd-copy-uid]");
+        if (copyBtn) {
+          copyText(copyBtn.getAttribute("data-bd-copy-uid") || "");
+          return;
+        }
+        var mapBtn = ev.target.closest("[data-bd-open-map]");
+        if (mapBtn) {
+          var mapKey = mapBtn.getAttribute("data-bd-open-map") || "";
+          hideBdTip();
+          setTab("mapping");
+          if (mapKey) openDrawer(mapKey);
+          return;
+        }
+        if (ev.target.closest("[data-bd-tip-close]")) {
+          hideBdTip();
+          return;
+        }
+        var info = ev.target.closest("[data-bd-tip]");
+        if (info) {
+          var tipRole = info.getAttribute("data-bd-tip");
+          var part =
+            (state.bdLineage && state.bdLineage[tipRole]) ||
+            lineagePart(tipRole, selectedBreakdownMeta());
+          showBdTip(info, part);
+          return;
+        }
+      });
+    }
+    document.addEventListener("click", function (ev) {
+      var tip = $("hcsc-bd-tip");
+      if (!tip || tip.hidden) return;
+      if (ev.target.closest("#hcsc-bd-tip") || ev.target.closest("[data-bd-tip]")) {
+        return;
+      }
+      hideBdTip();
+    });
     var bdPrev = $("hcsc-bd-prev");
     var bdNext = $("hcsc-bd-next");
     if (bdPrev) {

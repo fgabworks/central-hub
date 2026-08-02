@@ -2,7 +2,7 @@
 {% block title %}{{ page_title }} · {{ app_name }}{% endblock %}
 {% block head_extra %}
 <script src="{{ url_for('static', filename='js/dhis2_org_unit_picker.js') }}?v=ou-sync-immediate-1" defer></script>
-<script src="{{ url_for('static', filename='js/hcsc_indicator_summary.js') }}?v=hcsc-generate-fix-1" defer></script>
+<script src="{{ url_for('static', filename='js/hcsc_indicator_summary.js') }}?v=hcsc-bd-lineage-1" defer></script>
 {% endblock %}
 {% block content %}
 <section class="page-header page-header-compact hcsc-page-header">
@@ -213,20 +213,38 @@
         <option value="value_desc">Value high–low</option>
         <option value="value_asc">Value low–high</option>
       </select>
-      <button type="button" class="btn btn-sm" id="hcsc-bd-export-csv">Export CSV</button>
-      <button type="button" class="btn btn-sm" id="hcsc-bd-retry" hidden>Retry Breakdown</button>
+      <div class="hcsc-bd-actions">
+        <button type="button" class="btn btn-sm" id="hcsc-bd-export-csv">Export CSV</button>
+        <button type="button" class="btn btn-sm" id="hcsc-bd-retry" hidden>Retry Breakdown</button>
+      </div>
     </div>
+    <div class="hcsc-bd-formula" id="hcsc-bd-formula" hidden aria-label="Indicator formula and lineage"></div>
     <div class="hcsc-table-scroll">
-      <table class="hcsc-table" id="hcsc-breakdown-table">
+      <table class="hcsc-table hcsc-breakdown-table" id="hcsc-breakdown-table" data-bd-mode="percentage">
+        <colgroup>
+          <col class="hcsc-bd-col-ou">
+          <col class="hcsc-bd-col-num">
+          <col class="hcsc-bd-col-den">
+          <col class="hcsc-bd-col-result">
+          <col class="hcsc-bd-col-source">
+          <col class="hcsc-bd-col-val">
+          <col class="hcsc-bd-col-updated">
+        </colgroup>
         <thead>
           <tr>
-            <th>Organisation Unit</th>
-            <th>Numerator</th>
-            <th>Denominator</th>
-            <th>Result</th>
-            <th>Source</th>
-            <th>Validation</th>
-            <th>Last Updated</th>
+            <th scope="col">Organisation Unit</th>
+            <th scope="col" class="hcsc-bd-col-num" data-bd-col="num">
+              Numerator
+              <button type="button" class="hcsc-bd-info" data-bd-tip="num" title="Numerator lineage" aria-label="Numerator lineage">ⓘ</button>
+            </th>
+            <th scope="col" class="hcsc-bd-col-den" data-bd-col="den">
+              Denominator
+              <button type="button" class="hcsc-bd-info" data-bd-tip="den" title="Denominator lineage" aria-label="Denominator lineage">ⓘ</button>
+            </th>
+            <th scope="col" class="hcsc-bd-col-result" data-bd-col="result" id="hcsc-bd-result-h">Result</th>
+            <th scope="col">Source</th>
+            <th scope="col">Validation</th>
+            <th scope="col">Last Updated</th>
           </tr>
         </thead>
         <tbody id="hcsc-breakdown-tbody">
@@ -234,6 +252,7 @@
         </tbody>
       </table>
     </div>
+    <div class="hcsc-bd-tip" id="hcsc-bd-tip" hidden role="dialog" aria-label="Lineage details"></div>
     <div class="hcsc-breakdown-pager" id="hcsc-breakdown-pager" hidden>
       <button type="button" class="btn btn-sm" id="hcsc-bd-prev">Previous</button>
       <span class="muted" id="hcsc-bd-page-label">Page 1</span>
@@ -344,16 +363,25 @@
 
   <section class="hcsc-tab-panel" data-panel="mapping" id="hcsc-panel-mapping" hidden>
     <div class="hcsc-table-scroll">
-      <table class="data-table hcsc-table" id="hcsc-mapping-table">
+      <table class="hcsc-table hcsc-mapping-table" id="hcsc-mapping-table">
+        <colgroup>
+          <col>
+          <col>
+          <col>
+          <col>
+          <col>
+          <col>
+          <col>
+        </colgroup>
         <thead>
           <tr>
-            <th>Indicator</th>
-            <th>Badge</th>
-            <th>Source type</th>
-            <th>Owner</th>
-            <th>UID</th>
-            <th>Table / view</th>
-            <th>Status</th>
+            <th scope="col">Indicator</th>
+            <th scope="col">Badge</th>
+            <th scope="col">Source type</th>
+            <th scope="col">Owner</th>
+            <th scope="col">UID</th>
+            <th scope="col">Table / view</th>
+            <th scope="col">Status</th>
           </tr>
         </thead>
         <tbody id="hcsc-mapping-tbody">

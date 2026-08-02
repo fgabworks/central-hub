@@ -80,7 +80,7 @@ class ReportGenerationPageContractTests(unittest.TestCase):
         self.assertIn('id="hcsc-ou"', html)
         self.assertIn('type="hidden"', html)
         self.assertIn("data-report-url", html)
-        self.assertIn("hcsc-generate-fix-1", html)
+        self.assertIn("hcsc-bd-lineage-1", html)
         self.assertIn("ou-sync-immediate-1", html)
         self.assertNotIn("BOOT && BOOT.environments", js)
         self.assertIn("(boot && boot.environments)", js)

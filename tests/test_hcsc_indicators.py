@@ -1611,7 +1611,7 @@ class GenStateMachineContractTests(unittest.TestCase):
         self.assertIn("#hcsc-cards.is-stale .hcsc-skel", css)
         self.assertIn("animation: none !important", css)
         self.assertIn("@keyframes hcsc-spin", css)
-        self.assertIn("hcsc-generate-fix-1", html)
+        self.assertIn("hcsc-bd-lineage-1", html)
         self.assertIn("ou-sync-immediate-1", html)
 
 
@@ -1647,7 +1647,7 @@ class StatusStripCopyTests(unittest.TestCase):
         self.assertIn("min-height: 5.75rem", css)
         self.assertIn("min-height: 4.5rem", css)
         self.assertIn("hcsc-status-actions-spacer", js)
-        self.assertIn("hcsc-generate-fix-1", html)
+        self.assertIn("hcsc-bd-lineage-1", html)
         # Initial HTML already has distinct badge + helper
         self.assertIn(">Awaiting selection</span>", html)
         self.assertIn(">Select an organisation unit to continue.</p>", html)
