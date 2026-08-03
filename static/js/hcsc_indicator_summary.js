@@ -2620,25 +2620,27 @@
         ? Math.max(CLIENT_TIMEOUT_MS, 180000)
         : CLIENT_TIMEOUT_MS;
     var selectedPath = ouPicker && ouPicker.selectedPath ? ouPicker.selectedPath() : null;
-    if (selectedPath && selectedPath.level === 1) {
-      // National analytics batches routinely exceed the default DHIS2 10s server timeout;
-      // keep the browser wait aligned with HCSC_NATIONAL_ANALYTICS_TIMEOUT_SECONDS.
-      timeoutMs = Math.max(timeoutMs, 120000);
+    var isNationalScope = !!(selectedPath && selectedPath.level === 1);
+    // National analytics is a large batched DHIS2 request — do not abort in the browser.
+    // User can still Cancel; server uses HCSC_NATIONAL_ANALYTICS_TIMEOUT_SECONDS (default 600s).
+    if (!isNationalScope) {
+      state.timeoutTimer = setTimeout(function () {
+        if (state.activeRequestId !== requestId) return;
+        stopActiveRequest("timeout");
+        state.lastRunOk = false;
+        state.errorMessage = "Request timed out";
+        state.lastDiagnostics = buildDiagnostics();
+        state.genSubPhase = "";
+        setGenPhase(GEN.TIMED_OUT, {
+          explicitMsg: "Request timed out.",
+          errorMessage: "Request timed out",
+        });
+        renderCards(state.results);
+        validateForm();
+      }, timeoutMs);
+    } else {
+      state.timeoutTimer = null;
     }
-    state.timeoutTimer = setTimeout(function () {
-      if (state.activeRequestId !== requestId) return;
-      stopActiveRequest("timeout");
-      state.lastRunOk = false;
-      state.errorMessage = "Request timed out";
-      state.lastDiagnostics = buildDiagnostics();
-      state.genSubPhase = "";
-      setGenPhase(GEN.TIMED_OUT, {
-        explicitMsg: "Request timed out.",
-        errorMessage: "Request timed out",
-      });
-      renderCards(state.results);
-      validateForm();
-    }, timeoutMs);
 
     function fetchJson(url) {
       var fetchOpts = { credentials: "same-origin" };

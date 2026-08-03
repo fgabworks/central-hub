@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -74,11 +75,47 @@ class HcscNationalExportTests(unittest.TestCase):
     def test_resolve_analytics_timeout_gives_national_headroom(self):
         from hub.hcsc_indicators.analytics import resolve_analytics_timeout
 
-        self.assertGreaterEqual(resolve_analytics_timeout(ou_level=1), 90.0)
+        self.assertGreaterEqual(resolve_analytics_timeout(ou_level=1), 600.0)
         self.assertGreaterEqual(resolve_analytics_timeout(ou_level=2), 60.0)
         self.assertLess(resolve_analytics_timeout(ou_level=2), resolve_analytics_timeout(ou_level=1))
         multi = resolve_analytics_timeout(org_unit=["a", "b", "c"] * 10, ou_level=2)
         self.assertGreaterEqual(multi, 60.0)
+        with mock.patch.dict(os.environ, {"HCSC_NATIONAL_ANALYTICS_TIMEOUT_SECONDS": "0"}, clear=False):
+            self.assertEqual(resolve_analytics_timeout(ou_level=1), 0.0)
+
+    def test_national_dx_chunk_size_and_batch_split(self):
+        from hub.hcsc_indicators.analytics import (
+            analytics_dx_chunk_size,
+            fetch_analytics_batch,
+        )
+
+        self.assertEqual(analytics_dx_chunk_size(ou_level=1), 6)
+        self.assertEqual(analytics_dx_chunk_size(ou_level=2), 24)
+        with mock.patch.dict(os.environ, {"HCSC_ANALYTICS_DX_CHUNK_NATIONAL": "3"}):
+            self.assertEqual(analytics_dx_chunk_size(ou_level=1), 3)
+            dx = [
+                "fxmvSiKfEpn",
+                "qzjKcfO9J2w",
+                "LOMZy9q1euI",
+                "BSqDSIpHhoT",
+                "jkgkU9EiJ5k",
+                "fgfeI3Az7zv",
+                "r5cHtnYeyXd",
+            ]
+            client = FakeAnalyticsClient({u: 1.0 for u in dx}, environment="stage")
+            batch = fetch_analytics_batch(
+                client,
+                dx_uids=dx,
+                period="2026Q2",
+                org_unit=NATIONAL_UID,
+                ou_level=1,
+            )
+            self.assertEqual(batch["http_requests"], 3)  # 7 UIDs / chunk 3
+            self.assertEqual(batch["request"]["parameters"]["dx_chunk_size"], 3)
+            self.assertEqual(batch["request"]["parameters"]["dx_chunks"], 3)
+            self.assertEqual(len(batch["values"]), 7)
+
+    def test_national_chunks_analytics_dx_and_skips_child_listing(self):
         self.store.list_children = lambda *args, **kwargs: self.fail("national report listed child OUs")
         self.store.list_descendants_at_level = (
             lambda *args, **kwargs: self.fail("national report listed descendant OUs")
@@ -89,8 +126,9 @@ class HcscNationalExportTests(unittest.TestCase):
         self.assertEqual(result["scope_label"], "National Level")
         self.assertEqual(result["org_unit_name"], "Philippines (National)")
         self.assertEqual(result["org_unit_level"], 1)
-        self.assertEqual(self.clients["stage"].get_analytics_calls, 1)
-        # National analytics must not use the short 10s OU-picker DHIS2 default.
+        # National dx UIDs are chunked to avoid Live nginx 504 on one large analytics call.
+        self.assertGreaterEqual(self.clients["stage"].get_analytics_calls, 2)
+        # Per-chunk timeout (default 90s), not the short 10s OU-picker default.
         self.assertGreaterEqual(float(self.clients["stage"].last_analytics_timeout or 0), 60.0)
         self.assertEqual(
             [r["indicator_key"] for r in result["results"]],
@@ -115,7 +153,7 @@ class HcscNationalExportTests(unittest.TestCase):
         self.assertEqual(rows[0]["Environment"], "stage")
         self.assertIn(rows[0]["Source type"], {"PI", "IND", "DE", "SQL", "LP"})
         self.assertTrue(filename.endswith(".csv"))
-        self.assertEqual(self.clients["stage"].get_analytics_calls, 1)
+        self.assertGreaterEqual(self.clients["stage"].get_analytics_calls, 2)
 
     def test_lower_level_and_environment_cache_isolation_remain(self):
         lower = self.service.report(
@@ -134,8 +172,9 @@ class HcscNationalExportTests(unittest.TestCase):
         self.assertEqual(national["scope_label"], "National Level")
         self.assertEqual(live["environment"], "live")
         self.assertTrue(cached["cache"]["hit"])
-        self.assertEqual(self.clients["stage"].get_analytics_calls, 2)
-        self.assertEqual(self.clients["live"].get_analytics_calls, 1)
+        # Region: 1 call (dx chunk 24). National stage+live: 2 calls each (dx chunk 6).
+        self.assertEqual(self.clients["stage"].get_analytics_calls, 3)
+        self.assertEqual(self.clients["live"].get_analytics_calls, 2)
 
 
 class HcscNationalUiAndRouteTests(unittest.TestCase):
@@ -170,6 +209,8 @@ class HcscNationalUiAndRouteTests(unittest.TestCase):
         self.assertIn("data-export-csv-url", template)
         self.assertIn("Download CSV", template)
         self.assertIn("Philippines (National) → lower selectors stay disabled", template)
+        self.assertIn("isNationalScope", js)
+        self.assertIn("do not abort in the browser", js)
 
     def test_csv_download_route(self):
         from app import create_app

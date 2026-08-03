@@ -4,7 +4,16 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**HCSC-RF National reporting and CSV export (2026-08-03)**
+**HCSC-RF National analytics 504 mitigation (2026-08-03)**
+
+Live National `2026Q2` / `DcGhhRsspFX` failed after ~10 minutes with nginx
+**HTTP 504** on one large `/api/analytics.json` (all HCSC dx UIDs). Hub now:
+chunks national dx (default 6 via `HCSC_ANALYTICS_DX_CHUNK_NATIONAL`), uses a
+per-chunk timeout (`HCSC_ANALYTICS_CHUNK_TIMEOUT_SECONDS`, default 90), retries
+504 in `Dhis2Client`, and keeps national browser abort disabled. Focused tests:
+`tests/test_hcsc_national_export.py`.
+
+Prior: **HCSC-RF National reporting and CSV export (2026-08-03)**
 
 `/dhis2/hcsc-indicators` now exposes National and Region in one `Region / National`
 selector, followed by Province, Municipality/City, and Barangay. National resolves the environment-specific
@@ -15,9 +24,7 @@ National payloads show `Philippines (National)` and `National Level`. The new
 with result, numerator, denominator, source type/UID, OU, period, environment, and
 last-updated timestamp. Focused coverage: `tests/test_hcsc_national_export.py` plus
 the existing HCSC indicator, geographic-breakdown, and generation E2E modules.
-Live metadata confirmed `DcGhhRsspFX` as `Philippines` level 1; the GET-only 2026Q2
-analytics validation attempt timed out at the configured 10 seconds, so no Live
-total parity claim is recorded.
+Live metadata confirmed `DcGhhRsspFX` as `Philippines` level 1.
 
 Prior: **Shared 48px page-header standardization (2026-08-02)**
 

@@ -28,7 +28,7 @@ from hub.settings import Dhis2Settings
 _UID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]{10}$")
 
 # Retry only these HTTP statuses on GET (idempotent).
-_RETRY_STATUSES = frozenset({429, 502, 503})
+_RETRY_STATUSES = frozenset({429, 502, 503, 504})
 
 # Allowlisted metadata collections for name search / detail fetch.
 ALLOWED_RESOURCES: dict[str, str] = {
@@ -870,9 +870,13 @@ class Dhis2Client:
         if not self.settings.base_url:
             raise Dhis2Error("DHIS2 base URL is not configured.")
         url = urljoin(self.settings.base_url.rstrip("/") + "/", path.lstrip("/"))
-        timeout_s = float(
-            self.settings.timeout_seconds if timeout is None else timeout
-        )
+        if timeout is not None and float(timeout) <= 0:
+            # Explicit unlimited wait (HCSC national analytics).
+            timeout_s: float | None = None
+        elif timeout is None:
+            timeout_s = float(self.settings.timeout_seconds)
+        else:
+            timeout_s = float(timeout)
         retries = (
             self.settings.retry_max if retry_max is None else retry_max
         )
@@ -902,7 +906,8 @@ class Dhis2Client:
                 self._stats["timeouts"] += 1
                 self._stats["errors"] += 1
                 last_error = Dhis2Error(
-                    f"DHIS2 request timed out after {timeout_s:g}s."
+                    "DHIS2 request timed out"
+                    + (f" after {timeout_s:g}s." if timeout_s is not None else ".")
                 )
                 continue
             except requests.ConnectionError:
@@ -928,14 +933,27 @@ class Dhis2Client:
             if response.status_code in _RETRY_STATUSES:
                 self._stats["errors"] += 1
                 body = redact_text(response.text[:240], self._secrets)
-                last_error = Dhis2Error(
-                    f"DHIS2 returned HTTP {response.status_code}. {body}".strip(),
-                    status_code=response.status_code,
-                )
+                if response.status_code == 504 or "504 Gateway" in (response.text or ""):
+                    last_error = Dhis2Error(
+                        "DHIS2 gateway timed out (HTTP 504). "
+                        "Retry with smaller analytics batches or try again later.",
+                        status_code=504,
+                    )
+                else:
+                    last_error = Dhis2Error(
+                        f"DHIS2 returned HTTP {response.status_code}. {body}".strip(),
+                        status_code=response.status_code,
+                    )
                 continue
             if response.status_code >= 400:
                 self._stats["errors"] += 1
                 body = redact_text(response.text[:240], self._secrets)
+                if response.status_code == 504 or "504 Gateway" in (response.text or ""):
+                    raise Dhis2Error(
+                        "DHIS2 gateway timed out (HTTP 504). "
+                        "Retry with smaller analytics batches or try again later.",
+                        status_code=504,
+                    )
                 raise Dhis2Error(
                     f"DHIS2 returned HTTP {response.status_code}. {body}".strip(),
                     status_code=response.status_code,
