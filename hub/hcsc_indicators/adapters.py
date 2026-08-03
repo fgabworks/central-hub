@@ -50,6 +50,7 @@ class Dhis2AnalyticsAdapter:
         period: str,
         org_unit: str,
         client: Dhis2Client | None = None,
+        ou_level: int | None = None,
     ) -> dict[str, Any]:
         if client is None:
             raise ValueError("Dhis2AnalyticsAdapter requires a read-only DHIS2 client.")
@@ -62,6 +63,7 @@ class Dhis2AnalyticsAdapter:
             period=period,
             org_unit=org_unit,
             include_num_den=True,
+            ou_level=ou_level,
         )
         values = batch.get("values") or {}
         num_den = batch.get("num_den") or {}

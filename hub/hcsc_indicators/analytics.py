@@ -2,12 +2,47 @@
 
 from __future__ import annotations
 
+import os
 import time
 from typing import Any
 from urllib.parse import urlencode
 
 from hub.dhis2.client import Dhis2Client
 from hub.dhis2.redact import redact_url
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = (os.environ.get(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        return max(1.0, float(raw))
+    except ValueError:
+        return default
+
+
+def resolve_analytics_timeout(
+    *,
+    org_unit: str | list[str] | None = None,
+    ou_level: int | None = None,
+) -> float:
+    """HCSC report analytics timeouts (separate from the short OU-picker default).
+
+    National-scope batched dx queries routinely exceed DHIS2_TIMEOUT_SECONDS (10s).
+    """
+    base = _env_float("HCSC_ANALYTICS_TIMEOUT_SECONDS", 60.0)
+    national = _env_float("HCSC_NATIONAL_ANALYTICS_TIMEOUT_SECONDS", 90.0)
+    ou_list = (
+        [u for u in org_unit if u]
+        if isinstance(org_unit, list)
+        else ([org_unit] if org_unit else [])
+    )
+    if ou_level == 1:
+        return national
+    # Multi-OU geographic breakdowns also need headroom beyond the 10s default.
+    if len(ou_list) > 1:
+        return max(base, min(national, base + min(len(ou_list), 40) * 0.5))
+    return base
 
 
 def analytics_request_description(
@@ -131,6 +166,8 @@ def fetch_analytics_batch(
     period: str,
     org_unit: str | list[str],
     include_num_den: bool = True,
+    timeout: float | None = None,
+    ou_level: int | None = None,
 ) -> dict[str, Any]:
     """One or more GET /api/analytics.json calls for all UIDs (optionally multi-OU)."""
     ou_list = (
@@ -164,6 +201,12 @@ def fetch_analytics_batch(
         chunk_size = 40
     chunk_size = max(1, min(chunk_size, 80))
 
+    timeout_s = float(
+        timeout
+        if timeout is not None
+        else resolve_analytics_timeout(org_unit=ou_list, ou_level=ou_level)
+    )
+
     started = time.perf_counter()
     merged_values: dict[str, float | None] = {}
     merged_num_den: dict[str, dict[str, float | None]] = {}
@@ -183,7 +226,7 @@ def fetch_analytics_batch(
             ("skipMeta", "false"),
             ("includeNumDen", "true" if include_num_den else "false"),
         ]
-        payload = client.get_analytics(params)
+        payload = client.get_analytics(params, timeout=timeout_s)
         http_requests += 1
         parsed = parse_analytics_payload(payload if isinstance(payload, dict) else {})
         raw_rows += len(payload.get("rows") or []) if isinstance(payload, dict) else 0
@@ -218,6 +261,7 @@ def fetch_analytics_batch(
     request_meta["base_url"] = redact_url(getattr(client.settings, "base_url", "") or "")
     request_meta["parameters"]["ou_count"] = len(ou_list)
     request_meta["http_requests"] = http_requests
+    request_meta["timeout_seconds"] = timeout_s
     return {
         "ok": True,
         "values": merged_values,

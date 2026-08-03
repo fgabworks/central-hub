@@ -26,6 +26,8 @@
 
   function createPicker(options) {
     var opts = options || {};
+    var levels = Array.isArray(opts.levels) && opts.levels.length ? opts.levels : OU_LEVELS;
+    var includeNationalInRoots = !!opts.includeNationalInRoots;
     var root = opts.root;
     var hiddenEl = opts.hiddenEl;
     var pathEl = opts.pathEl;
@@ -201,9 +203,12 @@
       var level = null;
       selects.forEach(function (sel, index) {
         if (!sel || !sel.value) return;
+        var opt = sel.selectedOptions && sel.selectedOptions[0];
         uid = sel.value;
-        name = (sel.selectedOptions[0] && sel.selectedOptions[0].textContent) || "";
-        level = OU_LEVELS[index] ? OU_LEVELS[index].level : null;
+        name = (opt && opt.textContent) || "";
+        level = opt && opt.dataset.level
+          ? Number(opt.dataset.level)
+          : (levels[index] ? levels[index].level : null);
         if (name) parts.push(name);
       });
       return { uid: uid, name: name, path: parts.join(" › "), level: level };
@@ -326,7 +331,7 @@
       for (var i = index; i < selects.length; i++) {
         var sel = selects[i];
         if (!sel) continue;
-        sel.innerHTML = '<option value="">' + OU_LEVELS[i].label + "…</option>";
+        sel.innerHTML = '<option value="">' + levels[i].label + "…</option>";
         sel.disabled = i !== 0;
       }
     }
@@ -344,6 +349,63 @@
         sel.appendChild(opt);
       });
       sel.disabled = !!keepDisabled || !(rows || []).length;
+    }
+
+    function normalizeNationalRows(rows) {
+      return (rows || []).map(function (ou) {
+        var national = Object.assign({}, ou);
+        national.name = "Philippines (National)";
+        national.level = 1;
+        // National is the report aggregate scope — never cascade into Province+.
+        national.has_children = false;
+        return national;
+      });
+    }
+
+    function mergeNationalFirst(nationalRows, regionRows) {
+      var nationals = normalizeNationalRows(nationalRows);
+      var nationalIds = {};
+      nationals.forEach(function (ou) {
+        var id = ou.id || ou.uid || "";
+        if (id) nationalIds[id] = true;
+      });
+      var regions = (regionRows || []).filter(function (ou) {
+        var id = ou.id || ou.uid || "";
+        if (!id || nationalIds[id]) return false;
+        // Keep level-1 rows out of the region list; National owns that slot.
+        if (ou.level != null && Number(ou.level) === 1) return false;
+        return true;
+      });
+      return nationals.concat(regions);
+    }
+
+    function loadNationalRoots(refresh) {
+      var nationalKey = "level:1";
+      var cachedNational = !refresh ? cacheGet(nationalKey) : null;
+      if (cachedNational && cachedNational.length) {
+        return Promise.resolve(cachedNational);
+      }
+      var nationalUrl = buildUrl({
+        environment: env(),
+        limit: 5,
+        level: 1,
+        refresh: refresh ? "1" : "",
+      });
+      return dedupeFetch(
+        env() + ":" + nationalKey + (refresh ? ":refresh" : ""),
+        nationalUrl
+      ).then(function (nationalData) {
+        applyAvailability(nationalData || {});
+        var nationalRows =
+          nationalData && nationalData.ok !== false
+            ? nationalData.org_units || nationalData.orgunits || []
+            : [];
+        nationalRows = normalizeNationalRows(nationalRows);
+        cacheSet(nationalKey, nationalRows);
+        return nationalRows;
+      }).catch(function () {
+        return [];
+      });
     }
 
     function buildUrl(params) {
@@ -374,7 +436,7 @@
     function loadOptions(index, parentUid, refresh) {
       var sel = selects[index];
       if (!sel) return Promise.resolve();
-      var meta = OU_LEVELS[index];
+      var meta = levels[index];
       var label = meta.label;
       sel.innerHTML = '<option value="">Loading…</option>';
       sel.disabled = true;
@@ -409,15 +471,23 @@
             return handleFetchError(data, label, sel);
           }
           var rows = (data && (data.org_units || data.orgunits)) || [];
-          cacheSet(key, rows);
-          fillSelect(sel, label, rows, false);
-          lastFailed = null;
-          if (data && data.maintenance) {
-            setError(data.maintenance_message || MAINTENANCE_MSG, true);
-          } else {
-            setError(rows.length ? "" : "No " + label.toLowerCase() + " options found.");
+          var withNational = Promise.resolve(rows);
+          if (includeNationalInRoots && index === 0 && !parentUid) {
+            withNational = loadNationalRoots(!!refresh).then(function (nationalRows) {
+              return mergeNationalFirst(nationalRows, rows);
+            });
           }
-          return rows;
+          return withNational.then(function (allRows) {
+            cacheSet(key, allRows);
+            fillSelect(sel, label, allRows, false);
+            lastFailed = null;
+            if (data && data.maintenance) {
+              setError(data.maintenance_message || MAINTENANCE_MSG, true);
+            } else {
+              setError(allRows.length ? "" : "No " + label.toLowerCase() + " options found.");
+            }
+            return allRows;
+          });
         })
         .catch(function (err) {
           var aborted = err && (err.name === "AbortError" || err.message === "The user aborted a request.");
@@ -453,7 +523,7 @@
       setRefreshingMeta(true);
       var startRefresh = Promise.resolve({ ok: true });
       if (refreshUrl) {
-        var qs = "?environment=" + encodeURIComponent(env()) + "&level=2";
+        var qs = "?environment=" + encodeURIComponent(env()) + "&level=" + levels[0].level;
         startRefresh = fetch(refreshUrl + qs, {
           method: "POST",
           credentials: "same-origin",
@@ -498,7 +568,7 @@
     function ensureRoots(force, refresh) {
       if (rootsLoaded && !force && !refresh) return Promise.resolve();
       if (rootsLoading && !force && !refresh) {
-        return inFlight[env() + ":level:2"] || Promise.resolve();
+        return inFlight[env() + ":level:" + levels[0].level] || Promise.resolve();
       }
       rootsLoading = true;
       return loadOptions(0, null, !!refresh).then(function (rows) {
@@ -533,6 +603,11 @@
       // Commit the selected UID immediately so Generate/report can use it
       // without waiting for child options to finish loading.
       syncSelection();
+      var selectedLevel = opt && opt.dataset.level ? Number(opt.dataset.level) : null;
+      if (includeNationalInRoots && index === 0 && selectedLevel === 1) {
+        // National is already the aggregate scope; keep Province and below disabled.
+        return;
+      }
       var hasChildren = !opt || opt.dataset.hasChildren !== "0";
       if (hasChildren && index + 1 < selects.length) {
         loadOptions(index + 1, uid, false)
@@ -568,7 +643,7 @@
         ensureRoots(true, false).then(function () { syncSelection(); });
       } else {
         if (selects[0]) {
-          selects[0].innerHTML = '<option value="">Region…</option>';
+          selects[0].innerHTML = '<option value="">' + levels[0].label + '…</option>';
           selects[0].disabled = false;
         }
         setSyncLabel(lastSyncedAt[env()] || "", "", false);
@@ -657,7 +732,7 @@
       commitSelection(id, ou.name || id, pathLabel, "search");
       resetFrom(0);
       if (selects[0]) {
-        selects[0].innerHTML = '<option value="">Region…</option>';
+        selects[0].innerHTML = '<option value="">' + levels[0].label + '…</option>';
         selects[0].disabled = false;
       }
       syncSelection();
@@ -776,7 +851,7 @@
       });
     }
 
-    OU_LEVELS.forEach(function (lvl, i) {
+    levels.forEach(function (lvl, i) {
       var el =
         (opts.selects && opts.selects[lvl.id]) ||
         (root && root.querySelector('[data-ou-level="' + i + '"]')) ||
@@ -848,7 +923,7 @@
     resetFrom(0);
     if (lazyRoots) {
       if (selects[0]) {
-        selects[0].innerHTML = '<option value="">Region…</option>';
+        selects[0].innerHTML = '<option value="">' + levels[0].label + '…</option>';
         selects[0].disabled = false;
       }
       syncSelection();

@@ -4,7 +4,22 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**Shared 48px page-header standardization (2026-08-02)**
+**HCSC-RF National reporting and CSV export (2026-08-03)**
+
+`/dhis2/hcsc-indicators` now exposes National and Region in one `Region / National`
+selector, followed by Province, Municipality/City, and Barangay. National resolves the environment-specific
+DHIS2 level-1 Philippines UID and sends that single UID through the unchanged registry
+and batched analytics path; no child enumeration or national formulas were added.
+National payloads show `Philippines (National)` and `National Level`. The new
+`/api/dhis2/hcsc-indicators/export.csv` endpoint downloads all generated result rows
+with result, numerator, denominator, source type/UID, OU, period, environment, and
+last-updated timestamp. Focused coverage: `tests/test_hcsc_national_export.py` plus
+the existing HCSC indicator, geographic-breakdown, and generation E2E modules.
+Live metadata confirmed `DcGhhRsspFX` as `Philippines` level 1; the GET-only 2026Q2
+analytics validation attempt timed out at the configured 10 seconds, so no Live
+total parity claim is recorded.
+
+Prior: **Shared 48px page-header standardization (2026-08-02)**
 
 All hub pages use `templates/partials/section_header.html`: 48px title row
 (20px/semibold title + info tooltip + right badges/actions), optional separate

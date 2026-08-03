@@ -6244,7 +6244,7 @@ body.qn-maximized .qn-history[open] {
   width: 100%;
   min-width: 0;
 }
-/* Row 1: six equal fields */
+/* Row 1: Env | Period | Region/National | Province | Municipality/City | Barangay */
 .hcsc-filter-row-primary {
   grid-template-columns: repeat(6, minmax(0, 1fr));
 }

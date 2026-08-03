@@ -694,6 +694,7 @@ class Dhis2ReportsService:
     @classmethod
     def _map_org_unit_rows(cls, items: list[Any]) -> list[dict[str, Any]]:
         level_labels = {
+            1: "national",
             2: "region",
             3: "province",
             4: "municipality_city",

@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{{ page_title }} · {{ app_name }}{% endblock %}
 {% block head_extra %}
-<script src="{{ url_for('static', filename='js/dhis2_org_unit_picker.js') }}?v=ou-sync-immediate-1" defer></script>
-<script src="{{ url_for('static', filename='js/hcsc_indicator_summary.js') }}?v=hcsc-bd-lineage-1" defer></script>
+<script src="{{ url_for('static', filename='js/dhis2_org_unit_picker.js') }}?v=ou-region-national-4" defer></script>
+<script src="{{ url_for('static', filename='js/hcsc_indicator_summary.js') }}?v=hcsc-national-timeout-1" defer></script>
 {% endblock %}
 {% block content %}
 {% set sh_title = page_title %}
@@ -21,6 +21,7 @@
      class="hcsc-root"
      data-overview-url="{{ url_for('api_hcsc_indicators_overview') }}"
      data-report-url="{{ url_for('api_hcsc_indicators_report') }}"
+     data-export-csv-url="{{ url_for('api_hcsc_indicators_export_csv') }}"
      data-category-url="{{ url_for('api_hcsc_indicators_category', section='__SECTION__') }}"
      data-validation-url="{{ url_for('api_hcsc_indicators_validation') }}"
      data-detail-url="{{ url_for('api_hcsc_indicator_detail', key='__KEY__') }}"
@@ -48,9 +49,9 @@
       </div>
 
       <div class="hcsc-filter-field hcsc-filter-region">
-        <label class="hcsc-field-label" for="hcsc-ou-region">Region</label>
-        <select id="hcsc-ou-region" class="hcsc-control hcsc-ou-select" data-ou-level="0" aria-label="Region">
-          <option value="">Region…</option>
+        <label class="hcsc-field-label" for="hcsc-ou-region">Region / National</label>
+        <select id="hcsc-ou-region" class="hcsc-control hcsc-ou-select" data-ou-level="0" aria-label="Region / National">
+          <option value="">Region / National…</option>
         </select>
       </div>
 
@@ -111,17 +112,18 @@
 
       <div class="hcsc-filter-field hcsc-filter-geo">
         <label class="hcsc-field-label" for="hcsc-geo-breakdown">
-          Geographic Breakdown
-          <button type="button" class="hcsc-info-btn" id="hcsc-geo-help-btn" aria-expanded="false" aria-controls="hcsc-geo-help" title="About geographic breakdown">ⓘ</button>
+          Disaggregation Level
+          <button type="button" class="hcsc-info-btn" id="hcsc-geo-help-btn" aria-expanded="false" aria-controls="hcsc-geo-help" title="About disaggregation level">ⓘ</button>
         </label>
-        <select id="hcsc-geo-breakdown" class="hcsc-control" aria-label="Geographic Breakdown" aria-describedby="hcsc-geo-estimate">
+        <select id="hcsc-geo-breakdown" class="hcsc-control" aria-label="Disaggregation Level" aria-describedby="hcsc-geo-estimate">
           <option value="none">None (selected area total)</option>
         </select>
         <p class="muted hcsc-geo-estimate" id="hcsc-geo-estimate">Select a breakdown to see estimate.</p>
         <div class="hcsc-geo-help" id="hcsc-geo-help" hidden role="region" aria-label="Geographic breakdown help">
-          <p class="hcsc-geo-help-title">About Geographic Breakdown</p>
+          <p class="hcsc-geo-help-title">About Disaggregation Level</p>
           <ul>
-            <li>Region → Province / Municipality/City / Barangay</li>
+            <li>Region / National → Province / Municipality/City / Barangay</li>
+            <li>Philippines (National) → lower selectors stay disabled</li>
             <li>Province → Municipality/City / Barangay</li>
             <li>Municipality/City → Barangay</li>
             <li>Barangay → no lower breakdown</li>
@@ -305,10 +307,9 @@
       </select>
       <div class="hcsc-toolbar-actions">
         <details class="hcsc-menu" id="hcsc-export-menu">
-          <summary class="btn btn-sm">Export</summary>
+          <summary class="btn btn-sm">Download CSV</summary>
           <div class="hcsc-menu-panel" role="menu">
-            <button type="button" class="hcsc-menu-item" data-export="csv" role="menuitem">CSV (visible rows)</button>
-            <button type="button" class="hcsc-menu-item" data-export="json" role="menuitem">JSON (visible rows)</button>
+            <button type="button" class="hcsc-menu-item" data-export="csv" role="menuitem">Download CSV (all results)</button>
           </div>
         </details>
         <details class="hcsc-menu" id="hcsc-columns-menu">

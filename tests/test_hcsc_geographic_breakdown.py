@@ -53,9 +53,11 @@ class MultiOuAnalyticsClient:
         self.get_analytics_calls = 0
         self.ou_batches: list[list[str]] = []
         self.write_calls = 0
+        self.last_analytics_timeout = None
 
-    def get_analytics(self, params):
+    def get_analytics(self, params, timeout=None):
         self.get_analytics_calls += 1
+        self.last_analytics_timeout = timeout
         dx: list[str] = []
         ous: list[str] = ["OuUidParent01"]
         if isinstance(params, list):
@@ -429,10 +431,10 @@ class GeographicBreakdownServiceTests(unittest.TestCase):
         real = self.clients  # noqa: F841 — factory uses self.clients
 
         class SlowClient(MultiOuAnalyticsClient):
-            def get_analytics(self, params):
+            def get_analytics(self, params, timeout=None):
                 started.set()
                 release.wait(timeout=3)
-                return super().get_analytics(params)
+                return super().get_analytics(params, timeout=timeout)
 
         slow = SlowClient(
             {
@@ -491,7 +493,7 @@ class GeographicBreakdownServiceTests(unittest.TestCase):
 
     def test_failed_breakdown_preserves_parent(self):
         class BoomOnMulti(MultiOuAnalyticsClient):
-            def get_analytics(self, params):
+            def get_analytics(self, params, timeout=None):
                 ous: list[str] = []
                 if isinstance(params, list):
                     for k, v in params:
@@ -499,7 +501,7 @@ class GeographicBreakdownServiceTests(unittest.TestCase):
                             ous = [x for x in str(v)[3:].split(";") if x]
                 if len(ous) > 1:
                     raise Dhis2Error("analytics failed", status_code=500)
-                return super().get_analytics(params)
+                return super().get_analytics(params, timeout=timeout)
 
         boom = BoomOnMulti(
             {
@@ -558,7 +560,7 @@ class GeographicBreakdownUiContractTests(unittest.TestCase):
         html = (ROOT / "templates" / "hcsc_indicator_summary.html").read_text(encoding="utf-8")
         js = (ROOT / "static" / "js" / "hcsc_indicator_summary.js").read_text(encoding="utf-8")
         self.assertIn("Population Filter", html)
-        self.assertIn("Geographic Breakdown", html)
+        self.assertIn("Disaggregation Level", html)
         self.assertIn("Selected Area Summary", html)
         self.assertIn("hcsc-breakdown-panel", html)
         self.assertIn("Retry Breakdown", html)

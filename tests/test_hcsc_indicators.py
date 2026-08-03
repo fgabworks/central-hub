@@ -167,9 +167,11 @@ class FakeAnalyticsClient:
         )
         self.get_analytics_calls = 0
         self.write_calls = 0
+        self.last_analytics_timeout = None
 
-    def get_analytics(self, params):
+    def get_analytics(self, params, timeout=None):
         self.get_analytics_calls += 1
+        self.last_analytics_timeout = timeout
         dx = []
         if isinstance(params, list):
             for k, v in params:
@@ -1428,7 +1430,7 @@ class ParamCardLayoutContractTests(unittest.TestCase):
         css = (ROOT / "static" / "css" / "style.css").read_text(encoding="utf-8")
         picker = (ROOT / "static" / "js" / "dhis2_org_unit_picker.js").read_text(encoding="utf-8")
 
-        # Exact two-row filter: 6 primary + 6 secondary fields (Population + Geographic Breakdown).
+        # Exact two-row filter: National shares the Region field; 6 primary + 6 secondary fields.
         self.assertIn("hcsc-filter-row-primary", html)
         self.assertIn("hcsc-filter-row-secondary", html)
         self.assertIn("repeat(6, minmax(0, 1fr))", css)
@@ -1436,7 +1438,9 @@ class ParamCardLayoutContractTests(unittest.TestCase):
         self.assertIn("minmax(0, 24%)", css)
         self.assertIn("minmax(0, 14%)", css)
         self.assertIn("Population Filter", html)
-        self.assertIn("Geographic Breakdown", html)
+        self.assertIn("Disaggregation Level", html)
+        self.assertIn("Region / National", html)
+        self.assertNotIn('id="hcsc-ou-national"', html)
         self.assertIn("Selected Area Summary", html)
         self.assertNotIn(">Disaggregation<", html)
         self.assertIn("height: 36px", css)
@@ -1524,7 +1528,7 @@ class FilterCardLayoutStabilityTests(unittest.TestCase):
         self.assertIn('id="hcsc-ou-error"', html)
         self.assertIn(".hcsc-field-error[hidden]", css)
         self.assertIn("minmax(0, 1.4fr)", css)
-        self.assertIn("ou-sync-immediate-1", html)
+        self.assertIn("ou-region-national-4", html)
 
 
 class GenStateMachineContractTests(unittest.TestCase):
@@ -1611,8 +1615,8 @@ class GenStateMachineContractTests(unittest.TestCase):
         self.assertIn("#hcsc-cards.is-stale .hcsc-skel", css)
         self.assertIn("animation: none !important", css)
         self.assertIn("@keyframes hcsc-spin", css)
-        self.assertIn("hcsc-bd-lineage-1", html)
-        self.assertIn("ou-sync-immediate-1", html)
+        self.assertIn("hcsc-national-timeout-1", html)
+        self.assertIn("ou-region-national-4", html)
 
 
 class StatusStripCopyTests(unittest.TestCase):
@@ -1647,7 +1651,7 @@ class StatusStripCopyTests(unittest.TestCase):
         self.assertIn("min-height: 5.75rem", css)
         self.assertIn("min-height: 4.5rem", css)
         self.assertIn("hcsc-status-actions-spacer", js)
-        self.assertIn("hcsc-bd-lineage-1", html)
+        self.assertIn("hcsc-national-timeout-1", html)
         # Initial HTML already has distinct badge + helper
         self.assertIn(">Awaiting selection</span>", html)
         self.assertIn(">Select an organisation unit to continue.</p>", html)
@@ -1705,7 +1709,7 @@ class UiContractTests(unittest.TestCase):
         # Geographic breakdown table may show Numerator/Denominator for child OUs.
         main_table = html.split('id="hcsc-table"', 1)[1].split("</table>", 1)[0]
         self.assertNotIn(">Numerator</th>", main_table)
-        self.assertIn(">Numerator</th>", html)  # breakdown panel
+        self.assertIn("Numerator lineage", html)  # breakdown panel
         self.assertNotIn("This Report", html)
         self.assertNotIn("This Report", js)
         overview = (ROOT / "templates" / "dhis2_overview.html").read_text(encoding="utf-8")

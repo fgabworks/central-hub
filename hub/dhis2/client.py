@@ -311,10 +311,15 @@ class Dhis2Client:
             "raw": payload,
         }
 
-    def get_analytics(self, params: dict[str, Any] | list[tuple[str, str]]) -> dict[str, Any]:
+    def get_analytics(
+        self,
+        params: dict[str, Any] | list[tuple[str, str]],
+        *,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
         """GET /api/analytics.json — read-only aggregate values (no writes)."""
         self._require_ready()
-        return self._get_json("/api/analytics.json", params=params)
+        return self._get_json("/api/analytics.json", params=params, timeout=timeout)
 
     def _search_by_uid(self, uid: str) -> dict[str, Any]:
         try:

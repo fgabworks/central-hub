@@ -471,6 +471,7 @@ class OrgUnitStore:
         except (TypeError, ValueError):
             level_i = None
         level_labels = {
+            1: "national",
             2: "region",
             3: "province",
             4: "municipality_city",

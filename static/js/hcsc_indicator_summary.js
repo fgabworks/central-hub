@@ -937,6 +937,18 @@
     return (chip && chip.textContent) || "";
   }
 
+  function selectedOuParameterLabel() {
+    var selected = ouPicker && ouPicker.selectedPath ? ouPicker.selectedPath() : null;
+    var labels = {
+      1: "Region / National",
+      2: "Region / National",
+      3: "Province",
+      4: "Municipality/City",
+      5: "Barangay",
+    };
+    return (selected && labels[selected.level]) || "Region / National";
+  }
+
 
   function currentScopeKey() {
     var env = (($("hcsc-env") && $("hcsc-env").value) || "stage").toLowerCase();
@@ -1277,13 +1289,15 @@
         "</span>" +
         '<span class="hcsc-param-chip" title="' +
         escapeHtml(path) +
-        '"><span class="hcsc-chip-k">Organisation Unit</span> ' +
+        '"><span class="hcsc-chip-k">' +
+        escapeHtml(selectedOuParameterLabel()) +
+        "</span> " +
         escapeHtml(path) +
         "</span>" +
         '<span class="hcsc-param-chip"><span class="hcsc-chip-k">Population Filter</span> ' +
         escapeHtml(selectedPopulationLabel()) +
         "</span>" +
-        '<span class="hcsc-param-chip"><span class="hcsc-chip-k">Geographic Breakdown</span> ' +
+        '<span class="hcsc-param-chip"><span class="hcsc-chip-k">Disaggregation Level</span> ' +
         escapeHtml(selectedGeoLabel()) +
         "</span>";
     }
@@ -2605,6 +2619,12 @@
       wantGeo && wantGeo !== "none"
         ? Math.max(CLIENT_TIMEOUT_MS, 180000)
         : CLIENT_TIMEOUT_MS;
+    var selectedPath = ouPicker && ouPicker.selectedPath ? ouPicker.selectedPath() : null;
+    if (selectedPath && selectedPath.level === 1) {
+      // National analytics batches routinely exceed the default DHIS2 10s server timeout;
+      // keep the browser wait aligned with HCSC_NATIONAL_ANALYTICS_TIMEOUT_SECONDS.
+      timeoutMs = Math.max(timeoutMs, 120000);
+    }
     state.timeoutTimer = setTimeout(function () {
       if (state.activeRequestId !== requestId) return;
       stopActiveRequest("timeout");
@@ -2944,6 +2964,13 @@
       return;
     }
     ouPicker = window.CentralHubOuPicker.create({
+      levels: [
+        { id: "region", label: "Region / National", level: 2, limit: 50 },
+        { id: "province", label: "Province", level: 3, limit: 100 },
+        { id: "municipality", label: "Municipality/City", level: 4, limit: 200 },
+        { id: "barangay", label: "Barangay", level: 5, limit: 250 },
+      ],
+      includeNationalInRoots: true,
       root: $("hcsc-controls") || $("hcsc-ou-picker"),
       hiddenEl: $("hcsc-ou"),
       pathEl: null,
@@ -2963,6 +2990,13 @@
       storagePrefix: "centralhub.hcsc.ou.",
       idPrefix: "hcsc-ou-",
       onChange: function () {
+        var selected = ouPicker && ouPicker.selectedPath ? ouPicker.selectedPath() : null;
+        var kicker = $("hcsc-summary-kicker");
+        if (kicker) {
+          kicker.textContent = selected && selected.level === 1
+            ? "National Level"
+            : "Selected Area Summary";
+        }
         onScopeMaybeChanged();
       },
       onEnvironmentStatus: function (status) {
@@ -3041,41 +3075,11 @@
   }
 
   function exportVisible(kind) {
-    var rows = filteredRows();
-    if (kind === "json") {
-      copyText(JSON.stringify(rows, null, 2));
-      return;
-    }
-    var header = [
-      "Indicator",
-      "Value",
-      "Calculation Basis",
-      "Population / Scope",
-      "Source",
-      "UID",
-      "Validation",
-      "Last Updated",
-    ];
-    var lines = [header.join(",")];
-    rows.forEach(function (r) {
-      lines.push(
-        [
-          r.display_name,
-          r.value_text,
-          calculationBasisText(r),
-          r.population_scope,
-          r.source_badge,
-          r.source_uid,
-          r.validation_status,
-          r.last_updated || r.freshness || "",
-        ]
-          .map(function (v) {
-            return '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
-          })
-          .join(",")
-      );
-    });
-    copyText(lines.join("\n"));
+    if (kind !== "csv") return;
+    var endpoint = root.getAttribute("data-export-csv-url") || "";
+    var scope = scopeQuery(false, "none");
+    if (!endpoint || !scope) return;
+    window.location.assign(endpoint + scope);
   }
 
   function wire() {

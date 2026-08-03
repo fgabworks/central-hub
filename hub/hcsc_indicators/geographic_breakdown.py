@@ -12,6 +12,7 @@ from typing import Any
 from hub.dhis2_reports.security import ReportSecurityError
 
 # DHIS2 org-unit levels used by the HCSC cascade picker.
+LEVEL_NATIONAL = 1
 LEVEL_REGION = 2
 LEVEL_PROVINCE = 3
 LEVEL_MUNICIPALITY = 4
@@ -39,6 +40,7 @@ BREAKDOWN_LABELS: dict[str, str] = {
 }
 
 LEVEL_NAME: dict[int, str] = {
+    LEVEL_NATIONAL: "national",
     LEVEL_REGION: "region",
     LEVEL_PROVINCE: "province",
     LEVEL_MUNICIPALITY: "municipality_city",
@@ -156,6 +158,7 @@ def bootstrap_breakdown_meta() -> dict[str, Any]:
         "labels": BREAKDOWN_LABELS,
         "thresholds": breakdown_thresholds(),
         "help": {
+            "national": "National -> Region / Province / Municipality/City / Barangay",
             "region": "Region → Province / Municipality/City / Barangay",
             "province": "Province → Municipality/City / Barangay",
             "municipality_city": "Municipality/City → Barangay",

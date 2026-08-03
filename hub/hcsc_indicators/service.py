@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import threading
 import time
 from datetime import datetime, timezone
@@ -282,6 +284,51 @@ class HcscIndicatorService:
             section=None,
         )
 
+    def export_csv(
+        self,
+        *,
+        environment: str,
+        period: str,
+        org_unit: str,
+        disaggregation: str = "none",
+        force_refresh: bool = False,
+    ) -> tuple[str, str]:
+        """Export the generated aggregate report without changing indicator logic."""
+        report = self.report(
+            environment=environment,
+            period=period,
+            org_unit=org_unit,
+            disaggregation=disaggregation,
+            geographic_breakdown=BREAKDOWN_NONE,
+            force_refresh=force_refresh,
+        )
+        output = io.StringIO(newline="")
+        writer = csv.writer(output, lineterminator="\n")
+        writer.writerow(
+            [
+                "Indicator name", "Result value", "Numerator", "Denominator",
+                "Source type", "Source UID", "Organisation Unit", "Period",
+                "Environment", "Last updated timestamp",
+            ]
+        )
+        ou_label = report.get("org_unit_name") or report.get("org_unit") or ""
+        for row in report.get("results") or []:
+            writer.writerow(
+                [
+                    row.get("display_name") or "", row.get("value_text") or "",
+                    row.get("numerator") if row.get("numerator") is not None else "",
+                    row.get("denominator") if row.get("denominator") is not None else "",
+                    row.get("source_badge") or "", row.get("source_uid") or "",
+                    ou_label, report.get("period") or "", report.get("environment") or "",
+                    row.get("last_updated") or report.get("freshness") or "",
+                ]
+            )
+        filename = (
+            f"hcsc-rf-{report.get('environment')}-{report.get('period')}-"
+            f"{report.get('org_unit')}.csv"
+        )
+        return output.getvalue(), filename
+
     def breakdown_estimate(
         self,
         *,
@@ -541,6 +588,14 @@ class HcscIndicatorService:
         design = self.design_bindings()
         indicators = self._select_indicators(reg, scope=scope, section=section)
         freshness = datetime.now(timezone.utc).isoformat()
+        ou_meta = self._ou_store.get(env, ou) or {}
+        ou_level = ou_meta.get("level")
+        try:
+            ou_level = int(ou_level) if ou_level is not None else None
+        except (TypeError, ValueError):
+            ou_level = None
+        is_national = ou_level == 1
+        ou_name = ou_meta.get("name") or ou
 
         by_adapter: dict[str, list[dict[str, Any]]] = {
             ADAPTER_DHIS2: [],
@@ -572,6 +627,7 @@ class HcscIndicatorService:
                         period=pe,
                         org_unit=ou,
                         client=client,
+                        ou_level=ou_level,
                     )
                 except Dhis2Error as exc:
                     raise ReportSecurityError(str(exc), code="dhis2_error") from exc
@@ -788,6 +844,9 @@ class HcscIndicatorService:
             "environment": env,
             "period": pe,
             "org_unit": ou,
+            "org_unit_name": "Philippines (National)" if is_national else ou_name,
+            "org_unit_level": ou_level,
+            "scope_label": "National Level" if is_national else (ou_meta.get("level_label") or "Selected Area"),
             "disaggregation": disagg,
             "geographic_breakdown": geo_payload,
             "freshness": freshness,
@@ -911,6 +970,7 @@ class HcscIndicatorService:
                     period=pe,
                     org_unit=child_uids,
                     include_num_den=True,
+                    ou_level=parent.get("level") if isinstance(parent.get("level"), int) else None,
                 )
             except Dhis2Error as exc:
                 return _fail(str(exc), child_count=child_count)

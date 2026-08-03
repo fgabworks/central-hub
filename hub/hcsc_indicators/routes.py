@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request
 
 from hub.audit import actions as audit_actions
 from hub.dhis2_reports.security import ReportSecurityError, redact_report_detail
@@ -149,6 +149,21 @@ def register_hcsc_indicator_routes(app: Flask) -> None:
                 detail=str(exc),
                 ok=False,
             )
+            return _json_error(exc)
+
+    @app.get("/api/dhis2/hcsc-indicators/export.csv")
+    def api_hcsc_indicators_export_csv():
+        p = _scope_params()
+        try:
+            body, filename = _svc().export_csv(
+                environment=p["env"], period=p["period"], org_unit=p["org_unit"],
+                disaggregation=p["disagg"], force_refresh=p["force"],
+            )
+            return Response(
+                body, mimetype="text/csv",
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            )
+        except ReportSecurityError as exc:
             return _json_error(exc)
 
     @app.get("/api/dhis2/hcsc-indicators/breakdown-estimate")
