@@ -1,10 +1,8 @@
-{# TODAY Mission Control — daily task execution panel on Work Dashboard. #}
+{# TODAY Mission Control - compact Work Dashboard panel. #}
 {% if mission_widget %}
 {% set p = mission_widget.progress %}
 {% set all_done = (p.done > 0 and p.pending == 0 and p.overdue == 0) %}
 {% set has_carry = p.overdue > 0 %}
-{% set total_dots = p.total if p.total > 0 else 0 %}
-{% set is_empty = p.total_all == 0 %}
 <section
   class="panel panel-mission-widget mc-command{% if all_done %} is-success{% elif has_carry %} is-carry-warn{% else %} is-active{% endif %}"
   id="mc-dash-widget"
@@ -13,32 +11,32 @@
   data-complete-url-template="{{ url_for('api_notebook_missions_complete', note_id='__ID__') }}"
   data-reopen-url-template="{{ url_for('api_notebook_missions_reopen', note_id='__ID__') }}"
   data-clear-url="{{ url_for('api_notebook_missions_clear') }}"
-  data-missions-href="{{ url_for(nb_ep, view='missions') }}"
   data-today="{{ mission_widget.today }}"
 >
   <header class="mc-command-header">
-    <h2>🚀 TODAY Mission Control</h2>
+    <div class="mc-command-heading">
+      <h2>&#128640; TODAY Mission Control</h2>
+      <span class="mc-all-done-msg" data-mc-all-done{% if not all_done %} hidden{% endif %}>&#10003; All done today</span>
+    </div>
+    <div class="mc-header-progress" data-mc-progress aria-label="Mission progress">
+      <span class="mc-progress-ring"
+            data-mc-progress-ring
+            style="--mc-progress: {{ p.percent }}%"
+            role="img"
+            aria-label="{{ p.done }} of {{ p.total }} completed">
+        <span data-mc-progress-percent>{{ p.percent }}%</span>
+      </span>
+      <strong class="mc-command-progress-label" data-mc-progress-label>{{ p.done }}/{{ p.total }} Completed</strong>
+    </div>
   </header>
 
   <div class="mc-command-body">
-    <div class="mc-command-status" data-mc-status>
-      <p class="mc-status-empty muted" data-mc-empty-msg{% if not is_empty %} hidden{% endif %}>No missions today.</p>
-
-      <div class="mc-command-progress" data-mc-progress{% if is_empty %} hidden{% endif %} aria-label="Mission progress">
-        <strong class="mc-command-progress-label" data-mc-progress-label>{{ p.done }}/{{ p.total }} Completed</strong>
-        <div class="mc-dot-track" data-mc-dots role="img" aria-label="{{ p.done }} of {{ p.total }} completed">
-          {% if total_dots > 0 %}
-            {% for i in range(total_dots) %}
-              <span class="mc-dot{% if i < p.done %} is-filled{% endif %}"></span>
-            {% endfor %}
-          {% else %}
-            <span class="mc-dot is-empty-slot"></span>
-          {% endif %}
-        </div>
-      </div>
-
-      <p class="mc-all-done-msg" data-mc-all-done{% if not all_done %} hidden{% endif %}>✓ All done today</p>
-    </div>
+    <form class="mc-quick-add" data-mc-add-form>
+      <input type="text" class="mc-quick-input" data-mc-add-input
+             maxlength="200" required autocomplete="off"
+             placeholder="What needs to be done today?" aria-label="New mission title">
+      <button type="submit" class="btn btn-sm btn-primary mc-quick-btn">+ Add Mission</button>
+    </form>
 
     {% if mission_widget.reminder.active %}
     <div class="mc-widget-reminder" data-mc-reminder>Reminder: {{ mission_widget.reminder.count }} unfinished before 5 PM</div>
@@ -47,7 +45,7 @@
     {% endif %}
 
     <ul class="mc-command-list" data-mc-list aria-label="Today's missions">
-      {% for m in mission_widget.missions %}
+      {% for m in mission_widget.top_missions %}
       {% set done = m.status == 'done' %}
       {% set carry = m.is_overdue_carry %}
       <li class="mc-command-item{% if carry %} is-carry{% elif done %} is-done{% else %} is-pending{% endif %}"
@@ -60,38 +58,30 @@
           <span class="mc-command-main">
             <span class="mc-command-title">{{ m.title }}</span>
             <span class="mc-command-meta">
+              <span class="mc-chip mc-chip-priority">{{ m.priority_label or 'Medium' }}</span>
+              <span class="mc-meta-sep" aria-hidden="true">&bull;</span>
               {% if carry %}
-                <span class="mc-chip mc-chip-priority">{{ m.priority_label or 'Medium' }}</span>
-                <span class="mc-meta-sep" aria-hidden="true">•</span>
                 <span class="mc-chip mc-chip-carry">Carry-over</span>
               {% elif done %}
-                <span class="mc-chip mc-chip-priority">{{ m.priority_label or 'Medium' }}</span>
-                <span class="mc-meta-sep" aria-hidden="true">&bull;</span>
                 <span class="mc-chip mc-chip-done">Completed</span>
               {% else %}
-                <span class="mc-chip mc-chip-priority">{{ m.priority_label or 'Medium' }}</span>
-                <span class="mc-meta-sep" aria-hidden="true">•</span>
                 <span class="mc-chip mc-chip-pending">Pending</span>
               {% endif %}
             </span>
           </span>
         </label>
       </li>
+      {% else %}
+      <li class="mc-command-empty muted" data-mc-empty>No missions today.</li>
       {% endfor %}
     </ul>
-
-    <form class="mc-quick-add" data-mc-add-form>
-      <input type="text" class="mc-quick-input" data-mc-add-input
-             maxlength="200" required autocomplete="off"
-             placeholder="What needs to be done today?" aria-label="New mission title">
-      <button type="submit" class="btn btn-sm btn-primary mc-quick-btn">+ Add Mission</button>
-    </form>
   </div>
 
   <footer class="mc-command-footer">
-    <button type="button" class="btn btn-sm mc-btn-clear" data-mc-clear-completed
+    <button type="button" class="mc-footer-action" data-mc-clear-completed
             {% if p.done == 0 %}disabled{% endif %}>Clear Completed</button>
-    <a class="btn btn-sm mc-btn-open{% if all_done %} is-success{% endif %}"
+    <span class="mc-footer-divider" aria-hidden="true"></span>
+    <a class="mc-footer-action mc-footer-link{% if all_done %} is-success{% endif %}"
        href="{{ url_for(nb_ep, view='missions') }}" data-mc-open-btn>Open Mission Control</a>
   </footer>
 </section>

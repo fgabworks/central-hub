@@ -13,8 +13,8 @@ Fields: title, notes, priority, created/target dates, status, `completed_at`,
 Before 5 PM local time, unfinished TODAY missions are marked reminded on board/dashboard
 load. Past-due unfinished missions move to Carry Over (red highlight) with Complete /
 Reschedule. Work Dashboard shows a compact, content-height widget fed by the same
-`MissionControl` service: compact completion count/dots, direct checkbox completion,
-today-only quick add, five visible mission rows, and internal scrolling beyond five.
+`MissionControl` service: compact completion count/ring, direct checkbox completion,
+today-only quick add, and a five-row dashboard preview above the Work Queue.
 Completed-all uses a subtle green success state; pending and carry-over remain blue
 and red. APIs: `/api/notebook/missions*`. Tests: `tests/test_notebook_missions.py`.
 

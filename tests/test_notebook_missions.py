@@ -266,7 +266,7 @@ class MissionControlRouteTests(unittest.TestCase):
         self.assertIn("TODAY Mission Control", html)
         self.assertIn("Open Mission Control", html)
         self.assertIn("mc-command", html)
-        self.assertIn("mc-dot-track", html)
+        self.assertIn("mc-progress-ring", html)
         self.assertIn("mc-widget-checkbox", html)
         self.assertIn("dash-grid-mission-top", html)
         self.assertIn("What needs to be done today?", html)
@@ -297,6 +297,12 @@ class MissionControlRouteTests(unittest.TestCase):
         self.assertIn("Pending", one_html)
         self.assertIn("data-mc-add-form", one_html)
         self.assertNotIn("mc-progress-track-inline", one_html)
+        self.assertIn("mc-header-progress", one_html)
+        self.assertLess(
+            one_html.index('id="mc-dash-widget"'),
+            one_html.index('class="panel panel-queue'),
+        )
+        self.assertNotIn("dash-grid-queue-row", one_html)
 
         for index in range(2, 6):
             self.client.post(
@@ -308,13 +314,23 @@ class MissionControlRouteTests(unittest.TestCase):
 
         sixth = self.client.post(
             "/api/notebook/missions",
-            json={"title": "Scrollable sixth mission", "priority": "high"},
+            json={"title": "Sixth mission", "priority": "medium"},
         ).get_json()["widget"]
         self.assertEqual(len(sixth["top_missions"]), 5)
         self.assertEqual(len(sixth["missions"]), 6)
         six_html = self.client.get("/work").get_data(as_text=True)
-        self.assertEqual(six_html.count('class="mc-command-item'), 6)
-        self.assertIn("Scrollable sixth mission", six_html)
+        self.assertEqual(six_html.count('class="mc-command-item'), 5)
+        widget_html = six_html[
+            six_html.index('id="mc-dash-widget"') :
+            six_html.index('class="panel panel-queue')
+        ]
+        visible_titles = {mission["title"] for mission in sixth["top_missions"]}
+        omitted_titles = {
+            mission["title"] for mission in sixth["missions"]
+        } - visible_titles
+        self.assertTrue(omitted_titles)
+        self.assertTrue(all(title in widget_html for title in visible_titles))
+        self.assertTrue(all(title not in widget_html for title in omitted_titles))
         css = (Path(__file__).parents[1] / "static" / "css" / "style.css").read_text(
             encoding="utf-8"
         )
@@ -322,8 +338,9 @@ class MissionControlRouteTests(unittest.TestCase):
         card_rules = css.split(".panel-mission-widget.mc-command {", 1)[1].split(
             "}", 1
         )[0]
-        self.assertIn("max-height:", list_rules)
-        self.assertIn("overflow-y: auto", list_rules)
+        self.assertNotIn("max-height:", list_rules)
+        self.assertNotIn("min-height:", list_rules)
+        self.assertNotIn("height:", list_rules)
         self.assertNotIn("height:", card_rules)
         self.assertNotIn("min-height:", card_rules)
 

@@ -96,10 +96,11 @@ Work Dashboard queue shows work-scoped notes only. Assistant context never prelo
 Notebook content; selected lookup tools search the active profile scope.
 
 Work Dashboard also shows TODAY Mission Control as a compact, content-height panel.
-It renders five mission rows without scrolling and keeps additional rows in an
-internal scroll area. Rows expose priority/status badges and direct completion;
-quick add targets today. The notebook mission model, reminders, carry-over rules,
-and notebook synchronization remain shared and unchanged.
+It renders up to five mission rows as a dashboard preview. Rows expose
+priority/status badges and direct completion; quick add targets today. The Work
+Queue stays directly below the widget in the left dashboard column. The notebook
+mission model, reminders, carry-over rules, and notebook synchronization remain
+shared and unchanged.
 
 ## AI Assistant Center (read-only MVP)
 

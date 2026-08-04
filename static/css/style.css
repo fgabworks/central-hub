@@ -7666,8 +7666,7 @@ body.qn-maximized .qn-history[open] {
 
 /* TODAY Mission Control — daily task execution panel */
 .panel-mission-widget.mc-command {
-  display: flex;
-  flex-direction: column;
+  display: block;
   border: 1px solid rgba(59, 130, 246, 0.42);
   background:
     linear-gradient(180deg, rgba(30, 64, 175, 0.18), rgba(15, 23, 42, 0.15)),
@@ -7688,7 +7687,12 @@ body.qn-maximized .qn-history[open] {
 }
 
 .mc-command-header {
-  padding: 0.75rem 0.95rem 0.35rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.7rem 0.8rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
 }
 .mc-command-header h2 {
   margin: 0;
@@ -7696,12 +7700,53 @@ body.qn-maximized .qn-history[open] {
   font-weight: 700;
   line-height: 1.25;
 }
+.mc-command-heading {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+}
+.mc-header-progress {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+}
+.mc-progress-ring {
+  --mc-progress: 0%;
+  width: 2.15rem;
+  height: 2.15rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: conic-gradient(#60a5fa var(--mc-progress), rgba(96, 165, 250, 0.18) 0);
+  position: relative;
+}
+.mc-progress-ring::before {
+  content: "";
+  position: absolute;
+  inset: 0.24rem;
+  border-radius: inherit;
+  background: var(--panel, #151a21);
+}
+.mc-progress-ring span {
+  position: relative;
+  z-index: 1;
+  font-size: 0.58rem;
+  font-weight: 750;
+  color: #dbeafe;
+}
+.mc-command.is-success .mc-progress-ring {
+  background: conic-gradient(#34d399 var(--mc-progress), rgba(52, 211, 153, 0.18) 0);
+}
+.mc-command.is-carry-warn .mc-progress-ring {
+  background: conic-gradient(#f87171 var(--mc-progress), rgba(248, 113, 113, 0.18) 0);
+}
 
 .mc-command-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 0 0.95rem;
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.55rem 0.8rem 0.4rem;
 }
 
 .mc-command-status {
@@ -7715,7 +7760,7 @@ body.qn-maximized .qn-history[open] {
 }
 .mc-all-done-msg {
   margin: 0;
-  font-size: 0.88rem;
+  font-size: 0.75rem;
   font-weight: 650;
   color: #86efac;
 }
@@ -7727,7 +7772,7 @@ body.qn-maximized .qn-history[open] {
   gap: 0.25rem;
 }
 .mc-command-progress-label {
-  font-size: 0.88rem;
+  font-size: 0.78rem;
   font-weight: 700;
   line-height: 1.2;
 }
@@ -7763,24 +7808,19 @@ body.qn-maximized .qn-history[open] {
 .mc-command-list {
   list-style: none;
   margin: 0;
-  padding: 0.15rem 0;
+  padding: 0;
   display: grid;
-  gap: 0.5rem;
+  gap: 0.35rem;
   align-content: start;
-  max-height: 21.75rem;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-  padding-right: 0.2rem;
 }
 .mc-command-list:empty {
   padding: 0;
 }
 .mc-command-item {
-  border-radius: 10px;
+  border-radius: 7px;
   border: 1px solid rgba(59, 130, 246, 0.3);
   background: rgba(59, 130, 246, 0.08);
-  padding: 0.65rem 0.75rem;
+  padding: 0.42rem 0.55rem;
 }
 .mc-command-item.is-pending {
   border-color: rgba(59, 130, 246, 0.4);
@@ -7796,17 +7836,17 @@ body.qn-maximized .qn-history[open] {
 }
 .mc-command-check {
   display: flex;
-  gap: 0.65rem;
-  align-items: flex-start;
+  gap: 0.55rem;
+  align-items: center;
   cursor: pointer;
   min-width: 0;
 }
 .mc-command .mc-widget-checkbox {
   appearance: none;
   -webkit-appearance: none;
-  width: 1.45rem;
-  height: 1.45rem;
-  margin-top: 0.05rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0;
   flex: 0 0 auto;
   border-radius: 0.4rem;
   border: 2px solid #60a5fa;
@@ -7834,11 +7874,14 @@ body.qn-maximized .qn-history[open] {
 }
 .mc-command-main {
   display: grid;
-  gap: 0.22rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.55rem;
   min-width: 0;
+  width: 100%;
 }
 .mc-command-title {
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   font-weight: 650;
   line-height: 1.3;
   overflow: hidden;
@@ -7851,7 +7894,7 @@ body.qn-maximized .qn-history[open] {
 }
 .mc-command-meta {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 0.3rem 0.4rem;
   font-size: 0.75rem;
@@ -7893,6 +7936,10 @@ body.qn-maximized .qn-history[open] {
   justify-self: start;
 }
 .mc-more[hidden] { display: none !important; }
+.mc-command-empty {
+  padding: 0.25rem 0.1rem 0.35rem;
+  font-size: 0.82rem;
+}
 
 .mc-quick-add {
   display: grid;
@@ -7903,8 +7950,7 @@ body.qn-maximized .qn-history[open] {
 .mc-quick-input {
   width: 100%;
   min-width: 0;
-  height: 2.1rem;
-  padding: 0.35rem 0.6rem;
+  padding: 0.45rem 0.6rem;
   border-radius: 8px;
   border: 1px solid rgba(148, 163, 184, 0.35);
   background: rgba(0, 0, 0, 0.25);
@@ -7918,22 +7964,20 @@ body.qn-maximized .qn-history[open] {
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
 }
 .mc-quick-btn {
-  min-height: 2.1rem;
-  padding: 0.3rem 0.7rem;
+  padding: 0.38rem 0.7rem;
   white-space: nowrap;
 }
 
 .mc-command-footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.55rem;
-  padding: 0.7rem 0.95rem 0.9rem;
-  margin-top: 0.35rem;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  padding: 0.45rem 0.8rem 0.55rem;
+  margin: 0;
   border-top: 1px solid rgba(148, 163, 184, 0.16);
 }
 .mc-btn-clear {
-  min-height: 2rem;
   padding: 0.28rem 0.75rem;
   background: transparent;
   border: 1px solid rgba(226, 232, 240, 0.28);
@@ -7948,7 +7992,6 @@ body.qn-maximized .qn-history[open] {
   cursor: not-allowed;
 }
 .mc-btn-open {
-  min-height: 2rem;
   padding: 0.28rem 0.8rem;
 }
 .mc-btn-open.is-success,
@@ -7962,9 +8005,45 @@ body.qn-maximized .qn-history[open] {
   font-size: 0.78rem;
   color: #fbbf24;
 }
+.mc-footer-action {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #cbd5e1;
+  padding: 0.12rem 0.2rem;
+  font: inherit;
+  font-size: 0.76rem;
+  line-height: 1.25;
+  cursor: pointer;
+}
+.mc-footer-action:hover {
+  color: #ffffff;
+}
+.mc-footer-action:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+.mc-footer-link.is-success,
+.mc-command.is-success .mc-footer-link {
+  color: #86efac;
+  font-weight: 650;
+}
+.mc-footer-divider {
+  width: 1px;
+  height: 0.85rem;
+  background: rgba(148, 163, 184, 0.3);
+}
 
 @media (max-width: 900px) {
   .dash-grid-mission-top { grid-template-columns: 1fr; }
   .mc-quick-add { grid-template-columns: 1fr; }
   .mc-quick-btn { width: 100%; }
+}
+@media (max-width: 560px) {
+  .mc-command-header { align-items: flex-start; }
+  .mc-command-main {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.2rem;
+  }
+  .mc-command-meta { justify-content: flex-start; }
 }

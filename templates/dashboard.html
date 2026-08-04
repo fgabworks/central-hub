@@ -100,6 +100,7 @@
     {% include "partials/dashboard_notebook_queue.html" %}
     {% else %}
     {% include "partials/dashboard_mission_widget.html" %}
+    {% include "partials/dashboard_notebook_queue.html" %}
     {% endif %}
   </div>
 
@@ -172,15 +173,6 @@
   </aside>
 </section>
 
-{% if note_scope == 'work' %}
-{# Work queue sits below Mission Control + DHIS2 so Mission Control stays top-left. #}
-<section class="dash-grid dash-grid-queue-row">
-  <div class="stack dash-main-stack dash-queue-span">
-    {% include "partials/dashboard_notebook_queue.html" %}
-  </div>
-</section>
-{% endif %}
-
 {# Row 2 (work): Connected Repositories + Recent Activity #}
 {% if show_repos %}
 <section class="dash-grid dash-grid-lower">
@@ -245,6 +237,6 @@
 <script src="{{ url_for('static', filename='js/nav_async.js') }}?v=perf-1"></script>
 {% endif %}
 {% if note_scope == 'work' and mission_widget %}
-<script src="{{ url_for('static', filename='js/mission_widget.js') }}?v=mc-panel-2"></script>
+<script src="{{ url_for('static', filename='js/mission_widget.js') }}?v=mission-control-3"></script>
 {% endif %}
 {% endblock %}

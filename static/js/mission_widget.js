@@ -1,13 +1,12 @@
-/* TODAY Mission Control — daily task execution panel (dashboard). */
+/* TODAY Mission Control - compact dashboard panel. */
 (function () {
   var root = document.getElementById("mc-dash-widget");
   if (!root) return;
 
   var listEl = root.querySelector("[data-mc-list]");
-  var progressEl = root.querySelector("[data-mc-progress]");
   var progressLabel = root.querySelector("[data-mc-progress-label]");
-  var dotsEl = root.querySelector("[data-mc-dots]");
-  var emptyMsgEl = root.querySelector("[data-mc-empty-msg]");
+  var progressRing = root.querySelector("[data-mc-progress-ring]");
+  var progressPercent = root.querySelector("[data-mc-progress-percent]");
   var allDoneEl = root.querySelector("[data-mc-all-done]");
   var reminderEl = root.querySelector("[data-mc-reminder]");
   var openBtn = root.querySelector("[data-mc-open-btn]");
@@ -31,64 +30,43 @@
     return (root.getAttribute("data-reopen-url-template") || "").replace("__ID__", encodeURIComponent(id));
   }
 
-  function renderDots(done, total) {
-    if (!dotsEl) return;
-    if (!total) {
-      dotsEl.innerHTML = '<span class="mc-dot is-empty-slot"></span>';
-      dotsEl.setAttribute("aria-label", "0 of 0 completed");
-      return;
-    }
-    var html = "";
-    for (var i = 0; i < total; i++) {
-      html += '<span class="mc-dot' + (i < done ? " is-filled" : "") + '"></span>';
-    }
-    dotsEl.innerHTML = html;
-    dotsEl.setAttribute("aria-label", done + " of " + total + " completed");
-  }
-
   function setCardState(p) {
     var allDone = p.done > 0 && p.pending === 0 && p.overdue === 0;
     var hasCarry = p.overdue > 0;
-    var isEmpty = !(p.total_all > 0);
 
     root.classList.remove("is-success", "is-carry-warn", "is-active");
     if (allDone) root.classList.add("is-success");
     else if (hasCarry) root.classList.add("is-carry-warn");
     else root.classList.add("is-active");
 
-    if (emptyMsgEl) emptyMsgEl.hidden = !isEmpty;
-    if (progressEl) progressEl.hidden = isEmpty;
     if (allDoneEl) allDoneEl.hidden = !allDone;
-
     if (openBtn) openBtn.classList.toggle("is-success", !!allDone);
     if (clearBtn) clearBtn.disabled = !(p.done > 0);
+  }
+
+  function renderProgress(p) {
+    var percent = Number(p.percent || 0);
+    if (progressLabel) {
+      progressLabel.textContent = p.done + "/" + p.total + " Completed";
+    }
+    if (progressRing) {
+      progressRing.style.setProperty("--mc-progress", percent + "%");
+      progressRing.setAttribute(
+        "aria-label",
+        p.done + " of " + p.total + " completed"
+      );
+    }
+    if (progressPercent) progressPercent.textContent = percent + "%";
   }
 
   function renderMission(m) {
     var done = m.status === "done";
     var carry = !!m.is_overdue_carry;
     var state = carry ? "is-carry" : done ? "is-done" : "is-pending";
+    var statusClass = carry ? "mc-chip-carry" : done ? "mc-chip-done" : "mc-chip-pending";
+    var statusLabel = carry ? "Carry-over" : done ? "Completed" : "Pending";
     var priority = esc(m.priority_label || m.priority || "Medium");
-    var meta = "";
-    if (carry) {
-      meta =
-        '<span class="mc-chip mc-chip-priority">' +
-        priority +
-        '</span><span class="mc-meta-sep" aria-hidden="true">•</span>' +
-        '<span class="mc-chip mc-chip-carry">Carry-over</span>';
-    } else if (done) {
-      meta =
-        '<span class="mc-chip mc-chip-priority">' +
-        priority +
-        '</span><span class="mc-meta-sep" aria-hidden="true">&bull;</span>' +
-        '<span class="mc-chip mc-chip-done">Completed</span>';
-    } else {
-      meta =
-        '<span class="mc-chip mc-chip-priority">' +
-        priority +
-        '</span><span class="mc-meta-sep" aria-hidden="true">•</span>' +
-        '<span class="mc-chip mc-chip-pending">Pending</span>';
-    }
+
     return (
       '<li class="mc-command-item ' +
       state +
@@ -108,8 +86,14 @@
       esc(m.title || "Untitled mission") +
       "</span>" +
       '<span class="mc-command-meta">' +
-      meta +
-      "</span></span></label></li>"
+      '<span class="mc-chip mc-chip-priority">' +
+      priority +
+      '</span><span class="mc-meta-sep" aria-hidden="true">&bull;</span>' +
+      '<span class="mc-chip ' +
+      statusClass +
+      '">' +
+      statusLabel +
+      "</span></span></span></label></li>"
     );
   }
 
@@ -117,8 +101,8 @@
     if (!widget || !widget.progress) return;
     var p = widget.progress;
     setCardState(p);
-    if (progressLabel) progressLabel.textContent = p.done + "/" + p.total + " Completed";
-    renderDots(p.done || 0, p.total || 0);
+    renderProgress(p);
+
     if (reminderEl) {
       if (widget.reminder && widget.reminder.active) {
         reminderEl.hidden = false;
@@ -129,9 +113,12 @@
         reminderEl.textContent = "";
       }
     }
+
     if (listEl) {
-      var rows = widget.missions || widget.top_missions || [];
-      listEl.innerHTML = rows.length ? rows.map(renderMission).join("") : "";
+      var rows = widget.top_missions || [];
+      listEl.innerHTML = rows.length
+        ? rows.map(renderMission).join("")
+        : '<li class="mc-command-empty muted" data-mc-empty>No missions today.</li>';
     }
     if (widget.today) root.setAttribute("data-today", widget.today);
   }
@@ -228,9 +215,6 @@
       })
       .catch(function () {
         btn.disabled = false;
-      })
-      .then(function () {
-        /* disabled state refreshed by applyWidget */
       });
   });
 })();
