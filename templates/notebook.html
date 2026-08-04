@@ -14,9 +14,18 @@
 {% if flash %}<div class="banner" style="background:var(--success-soft);border-color:rgba(34,197,94,.35)">{{ flash }}</div>{% endif %}
 {% if error %}<div class="banner banner-error">{{ error }}</div>{% endif %}
 
+{% if missions_view|default(false) and mission_board %}
+  {% include "partials/notebook_mission_control.html" %}
+{% else %}
 <div class="nb-workspace">
 <div class="nb-shell">
   <aside class="nb-rail card" aria-label="Note statuses">
+    {% if note_scope == 'work' %}
+    <div class="nav-label">Mission Control</div>
+    <a class="nb-status" href="{{ url_for(notebook_endpoint, view='missions') }}">
+      <span>🚀 TODAY Mission Control</span>
+    </a>
+    {% endif %}
     <div class="nav-label">Statuses</div>
     <a class="nb-status{% if status == 'all' %} is-active{% endif %}" href="{{ url_for(notebook_endpoint, status='all', repo=filters.repo, type=filters.type, priority=filters.priority, tag=filters.tag, q=filters.q) }}">
       <span>All Notes</span><span class="nb-count">{{ counts.all }}</span>
@@ -286,8 +295,9 @@
   </section>
 </div>
 </div>
+{% endif %}
 
-{% if allow_repositories %}
+{% if allow_repositories and not missions_view %}
 <template id="nb-repo-template">
   <div class="nb-repeat-row">
     <select name="repo_id">

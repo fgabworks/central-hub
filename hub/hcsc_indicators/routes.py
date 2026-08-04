@@ -41,6 +41,9 @@ def register_hcsc_indicator_routes(app: Flask) -> None:
             "invalid_section": 400,
             "dhis2_unconfigured": 400,
             "dhis2_error": 502,
+            "national_rollup_incomplete": 502,
+            "national_rollup_no_regions": 400,
+            "national_rollup_nothing_to_retry": 400,
             "duplicate_request": 409,
             "forbidden": 403,
         }.get(code, 400)
@@ -138,6 +141,7 @@ def register_hcsc_indicator_routes(app: Flask) -> None:
                     f"Report adapters={payload.get('adapters_used')} "
                     f"dx={payload.get('timings', {}).get('dx_count')} "
                     f"geo={p['geographic_breakdown']} "
+                    f"arch={(payload.get('timings') or {}).get('architecture') or 'direct'} "
                     f"cache_hit={payload.get('cache', {}).get('hit')}"
                 ),
             )
@@ -149,7 +153,76 @@ def register_hcsc_indicator_routes(app: Flask) -> None:
                 detail=str(exc),
                 ok=False,
             )
+            body, status = _json_error(exc)
+            # Attach roll-up progress so the UI can show failed regions + retry.
+            if getattr(exc, "code", "") == "national_rollup_incomplete":
+                try:
+                    progress = _svc().national_rollup_progress(
+                        environment=p["env"],
+                        period=p["period"],
+                        org_unit=p["org_unit"],
+                    )
+                    if hasattr(body, "get_json"):
+                        data = body.get_json() or {}
+                    else:
+                        data = {}
+                    data["rollup_progress"] = progress.get("progress")
+                    return jsonify(data), status
+                except Exception:  # noqa: BLE001
+                    return body, status
+            return body, status
+
+    @app.get("/api/dhis2/hcsc-indicators/national-rollup-progress")
+    def api_hcsc_national_rollup_progress():
+        p = _scope_params()
+        try:
+            return jsonify(
+                _svc().national_rollup_progress(
+                    environment=p["env"],
+                    period=p["period"],
+                    org_unit=p["org_unit"],
+                )
+            )
+        except ReportSecurityError as exc:
             return _json_error(exc)
+
+    @app.post("/api/dhis2/hcsc-indicators/national-rollup-retry")
+    def api_hcsc_national_rollup_retry():
+        p = _scope_params()
+        body = request.get_json(silent=True) or {}
+        region_uids = body.get("region_uids") or body.get("regionUids") or []
+        if isinstance(region_uids, str):
+            region_uids = [region_uids]
+        try:
+            payload = _svc().retry_national_rollup_regions(
+                environment=p["env"],
+                period=p["period"],
+                org_unit=p["org_unit"],
+                region_uids=list(region_uids),
+                force_refresh=True,
+            )
+            _audit(
+                getattr(audit_actions, "HCSC_INDICATOR_OVERVIEW", "HCSC_INDICATOR_REPORT"),
+                target=f"hcsc-national-retry:{p['env']}:{p['period']}:{p['org_unit']}",
+                detail=f"Retried regions={region_uids or 'failed'}",
+            )
+            return jsonify(payload)
+        except ReportSecurityError as exc:
+            body_resp, status = _json_error(exc)
+            if getattr(exc, "code", "") == "national_rollup_incomplete":
+                try:
+                    progress = _svc().national_rollup_progress(
+                        environment=p["env"],
+                        period=p["period"],
+                        org_unit=p["org_unit"],
+                    )
+                    data = body_resp.get_json() if hasattr(body_resp, "get_json") else {}
+                    data = data or {}
+                    data["rollup_progress"] = progress.get("progress")
+                    return jsonify(data), status
+                except Exception:  # noqa: BLE001
+                    return body_resp, status
+            return body_resp, status
 
     @app.get("/api/dhis2/hcsc-indicators/export.csv")
     def api_hcsc_indicators_export_csv():

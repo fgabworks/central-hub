@@ -51,6 +51,17 @@ from hub.hcsc_indicators.geographic_breakdown import (
     target_level_for_breakdown,
     validate_breakdown_for_parent,
 )
+from hub.hcsc_indicators.national_rollup import (
+    ROLLUP_PROGRESS,
+    STATUS_CACHED,
+    STATUS_COMPLETED,
+    STATUS_FAILED,
+    STATUS_PROCESSING,
+    NationalRollupProgress,
+    aggregate_result_rows,
+    indicator_version,
+    verify_national_equals_region_sums,
+)
 from hub.hcsc_indicators.presentation import enrich_result_row
 from hub.hcsc_indicators.query_display import build_retrieval_panel
 from hub.hcsc_indicators.quarters import (
@@ -442,6 +453,7 @@ class HcscIndicatorService:
                 org_unit=ou,
                 disaggregation=disagg,
                 geographic_breakdown=geo,
+                indicator_version=indicator_version(self.registry()),
             )
 
         if not force_refresh:
@@ -483,6 +495,7 @@ class HcscIndicatorService:
                 section=section,
                 cache_key=cache_key,
                 geographic_breakdown=geo,
+                force_refresh=force_refresh,
             )
             cache.set(cache_key, payload)
             return payload
@@ -571,6 +584,534 @@ class HcscIndicatorService:
         }
         return enrich_result_row(validate_row(row))
 
+    def national_rollup_progress(
+        self,
+        *,
+        environment: str,
+        period: str,
+        org_unit: str,
+    ) -> dict[str, Any]:
+        """Snapshot of in-flight / last National regional roll-up progress."""
+        env = validate_environment(environment)
+        pe = assert_allowed_quarter(period, allowed_quarter_ids(self.registry()))
+        ou = validate_org_unit(org_unit, required=True)
+        key = NationalRollupProgress.job_key(
+            environment=env,
+            period=pe,
+            org_unit=ou,
+            version=indicator_version(self.registry()),
+        )
+        snap = ROLLUP_PROGRESS.snapshot(key)
+        return {
+            "ok": True,
+            "job_key": key,
+            "progress": snap,
+            "found": snap is not None,
+        }
+
+    def retry_national_rollup_regions(
+        self,
+        *,
+        environment: str,
+        period: str,
+        org_unit: str,
+        region_uids: list[str] | None = None,
+        force_refresh: bool = True,
+    ) -> dict[str, Any]:
+        """Re-fetch failed (or named) regions and rebuild the National aggregate."""
+        env = validate_environment(environment)
+        pe = assert_allowed_quarter(period, allowed_quarter_ids(self.registry()))
+        ou = validate_org_unit(org_unit, required=True)
+        ou_meta = self._ou_store.get(env, ou) or {}
+        if int(ou_meta.get("level") or 0) != 1:
+            raise ReportSecurityError(
+                "Regional retry is only valid for Philippines (National).",
+                code="invalid_org_unit",
+            )
+        version = indicator_version(self.registry())
+        job_key = NationalRollupProgress.job_key(
+            environment=env, period=pe, org_unit=ou, version=version
+        )
+        snap = ROLLUP_PROGRESS.snapshot(job_key)
+        if not snap:
+            # Start a fresh national report (includes all regions).
+            return self.report(
+                environment=env,
+                period=pe,
+                org_unit=ou,
+                force_refresh=force_refresh,
+            )
+        wanted = {
+            (u or "").strip()
+            for u in (region_uids or [])
+            if (u or "").strip()
+        }
+        if not wanted:
+            wanted = {
+                r["uid"]
+                for r in (snap.get("regions") or [])
+                if r.get("status") == STATUS_FAILED and r.get("uid")
+            }
+        if not wanted:
+            raise ReportSecurityError(
+                "No failed regions to retry.",
+                code="national_rollup_nothing_to_retry",
+            )
+
+        payloads = ROLLUP_PROGRESS.region_payloads(job_key)
+        regions_meta = {
+            r["uid"]: r for r in (snap.get("regions") or []) if r.get("uid")
+        }
+        for uid in sorted(wanted):
+            meta = regions_meta.get(uid) or {"uid": uid, "name": uid}
+            ROLLUP_PROGRESS.set_region(job_key, uid, status=STATUS_PROCESSING)
+            t0 = time.perf_counter()
+            try:
+                region_payload = self._cached_fetch(
+                    scope="report",
+                    environment=env,
+                    period=pe,
+                    org_unit=uid,
+                    disaggregation="none",
+                    force_refresh=force_refresh,
+                    section=None,
+                    geographic_breakdown=BREAKDOWN_NONE,
+                )
+                latency = int((time.perf_counter() - t0) * 1000)
+                cache_hit = bool((region_payload.get("cache") or {}).get("hit"))
+                ROLLUP_PROGRESS.store_region_payload(job_key, uid, region_payload)
+                ROLLUP_PROGRESS.set_region(
+                    job_key,
+                    uid,
+                    status=STATUS_CACHED if cache_hit else STATUS_COMPLETED,
+                    cache_hit=cache_hit,
+                    latency_ms=latency,
+                )
+                payloads[uid] = region_payload
+            except ReportSecurityError as exc:
+                ROLLUP_PROGRESS.set_region(
+                    job_key, uid, status=STATUS_FAILED, error=str(exc)
+                )
+            except Exception as exc:  # noqa: BLE001
+                ROLLUP_PROGRESS.set_region(
+                    job_key, uid, status=STATUS_FAILED, error=str(exc)
+                )
+
+        snap2 = ROLLUP_PROGRESS.snapshot(job_key) or {}
+        still_failed = [
+            r for r in (snap2.get("regions") or []) if r.get("status") == STATUS_FAILED
+        ]
+        if still_failed:
+            ROLLUP_PROGRESS.finish(
+                job_key,
+                status="incomplete",
+                error=f"{len(still_failed)} region(s) still failed",
+            )
+            raise ReportSecurityError(
+                f"National roll-up incomplete: {len(still_failed)} region(s) failed. "
+                "Retry failed regions.",
+                code="national_rollup_incomplete",
+            )
+
+        reg = self.registry()
+        design = self.design_bindings()
+        indicators = self._select_indicators(reg, scope="report", section=None)
+        freshness = datetime.now(timezone.utc).isoformat()
+        cache_key = report_cache_key(
+            environment=env,
+            period=pe,
+            org_unit=ou,
+            disaggregation="none",
+            geographic_breakdown=BREAKDOWN_NONE,
+            indicator_version=version,
+        )
+        ordered_uids = [r["uid"] for r in (snap2.get("regions") or []) if r.get("uid")]
+        payload = self._assemble_national_from_regions(
+            scope="report",
+            env=env,
+            pe=pe,
+            ou=ou,
+            disagg="none",
+            section=None,
+            cache_key=cache_key,
+            reg=reg,
+            design=design,
+            indicators=indicators,
+            freshness=freshness,
+            ou_meta=ou_meta,
+            region_payloads=[payloads[u] for u in ordered_uids if u in payloads],
+            region_metas=[regions_meta.get(u) or {"uid": u, "name": u} for u in ordered_uids],
+            started=time.perf_counter(),
+            http_requests_extra=0,
+            analytics_ms_extra=0,
+        )
+        REPORT_CACHE.set(cache_key, payload)
+        ROLLUP_PROGRESS.finish(job_key, status="completed")
+        return payload
+
+    def _list_national_regions(self, env: str, national_uid: str) -> list[dict[str, Any]]:
+        children = self._ou_store.list_children(env, national_uid, limit=80)
+        regions = []
+        for row in children:
+            try:
+                level = int(row.get("level") or 0)
+            except (TypeError, ValueError):
+                level = 0
+            if level == 2 and (row.get("uid") or row.get("id")):
+                regions.append(row)
+        if regions:
+            return regions
+        # Fallback when parent links are missing in the OU cache.
+        return [
+            r
+            for r in self._ou_store.list_level(env, 2, limit=80)
+            if r.get("uid") or r.get("id")
+        ]
+
+    def _fetch_national_regional_rollup(
+        self,
+        *,
+        scope: str,
+        env: str,
+        pe: str,
+        ou: str,
+        disagg: str,
+        section: str | None,
+        cache_key: str,
+        force_refresh: bool,
+        started: float,
+        reg: dict[str, Any],
+        design: dict[str, Any],
+        indicators: list[dict[str, Any]],
+        freshness: str,
+        ou_meta: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Generate National by rolling up regional reports (sum N/D; recompute %)."""
+        import os
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        regions = self._list_national_regions(env, ou)
+        if not regions:
+            raise ReportSecurityError(
+                "No regions found under Philippines (National) in the organisation-unit "
+                "cache. Sync org units, then retry National generation.",
+                code="national_rollup_no_regions",
+            )
+
+        version = indicator_version(reg)
+        job_key = NationalRollupProgress.job_key(
+            environment=env, period=pe, org_unit=ou, version=version
+        )
+        ROLLUP_PROGRESS.begin(
+            job_key,
+            regions=regions,
+            environment=env,
+            period=pe,
+            org_unit=ou,
+        )
+
+        try:
+            max_workers = max(1, min(8, int(os.environ.get("HCSC_NATIONAL_ROLLUP_WORKERS") or 3)))
+        except ValueError:
+            max_workers = 3
+
+        payloads_by_uid: dict[str, dict[str, Any]] = {}
+        errors: dict[str, str] = {}
+
+        def _one(region: dict[str, Any]) -> tuple[str, dict[str, Any] | None, str | None, bool, int]:
+            uid = str(region.get("uid") or region.get("id") or "")
+            ROLLUP_PROGRESS.set_region(job_key, uid, status=STATUS_PROCESSING)
+            t0 = time.perf_counter()
+            try:
+                payload = self._cached_fetch(
+                    scope=scope,
+                    environment=env,
+                    period=pe,
+                    org_unit=uid,
+                    disaggregation=disagg,
+                    force_refresh=force_refresh,
+                    section=section,
+                    geographic_breakdown=BREAKDOWN_NONE,
+                )
+                latency = int((time.perf_counter() - t0) * 1000)
+                cache_hit = bool((payload.get("cache") or {}).get("hit"))
+                return uid, payload, None, cache_hit, latency
+            except ReportSecurityError as exc:
+                return uid, None, str(exc), False, int((time.perf_counter() - t0) * 1000)
+            except Exception as exc:  # noqa: BLE001
+                return uid, None, str(exc), False, int((time.perf_counter() - t0) * 1000)
+
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = [pool.submit(_one, r) for r in regions]
+            for fut in as_completed(futures):
+                uid, payload, err, cache_hit, latency = fut.result()
+                if err or payload is None:
+                    errors[uid] = err or "Region report failed"
+                    ROLLUP_PROGRESS.set_region(
+                        job_key, uid, status=STATUS_FAILED, error=errors[uid], latency_ms=latency
+                    )
+                else:
+                    payloads_by_uid[uid] = payload
+                    ROLLUP_PROGRESS.store_region_payload(job_key, uid, payload)
+                    ROLLUP_PROGRESS.set_region(
+                        job_key,
+                        uid,
+                        status=STATUS_CACHED if cache_hit else STATUS_COMPLETED,
+                        cache_hit=cache_hit,
+                        latency_ms=latency,
+                    )
+
+        if errors:
+            ROLLUP_PROGRESS.finish(
+                job_key,
+                status="incomplete",
+                error=f"{len(errors)} region(s) failed",
+            )
+            raise ReportSecurityError(
+                f"National roll-up incomplete: {len(errors)} of {len(regions)} "
+                "region(s) failed. Retry failed regions without restarting.",
+                code="national_rollup_incomplete",
+            )
+
+        ordered = [
+            (r, payloads_by_uid[str(r.get("uid") or r.get("id"))])
+            for r in regions
+            if str(r.get("uid") or r.get("id")) in payloads_by_uid
+        ]
+        http_extra = sum(
+            int((p.get("timings") or {}).get("http_requests") or 0) for _, p in ordered
+        )
+        analytics_extra = sum(
+            int((p.get("timings") or {}).get("analytics_ms") or 0) for _, p in ordered
+        )
+        payload = self._assemble_national_from_regions(
+            scope=scope,
+            env=env,
+            pe=pe,
+            ou=ou,
+            disagg=disagg,
+            section=section,
+            cache_key=cache_key,
+            reg=reg,
+            design=design,
+            indicators=indicators,
+            freshness=freshness,
+            ou_meta=ou_meta,
+            region_payloads=[p for _, p in ordered],
+            region_metas=[r for r, _ in ordered],
+            started=started,
+            http_requests_extra=http_extra,
+            analytics_ms_extra=analytics_extra,
+        )
+        ROLLUP_PROGRESS.finish(job_key, status="completed")
+        return payload
+
+    def _assemble_national_from_regions(
+        self,
+        *,
+        scope: str,
+        env: str,
+        pe: str,
+        ou: str,
+        disagg: str,
+        section: str | None,
+        cache_key: str,
+        reg: dict[str, Any],
+        design: dict[str, Any],
+        indicators: list[dict[str, Any]],
+        freshness: str,
+        ou_meta: dict[str, Any],
+        region_payloads: list[dict[str, Any]],
+        region_metas: list[dict[str, Any]],
+        started: float,
+        http_requests_extra: int,
+        analytics_ms_extra: int,
+    ) -> dict[str, Any]:
+        by_key: dict[str, list[dict[str, Any]]] = {}
+        for payload in region_payloads:
+            for row in payload.get("results") or []:
+                by_key.setdefault(row.get("indicator_key") or "", []).append(row)
+
+        adapter_rows = aggregate_result_rows(
+            indicators=indicators, regional_results_by_key=by_key
+        )
+        mapped_by_key = {r["indicator_key"]: r for r in adapter_rows}
+
+        results: list[dict[str, Any]] = []
+        calc_refs: list[dict[str, Any]] = []
+        mapping_rows: list[dict[str, Any]] = []
+        for ind in indicators:
+            adapter_row = mapped_by_key.get(ind["key"])
+            if adapter_row:
+                enriched = self._build_result_row(
+                    ind,
+                    mapped=adapter_row.get("mapped") or {},
+                    freshness=freshness,
+                    adapter_name=adapter_row.get("adapter") or "dhis2_analytics",
+                    retrieval_method=adapter_row.get("retrieval_method")
+                    or "Regional roll-up",
+                    deferred=bool(adapter_row.get("deferred")),
+                    deferred_reason=adapter_row.get("reason"),
+                )
+            else:
+                enriched = self._build_result_row(
+                    ind,
+                    mapped={
+                        "count": None,
+                        "numerator": None,
+                        "denominator": None,
+                        "percentage": None,
+                        "source_uid": (ind.get("dhis2_uids") or {}).get("value"),
+                    },
+                    freshness=freshness,
+                    adapter_name="unresolved",
+                    retrieval_method="Unresolved",
+                    deferred=True,
+                    deferred_reason=ind.get("notes") or "Unresolved — no adapter retrieval.",
+                )
+            results.append(enriched)
+            if ind.get("percentage_formula_reference") or ind.get("lineage_reference"):
+                calc_refs.append(
+                    {
+                        "indicator_key": ind["key"],
+                        "display_name": ind["display_name"],
+                        "formula_reference": ind.get("percentage_formula_reference"),
+                        "lineage_reference": ind.get("lineage_reference"),
+                        "invented": False,
+                    }
+                )
+            mapping_rows.append(
+                {
+                    "indicator_key": ind["key"],
+                    "display_name": ind["display_name"],
+                    "section": ind.get("section"),
+                    "source_badge": enriched.get("source_badge"),
+                    "source_type": ind.get("source_type"),
+                    "source_owner": ind.get("source_owner"),
+                    "uid": enriched.get("source_uid"),
+                    "source_table_view_reference": ind.get("source_table_view_reference"),
+                    "approved_sql_query_id": ind.get("approved_sql_query_id"),
+                    "capability_reference": ind.get("capability_reference"),
+                    "adapter": enriched.get("adapter"),
+                    "unresolved": bool(ind.get("unresolved")),
+                }
+            )
+
+        mismatches = verify_national_equals_region_sums(
+            results, [p.get("results") or [] for p in region_payloads]
+        )
+        retrieval = build_retrieval_panel(
+            retrieval_method="Regional roll-up",
+            request_meta={
+                "readable": (
+                    f"National totals from {len(region_payloads)} regional reports "
+                    "(sum numerators/denominators; recompute %; never average %)."
+                ),
+                "parameters": {
+                    "architecture": "regional_rollup",
+                    "region_count": len(region_payloads),
+                    "regions": [
+                        {"uid": m.get("uid") or m.get("id"), "name": m.get("name")}
+                        for m in region_metas
+                    ],
+                },
+            },
+            calculation_refs=calc_refs,
+            source_mapping_rows=mapping_rows,
+            pi_expressions={},
+        )
+
+        by_group: dict[str, list[dict[str, Any]]] = {}
+        for row in results:
+            by_group.setdefault(
+                row.get("display_group") or row.get("section") or "unresolved", []
+            ).append(row)
+        from hub.hcsc_indicators.branding import DISPLAY_GROUP_LABELS, DISPLAY_GROUPS, RF_DOMAIN_GROUPS
+
+        sections_out = []
+        for gid in DISPLAY_GROUPS:
+            rows = by_group.get(gid) or []
+            if not rows and not (
+                gid == "results_framework" and any(by_group.get(d) for d in RF_DOMAIN_GROUPS)
+            ):
+                continue
+            sections_out.append(
+                {
+                    "id": gid,
+                    "label": DISPLAY_GROUP_LABELS.get(gid, gid),
+                    "results": rows,
+                    "count": len(rows),
+                    "rf_domain": gid in RF_DOMAIN_GROUPS,
+                }
+            )
+
+        total_ms = int((time.perf_counter() - started) * 1000)
+        package = export_package_meta(
+            kind="report",
+            environment=env,
+            period=pe,
+            org_unit=ou,
+            generated_at=freshness,
+            source_versions={
+                "registry": "config/hcsc_indicators.yaml",
+                "npmo_report_uid": reg.get("npmo_report_uid"),
+                "architecture": "regional_rollup",
+                "region_count": len(region_payloads),
+                "indicator_version": indicator_version(reg),
+            },
+        )
+        return {
+            "ok": True,
+            "scope": scope,
+            "section": section,
+            "environment": env,
+            "period": pe,
+            "org_unit": ou,
+            "org_unit_name": "Philippines (National)",
+            "org_unit_level": 1,
+            "scope_label": "National Level",
+            "disaggregation": disagg,
+            "geographic_breakdown": {"mode": BREAKDOWN_NONE, "children": []},
+            "freshness": freshness,
+            "package": package,
+            "results": results,
+            "sections": sections_out,
+            "adapters_used": ["dhis2_analytics"],
+            "query": retrieval,
+            "retrieval": retrieval,
+            "design_unresolved_elements": design.get("unresolved_elements") or [],
+            "registry_unresolved_keys": [
+                r["indicator_key"] for r in results if r.get("unresolved")
+            ],
+            "timings": {
+                "total_ms": total_ms,
+                "analytics_ms": analytics_ms_extra,
+                "dx_count": 0,
+                "http_requests": http_requests_extra,
+                "indicator_count": len(results),
+                "architecture": "regional_rollup",
+                "region_count": len(region_payloads),
+            },
+            "rollup": {
+                "architecture": "regional_rollup",
+                "region_count": len(region_payloads),
+                "regions": [
+                    {"uid": m.get("uid") or m.get("id"), "name": m.get("name")}
+                    for m in region_metas
+                ],
+                "validation_mismatches": mismatches,
+                "aggregation": "sum_numerators_denominators_recompute_percentage",
+            },
+            "cache": {"hit": False, "key": cache_key},
+            "dhis2_writes": 0,
+            "boundaries": {
+                "readonly": True,
+                "no_formula_engine": True,
+                "no_html_scrape": True,
+                "national_architecture": "regional_rollup",
+            },
+        }
+
     def _fetch_indicators(
         self,
         *,
@@ -582,6 +1123,7 @@ class HcscIndicatorService:
         section: str | None,
         cache_key: str,
         geographic_breakdown: str = "none",
+        force_refresh: bool = False,
     ) -> dict[str, Any]:
         started = time.perf_counter()
         reg = self.registry()
@@ -596,6 +1138,60 @@ class HcscIndicatorService:
             ou_level = None
         is_national = ou_level == 1
         ou_name = ou_meta.get("name") or ou
+
+        # National aggregate: regional roll-up (no nationwide analytics call).
+        if is_national:
+            rollup_payload = self._fetch_national_regional_rollup(
+                scope=scope,
+                env=env,
+                pe=pe,
+                ou=ou,
+                disagg=disagg,
+                section=section,
+                cache_key=cache_key,
+                force_refresh=force_refresh,
+                started=started,
+                reg=reg,
+                design=design,
+                indicators=indicators,
+                freshness=freshness,
+                ou_meta=ou_meta,
+            )
+            if (geographic_breakdown or BREAKDOWN_NONE) == BREAKDOWN_NONE:
+                return rollup_payload
+            # Parent from roll-up; child OUs via existing geographic breakdown path.
+            overview_inds = [
+                r
+                for r in (reg.get("overview_indicators") or [])
+                if select_adapter(r) == ADAPTER_DHIS2
+            ]
+            if not overview_inds:
+                overview_inds = [
+                    r
+                    for r in (reg.get("indicators") or [])
+                    if select_adapter(r) == ADAPTER_DHIS2
+                ]
+            geo_payload = self._build_geographic_breakdown(
+                env=env,
+                pe=pe,
+                ou=ou,
+                breakdown_id=geographic_breakdown,
+                indicators=overview_inds,
+                freshness=freshness,
+            )
+            geo_timings = geo_payload.get("timings") or {}
+            timings = dict(rollup_payload.get("timings") or {})
+            timings["http_requests"] = int(timings.get("http_requests") or 0) + int(
+                geo_timings.get("http_requests") or 0
+            )
+            timings["analytics_ms"] = int(timings.get("analytics_ms") or 0) + int(
+                geo_timings.get("analytics_ms") or 0
+            )
+            timings["total_ms"] = int((time.perf_counter() - started) * 1000)
+            out = dict(rollup_payload)
+            out["geographic_breakdown"] = geo_payload
+            out["timings"] = timings
+            return out
 
         by_adapter: dict[str, list[dict[str, Any]]] = {
             ADAPTER_DHIS2: [],

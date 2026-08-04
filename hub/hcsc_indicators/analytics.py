@@ -185,14 +185,32 @@ def analytics_dx_chunk_size(*, ou_level: int | None = None) -> int:
     """How many dx UIDs per /api/analytics.json call.
 
     National Live often hits nginx 504 when all HCSC UIDs go in one request.
+    Smaller national chunks (default 3) also finish under the gateway more reliably.
     """
     if ou_level == 1:
-        return _env_int("HCSC_ANALYTICS_DX_CHUNK_NATIONAL", 6)
+        return _env_int("HCSC_ANALYTICS_DX_CHUNK_NATIONAL", 3)
     return _env_int("HCSC_ANALYTICS_DX_CHUNK", 24)
 
 
-def analytics_chunk_timeout_seconds(total_timeout: float) -> float:
-    """Per-chunk timeout so one nginx 504 fails fast and retries/next chunk can proceed."""
+def analytics_chunk_timeout_seconds(
+    total_timeout: float, *, ou_level: int | None = None
+) -> float:
+    """Per-chunk HTTP timeout for each /api/analytics.json call.
+
+    National Live routinely needs several minutes per small dx chunk. When the
+    national total timeout is unlimited (0), do not fall back to the short
+    non-national 90s chunk default — that aborts mid-query (client timeout).
+    """
+    if ou_level == 1:
+        raw = (
+            os.environ.get("HCSC_NATIONAL_ANALYTICS_CHUNK_TIMEOUT_SECONDS") or ""
+        ).strip().lower()
+        if raw in {"0", "none", "unlimited", "inf"}:
+            return 0.0
+        if raw:
+            return _env_float("HCSC_NATIONAL_ANALYTICS_CHUNK_TIMEOUT_SECONDS", 300.0)
+        return 300.0
+
     per_chunk = _env_float("HCSC_ANALYTICS_CHUNK_TIMEOUT_SECONDS", 90.0)
     if total_timeout <= 0:
         return per_chunk
@@ -248,7 +266,7 @@ def fetch_analytics_batch(
         if timeout is not None
         else resolve_analytics_timeout(org_unit=ou_list, ou_level=ou_level)
     )
-    chunk_timeout = analytics_chunk_timeout_seconds(timeout_s)
+    chunk_timeout = analytics_chunk_timeout_seconds(timeout_s, ou_level=ou_level)
 
     started = time.perf_counter()
     merged_values: dict[str, float | None] = {}

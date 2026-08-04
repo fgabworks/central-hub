@@ -83,6 +83,7 @@ from hub.notebook import (
     WORKSPACES,
     NotebookStore,
     QuickNotepadStore,
+    mission_control,
     normalize_scope,
     normalize_workspace,
     render_markdown,
@@ -942,6 +943,20 @@ def create_app() -> Flask:
             dhis2_tools_local = _DHIS2_TOOLS
             upcoming_events = []
 
+        mission_widget = None
+        if scope_n == "work":
+            mission_widget = mission_control(notebook).widget(actor=current_actor())
+            if mission_widget["reminder"]["active"]:
+                audit.append(
+                    action=audit_actions.NOTEBOOK_MISSION_REMINDER,
+                    target="missions",
+                    detail=(
+                        "Dashboard surfaced reminders for "
+                        f"{mission_widget['reminder']['count']} TODAY missions"
+                    ),
+                    ok=True,
+                )
+
         persist_workspace(notebook.db, scope_n)
         with timed("template_dashboard"):
             html = render_template(
@@ -968,6 +983,7 @@ def create_app() -> Flask:
                 page_title=(
                     "Personal Dashboard" if scope_n == "personal" else "Work Dashboard"
                 ),
+                mission_widget=mission_widget,
                 page_sub=(
                     "Personal notes, tasks, calendar, and Quick Notepad."
                     if scope_n == "personal"
@@ -1617,6 +1633,9 @@ def create_app() -> Flask:
         error = None
         selected_id = (request.values.get("note") or "").strip()
         nb_ep = notebook_endpoint(scope_n)
+        view = (request.values.get("view") or "").strip().lower()
+        missions_view = scope_n == "work" and view == "missions"
+        mc = mission_control(store) if scope_n == "work" else None
 
         if request.method == "POST":
             action = (request.form.get("action") or "").strip()
@@ -1647,6 +1666,68 @@ def create_app() -> Flask:
                     ok=True,
                 )
                 return redirect(url_for(nb_ep, note=note["id"]))
+            if mc is not None and action == "mission_create":
+                title = (request.form.get("mission_title") or "").strip()
+                if not title:
+                    error = "Mission title is required."
+                    missions_view = True
+                else:
+                    created = mc.create_mission(
+                        title=title,
+                        body_md=request.form.get("mission_notes") or "",
+                        priority=request.form.get("mission_priority") or "medium",
+                        due_date=request.form.get("mission_due") or None,
+                        actor=actor,
+                    )
+                    audit.append(
+                        action=audit_actions.NOTEBOOK_MISSION_CREATE,
+                        target=created["id"],
+                        detail=f"Created TODAY mission: {created.get('title')}",
+                        ok=True,
+                    )
+                    return redirect(url_for(nb_ep, view="missions"))
+            if mc is not None and action in {
+                "mission_complete",
+                "mission_reopen",
+                "mission_reschedule",
+            }:
+                note_id = (request.form.get("note_id") or "").strip()
+                updated = None
+                if action == "mission_complete" and note_id:
+                    updated = mc.complete_mission(note_id, actor=actor)
+                    if updated:
+                        audit.append(
+                            action=audit_actions.NOTEBOOK_MISSION_COMPLETE,
+                            target=note_id,
+                            detail="Completed TODAY mission",
+                            ok=True,
+                        )
+                elif action == "mission_reopen" and note_id:
+                    updated = mc.reopen_mission(note_id, actor=actor)
+                    if updated:
+                        audit.append(
+                            action=audit_actions.NOTEBOOK_MISSION_COMPLETE,
+                            target=note_id,
+                            detail="Reopened TODAY mission",
+                            ok=True,
+                        )
+                elif action == "mission_reschedule" and note_id:
+                    updated = mc.reschedule_mission(
+                        note_id,
+                        due_date=request.form.get("mission_due") or "",
+                        actor=actor,
+                    )
+                    if updated:
+                        audit.append(
+                            action=audit_actions.NOTEBOOK_MISSION_RESCHEDULE,
+                            target=note_id,
+                            detail=f"Rescheduled TODAY mission to {updated.get('due_date')}",
+                            ok=True,
+                        )
+                if updated:
+                    return redirect(url_for(nb_ep, view="missions"))
+                error = "Mission not found."
+                missions_view = True
             note_id = (request.form.get("note_id") or "").strip()
             if action == "save" and note_id:
                 existing = store.get(note_id)
@@ -1743,8 +1824,71 @@ def create_app() -> Flask:
                         selected_id = ""
                     else:
                         error = "Note not found."
-            elif action:
+            elif action and not action.startswith("mission_"):
                 error = f"Unknown action: {action}"
+
+        mission_board = None
+        if missions_view and mc is not None:
+            mission_board = mc.board(actor=current_actor())
+            if mission_board["sync"]["carried_count"]:
+                audit.append(
+                    action=audit_actions.NOTEBOOK_MISSION_CARRY_OVER,
+                    target="missions",
+                    detail=(
+                        f"Carried over {mission_board['sync']['carried_count']} unfinished missions"
+                    ),
+                    ok=True,
+                )
+            if mission_board["sync"]["reminded_count"]:
+                audit.append(
+                    action=audit_actions.NOTEBOOK_MISSION_REMINDER,
+                    target="missions",
+                    detail=(
+                        f"Sent reminders for {mission_board['sync']['reminded_count']} TODAY missions"
+                    ),
+                    ok=True,
+                )
+            persist_workspace(store.db, scope_n)
+            audit.append(
+                action=audit_actions.NOTEBOOK_VIEW,
+                target="missions",
+                detail="Notebook view scope=work view=missions",
+                ok=True,
+            )
+            html = render_template(
+                "notebook.html",
+                notes=[],
+                selected=None,
+                selected_id="",
+                counts=store.status_counts(scope=scope_n),
+                status="all",
+                filters={"repo": "", "type": "", "priority": "", "tag": "", "q": ""},
+                registry_repos=_notebook_registry_options(),
+                all_tags=store.list_tags(scope=scope_n),
+                statuses=STATUSES,
+                status_labels=STATUS_LABELS,
+                note_types=NOTE_TYPES,
+                note_type_labels=NOTE_TYPE_LABELS,
+                priorities=PRIORITIES,
+                priority_labels=PRIORITY_LABELS,
+                repo_roles=REPO_ROLES,
+                repo_role_labels=REPO_ROLE_LABELS,
+                preview_html="",
+                notepad=QuickNotepadStore(store.db, scope=scope_n).get(),
+                show_notepad=True,
+                note_scope=scope_n,
+                scope_label=SCOPE_LABELS.get(scope_n, scope_n),
+                notebook_endpoint=nb_ep,
+                allow_repositories=True,
+                page_title="Work Notebook",
+                page_sub="Local notes linked to registry repositories. Survives missing repos.",
+                flash=flash,
+                error=error,
+                missions_view=True,
+                mission_board=mission_board,
+            )
+            resp = app.make_response(html)
+            return apply_workspace_cookie(resp, scope_n)
 
         status = (request.args.get("status") or "all").strip().lower()
         repository_id = (request.args.get("repo") or "").strip()
@@ -1830,6 +1974,8 @@ def create_app() -> Flask:
             ),
             flash=flash,
             error=error,
+            missions_view=False,
+            mission_board=None,
         )
         resp = app.make_response(html)
         return apply_workspace_cookie(resp, scope_n)
@@ -2047,6 +2193,144 @@ def create_app() -> Flask:
             ok=True,
         )
         return jsonify({"ok": True, "notepad": restored})
+
+    @app.get("/api/notebook/missions/board")
+    def api_notebook_missions_board():
+        """Shared Mission Control board payload (Work Notebook + dashboard)."""
+        store: NotebookStore = app.config["NOTEBOOK"]
+        board = mission_control(store).board(actor=current_actor())
+        return jsonify({"ok": True, "board": board})
+
+    @app.get("/api/notebook/missions/widget")
+    def api_notebook_missions_widget():
+        store: NotebookStore = app.config["NOTEBOOK"]
+        widget = mission_control(store).widget(actor=current_actor())
+        return jsonify({"ok": True, "widget": widget})
+
+    @app.post("/api/notebook/missions")
+    def api_notebook_missions_create():
+        store: NotebookStore = app.config["NOTEBOOK"]
+        audit: AuditStore = app.config["AUDIT"]
+        data = request.get_json(silent=True) or {}
+        title = str(data.get("title") or "").strip()
+        if not title:
+            return jsonify({"ok": False, "error": "title is required"}), 400
+        created = mission_control(store).create_mission(
+            title=title,
+            body_md=str(data.get("notes") or data.get("body_md") or ""),
+            priority=str(data.get("priority") or "medium"),
+            due_date=str(data.get("due_date") or "") or None,
+            actor=current_actor(),
+        )
+        audit.append(
+            action=audit_actions.NOTEBOOK_MISSION_CREATE,
+            target=created["id"],
+            detail=f"Created TODAY mission: {created.get('title')}",
+            ok=True,
+        )
+        return jsonify({"ok": True, "mission": created})
+
+    @app.post("/api/notebook/missions/<note_id>/complete")
+    def api_notebook_missions_complete(note_id: str):
+        store: NotebookStore = app.config["NOTEBOOK"]
+        audit: AuditStore = app.config["AUDIT"]
+        mc = mission_control(store)
+        updated = mc.complete_mission(note_id, actor=current_actor())
+        if not updated:
+            return jsonify({"ok": False, "error": "Mission not found"}), 404
+        audit.append(
+            action=audit_actions.NOTEBOOK_MISSION_COMPLETE,
+            target=note_id,
+            detail="Completed TODAY mission",
+            ok=True,
+        )
+        return jsonify(
+            {
+                "ok": True,
+                "mission": updated,
+                "widget": mc.widget(actor=current_actor(), sync=False),
+            }
+        )
+
+    @app.post("/api/notebook/missions/<note_id>/reopen")
+    def api_notebook_missions_reopen(note_id: str):
+        store: NotebookStore = app.config["NOTEBOOK"]
+        audit: AuditStore = app.config["AUDIT"]
+        mc = mission_control(store)
+        updated = mc.reopen_mission(note_id, actor=current_actor())
+        if not updated:
+            return jsonify({"ok": False, "error": "Mission not found"}), 404
+        audit.append(
+            action=audit_actions.NOTEBOOK_MISSION_COMPLETE,
+            target=note_id,
+            detail="Reopened TODAY mission",
+            ok=True,
+        )
+        return jsonify(
+            {
+                "ok": True,
+                "mission": updated,
+                "widget": mc.widget(actor=current_actor(), sync=False),
+            }
+        )
+
+    @app.post("/api/notebook/missions/clear")
+    def api_notebook_missions_clear():
+        store: NotebookStore = app.config["NOTEBOOK"]
+        audit: AuditStore = app.config["AUDIT"]
+        data = request.get_json(silent=True) or {}
+        # Require explicit confirmation so Clear never silently wipes missions.
+        confirm = str(data.get("confirm") or "").strip().lower()
+        mode = str(data.get("mode") or "completed").strip().lower()
+        if mode not in {"completed", "all"}:
+            mode = "completed"
+        expected = "clear-all" if mode == "all" else "clear-completed"
+        if confirm != expected:
+            return (
+                jsonify(
+                    {
+                        "ok": False,
+                        "error": (
+                            "Confirmation required. "
+                            "Use confirm=clear-completed (default) or confirm=clear-all."
+                        ),
+                    }
+                ),
+                400,
+            )
+        result = mission_control(store).clear_missions(
+            mode=mode, actor=current_actor()
+        )
+        audit.append(
+            action=audit_actions.NOTEBOOK_MISSION_CLEAR,
+            target="missions",
+            detail=(
+                f"Cleared {result['cleared_count']} TODAY missions "
+                f"(mode={result['mode']}; archived, history preserved)"
+            ),
+            ok=True,
+        )
+        return jsonify({"ok": True, **result})
+
+    @app.post("/api/notebook/missions/<note_id>/reschedule")
+    def api_notebook_missions_reschedule(note_id: str):
+        store: NotebookStore = app.config["NOTEBOOK"]
+        audit: AuditStore = app.config["AUDIT"]
+        data = request.get_json(silent=True) or {}
+        updated = mission_control(store).reschedule_mission(
+            note_id,
+            due_date=str(data.get("due_date") or ""),
+            actor=current_actor(),
+        )
+        if not updated:
+            return jsonify({"ok": False, "error": "Mission not found"}), 404
+        audit.append(
+            action=audit_actions.NOTEBOOK_MISSION_RESCHEDULE,
+            target=note_id,
+            detail=f"Rescheduled TODAY mission to {updated.get('due_date')}",
+            ok=True,
+        )
+        return jsonify({"ok": True, "mission": updated})
 
     # ----- SQL Workspace (read-only) -----
     def _sql_store() -> SqlWorkspaceStore:

@@ -455,6 +455,8 @@ class NotebookStore:
         for row in rows:
             note = dict(row)
             note["pinned"] = bool(note.get("pinned"))
+            note["carry_over"] = bool(int(note.get("carry_over") or 0))
+            note["reminder_status"] = str(note.get("reminder_status") or "none")
             note["scope"] = normalize_scope(note.get("scope"))
             try:
                 note["tags"] = json.loads(note.get("tags_json") or "[]")
@@ -483,6 +485,8 @@ class NotebookStore:
     ) -> dict[str, Any]:
         note = dict(row)
         note["pinned"] = bool(note.get("pinned"))
+        note["carry_over"] = bool(int(note.get("carry_over") or 0))
+        note["reminder_status"] = str(note.get("reminder_status") or "none")
         note["scope"] = normalize_scope(note.get("scope"))
         try:
             note["tags"] = json.loads(note.get("tags_json") or "[]")

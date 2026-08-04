@@ -27,6 +27,7 @@ NOTE_TYPES = (
     "decision",
     "idea",
     "follow-up",
+    "mission",
 )
 
 NOTE_TYPE_LABELS = {
@@ -36,7 +37,19 @@ NOTE_TYPE_LABELS = {
     "decision": "Decision",
     "idea": "Idea",
     "follow-up": "Follow-up",
+    "mission": "Mission",
 }
+
+# TODAY Mission Control reminder lifecycle (notebook missions only).
+REMINDER_STATUSES = ("none", "pending", "sent", "skipped")
+REMINDER_STATUS_LABELS = {
+    "none": "None",
+    "pending": "Pending",
+    "sent": "Sent",
+    "skipped": "Skipped",
+}
+# Local-time cutoff: unfinished TODAY missions should be reminded before 17:00.
+MISSION_REMINDER_BEFORE_HOUR = 17
 
 PRIORITIES = ("low", "medium", "high", "urgent")
 
@@ -82,6 +95,11 @@ def normalize_status(value: str | None, *, default: str = "inbox") -> str:
 def normalize_type(value: str | None, *, default: str = "note") -> str:
     raw = (value or "").strip().lower()
     return raw if raw in NOTE_TYPES else default
+
+
+def normalize_reminder_status(value: str | None, *, default: str = "none") -> str:
+    raw = (value or "").strip().lower()
+    return raw if raw in REMINDER_STATUSES else default
 
 
 def normalize_priority(value: str | None, *, default: str = "medium") -> str:

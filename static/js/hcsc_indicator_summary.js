@@ -63,6 +63,8 @@
     elapsedTimer: null,
     slowTimer: null,
     timeoutTimer: null,
+    rollupPollTimer: null,
+    rollupProgress: null,
     cacheHit: false,
     staleReason: "",
     errorMessage: "",
@@ -979,6 +981,183 @@
       clearTimeout(state.timeoutTimer);
       state.timeoutTimer = null;
     }
+    if (state.rollupPollTimer) {
+      clearInterval(state.rollupPollTimer);
+      state.rollupPollTimer = null;
+    }
+  }
+
+  function isNationalSelected() {
+    var selectedPath = ouPicker && ouPicker.selectedPath ? ouPicker.selectedPath() : null;
+    return !!(selectedPath && selectedPath.level === 1);
+  }
+
+  function rollupProgressUrl() {
+    return root.getAttribute("data-national-progress-url") || "";
+  }
+
+  function rollupRetryUrl() {
+    return root.getAttribute("data-national-retry-url") || "";
+  }
+
+  function renderRollupProgress(progress) {
+    var host = $("hcsc-rollup-progress");
+    if (!host) return;
+    state.rollupProgress = progress || null;
+    if (!progress || !(progress.regions || []).length) {
+      host.hidden = true;
+      host.innerHTML = "";
+      return;
+    }
+    var counts = progress.counts || {};
+    var done =
+      (counts.completed || 0) + (counts.failed || 0);
+    var total = progress.total_regions || (progress.regions || []).length;
+    var title =
+      "Regions " + done + " / " + total +
+      (progress.status === "incomplete" ? " · incomplete" : "");
+    var items = (progress.regions || [])
+      .map(function (r) {
+        var st = r.status || "pending";
+        return (
+          '<li class="hcsc-rollup-item is-' +
+          st +
+          '"><span class="nm">' +
+          escapeHtml(r.name || r.uid || "") +
+          '</span><span class="st">' +
+          escapeHtml(st) +
+          (r.error ? " · " + escapeHtml(String(r.error).slice(0, 80)) : "") +
+          "</span></li>"
+        );
+      })
+      .join("");
+    host.hidden = false;
+    host.innerHTML =
+      '<p class="hcsc-rollup-progress-title">' +
+      escapeHtml(title) +
+      '</p><ul class="hcsc-rollup-list">' +
+      items +
+      "</ul>";
+  }
+
+  function startRollupProgressPolling(requestId) {
+    var url = rollupProgressUrl();
+    if (!url || !isNationalSelected()) return;
+    function poll() {
+      if (state.activeRequestId !== requestId) return;
+      var q =
+        url +
+        (url.indexOf("?") >= 0 ? "&" : "?") +
+        "environment=" +
+        encodeURIComponent(selectedEnv()) +
+        "&period=" +
+        encodeURIComponent(selectedPeriod()) +
+        "&orgUnit=" +
+        encodeURIComponent(selectedOu());
+      fetch(q, { credentials: "same-origin" })
+        .then(function (r) {
+          return r.json();
+        })
+        .then(function (body) {
+          if (state.activeRequestId !== requestId) return;
+          if (body && body.progress) {
+            renderRollupProgress(body.progress);
+            applyGenUi();
+          }
+        })
+        .catch(function () {});
+    }
+    poll();
+    state.rollupPollTimer = setInterval(poll, 1200);
+  }
+
+  function retryFailedNationalRegions() {
+    var url = rollupRetryUrl();
+    if (!url) {
+      loadReport(true);
+      return;
+    }
+    var failed = ((state.rollupProgress && state.rollupProgress.regions) || [])
+      .filter(function (r) {
+        return r.status === "failed";
+      })
+      .map(function (r) {
+        return r.uid;
+      });
+    stopActiveRequest("superseded");
+    state.requestSeq += 1;
+    var requestId = state.requestSeq;
+    state.activeRequestId = requestId;
+    state.genStartedAt = Date.now();
+    state.errorMessage = "";
+    setGenPhase(GEN.GENERATING, { updatingBackground: hasPriorResults() });
+    startRollupProgressPolling(requestId);
+    var q =
+      url +
+      (url.indexOf("?") >= 0 ? "&" : "?") +
+      "environment=" +
+      encodeURIComponent(selectedEnv()) +
+      "&period=" +
+      encodeURIComponent(selectedPeriod()) +
+      "&orgUnit=" +
+      encodeURIComponent(selectedOu());
+    fetch(q, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ region_uids: failed }),
+    })
+      .then(function (r) {
+        return r.json().then(function (body) {
+          body._status = r.status;
+          return body;
+        });
+      })
+      .then(function (data) {
+        if (state.activeRequestId !== requestId) return;
+        clearGenTimers();
+        state.activeRequestId = null;
+        if (data.rollup_progress) renderRollupProgress(data.rollup_progress);
+        if (!data.ok) {
+          state.lastRunOk = false;
+          state.errorMessage = data.error || "National region retry failed";
+          setGenPhase(GEN.ERROR, {
+            explicitMsg: state.errorMessage,
+            errorMessage: state.errorMessage,
+          });
+          return;
+        }
+        // Reuse finish path via synthetic success
+        state.results = data.results || [];
+        state.sections = data.sections || [];
+        state.retrieval = data.retrieval || data.query || null;
+        state.lastPayload = data;
+        state.generated = true;
+        state.lastRunAt = data.freshness || new Date().toISOString();
+        state.lastRunOk = true;
+        state.cacheHit = !!(data.cache && data.cache.hit);
+        state.lastSuccessScopeKey = currentScopeKey();
+        state.genCompletedAt = Date.now();
+        setGenPhase(GEN.SUCCESS_FRESH);
+        renderCards(state.results);
+        renderTable();
+        renderMapping();
+        renderLineage();
+        renderValidation();
+        renderRetrieval();
+        renderRollupProgress((data.rollup && { regions: (data.rollup.regions || []).map(function (r) {
+          return { uid: r.uid, name: r.name, status: "completed" };
+        }), total_regions: (data.rollup.regions || []).length, counts: { completed: (data.rollup.regions || []).length }, status: "completed" }) || state.rollupProgress);
+      })
+      .catch(function () {
+        if (state.activeRequestId !== requestId) return;
+        clearGenTimers();
+        state.activeRequestId = null;
+        setGenPhase(GEN.ERROR, {
+          explicitMsg: "National region retry failed.",
+          errorMessage: "National region retry failed.",
+        });
+      });
   }
 
   function formatAge(fromMs) {
@@ -1033,6 +1212,22 @@
       } else if (state.genSubPhase === "parent") {
         badge = "Generating selected area";
         helper = "Request in progress · " + elapsed;
+      } else if (isNationalSelected() && state.rollupProgress) {
+        var c = state.rollupProgress.counts || {};
+        var done = (c.completed || 0) + (c.failed || 0);
+        var total = state.rollupProgress.total_regions || 0;
+        var processing = (state.rollupProgress.regions || []).find(function (r) {
+          return r.status === "processing";
+        });
+        badge = "Generating National (by region)";
+        helper =
+          "Regions " +
+          done +
+          " / " +
+          total +
+          (processing ? " · " + (processing.name || "") : "") +
+          " · " +
+          elapsed;
       } else {
         badge = "Generating report";
         helper = "Request in progress · " + elapsed;
@@ -1042,7 +1237,9 @@
       badge =
         state.genSubPhase === "breakdown"
           ? "Still generating breakdown"
-          : "Still generating";
+          : isNationalSelected()
+            ? "Still generating National (by region)"
+            : "Still generating";
       helper = "This is taking longer than usual · " + elapsed;
       tone = "slow";
     } else if (phase === GEN.SUCCESS_FRESH) {
@@ -1215,7 +1412,17 @@
     } else if (phase === GEN.SUCCESS_CACHED) {
       buttons.push('<button type="button" class="btn btn-sm" data-gen-action="refresh">Refresh</button>');
     } else if (phase === GEN.ERROR || phase === GEN.TIMED_OUT || phase === GEN.CANCELLED) {
-      buttons.push('<button type="button" class="btn btn-sm btn-primary" data-gen-action="retry">Retry</button>');
+      var failedCount = ((state.rollupProgress && state.rollupProgress.regions) || []).filter(
+        function (r) {
+          return r.status === "failed";
+        }
+      ).length;
+      if (failedCount && isNationalSelected()) {
+        buttons.push(
+          '<button type="button" class="btn btn-sm btn-primary" data-gen-action="retry-failed-regions">Retry failed regions</button>'
+        );
+      }
+      buttons.push('<button type="button" class="btn btn-sm btn-primary" data-gen-action="retry">Retry all</button>');
       buttons.push('<button type="button" class="btn btn-sm" data-gen-action="copy-diagnostics">Copy Diagnostics</button>');
     }
     // Keep the actions row mounted for stable status-card height.
@@ -2621,8 +2828,7 @@
         : CLIENT_TIMEOUT_MS;
     var selectedPath = ouPicker && ouPicker.selectedPath ? ouPicker.selectedPath() : null;
     var isNationalScope = !!(selectedPath && selectedPath.level === 1);
-    // National analytics is a large batched DHIS2 request — do not abort in the browser.
-    // User can still Cancel; server uses HCSC_NATIONAL_ANALYTICS_TIMEOUT_SECONDS (default 600s).
+    // National uses regional roll-up — no browser abort timer; Cancel still works.
     if (!isNationalScope) {
       state.timeoutTimer = setTimeout(function () {
         if (state.activeRequestId !== requestId) return;
@@ -2640,6 +2846,7 @@
       }, timeoutMs);
     } else {
       state.timeoutTimer = null;
+      startRollupProgressPolling(requestId);
     }
 
     function fetchJson(url) {
@@ -2743,7 +2950,7 @@
       validateForm();
     }
 
-    function failWhole(message) {
+    function failWhole(message, payload) {
       clearGenTimers();
       state.abortController = null;
       state.activeRequestId = null;
@@ -2753,6 +2960,9 @@
       state.genSubPhase = "";
       state.lastRunOk = false;
       state.errorMessage = message || "Report failed";
+      if (payload && payload.rollup_progress) {
+        renderRollupProgress(payload.rollup_progress);
+      }
       state.lastDiagnostics = buildDiagnostics();
       setGenPhase(GEN.ERROR, {
         explicitMsg: state.errorMessage,
@@ -2819,8 +3029,18 @@
         .then(function (data) {
           if (state.activeRequestId !== requestId) return; // late / superseded
           if (!data.ok) {
-            failWhole(data.error || "Report failed");
+            failWhole(data.error || "Report failed", data);
             return;
+          }
+          if (data.rollup) {
+            renderRollupProgress({
+              status: "completed",
+              total_regions: (data.rollup.regions || []).length,
+              counts: { completed: (data.rollup.regions || []).length },
+              regions: (data.rollup.regions || []).map(function (r) {
+                return { uid: r.uid, name: r.name, status: "completed" };
+              }),
+            });
           }
           finishReportSuccess(data);
         })
@@ -2833,7 +3053,7 @@
       .then(function (parentData) {
         if (state.activeRequestId !== requestId) return; // late / superseded
         if (!parentData.ok) {
-          failWhole(parentData.error || "Report failed");
+          failWhole(parentData.error || "Report failed", parentData);
           return null;
         }
         applyParentSuccess(parentData);
@@ -3148,6 +3368,8 @@
         var action = btn.getAttribute("data-gen-action");
         if (action === "cancel") {
           cancelGeneration(true);
+        } else if (action === "retry-failed-regions") {
+          retryFailedNationalRegions();
         } else if (action === "retry" || action === "refresh" || action === "generate-latest") {
           loadReport(true);
         } else if (action === "copy-diagnostics") {

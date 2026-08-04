@@ -1,0 +1,91 @@
+{# Compact Work Dashboard widget — same MissionControl data as Notebook. #}
+{% if mission_widget %}
+<section
+  class="panel panel-mission-widget"
+  id="mc-dash-widget"
+  data-widget-url="{{ url_for('api_notebook_missions_widget') }}"
+  data-complete-url-template="{{ url_for('api_notebook_missions_complete', note_id='__ID__') }}"
+  data-reopen-url-template="{{ url_for('api_notebook_missions_reopen', note_id='__ID__') }}"
+  data-clear-url="{{ url_for('api_notebook_missions_clear') }}"
+  data-missions-href="{{ url_for(nb_ep, view='missions') }}"
+>
+  <div class="panel-header mc-widget-header">
+    <div class="mc-widget-heading">
+      <h2>🚀 TODAY Mission Control</h2>
+      <div class="mc-widget-badges" data-mc-badges>
+        <span class="mc-badge">{{ mission_widget.progress.total_all }} total</span>
+        <span class="mc-badge mc-badge-done">{{ mission_widget.progress.done }} completed</span>
+        <span class="mc-badge{% if mission_widget.progress.overdue %} mc-badge-carry{% endif %}">{{ mission_widget.progress.overdue }} carry-over</span>
+      </div>
+    </div>
+    <div class="panel-actions mc-widget-actions">
+      <a class="btn btn-sm" href="{{ url_for(nb_ep, view='missions') }}">Open Mission Control</a>
+      <button type="button" class="btn btn-sm" data-mc-clear-open>Clear</button>
+    </div>
+  </div>
+  <div class="panel-body mc-widget-body">
+    <div class="mc-widget-progress-row" data-mc-progress>
+      <strong data-mc-progress-label>{{ mission_widget.progress.done }}/{{ mission_widget.progress.total }} Completed</strong>
+      <div class="mc-progress-track mc-progress-track-inline" role="progressbar"
+           aria-valuemin="0" aria-valuemax="{{ mission_widget.progress.total }}"
+           aria-valuenow="{{ mission_widget.progress.done }}"
+           data-mc-progress-track>
+        <div class="mc-progress-bar" style="width: {{ mission_widget.progress.percent }}%" data-mc-progress-bar></div>
+      </div>
+    </div>
+
+    {% if mission_widget.reminder.active %}
+    <div class="mc-widget-reminder" data-mc-reminder>Reminder: {{ mission_widget.reminder.count }} unfinished before 5 PM</div>
+    {% else %}
+    <div class="mc-widget-reminder" data-mc-reminder hidden></div>
+    {% endif %}
+
+    <ul class="mc-widget-list" data-mc-list>
+      {% for m in mission_widget.top_missions %}
+      <li class="mc-widget-item{% if m.is_overdue_carry %} is-carry{% endif %}{% if m.status == 'done' %} is-done{% endif %}"
+          data-mission-id="{{ m.id }}">
+        <label class="mc-widget-check-label">
+          <input type="checkbox" class="mc-widget-checkbox"
+                 {% if m.status == 'done' %}checked{% endif %}
+                 data-mission-id="{{ m.id }}"
+                 aria-label="{% if m.status == 'done' %}Reopen{% else %}Complete{% endif %} {{ m.title }}">
+          <span class="mc-widget-main">
+            <span class="mc-widget-title">{{ m.title }}</span>
+            <span class="mc-widget-meta">
+              {% if m.is_overdue_carry %}
+                <span class="mc-chip mc-chip-carry">Carry-over</span>
+              {% elif m.show_priority_badge %}
+                <span class="mc-chip mc-chip-priority">{{ m.priority_label }}</span>
+              {% endif %}
+              {% if m.status == 'done' and m.completed_time_label %}
+                <span class="muted">{{ m.completed_time_label }}</span>
+              {% endif %}
+            </span>
+          </span>
+        </label>
+      </li>
+      {% else %}
+      <li class="muted mc-widget-empty" data-mc-empty>No missions for today. Add one in Mission Control.</li>
+      {% endfor %}
+    </ul>
+
+    {% if mission_widget.has_more %}
+    <a class="quiet mc-widget-view-all" data-mc-view-all href="{{ url_for(nb_ep, view='missions') }}">View all missions</a>
+    {% else %}
+    <a class="quiet mc-widget-view-all" data-mc-view-all href="{{ url_for(nb_ep, view='missions') }}" hidden>View all missions</a>
+    {% endif %}
+  </div>
+
+  <div class="mc-clear-backdrop" data-mc-clear-dialog hidden>
+    <div class="mc-clear-dialog" role="dialog" aria-modal="true" aria-labelledby="mc-clear-title">
+      <h3 id="mc-clear-title">Clear missions?</h3>
+      <p class="muted">This archives missions (history kept). It does not permanently delete them.</p>
+      <div class="mc-clear-actions">
+        <button type="button" class="btn btn-primary btn-sm" data-mc-clear-mode="completed">Clear completed</button>
+        <button type="button" class="btn btn-sm btn-danger" data-mc-clear-mode="all">Clear all missions</button>
+        <button type="button" class="btn btn-sm" data-mc-clear-cancel>Cancel</button>
+      </div>
+    </div>
+  </div>
+</section>
+{% endif %}

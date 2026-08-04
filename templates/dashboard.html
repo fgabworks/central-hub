@@ -62,8 +62,8 @@
   {% endfor %}
 </section>
 
-{# Row 1: Notebook Work Queue + DHIS2 Maintenance (or Personal upcoming + queue) #}
-<section class="dash-grid{% if note_scope == 'personal' %} dash-grid-personal{% endif %}">
+{# Row 1: TODAY Mission Control beside DHIS2 (work) / Personal upcoming + queue #}
+<section class="dash-grid{% if note_scope == 'personal' %} dash-grid-personal{% else %} dash-grid-mission-top{% endif %}">
   <div class="stack dash-main-stack">
     {% if note_scope == 'personal' %}
     <section class="panel panel-upcoming{% if not upcoming_events %} is-empty{% endif %}"
@@ -97,9 +97,10 @@
       {% endif %}
       </div>
     </section>
-    {% endif %}
-
     {% include "partials/dashboard_notebook_queue.html" %}
+    {% else %}
+    {% include "partials/dashboard_mission_widget.html" %}
+    {% endif %}
   </div>
 
   <aside class="stack dash-side-stack">
@@ -171,6 +172,15 @@
   </aside>
 </section>
 
+{% if note_scope == 'work' %}
+{# Work queue sits below Mission Control + DHIS2 so Mission Control stays top-left. #}
+<section class="dash-grid dash-grid-queue-row">
+  <div class="stack dash-main-stack dash-queue-span">
+    {% include "partials/dashboard_notebook_queue.html" %}
+  </div>
+</section>
+{% endif %}
+
 {# Row 2 (work): Connected Repositories + Recent Activity #}
 {% if show_repos %}
 <section class="dash-grid dash-grid-lower">
@@ -233,5 +243,8 @@
 {% if health_async|default(false) or calendar_async|default(false) %}
 <script src="{{ url_for('static', filename='js/hub_perf.js') }}?v=perf-1"></script>
 <script src="{{ url_for('static', filename='js/nav_async.js') }}?v=perf-1"></script>
+{% endif %}
+{% if note_scope == 'work' and mission_widget %}
+<script src="{{ url_for('static', filename='js/mission_widget.js') }}?v=mc-widget-1"></script>
 {% endif %}
 {% endblock %}

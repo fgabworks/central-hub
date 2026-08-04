@@ -188,6 +188,19 @@ _MIGRATIONS: list[tuple[str, str]] = [
         CREATE INDEX IF NOT EXISTS idx_notes_scope_status ON notes(scope, status);
         """,
     ),
+    (
+        "008_today_missions",
+        """
+        ALTER TABLE notes ADD COLUMN completed_at TEXT;
+        ALTER TABLE notes ADD COLUMN reminder_status TEXT NOT NULL DEFAULT 'none';
+        ALTER TABLE notes ADD COLUMN carry_over INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE notes ADD COLUMN original_due_date TEXT;
+        CREATE INDEX IF NOT EXISTS idx_notes_mission_due
+            ON notes(scope, note_type, due_date, status);
+        CREATE INDEX IF NOT EXISTS idx_notes_carry_over
+            ON notes(scope, carry_over, status);
+        """,
+    ),
 ]
 
 

@@ -4,14 +4,33 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**HCSC-RF National analytics 504 mitigation (2026-08-03)**
+**TODAY Mission Control (2026-08-04)**
 
-Live National `2026Q2` / `DcGhhRsspFX` failed after ~10 minutes with nginx
-**HTTP 504** on one large `/api/analytics.json` (all HCSC dx UIDs). Hub now:
-chunks national dx (default 6 via `HCSC_ANALYTICS_DX_CHUNK_NATIONAL`), uses a
-per-chunk timeout (`HCSC_ANALYTICS_CHUNK_TIMEOUT_SECONDS`, default 90), retries
-504 in `Dhis2Client`, and keeps national browser abort disabled. Focused tests:
-`tests/test_hcsc_national_export.py`.
+Work Notebook gains a `TODAY Mission Control` view (`?view=missions`) for
+same-day missions stored as Work-scoped notebook notes (`note_type=mission`).
+Fields: title, notes, priority, created/target dates, status, `completed_at`,
+`reminder_status`, `carry_over`, `original_due_date` (migration `008_today_missions`).
+Before 5 PM local time, unfinished TODAY missions are marked reminded on board/dashboard
+load. Past-due unfinished missions move to Carry Over (red highlight) with Complete /
+Reschedule. Work Dashboard shows a compact widget fed by the same `MissionControl`
+service. APIs: `/api/notebook/missions*`. Tests: `tests/test_notebook_missions.py`.
+
+Prior: **HCSC-RF National regional roll-up (2026-08-03)**
+
+Philippines (National) no longer runs one nationwide `/api/analytics.json`.
+It lists regions from the OU cache, generates each Region with the existing
+HCSC–RF path (registry + adapters), caches regional reports
+(`env|period|ou|indicator_version`, TTL 600s), and aggregates:
+sum numerators, sum denominators, recompute % (never average %).
+Progress: `GET .../national-rollup-progress`; retry failed regions:
+`POST .../national-rollup-retry`. UI shows per-region status.
+Tests: `tests/test_hcsc_national_rollup.py`, `tests/test_hcsc_national_export.py`.
+
+Prior: **HCSC-RF National analytics 504 mitigation (2026-08-03)**
+
+Live National previously failed with nginx **HTTP 504** / client **90s timeout**
+on chunked nationwide dx. Regional roll-up supersedes relying on longer timeouts
+alone; dx chunking remains for non-national / regional analytics calls.
 
 Prior: **HCSC-RF National reporting and CSV export (2026-08-03)**
 

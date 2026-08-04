@@ -40,6 +40,7 @@ class NotebookStoreTests(unittest.TestCase):
         self.assertIn("001_initial_notebook", applied)
         self.assertIn("002_note_pinned", applied)
         self.assertIn("004_note_scope_workspace", applied)
+        self.assertIn("008_today_missions", applied)
 
     def test_create_save_archive_restore_export(self) -> None:
         note = self.store.create(

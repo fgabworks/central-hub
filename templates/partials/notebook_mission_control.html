@@ -1,0 +1,144 @@
+{# TODAY Mission Control — Work Notebook board (same source as dashboard widget). #}
+<section class="mc-board card" aria-label="TODAY Mission Control">
+  <header class="mc-board-header">
+    <div>
+      <h2 class="mc-title">🚀 TODAY Mission Control</h2>
+      <p class="mc-date muted">Today • {{ mission_board.today_label }}</p>
+    </div>
+    <a class="btn btn-sm" href="{{ url_for(notebook_endpoint) }}">Back to Notes</a>
+  </header>
+
+  {% if mission_board.reminder.active %}
+  <div class="banner mc-reminder" role="status">
+    Reminder: {{ mission_board.reminder.count }} unfinished TODAY mission{{ 's' if mission_board.reminder.count != 1 else '' }}
+    (before 5 PM).
+  </div>
+  {% endif %}
+
+  <div class="mc-progress" aria-label="Mission progress">
+    <div class="mc-progress-label">
+      <span>Progress</span>
+      <strong>{{ mission_board.progress.label }}</strong>
+    </div>
+    <div class="mc-progress-track" role="progressbar"
+         aria-valuemin="0" aria-valuemax="{{ mission_board.progress.total }}"
+         aria-valuenow="{{ mission_board.progress.done }}">
+      <div class="mc-progress-bar" style="width: {{ mission_board.progress.percent }}%"></div>
+    </div>
+    <div class="mc-progress-meta muted">
+      {{ mission_board.progress.pending }} pending
+      · {{ mission_board.progress.done }} completed
+      · {{ mission_board.progress.overdue }} carry-over
+    </div>
+  </div>
+
+  <div class="mc-section">
+    <h3 class="mc-section-title">Today's Missions</h3>
+    <ul class="mc-list">
+      {% for m in mission_board.today_open %}
+      <li class="mc-item">
+        <form method="post" action="{{ url_for(notebook_endpoint, view='missions') }}" class="mc-item-form">
+          <input type="hidden" name="note_id" value="{{ m.id }}">
+          <label class="mc-check-label">
+            <input type="checkbox" name="action" value="mission_complete"
+                   onchange="this.form.submit()" aria-label="Complete {{ m.title }}">
+            <span class="mc-item-body">
+              <span class="mc-item-title">{{ m.title }}</span>
+              <span class="mc-item-meta muted">
+                {{ m.priority_label }} • Due Today
+                {% if m.body_md %}<span class="mc-notes-preview"> · {{ m.body_md[:80] }}{% if m.body_md|length > 80 %}…{% endif %}</span>{% endif %}
+              </span>
+            </span>
+          </label>
+        </form>
+      </li>
+      {% else %}
+      <li class="mc-empty muted">No open missions for today. Add one below.</li>
+      {% endfor %}
+
+      {% for m in mission_board.completed_today %}
+      <li class="mc-item is-done">
+        <form method="post" action="{{ url_for(notebook_endpoint, view='missions') }}" class="mc-item-form">
+          <input type="hidden" name="note_id" value="{{ m.id }}">
+          <input type="hidden" name="action" value="mission_reopen">
+          <label class="mc-check-label">
+            <input type="checkbox" checked
+                   onchange="this.form.submit()"
+                   aria-label="Reopen {{ m.title }}">
+            <span class="mc-item-body">
+              <span class="mc-item-title">{{ m.title }}</span>
+              <span class="mc-item-meta muted">
+                Completed{% if m.completed_time_label %} {{ m.completed_time_label }}{% endif %}
+              </span>
+            </span>
+          </label>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <div class="mc-section mc-carry">
+    <h3 class="mc-section-title mc-carry-title">🔴 Carry Over</h3>
+    <ul class="mc-list">
+      {% for m in mission_board.carry_over %}
+      <li class="mc-item is-carry">
+        <div class="mc-carry-row">
+          <form method="post" action="{{ url_for(notebook_endpoint, view='missions') }}" class="mc-item-form">
+            <input type="hidden" name="note_id" value="{{ m.id }}">
+            <label class="mc-check-label">
+              <input type="checkbox" name="action" value="mission_complete"
+                     onchange="this.form.submit()" aria-label="Complete {{ m.title }}">
+              <span class="mc-item-body">
+                <span class="mc-item-title">{{ m.title }}</span>
+                <span class="mc-item-meta">
+                  {{ m.priority_label }}
+                  · Original {{ m.original_due_date or m.due_date or '—' }}
+                </span>
+              </span>
+            </label>
+          </form>
+          <form method="post" action="{{ url_for(notebook_endpoint, view='missions') }}" class="mc-reschedule">
+            <input type="hidden" name="action" value="mission_reschedule">
+            <input type="hidden" name="note_id" value="{{ m.id }}">
+            <input type="date" name="mission_due" value="{{ mission_board.today }}" required aria-label="Reschedule date">
+            <button class="btn btn-sm" type="submit">Reschedule</button>
+          </form>
+        </div>
+      </li>
+      {% else %}
+      <li class="mc-empty muted">No carry-over missions.</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <div class="mc-section mc-add">
+    <h3 class="mc-section-title">+ Add Mission</h3>
+    <form method="post" action="{{ url_for(notebook_endpoint, view='missions') }}" class="mc-add-form">
+      <input type="hidden" name="action" value="mission_create">
+      <label class="nb-field">
+        <span>Title</span>
+        <input type="text" name="mission_title" required placeholder="Mission title" maxlength="200">
+      </label>
+      <label class="nb-field">
+        <span>Notes</span>
+        <textarea name="mission_notes" rows="2" placeholder="Description / notes"></textarea>
+      </label>
+      <div class="mc-add-grid">
+        <label class="nb-field">
+          <span>Priority</span>
+          <select name="mission_priority">
+            {% for p in priorities %}
+              <option value="{{ p }}" {% if p == 'medium' %}selected{% endif %}>{{ priority_labels[p] }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="nb-field">
+          <span>Target date</span>
+          <input type="date" name="mission_due" value="{{ mission_board.today }}">
+        </label>
+      </div>
+      <button class="btn btn-primary btn-sm" type="submit">Add Mission</button>
+    </form>
+  </div>
+</section>
