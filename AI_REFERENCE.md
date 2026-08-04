@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-03 (HCSC-RF National scope and CSV export).
+Last verified: 2026-08-04 (TODAY Mission Control dashboard panel).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -94,6 +94,12 @@ Existing notes migrate to **work**. Existing Quick Notepad content migrates to t
 **personal** pad; work starts empty. Convert → note uses the same scope as the pad.
 Work Dashboard queue shows work-scoped notes only. Assistant context never preloads
 Notebook content; selected lookup tools search the active profile scope.
+
+Work Dashboard also shows TODAY Mission Control as a compact, content-height panel.
+It renders five mission rows without scrolling and keeps additional rows in an
+internal scroll area. Rows expose priority/status badges and direct completion;
+quick add targets today. The notebook mission model, reminders, carry-over rules,
+and notebook synchronization remain shared and unchanged.
 
 ## AI Assistant Center (read-only MVP)
 

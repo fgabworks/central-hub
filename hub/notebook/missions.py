@@ -506,14 +506,17 @@ class MissionControl:
             completed_today=list(board["completed_today"]),
         )
         preview = ordered[:limit]
+        more_count = max(0, len(ordered) - len(preview))
         return {
             "today": board["today"],
             "today_label": board["today_label"],
             "progress": board["progress"],
             "reminder": board["reminder"],
+            "missions": ordered,
             "top_missions": preview,
             "mission_count": len(ordered),
-            "has_more": len(ordered) > limit,
+            "has_more": more_count > 0,
+            "more_count": more_count,
             "limit": limit,
             "open_href_view": "missions",
         }

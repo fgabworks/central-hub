@@ -12,8 +12,11 @@ Fields: title, notes, priority, created/target dates, status, `completed_at`,
 `reminder_status`, `carry_over`, `original_due_date` (migration `008_today_missions`).
 Before 5 PM local time, unfinished TODAY missions are marked reminded on board/dashboard
 load. Past-due unfinished missions move to Carry Over (red highlight) with Complete /
-Reschedule. Work Dashboard shows a compact widget fed by the same `MissionControl`
-service. APIs: `/api/notebook/missions*`. Tests: `tests/test_notebook_missions.py`.
+Reschedule. Work Dashboard shows a compact, content-height widget fed by the same
+`MissionControl` service: compact completion count/dots, direct checkbox completion,
+today-only quick add, five visible mission rows, and internal scrolling beyond five.
+Completed-all uses a subtle green success state; pending and carry-over remain blue
+and red. APIs: `/api/notebook/missions*`. Tests: `tests/test_notebook_missions.py`.
 
 Prior: **HCSC-RF National regional roll-up (2026-08-03)**
 

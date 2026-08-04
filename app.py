@@ -2215,7 +2215,8 @@ def create_app() -> Flask:
         title = str(data.get("title") or "").strip()
         if not title:
             return jsonify({"ok": False, "error": "title is required"}), 400
-        created = mission_control(store).create_mission(
+        mc = mission_control(store)
+        created = mc.create_mission(
             title=title,
             body_md=str(data.get("notes") or data.get("body_md") or ""),
             priority=str(data.get("priority") or "medium"),
@@ -2228,7 +2229,13 @@ def create_app() -> Flask:
             detail=f"Created TODAY mission: {created.get('title')}",
             ok=True,
         )
-        return jsonify({"ok": True, "mission": created})
+        return jsonify(
+            {
+                "ok": True,
+                "mission": created,
+                "widget": mc.widget(actor=current_actor(), sync=False),
+            }
+        )
 
     @app.post("/api/notebook/missions/<note_id>/complete")
     def api_notebook_missions_complete(note_id: str):

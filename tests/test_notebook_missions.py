@@ -84,6 +84,7 @@ class MissionControlTests(unittest.TestCase):
         titles = [m["title"] for m in widget["top_missions"]]
         self.assertEqual(len(titles), 5)
         self.assertTrue(widget["has_more"])
+        self.assertGreaterEqual(widget["more_count"], 1)
         self.assertEqual(titles[0], "Carry me")
         self.assertEqual(titles[1], "High unfinished")
         self.assertTrue(widget["top_missions"][0]["is_overdue_carry"])
@@ -97,6 +98,37 @@ class MissionControlTests(unittest.TestCase):
             completed_today=[{"title": "D", "priority": "medium", "completed_at": "z"}],
         )
         self.assertEqual([m["title"] for m in ordered], ["C", "H", "L", "D"])
+
+    def test_widget_state_empty_pending_partial_complete_carry(self) -> None:
+        empty = self.mc.widget(now=self.today, sync=False)
+        self.assertEqual(empty["progress"]["total_all"], 0)
+        self.assertEqual(empty["more_count"], 0)
+
+        one = self.mc.create_mission(title="Only one", now=self.today)
+        pending = self.mc.widget(now=self.today, sync=False)
+        self.assertEqual(pending["progress"]["pending"], 1)
+        self.assertEqual(pending["progress"]["done"], 0)
+
+        two = self.mc.create_mission(title="Second", now=self.today)
+        self.mc.complete_mission(one["id"], now=self.today)
+        partial = self.mc.widget(now=self.today, sync=False)
+        self.assertEqual(partial["progress"]["done"], 1)
+        self.assertEqual(partial["progress"]["pending"], 1)
+
+        self.mc.complete_mission(two["id"], now=self.today)
+        done = self.mc.widget(now=self.today, sync=False)
+        self.assertEqual(done["progress"]["done"], 2)
+        self.assertEqual(done["progress"]["pending"], 0)
+        self.assertEqual(done["progress"]["overdue"], 0)
+
+        old = self.mc.create_mission(
+            title="Late", due_date="2026-08-03", now=self.yesterday
+        )
+        self.mc.process_carry_over(now=self.today)
+        carry = self.mc.widget(now=self.today, sync=False)
+        self.assertGreaterEqual(carry["progress"]["overdue"], 1)
+        self.assertTrue(any(m["id"] == old["id"] for m in carry["top_missions"]))
+        self.assertTrue(carry["top_missions"][0]["is_overdue_carry"])
 
     def test_clear_completed_default_preserves_open(self) -> None:
         open_m = self.mc.create_mission(title="Keep open", now=self.today)
@@ -194,6 +226,10 @@ class MissionControlRouteTests(unittest.TestCase):
         cls.app.config["NOTEBOOK"] = NotebookStore(NotebookDatabase(root / "notebook.db"))
         cls.client = cls.app.test_client()
 
+    def setUp(self) -> None:
+        db_path = Path(self._tmp.name) / f"{self._testMethodName}.db"
+        self.app.config["NOTEBOOK"] = NotebookStore(NotebookDatabase(db_path))
+
     @classmethod
     def tearDownClass(cls) -> None:
         cls._tmp.cleanup()
@@ -229,17 +265,88 @@ class MissionControlRouteTests(unittest.TestCase):
         html = dash.get_data(as_text=True)
         self.assertIn("TODAY Mission Control", html)
         self.assertIn("Open Mission Control", html)
-        self.assertIn("mc-progress-track-inline", html)
+        self.assertIn("mc-command", html)
+        self.assertIn("mc-dot-track", html)
         self.assertIn("mc-widget-checkbox", html)
         self.assertIn("dash-grid-mission-top", html)
-        self.assertIn("data-mc-clear-open", html)
-        self.assertIn("Clear completed", html)
-        self.assertIn("Clear all missions", html)
+        self.assertIn("What needs to be done today?", html)
+        self.assertIn("+ Add Mission", html)
+        self.assertIn("Clear Completed", html)
+        self.assertIn("data-mc-clear-completed", html)
         self.assertIn("mission_widget.js", html)
+        self.assertIn("mc-command-list", html)
+        self.assertIn("Open Mission Control", html)
 
         notes = self.client.get("/work/notebook")
         self.assertEqual(notes.status_code, 200)
         self.assertIn(b"All Notes", notes.data)
+
+    def test_dashboard_widget_requested_layout_states(self) -> None:
+        empty_html = self.client.get("/work").get_data(as_text=True)
+        self.assertIn("No missions today.", empty_html)
+        self.assertEqual(empty_html.count('class="mc-command-item'), 0)
+
+        one = self.client.post(
+            "/api/notebook/missions",
+            json={"title": "ECCD Denominator", "priority": "medium"},
+        ).get_json()["mission"]
+        one_html = self.client.get("/work").get_data(as_text=True)
+        self.assertEqual(one_html.count('class="mc-command-item'), 1)
+        self.assertIn("ECCD Denominator", one_html)
+        self.assertIn("Medium", one_html)
+        self.assertIn("Pending", one_html)
+        self.assertIn("data-mc-add-form", one_html)
+        self.assertNotIn("mc-progress-track-inline", one_html)
+
+        for index in range(2, 6):
+            self.client.post(
+                "/api/notebook/missions",
+                json={"title": f"Mission {index}", "priority": "medium"},
+            )
+        five_html = self.client.get("/work").get_data(as_text=True)
+        self.assertEqual(five_html.count('class="mc-command-item'), 5)
+
+        sixth = self.client.post(
+            "/api/notebook/missions",
+            json={"title": "Scrollable sixth mission", "priority": "high"},
+        ).get_json()["widget"]
+        self.assertEqual(len(sixth["top_missions"]), 5)
+        self.assertEqual(len(sixth["missions"]), 6)
+        six_html = self.client.get("/work").get_data(as_text=True)
+        self.assertEqual(six_html.count('class="mc-command-item'), 6)
+        self.assertIn("Scrollable sixth mission", six_html)
+        css = (Path(__file__).parents[1] / "static" / "css" / "style.css").read_text(
+            encoding="utf-8"
+        )
+        list_rules = css.split(".mc-command-list {", 1)[1].split("}", 1)[0]
+        card_rules = css.split(".panel-mission-widget.mc-command {", 1)[1].split(
+            "}", 1
+        )[0]
+        self.assertIn("max-height:", list_rules)
+        self.assertIn("overflow-y: auto", list_rules)
+        self.assertNotIn("height:", card_rules)
+        self.assertNotIn("min-height:", card_rules)
+
+        for mission in sixth["missions"]:
+            self.client.post(f"/api/notebook/missions/{mission['id']}/complete")
+        done_html = self.client.get("/work").get_data(as_text=True)
+        self.assertIn("is-success", done_html)
+        self.assertIn("All done today", done_html)
+        self.assertIn("Completed", done_html)
+        self.assertIn("Medium", done_html)
+
+        self.client.post(
+            "/api/notebook/missions",
+            json={
+                "title": "Yesterday carry-over",
+                "priority": "high",
+                "due_date": "2026-08-03",
+            },
+        )
+        carry_html = self.client.get("/work").get_data(as_text=True)
+        self.assertIn("is-carry-warn", carry_html)
+        self.assertIn("is-carry", carry_html)
+        self.assertIn("Carry-over", carry_html)
 
     def test_dashboard_checkbox_complete_syncs_notebook(self) -> None:
         created = self.client.post(
@@ -263,6 +370,34 @@ class MissionControlRouteTests(unittest.TestCase):
         nb = self.client.get("/work/notebook?view=missions")
         self.assertIn(b"Dash checkbox mission", nb.data)
 
+    def test_dashboard_create_mission_defaults_today_medium(self) -> None:
+        created = self.client.post(
+            "/api/notebook/missions",
+            json={"title": "From dashboard widget"},
+        )
+        self.assertEqual(created.status_code, 200)
+        payload = created.get_json()
+        mission = payload["mission"]
+        self.assertEqual(mission["priority"], "medium")
+        self.assertEqual(mission["note_type"], "mission")
+        self.assertTrue(mission.get("due_date"))
+        self.assertIn("widget", payload)
+        titles = [m["title"] for m in payload["widget"]["top_missions"]]
+        self.assertIn("From dashboard widget", titles)
+
+        board = self.client.get("/api/notebook/missions/board").get_json()["board"]
+        self.assertTrue(
+            any(m["title"] == "From dashboard widget" for m in board["today_open"])
+            or any(
+                m["title"] == "From dashboard widget"
+                for m in board["completed_today"]
+            )
+        )
+
+        dash = self.client.get("/work")
+        self.assertIn(b"From dashboard widget", dash.data)
+        self.assertIn(b"data-mc-add-form", dash.data)
+
     def test_clear_requires_confirmation(self) -> None:
         self.client.post("/api/notebook/missions", json={"title": "Temp"})
         denied = self.client.post(
@@ -284,6 +419,11 @@ class MissionControlRouteTests(unittest.TestCase):
         self.assertEqual(payload["mode"], "completed")
         self.assertGreaterEqual(payload["cleared_count"], 1)
         self.assertEqual(payload["widget"]["progress"]["done"], 0)
+
+        denied_all = self.client.post(
+            "/api/notebook/missions/clear", json={"mode": "all"}
+        )
+        self.assertEqual(denied_all.status_code, 400)
 
 
 if __name__ == "__main__":
