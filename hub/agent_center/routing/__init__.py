@@ -1,4 +1,4 @@
-"""AiriX Smart Routing — Phase 3 (history-aware recommend + execute)."""
+"""AiriX Smart Routing — Phase 5 (cost + RBAC + findings)."""
 
 from __future__ import annotations
 

@@ -63,7 +63,7 @@
   <div class="ad-routing-card" id="ad-routing-card" hidden>
     <div class="ad-routing-head">
       <strong>AiriX Smart Routing</strong>
-      <span class="ad-routing-phase muted">Phase 3 · history-aware</span>
+      <span class="ad-routing-phase muted">Phase 5 · cost + RBAC + findings</span>
     </div>
     <div class="ad-routing-body" id="ad-routing-body"></div>
     <div class="ad-routing-actions">
@@ -104,8 +104,14 @@
   {% endif %}
 
   <footer class="ad-composer">
+    {% if assistant_dock.smart_routing and assistant_dock.smart_routing.enabled %}
+    <p class="ad-routing-hint muted" style="margin:0 0 0.35rem;font-size:11px;line-height:1.35">
+      Smart Routing is on: type a prompt and press Send — then choose <strong>Use Recommended</strong>.
+      Settings: ⋯ menu → Smart Routing.
+    </p>
+    {% endif %}
     <div class="ad-prompt-row">
-      <textarea id="ad-prompt" class="ad-prompt" rows="2" placeholder="Ask {{ assistant_dock.profile.name }} a read-only question…" aria-label="Assistant prompt"></textarea>
+      <textarea id="ad-prompt" class="ad-prompt" rows="2" placeholder="{% if assistant_dock.smart_routing and assistant_dock.smart_routing.enabled %}Ask AiriX — Send runs Smart Routing first…{% else %}Ask {{ assistant_dock.profile.name }} a read-only question…{% endif %}" aria-label="Assistant prompt"></textarea>
       <div class="ad-prompt-actions">
         <button type="button" class="btn btn-sm ad-run-btn" id="ad-cancel" hidden disabled>Cancel</button>
         <button type="button" class="btn btn-sm ad-run-btn" id="ad-retry" hidden disabled>Retry</button>

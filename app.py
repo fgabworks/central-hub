@@ -4068,9 +4068,28 @@ def create_app() -> Flask:
                         in {"1", "on", "true"},
                         "use_history": request.form.get("use_history")
                         in {"1", "on", "true"},
+                        "enable_orchestration": request.form.get("enable_orchestration")
+                        in {"1", "on", "true"},
+                        "warn_before_expensive_escalation": request.form.get(
+                            "warn_before_expensive_escalation"
+                        )
+                        in {"1", "on", "true"},
+                        "enable_cost_estimates": request.form.get("enable_cost_estimates")
+                        in {"1", "on", "true"},
                         "max_retries": request.form.get("max_retries") or 2,
+                        "max_orchestration_steps": request.form.get("max_orchestration_steps")
+                        or 4,
+                        "daily_token_budget": request.form.get("daily_token_budget") or 0,
+                        "monthly_token_budget": request.form.get("monthly_token_budget") or 0,
+                        "per_task_max_tokens": request.form.get("per_task_max_tokens") or 0,
+                        "price_per_mtok": {
+                            "grok": request.form.get("price_grok") or 0,
+                            "codex": request.form.get("price_codex") or 0,
+                            "default": request.form.get("price_default") or 0,
+                        },
                     },
                     workspace="work",
+                    actor=current_actor(),
                 )
                 flash_notice = "AiriX Smart Routing settings saved."
                 audit.append(

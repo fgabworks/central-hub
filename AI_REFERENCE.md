@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-10 (AiriX Smart Routing Phase 3).
+Last verified: 2026-08-10 (AiriX manual-run stuck Running fix).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -40,7 +40,7 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Google Connections | System page to connect/assign/enable Gmail+Calendar scopes |
 | SQL Workspace | Read-only query library/runner (`/sql`); sqlglot allowlist; optional trusted-host-key Stage/Live SSH tunnels; Live warning; layout `minmax(260px,320px) | 1fr` under shell |
 | Data Explorer | `/data-explorer` — unified RO schema/data/relationship/lineage browser plus allowlisted CSV/XLSX/csv.gz exports, large jobs, presets, history, masking, and audit. `/live-data-export` redirects to `?tab=export`; one runtime service/store/export engine with shared SELECT/security primitives; no ad-hoc SQL or arbitrary table input; Stage/Live remain isolated |
-| AI Assistant Center | Aira at `/personal/aira`; AiriX at `/work/airix` (legacy `/work/okarun` redirects); full-height right dock + fixed composer (`hub/agent_center/dock.py`); **Smart Routing Phase 3** (`hub/agent_center/routing/` — history-aware recommend + execute; findings; analytics; `/api/assistants/airix/routing/*`); Find/Ask/Plan/Review; Codex CLI, Claude Code, Cursor, Grok, OpenAI |
+| AI Assistant Center | Aira at `/personal/aira`; AiriX at `/work/airix` (legacy `/work/okarun` redirects); full-height right dock + fixed composer (`hub/agent_center/dock.py`); **Smart Routing Phase 5** (`hub/agent_center/routing/` — cost intelligence, RBAC, relevance findings, budgets, orchestration; `/api/assistants/airix/routing/*`); Find/Ask/Plan/Review; Codex CLI, Claude Code, Cursor, Grok, OpenAI |
 | Workspace Console | Bottom panel under main content only (`left: var(--sidebar-w)`); bounded height; Ctrl+J; collapsed by default |
 | Activity Rail | Far-right icons for AI Assistant, Quick Notepad, Workspace Console (future utilities placeholders); reduces main width only |
 | App shell | Fixed sidebar 210–216px + `padding-left` on `.app-shell`; `.main-column` / `.content` `flex:1; min-width:0`; `.sidebar-scroll` for nav |
@@ -108,8 +108,8 @@ shared and unchanged.
 |---|---|
 | Persistent dock | Aira/AiriX full-height panel on all pages; prefs `/api/assistant-dock/prefs`; lazy agents; composer fixed at bottom |
 | `/personal/aira` | Personal UI; no repository/SQL/DHIS2/jobs/logs/Audit access |
-| `/work/airix` | Work UI (AiriX); selected repositories and Work read-only services; Smart Routing Phase 3 |
-| `/api/assistants/airix/routing/*` | Smart Routing recommend / execute / cancel / status / settings / providers / analytics (legacy `okarun` slug accepted) |
+| `/work/airix` | Work UI (AiriX); selected repositories and Work read-only services; Smart Routing Phase 5 |
+| `/api/assistants/airix/routing/*` | Smart Routing recommend / execute / cancel / status / settings / providers / analytics / roles / permissions / acl / sessions (legacy `okarun` slug accepted) |
 | `/api/assistants/<profile>/agents` | Profile-bound adapter availability |
 | `/api/assistants/<profile>/agents/<id>/models` | Dynamic adapter model list |
 | `/api/assistants/<profile>/context/preview` | Included/excluded sources and secret-safe context |
@@ -119,8 +119,10 @@ shared and unchanged.
 | `/api/assistants/<profile>/runs/<id>/retry` | Retry in the same scoped conversation |
 | `/api/assistants/<profile>/prompts` | Isolated saved prompt library |
 
-Implementation: `hub/agent_center/` (incl. `dock.py`), `config/agents.yaml`, SQLite `data/agent_center.db`,
-`templates/partials/assistant_dock_panel.html`, `static/js/assistant_dock.js`.
+Implementation: `hub/agent_center/` (incl. `dock.py`, `routing/lifecycle.py`), `config/agents.yaml`, SQLite `data/agent_center.db`,
+`templates/partials/assistant_dock_panel.html`, `static/js/assistant_dock.js` (`shell-dock-12`).
+Dock polls unwrap `{run: ...}` and stop on `completed|failed|cancelled|paused_for_approval|timed_out`;
+T0 lookups auto-execute; Choose Agent is a one-shot manual override (skip recommend once only).
 Modes: Find / Ask / Plan / Review. Edit / Test labeled **Not yet available**.
 Adapters: Hub Simulator (demo), **OpenAI API** and **Grok/xAI** Responses APIs,
 plus Claude Code / Cursor Agent / Codex CLIs. Provider accounts are managed at

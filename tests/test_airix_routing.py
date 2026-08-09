@@ -131,7 +131,7 @@ class AirixRoutingUnitTests(unittest.TestCase):
         plan = self.router.build_execution_plan("Look up recent audit events")
         public = plan.public()
         self.assertTrue(public["execute"])
-        self.assertEqual(public["phase"], 3)
+        self.assertEqual(public["phase"], 5)
         self.assertIn("explanation", public)
 
     def test_settings_persist_use_history(self) -> None:
@@ -279,13 +279,13 @@ class AirixRoutingPhase3HistoryTests(unittest.TestCase):
             "a breaking change migration plan"
         )
         with self.assertRaises(AgentCenterError) as ctx:
-            self.router.execute_route(prompt, approve_codex=False)
+            self.router.execute_route(prompt, approve_codex=False, orchestrate=False)
         self.assertEqual(ctx.exception.code, "approval_required")
 
     def test_retry_limit_enforced(self) -> None:
         prompt = "Investigate why the DHIS2 analytics SQL query returns empty rows"
         with self.assertRaises(AgentCenterError) as ctx:
-            self.router.execute_route(prompt, agent_override="grok", attempt=3)
+            self.router.execute_route(prompt, agent_override="grok", attempt=3, orchestrate=False)
         self.assertEqual(ctx.exception.code, "retry_limit")
 
     def test_identical_retry_blocked(self) -> None:
@@ -305,12 +305,12 @@ class AirixRoutingPhase3HistoryTests(unittest.TestCase):
             }
         )
         with self.assertRaises(AgentCenterError) as ctx:
-            self.router.execute_route(prompt, agent_override="grok", attempt=1)
+            self.router.execute_route(prompt, agent_override="grok", attempt=1, orchestrate=False)
         self.assertEqual(ctx.exception.code, "identical_retry_blocked")
 
     def test_metrics_recorded_and_t0_savings(self) -> None:
         prompt = "Look up the UID for Philippines and show me the status of recent jobs"
-        result = self.router.execute_route(prompt)
+        result = self.router.execute_route(prompt, orchestrate=False)
         self.assertEqual(result["execution"]["status"], "completed")
         analytics = self.history.analytics()
         self.assertGreaterEqual(analytics["executions_total"], 1)
@@ -325,7 +325,7 @@ class AirixRoutingPhase3HistoryTests(unittest.TestCase):
             "Investigate why the DHIS2 analytics SQL query for program indicators "
             "returns empty rows for this org unit — debug the join and UID mapping"
         )
-        result = self.router.execute_route(prompt)
+        result = self.router.execute_route(prompt, orchestrate=False, agent_override="grok")
         self.assertEqual(result["execution"]["adapter_id"], "grok")
         analytics = self.history.analytics()
         self.assertGreaterEqual(analytics["actual_tokens_total"], 42)
@@ -345,13 +345,13 @@ class AirixRoutingExecutionTests(unittest.TestCase):
 
     def test_t0_executes_without_ai(self) -> None:
         prompt = "Look up the UID for Philippines and show me the status of recent jobs"
-        result = self.router.execute_route(prompt)
+        result = self.router.execute_route(prompt, orchestrate=False)
         self.assertEqual(result["execution"]["mode"], "deterministic")
         self.assertEqual(self.fake.started, [])
 
     def test_manual_override_works(self) -> None:
         prompt = "Look up the UID for Philippines"
-        result = self.router.execute_route(prompt, agent_override="grok")
+        result = self.router.execute_route(prompt, agent_override="grok", orchestrate=False)
         self.assertTrue(result["execution"]["manual_override"])
         self.assertEqual(self.fake.started[0]["agent_id"], "grok")
 
@@ -392,7 +392,7 @@ class AirixRoutingRouteTests(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         body = resp.get_json()
-        self.assertEqual(body["phase"], 3)
+        self.assertEqual(body["phase"], 5)
         self.assertIn("explanation", body["recommendation"])
         self.assertTrue(body["plan"]["execute"])
 
@@ -415,14 +415,14 @@ class AirixRoutingRouteTests(unittest.TestCase):
         )
         resp = self.client.post(
             "/api/assistants/airix/routing/execute",
-            json={"prompt": prompt, "approve_codex": False},
+            json={"prompt": prompt, "approve_codex": False, "orchestrate": False},
         )
         self.assertEqual(resp.status_code, 403)
         self.assertEqual(resp.get_json()["code"], "approval_required")
 
     def test_work_dock_includes_phase3(self) -> None:
         html = self.client.get("/work").get_data(as_text=True)
-        self.assertIn("Phase 3", html)
+        self.assertIn("Phase 5", html)
         self.assertIn("analytics_url", html)
         self.assertIn("/api/assistants/airix/routing/", html)
 

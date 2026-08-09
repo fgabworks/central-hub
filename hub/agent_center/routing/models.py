@@ -1,4 +1,4 @@
-"""Shared models for AiriX Smart Routing (Phase 3)."""
+"""Shared models for AiriX Smart Routing (Phase 5)."""
 
 from __future__ import annotations
 
@@ -30,14 +30,14 @@ class ProviderSpec:
 
     id: str
     label: str
-    tier: str  # T0–T3
+    tier: str
     cost_tier: str
-    speed: str  # fast | medium | slow
-    context_capacity: str  # small | medium | large
+    speed: str
+    context_capacity: str
     capabilities: tuple[str, ...]
     tools: tuple[str, ...]
     requires_approval: bool = False
-    adapter_id: str | None = None  # maps to existing agents.yaml / adapter id
+    adapter_id: str | None = None
     notes: str = ""
 
     def public(self, *, available: bool = True, availability_detail: str = "") -> dict[str, Any]:
@@ -67,18 +67,37 @@ class RoutingSettings:
     allow_escalation: bool = True
     max_retries: int = 2
     use_history: bool = True
+    # Phase 4 budgets / orchestration
+    enable_orchestration: bool = True
+    max_orchestration_steps: int = 4
+    daily_token_budget: int = 50000
+    monthly_token_budget: int = 500000
+    per_task_max_tokens: int = 20000
+    warn_before_expensive_escalation: bool = True
+    # Phase 5 cost intelligence (public USD / 1M tokens rates — never secrets)
+    enable_cost_estimates: bool = True
+    price_per_mtok: dict[str, float] = field(default_factory=dict)
 
     def public(self) -> dict[str, Any]:
-        return asdict(self)
+        data = asdict(self)
+        # Normalize rates to plain floats for JSON prefs.
+        rates: dict[str, float] = {}
+        for key, val in (self.price_per_mtok or {}).items():
+            try:
+                rates[str(key)] = max(0.0, float(val))
+            except (TypeError, ValueError):
+                continue
+        data["price_per_mtok"] = rates
+        return data
 
 
 @dataclass
 class PromptClassification:
     task_type: str
-    complexity: int  # 0–100
+    complexity: int
     risk: str
     estimated_scope_files: int
-    context_size: str  # small | medium | large
+    context_size: str
     needs_coding: bool
     needs_testing: bool
     needs_architecture: bool
@@ -91,8 +110,6 @@ class PromptClassification:
 
 @dataclass
 class RouteExplanation:
-    """Human-readable routing explanation (Phase 3)."""
-
     recommended_provider: str
     historical_success_rate: float | None = None
     sample_size: int = 0
@@ -101,6 +118,11 @@ class RouteExplanation:
     escalation_reason: str | None = None
     history_influenced: bool = False
     reason: str = ""
+    role_id: str | None = None
+    budget_warning: str | None = None
+    expensive_warning: str | None = None
+    permission_warning: str | None = None
+    rbac_role: str | None = None
 
     def public(self) -> dict[str, Any]:
         return {
@@ -112,6 +134,11 @@ class RouteExplanation:
             "escalation_reason": self.escalation_reason,
             "history_influenced": self.history_influenced,
             "reason": self.reason,
+            "role_id": self.role_id,
+            "budget_warning": self.budget_warning,
+            "expensive_warning": self.expensive_warning,
+            "permission_warning": self.permission_warning,
+            "rbac_role": self.rbac_role,
         }
 
 
@@ -135,6 +162,12 @@ class RouteRecommendation:
     expected_retries: int = 0
     history_influenced: bool = False
     escalation_reason: str | None = None
+    role_id: str | None = None
+    orchestration: list[dict[str, Any]] = field(default_factory=list)
+    budget: dict[str, Any] = field(default_factory=dict)
+    permissions: dict[str, Any] = field(default_factory=dict)
+    prior_findings: list[dict[str, Any]] = field(default_factory=list)
+    estimated_cost_usd: float | None = None
 
     def public(self) -> dict[str, Any]:
         expl = self.explanation.public() if self.explanation else {
@@ -146,6 +179,11 @@ class RouteRecommendation:
             "escalation_reason": self.escalation_reason,
             "history_influenced": self.history_influenced,
             "reason": self.reason,
+            "role_id": self.role_id,
+            "budget_warning": None,
+            "expensive_warning": None,
+            "permission_warning": None,
+            "rbac_role": None,
         }
         return {
             "task_type": self.task_type,
@@ -166,15 +204,19 @@ class RouteRecommendation:
             "expected_retries": self.expected_retries,
             "history_influenced": self.history_influenced,
             "escalation_reason": self.escalation_reason,
-            "phase": 3,
+            "role_id": self.role_id,
+            "orchestration": list(self.orchestration),
+            "budget": dict(self.budget),
+            "permissions": dict(self.permissions),
+            "prior_findings": list(self.prior_findings),
+            "estimated_cost_usd": self.estimated_cost_usd,
+            "phase": 5,
             "execution": "ready",
         }
 
 
 @dataclass
 class ExecutionPlan:
-    """Execution plan preview (Phase 3 includes history-aware explanation)."""
-
     prompt: str
     recommended_agent: str
     alternative_agent: str | None
@@ -186,6 +228,13 @@ class ExecutionPlan:
     status: str = "planned"
     context: dict[str, Any] = field(default_factory=dict)
     explanation: dict[str, Any] = field(default_factory=dict)
+    orchestration: list[dict[str, Any]] = field(default_factory=list)
+    budget: dict[str, Any] = field(default_factory=dict)
+    role_id: str | None = None
+    session_id: str | None = None
+    permissions: dict[str, Any] = field(default_factory=dict)
+    prior_findings: list[dict[str, Any]] = field(default_factory=list)
+    estimated_cost_usd: float | None = None
 
     def public(self) -> dict[str, Any]:
         return {
@@ -200,7 +249,17 @@ class ExecutionPlan:
             "status": self.status,
             "context": dict(self.context),
             "explanation": dict(self.explanation),
-            "phase": 3,
+            "orchestration": list(self.orchestration),
+            "budget": dict(self.budget),
+            "role_id": self.role_id,
+            "session_id": self.session_id,
+            "permissions": dict(self.permissions),
+            "prior_findings": list(self.prior_findings),
+            "estimated_cost_usd": self.estimated_cost_usd,
+            "phase": 5,
             "execute": True,
-            "note": "Phase 3 executes via adapters; history influences routing; Codex still requires approval.",
+            "note": (
+                "Phase 5: cost intelligence + RBAC + relevance findings; "
+                "capability → permissions → budget → history; Codex still requires approval."
+            ),
         }

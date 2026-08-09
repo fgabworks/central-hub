@@ -48,6 +48,7 @@
     var contextBtn = $("ad-context-btn");
     var saveTimer = null;
     var pollTimer = null;
+    var agentPollDeadlineTimer = null;
     var activeRunId = null;
     var lastPrompt = "";
     var cancelBtn = $("ad-cancel");
@@ -332,6 +333,48 @@
         });
     }
 
+    function unwrapAgentRun(payload) {
+      if (!payload || typeof payload !== "object") return null;
+      if (payload.run && typeof payload.run === "object") return payload.run;
+      if (payload.id || payload.status) return payload;
+      return null;
+    }
+
+    function isAgentRunTerminal(status) {
+      var s = String(status || "").toLowerCase();
+      return (
+        s === "completed" ||
+        s === "succeeded" ||
+        s === "failed" ||
+        s === "cancelled" ||
+        s === "canceled" ||
+        s === "unavailable" ||
+        s === "timed_out" ||
+        s === "timeout" ||
+        s === "paused_for_approval"
+      );
+    }
+
+    function normalizeAgentRunStatus(status) {
+      var s = String(status || "").toLowerCase();
+      if (s === "succeeded" || s === "success") return "completed";
+      if (s === "canceled") return "cancelled";
+      if (s === "unavailable" || s === "error") return "failed";
+      if (s === "timeout") return "timed_out";
+      return s || "failed";
+    }
+
+    function stopAgentPoll() {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+      if (agentPollDeadlineTimer) {
+        clearTimeout(agentPollDeadlineTimer);
+        agentPollDeadlineTimer = null;
+      }
+    }
+
     function extractCodeBlocks(text) {
       var blocks = [];
       var re = /```(?:[a-zA-Z0-9_-]+)?\n([\s\S]*?)```/g;
@@ -343,8 +386,13 @@
     }
 
     function renderRun(run) {
+      run = unwrapAgentRun(run) || run || {};
+      var status = normalizeAgentRunStatus(run.status);
       var answer = run.answer || run.error || "No answer yet.";
       var sourceBits = ((run.context || {}).included_sources || []).join(", ");
+      if (!sourceBits && (run.agent_label || run.agent_id)) {
+        sourceBits = run.agent_label || run.agent_id;
+      }
       var codeBlocks = extractCodeBlocks(answer);
       var insertBtns = codeBlocks
         .map(function (code, idx) {
@@ -355,24 +403,44 @@
           );
         })
         .join(" ");
-      appendMessage(
-        "assistant",
-        '<div class="ad-thought">Thought for run ' +
-          escapeHtml(run.id || "") +
-          "</div><div>" +
-          escapeHtml(answer).replace(/\n/g, "<br>") +
-          "</div>" +
-          (insertBtns
-            ? '<div class="ad-insert-row muted">Suggestion only — you must press Enter in the terminal to run. ' +
-              insertBtns +
-              "</div>"
-            : "") +
-          (sourceBits
-            ? '<div class="ad-source">Source: ' +
-              escapeHtml(sourceBits) +
-              " (read-only)</div>"
-            : "")
-      );
+      if (status === "failed" || status === "timed_out") {
+        appendMessage(
+          "assistant",
+          "<strong>Run " +
+            escapeHtml(status) +
+            "</strong>" +
+            (run.error ? ": " + escapeHtml(run.error) : "") +
+            (run.answer
+              ? '<pre class="ad-run-answer">' + escapeHtml(run.answer) + "</pre>"
+              : "")
+        );
+      } else if (status === "cancelled") {
+        appendMessage("assistant", "Run cancelled.");
+      } else if (status === "paused_for_approval") {
+        appendMessage(
+          "assistant",
+          "Paused for approval. Choose an agent explicitly or approve Codex."
+        );
+      } else {
+        appendMessage(
+          "assistant",
+          '<div class="ad-thought">Thought for run ' +
+            escapeHtml(run.id || "") +
+            "</div><div>" +
+            escapeHtml(answer).replace(/\n/g, "<br>") +
+            "</div>" +
+            (insertBtns
+              ? '<div class="ad-insert-row muted">Suggestion only — you must press Enter in the terminal to run. ' +
+                insertBtns +
+                "</div>"
+              : "") +
+            (sourceBits
+              ? '<div class="ad-source">Source: ' +
+                escapeHtml(sourceBits) +
+                " (read-only)</div>"
+              : "")
+        );
+      }
       if (messages) {
         messages.querySelectorAll(".ad-insert-term").forEach(function (btn) {
           if (btn._bound) return;
@@ -382,7 +450,6 @@
             var text = codeBlocks[idx] || "";
             if (!text) return;
             if (window.WCTerminal && window.WCTerminal.insertText) {
-              // Never auto-execute: insertText strips trailing newlines.
               window.WCTerminal.insertText(text, true);
             } else {
               window.alert("Open Workspace Console → Terminal first.");
@@ -400,7 +467,8 @@
             : "");
       }
       activeRunId = run.id || activeRunId;
-      if (run.status === "failed" || run.status === "cancelled") {
+      stopAgentPoll();
+      if (status === "failed" || status === "cancelled" || status === "timed_out") {
         setRunControls("failed");
       } else {
         setRunControls("idle");
@@ -408,33 +476,46 @@
     }
 
     function pollRun(runId) {
-      if (pollTimer) clearInterval(pollTimer);
+      stopAgentPoll();
       activeRunId = runId;
       setRunControls("running");
+      var started = Date.now();
+      var maxMs = 120000;
       function tick() {
         if (document.visibilityState === "hidden") return;
         if (!expanded()) return;
+        if (Date.now() - started > maxMs) {
+          stopAgentPoll();
+          appendMessage("assistant", "Run timed out waiting for provider status.");
+          setRunControls("failed");
+          return;
+        }
         fetch(apiBase + "/runs/" + encodeURIComponent(runId), {
           credentials: "same-origin",
+          headers: { Accept: "application/json" },
         })
           .then(function (r) {
-            return r.json();
+            return r.json().then(function (data) {
+              return { ok: r.ok, data: data };
+            });
           })
-          .then(function (run) {
-            if (!run || (run.error && !run.id)) return;
-            if (
-              run.status === "succeeded" ||
-              run.status === "failed" ||
-              run.status === "cancelled"
-            ) {
-              clearInterval(pollTimer);
-              pollTimer = null;
+          .then(function (res) {
+            var run = unwrapAgentRun(res.data);
+            if (!res.ok || !run || !run.id) return;
+            if (isAgentRunTerminal(run.status)) {
+              stopAgentPoll();
               renderRun(run);
             }
           })
           .catch(function () {});
       }
-      pollTimer = setInterval(tick, 1200);
+      pollTimer = setInterval(tick, 900);
+      agentPollDeadlineTimer = setTimeout(function () {
+        if (!pollTimer) return;
+        stopAgentPoll();
+        appendMessage("assistant", "Run timed out waiting for provider status.");
+        setRunControls("failed");
+      }, maxMs + 500);
       tick();
     }
 
@@ -451,15 +532,14 @@
         .then(function (r) {
           return r.json();
         })
-        .then(function (run) {
-          if (pollTimer) {
-            clearInterval(pollTimer);
-            pollTimer = null;
-          }
+        .then(function (data) {
+          stopAgentPoll();
+          var run = unwrapAgentRun(data);
           if (run && run.id) renderRun(run);
           else setRunControls("failed");
         })
         .catch(function () {
+          stopAgentPoll();
           setRunControls("failed");
         });
     }
@@ -480,7 +560,7 @@
           });
         })
         .then(function (res) {
-          var run = (res.body && (res.body.run || res.body)) || {};
+          var run = unwrapAgentRun(res.body) || {};
           if (!res.ok) {
             appendMessage(
               "assistant",
@@ -490,7 +570,7 @@
             return;
           }
           activeRunId = run.id || activeRunId;
-          if (run.status === "succeeded" || run.answer) {
+          if (isAgentRunTerminal(run.status) || run.answer) {
             renderRun(run);
           } else if (run.id) {
             appendMessage("assistant", "Retrying…");
@@ -582,8 +662,32 @@
             ) +
             "</p>"
           : "";
+      var roleLine = rec.role_id
+        ? "<div class=\"ad-routing-line\"><span>Role</span><strong>" +
+          escapeHtml(rec.role_id) +
+          "</strong></div>"
+        : "";
+      var orch = (rec.orchestration || (plan && plan.orchestration) || []).map(function (s) {
+        return s.label || s.id;
+      });
+      var orchLine =
+        orch.length > 0
+          ? '<p class="ad-routing-reason muted">Plan: ' +
+            escapeHtml(orch.join(" → ")) +
+            "</p>"
+          : "";
+      var budgetWarn =
+        (expl.budget_warning || (rec.budget && !rec.budget.ok && rec.budget.blocked_reason))
+          ? '<p class="ad-routing-reason muted">Budget: ' +
+            escapeHtml(expl.budget_warning || rec.budget.blocked_reason) +
+            "</p>"
+          : "";
+      var expensiveWarn = expl.expensive_warning
+        ? '<p class="ad-routing-reason muted">' + escapeHtml(expl.expensive_warning) + "</p>"
+        : "";
       routingBody.innerHTML =
         '<div class="ad-routing-grid">' +
+        roleLine +
         "<div class=\"ad-routing-line\"><span>Task</span><strong>" +
         escapeHtml(rec.task_type) +
         "</strong></div>" +
@@ -614,9 +718,12 @@
         escapeHtml(rec.reason || "") +
         "</p>" +
         escLine +
+        orchLine +
+        budgetWarn +
+        expensiveWarn +
         findingsLine +
         planNote +
-        '<p class="ad-routing-note muted">Phase 3: history-aware routing; Codex still requires approval.</p>' +
+        '<p class="ad-routing-note muted">Phase 5: cost intelligence + RBAC + relevant findings; Codex still requires approval.</p>' +
         "</div>";
       routingCard.hidden = false;
     }
@@ -651,6 +758,23 @@
       if (promptEl && pendingPrompt) promptEl.value = pendingPrompt;
     }
 
+    function isRouteTerminalStatus(status) {
+      return (
+        status === "completed" ||
+        status === "failed" ||
+        status === "cancelled" ||
+        status === "paused_for_approval" ||
+        status === "timed_out" ||
+        status === "paused" ||
+        status === "blocked" ||
+        status === "unavailable"
+      );
+    }
+
+    function isRouteActiveStatus(status) {
+      return status === "queued" || status === "running" || status === "active";
+    }
+
     function renderRouteExecution(execution) {
       if (!execution) return;
       var status = execution.status || "";
@@ -665,7 +789,7 @@
           "<strong>Route complete</strong> · " +
             label +
             "<pre class=\"ad-run-answer\">" +
-            escapeHtml(execution.answer || "(no answer)") +
+            escapeHtml(execution.answer || execution.partial_summary || "(no answer)") +
             "</pre>"
         );
         setRunControls("idle");
@@ -680,23 +804,58 @@
         stopRoutePoll();
         return;
       }
-      if (status === "failed" || status === "unavailable") {
+      if (status === "paused_for_approval" || status === "paused") {
         appendMessage(
           "assistant",
-          "Route " +
-            escapeHtml(status) +
-            ": " +
-            escapeHtml(execution.error || "unknown error")
+          "Paused for Codex approval. Press Use Recommended again and confirm to continue."
+        );
+        setRunControls("idle");
+        activeRouteExecutionId = null;
+        stopRoutePoll();
+        return;
+      }
+      if (status === "timed_out") {
+        appendMessage(
+          "assistant",
+          "Route timed out: " + escapeHtml(execution.error || execution.stopped_reason || "timeout")
         );
         setRunControls("failed");
         activeRouteExecutionId = null;
         stopRoutePoll();
         return;
       }
-      setRunControls("running");
-      if (execution.agent_run_id) {
-        activeRunId = execution.agent_run_id;
+      if (
+        status === "failed" ||
+        status === "unavailable" ||
+        status === "blocked"
+      ) {
+        appendMessage(
+          "assistant",
+          "Route " +
+            escapeHtml(status === "blocked" ? "failed" : status) +
+            ": " +
+            escapeHtml(execution.error || execution.stopped_reason || "unknown error")
+        );
+        setRunControls("failed");
+        activeRouteExecutionId = null;
+        stopRoutePoll();
+        return;
       }
+      if (isRouteActiveStatus(status)) {
+        setRunControls("running");
+        if (execution.agent_run_id) {
+          activeRunId = execution.agent_run_id;
+        }
+        return;
+      }
+      // Unknown status — never leave the spinner spinning.
+      appendMessage(
+        "assistant",
+        "Route ended with status: " + escapeHtml(status || "unknown")
+      );
+      setRunControls("idle");
+      activeRouteExecutionId = null;
+      stopRoutePoll();
     }
 
     function pollRouteExecution(executionId) {
@@ -716,11 +875,13 @@
           .then(function (res) {
             if (!res.ok || !res.data || !res.data.execution) {
               setRunControls("failed");
+              activeRouteExecutionId = null;
+              stopRoutePoll();
               appendMessage("assistant", "Lost route execution status.");
               return;
             }
             var ex = res.data.execution;
-            if (ex.status === "queued" || ex.status === "running") {
+            if (isRouteActiveStatus(ex.status)) {
               pollRouteExecution(executionId);
               return;
             }
@@ -728,6 +889,8 @@
           })
           .catch(function () {
             setRunControls("failed");
+            activeRouteExecutionId = null;
+            stopRoutePoll();
             appendMessage("assistant", "Could not poll route status.");
           });
       }, 900);
@@ -783,12 +946,39 @@
         .then(function (res) {
           if (!res.ok || !res.data || !res.data.ok) {
             var code = (res.data && res.data.code) || "";
-            if (code === "approval_required") {
+            var exec = (res.data && res.data.execution) || {};
+            var orch = (res.data && res.data.orchestration) || {};
+            // Prefer detailed route/orchestration errors over a bare "failed".
+            var detail =
+              (res.data && res.data.error) ||
+              exec.error ||
+              orch.stopped_reason ||
+              exec.stopped_reason ||
+              "";
+            if (code === "approval_required" || exec.status === "paused_for_approval") {
               appendMessage(
                 "assistant",
                 "Codex approval required. Press Use Recommended again and confirm, or Choose Agent."
               );
               setRunControls("idle");
+              return;
+            }
+            if (code === "permission_denied") {
+              appendMessage(
+                "assistant",
+                escapeHtml(detail || "Permission denied.")
+              );
+              setRunControls("idle");
+              return;
+            }
+            if (code === "budget_exceeded" || /budget exceeded/i.test(String(detail))) {
+              appendMessage(
+                "assistant",
+                "Route blocked by budget: " +
+                  escapeHtml(detail || "AI budget exceeded.") +
+                  " Raise Daily token budget in Settings (Work) or ⋯ → Smart Routing, or wait until tomorrow."
+              );
+              setRunControls("failed");
               return;
             }
             if (code === "duplicate_execution") {
@@ -799,9 +989,18 @@
               setRunControls("idle");
               return;
             }
+            // HTTP 200 with ok:false still carries a finished execution — render it.
+            if (exec && exec.status && exec.status !== "running" && exec.status !== "queued") {
+              activeRouteExecutionId = exec.id || null;
+              renderRouteExecution(exec);
+              if (detail && exec.status === "failed") {
+                // renderRouteExecution already shows error; ensure budget/detail visible.
+              }
+              return;
+            }
             appendMessage(
               "assistant",
-              escapeHtml((res.data && res.data.error) || "Route execution failed.")
+              escapeHtml(detail || "Route execution failed.")
             );
             setRunControls("failed");
             return;
@@ -809,7 +1008,7 @@
           var execution = res.data.execution || {};
           activeRouteExecutionId = execution.id || null;
           if (execution.agent_run_id) activeRunId = execution.agent_run_id;
-          if (execution.status === "queued" || execution.status === "running") {
+          if (isRouteActiveStatus(execution.status)) {
             appendMessage("assistant", "Route running…");
             if (activeRouteExecutionId) pollRouteExecution(activeRouteExecutionId);
             else setRunControls("running");
@@ -903,11 +1102,22 @@
         .catch(function () {});
     }
 
-    function sendPrompt(text) {
+    function isT0DeterministicRecommendation(rec) {
+      if (!rec) return false;
+      return (
+        rec.recommended_agent === "deterministic" ||
+        rec.recommended_tier === "T0"
+      );
+    }
+
+    function sendPrompt(text, opts) {
+      opts = opts || {};
       var prompt = String(text || "").trim();
       if (!prompt) return;
 
-      if (routingEnabled && !skipRoutingOnce) {
+      // skipRoutingOnce skips Smart Routing recommend once only — lifecycle
+      // polling / terminal handling still always runs for the AgentCenter child.
+      if (routingEnabled && !skipRoutingOnce && !opts.forceManual) {
         pendingPrompt = prompt;
         lastPrompt = prompt;
         appendMessage("user", escapeHtml(prompt));
@@ -916,14 +1126,26 @@
         appendMessage("assistant", "Analyzing prompt for Smart Routing…");
         requestRoute(prompt)
           .then(function (data) {
+            var rec = data.recommendation || {};
+            pendingRoute = rec;
+            pendingPlan = data.plan || null;
+            if (isT0DeterministicRecommendation(rec)) {
+              setRunControls("idle");
+              appendMessage(
+                "assistant",
+                "T0 tools can answer this — executing deterministic route directly…"
+              );
+              executeRecommendedRoute(rec, {});
+              return;
+            }
             setRunControls("idle");
-            showRoutingCard(data.recommendation || {}, data.plan || null);
+            showRoutingCard(rec, data.plan || null);
           })
           .catch(function () {
             setRunControls("idle");
             appendMessage(
               "assistant",
-              "Smart Routing unavailable — select an agent manually, then Send again."
+              "Smart Routing unavailable — select an agent, then use Choose Agent / Send."
             );
             if (promptEl) promptEl.value = pendingPrompt;
           });
@@ -933,7 +1155,9 @@
       skipRoutingOnce = false;
       lastPrompt = prompt;
       setRunControls("running");
-      appendMessage("user", escapeHtml(prompt));
+      if (!opts.suppressUserBubble) {
+        appendMessage("user", escapeHtml(prompt));
+      }
       if (promptEl) promptEl.value = "";
       if (!selectedAgent) {
         appendMessage(
@@ -976,9 +1200,9 @@
             setRunControls("failed");
             return;
           }
-          var run = res.body.run || res.body;
+          var run = unwrapAgentRun(res.body) || {};
           activeRunId = run.id || null;
-          if (run.status === "succeeded" || run.answer) {
+          if (isAgentRunTerminal(run.status) || run.answer) {
             renderRun(run);
           } else if (run.id) {
             appendMessage("assistant", "Running…");
@@ -1150,6 +1374,8 @@
                 (a.success_rate != null ? Math.round(a.success_rate * 100) + "%" : "—") +
                 "\nRetries: " +
                 (a.retries_total || 0) +
+                "\nEscalations: " +
+                (a.escalations_total || 0) +
                 "\nAvg runtime: " +
                 (a.average_runtime_ms != null ? a.average_runtime_ms + " ms" : "—") +
                 "\nEst tokens: " +
@@ -1158,6 +1384,12 @@
                 (a.actual_tokens_total || 0) +
                 "\nT0 LLM avoided: " +
                 (a.t0_llm_avoided || 0) +
+                "\nFindings reused: " +
+                (a.prior_findings_reused || 0) +
+                "\nPermission blocked: " +
+                (a.permission_blocked || 0) +
+                "\nRBAC: " +
+                ((a.permissions && a.permissions.role_id) || "—") +
                 "\nBy tier: " +
                 JSON.stringify(a.executions_by_tier || {}) +
                 "\nBy provider: " +
@@ -1177,13 +1409,30 @@
         chooseAgent.addEventListener("click", function () {
           hideRoutingCard();
           ensureAgents();
-          if (promptEl && pendingPrompt) promptEl.value = pendingPrompt;
+          var prompt = pendingPrompt || lastPrompt || "";
+          if (!prompt) {
+            appendMessage("assistant", "No pending prompt for manual override.");
+            return;
+          }
+          if (!selectedAgent) {
+            skipRoutingOnce = true;
+            if (promptEl) promptEl.value = prompt;
+            if (agentSel) agentSel.focus();
+            appendMessage(
+              "assistant",
+              "Select an agent in the dropdown, then Send once (routing stays skipped for that send)."
+            );
+            return;
+          }
+          // Explicit manual override: one-shot skip of recommend only; still poll child run.
           skipRoutingOnce = true;
-          if (agentSel) agentSel.focus();
           appendMessage(
             "assistant",
-            "Choose an agent from the selector, then Send. Manual override uses the existing run flow."
+            "Manual override — running with <strong>" +
+              escapeHtml(selectedAgent) +
+              "</strong>…"
           );
+          sendPrompt(prompt, { suppressUserBubble: true, forceManual: true });
         });
       }
       var cancelRoute = $("ad-routing-cancel");

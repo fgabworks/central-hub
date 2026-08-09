@@ -42,7 +42,7 @@ WebSocket with xterm.js. Sessions start only inside enabled connected repo paths
   selected Personal Email/Calendar search.
 - **AiriX**: /work/airix (legacy /work/okarun redirects); selected repositories and
   instructions, Work Notebook, SQL library, DHIS2 UID metadata, Work Email/Calendar,
-  jobs, Audit, and Smart Routing Phase 3 (history-aware).
+  jobs, Audit, and Smart Routing Phase 5 (cost + RBAC + findings).
 - Adapters include Codex, Claude Code, Cursor Agent, Grok, OpenAI API, Hub Simulator,
   and future config-driven adapters. Models refresh for the selected adapter.
 - System -> AI Connections provides Connect/Reconnect, Test Connection, Refresh Models,

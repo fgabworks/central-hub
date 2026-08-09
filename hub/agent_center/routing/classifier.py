@@ -9,8 +9,15 @@ from hub.agent_center.routing.models import PromptClassification
 
 
 _LOOKUP = re.compile(
-    r"\b(look\s*up|lookup|find\s+uid|what\s+is|show\s+me|list\s+(open|recent)|"
-    r"search\s+(notes?|email|audit|jobs?)|status\s+of)\b",
+    r"\b("
+    r"look\s*up|lookup|find\s+uid|what\s+is|"
+    r"show\s+(me\s+)?(recent\s+)?|"
+    r"list\s+(open|recent)|"
+    r"search\s+(notes?|email|audit|jobs?)|"
+    r"status\s+of|"
+    r"recent\s+(dhis2\s+)?(jobs?|logs?|statuses?)|"
+    r"(jobs?|logs?)\s+and\s+statuses?"
+    r")\b",
     re.I,
 )
 _CSS = re.compile(

@@ -121,7 +121,7 @@ def register_agent_center_routes(app: Flask) -> None:
         prefs = save_dock_prefs(notebook.db, workspace, payload)
         return jsonify({"ok": True, "prefs": prefs})
 
-    # ---- AiriX Smart Routing (Phase 3: history-aware recommend + execute) ----
+    # ---- AiriX Smart Routing (Phase 5: cost + RBAC + findings) ----
     # Canonical: /api/assistants/airix/routing/*
     # Legacy:    /api/assistants/okarun/routing/* (compatibility)
 
@@ -130,11 +130,24 @@ def register_agent_center_routes(app: Flask) -> None:
 
         return is_work_routing_profile(profile_id)
 
+    def _routing_actor() -> str:
+        try:
+            from hub.jobs.auth import current_actor
+
+            return current_actor() or "owner"
+        except Exception:  # noqa: BLE001
+            return "owner"
+
     def _routing_http_error(exc: AgentCenterError):
         status = 400
-        if exc.code == "approval_required":
+        if exc.code in {"approval_required", "permission_denied"}:
             status = 403
-        elif exc.code in {"duplicate_execution", "identical_retry_blocked", "retry_limit"}:
+        elif exc.code in {
+            "duplicate_execution",
+            "identical_retry_blocked",
+            "retry_limit",
+            "budget_exceeded",
+        }:
             status = 409
         elif exc.code in {"execution_not_found"}:
             status = 404
@@ -148,10 +161,63 @@ def register_agent_center_routes(app: Flask) -> None:
         return jsonify(
             {
                 "ok": True,
-                "phase": 3,
+                "phase": 5,
                 "providers": _router().list_available_providers(probe=probe),
+                "roles": _router().list_roles(),
+                "rbac_roles": _router().list_rbac_roles(),
             }
         )
+
+    @app.get("/api/assistants/<profile_id>/routing/roles")
+    def api_airix_routing_roles(profile_id: str):
+        if not _routing_work_ok(profile_id):
+            return jsonify({"ok": False, "error": "Smart Routing roles are AiriX (Work) only"}), 400
+        return jsonify(
+            {
+                "ok": True,
+                "phase": 5,
+                "roles": _router().list_roles(),
+                "rbac_roles": _router().list_rbac_roles(),
+            }
+        )
+
+    @app.get("/api/assistants/<profile_id>/routing/permissions")
+    def api_airix_routing_permissions_get(profile_id: str):
+        if not _routing_work_ok(profile_id):
+            return jsonify({"ok": False, "error": "Smart Routing permissions are AiriX (Work) only"}), 400
+        actor = _routing_actor()
+        return jsonify({"ok": True, "phase": 5, "permissions": _router().rbac_snapshot(actor, workspace="work")})
+
+    @app.get("/api/assistants/<profile_id>/routing/acl")
+    def api_airix_routing_acl_get(profile_id: str):
+        if not _routing_work_ok(profile_id):
+            return jsonify({"ok": False, "error": "Smart Routing ACL is AiriX (Work) only"}), 400
+        try:
+            rows = _router().list_acl(workspace="work", actor=_routing_actor())
+        except AgentCenterError as exc:
+            return _routing_http_error(exc)
+        return jsonify({"ok": True, "phase": 5, "acl": rows, "rbac_roles": _router().list_rbac_roles()})
+
+    @app.put("/api/assistants/<profile_id>/routing/acl")
+    def api_airix_routing_acl_put(profile_id: str):
+        if not _routing_work_ok(profile_id):
+            return jsonify({"ok": False, "error": "Smart Routing ACL is AiriX (Work) only"}), 400
+        payload = request.get_json(silent=True) or {}
+        target = str(payload.get("actor") or "").strip()
+        role_id = str(payload.get("role_id") or "").strip()
+        if not target or not role_id:
+            return jsonify({"ok": False, "error": "actor and role_id are required"}), 400
+        try:
+            row = _router().set_acl_role(
+                target, role_id, workspace="work", actor=_routing_actor()
+            )
+        except AgentCenterError as exc:
+            return _routing_http_error(exc)
+        _audit(
+            audit_actions.AIRIX_ROUTING_SETTINGS,
+            detail={"acl_actor": target, "role_id": role_id},
+        )
+        return jsonify({"ok": True, "assignment": row})
 
     @app.get("/api/assistants/<profile_id>/routing/settings")
     def api_airix_routing_settings_get(profile_id: str):
@@ -167,7 +233,12 @@ def register_agent_center_routes(app: Flask) -> None:
                 {"ok": False, "error": "Smart Routing settings are Work/AiriX only"}
             ), 400
         payload = request.get_json(silent=True) or {}
-        settings = _router().save_settings(payload, workspace="work")
+        try:
+            settings = _router().save_settings(
+                payload, workspace="work", actor=_routing_actor()
+            )
+        except AgentCenterError as exc:
+            return _routing_http_error(exc)
         _audit(
             audit_actions.AIRIX_ROUTING_SETTINGS,
             detail={"mode": settings.mode, "max_retries": settings.max_retries},
@@ -180,9 +251,18 @@ def register_agent_center_routes(app: Flask) -> None:
             return jsonify(
                 {"ok": False, "error": "Smart Routing analytics are AiriX (Work) only"}
             ), 400
-        data = _router().analytics(workspace="work")
+        data = _router().analytics(workspace="work", actor=_routing_actor())
         _audit(audit_actions.AIRIX_ROUTING_ANALYTICS, detail={"executions": data.get("executions_total")})
         return jsonify({"ok": True, "analytics": data})
+
+    @app.get("/api/assistants/<profile_id>/routing/sessions/<session_id>")
+    def api_airix_routing_session_get(profile_id: str, session_id: str):
+        if not _routing_work_ok(profile_id):
+            return jsonify({"ok": False, "error": "Smart Routing sessions are AiriX (Work) only"}), 400
+        row = _router().get_session(session_id, workspace="work", actor=_routing_actor())
+        if row is None:
+            return jsonify({"ok": False, "error": "Session not found", "code": "execution_not_found"}), 404
+        return jsonify({"ok": True, "session": row})
 
     @app.post("/api/assistants/<profile_id>/routing/recommend")
     def api_airix_routing_recommend(profile_id: str):
@@ -195,8 +275,14 @@ def register_agent_center_routes(app: Flask) -> None:
         if not prompt:
             return jsonify({"ok": False, "error": "prompt is required"}), 400
         probe = bool(payload.get("probe_providers"))
-        rec = _router().recommend_route(prompt, workspace="work", probe_providers=probe)
-        plan = _router().build_execution_plan(prompt, workspace="work", recommendation=rec)
+        session_id = str(payload.get("session_id") or "").strip() or None
+        actor = _routing_actor()
+        rec = _router().recommend_route(
+            prompt, workspace="work", actor=actor, probe_providers=probe, session_id=session_id
+        )
+        plan = _router().build_execution_plan(
+            prompt, workspace="work", actor=actor, recommendation=rec, session_id=session_id
+        )
         _audit(
             audit_actions.AIRIX_ROUTING_RECOMMEND,
             detail={
@@ -204,6 +290,7 @@ def register_agent_center_routes(app: Flask) -> None:
                 "complexity": rec.complexity,
                 "recommended_agent": rec.recommended_agent,
                 "tier": rec.recommended_tier,
+                "role_id": rec.role_id,
                 "history_influenced": rec.history_influenced,
                 "execution": "ready",
             },
@@ -211,7 +298,7 @@ def register_agent_center_routes(app: Flask) -> None:
         return jsonify(
             {
                 "ok": True,
-                "phase": 3,
+                "phase": 5,
                 "recommendation": rec.public(),
                 "plan": plan.public(),
             }
@@ -232,21 +319,27 @@ def register_agent_center_routes(app: Flask) -> None:
         approve_codex = bool(payload.get("approve_codex"))
         force = bool(payload.get("force"))
         repository_ids = list(payload.get("repository_ids") or [])
+        session_id = str(payload.get("session_id") or "").strip() or None
+        orchestrate = payload.get("orchestrate")
         try:
             attempt = int(payload.get("attempt") or 0)
         except (TypeError, ValueError):
             attempt = 0
         previous_partial = str(payload.get("previous_partial") or "")
+        actor = _routing_actor()
         try:
             result = _router().execute_route(
                 prompt,
                 workspace="work",
+                actor=actor,
                 agent_override=agent_override,
                 repository_ids=repository_ids,
                 approve_codex=approve_codex,
                 force=force,
                 attempt=attempt,
                 previous_partial=previous_partial,
+                session_id=session_id,
+                orchestrate=None if orchestrate is None else bool(orchestrate),
             )
         except AgentCenterError as exc:
             return _routing_http_error(exc)
@@ -258,10 +351,9 @@ def register_agent_center_routes(app: Flask) -> None:
             detail={
                 "execution_id": execution.get("id"),
                 "provider_id": execution.get("provider_id"),
-                "adapter_id": execution.get("adapter_id"),
                 "status": execution.get("status"),
                 "manual_override": bool(agent_override),
-                "tier": execution.get("tier"),
+                "mode": execution.get("mode"),
                 "attempt": attempt,
             },
         )

@@ -165,6 +165,60 @@ _MIGRATIONS: list[tuple[str, str]] = [
         );
         """,
     ),
+    (
+        "007_airix_routing_phase4",
+        """
+        ALTER TABLE airix_routing_events ADD COLUMN actor TEXT NOT NULL DEFAULT 'owner';
+        ALTER TABLE airix_routing_findings ADD COLUMN actor TEXT NOT NULL DEFAULT 'owner';
+
+        CREATE TABLE IF NOT EXISTS airix_routing_sessions (
+            id TEXT PRIMARY KEY,
+            workspace TEXT NOT NULL DEFAULT 'work',
+            actor TEXT NOT NULL DEFAULT 'owner',
+            prompt_fingerprint TEXT NOT NULL DEFAULT '',
+            prompt_preview TEXT NOT NULL DEFAULT '',
+            role_id TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'active',
+            plan_json TEXT NOT NULL DEFAULT '[]',
+            completed_steps_json TEXT NOT NULL DEFAULT '[]',
+            findings_json TEXT NOT NULL DEFAULT '[]',
+            partial_summary TEXT NOT NULL DEFAULT '',
+            estimated_tokens INTEGER NOT NULL DEFAULT 0,
+            actual_tokens INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_airix_sessions_ws_actor
+            ON airix_routing_sessions(workspace, actor, updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_airix_sessions_fp
+            ON airix_routing_sessions(workspace, actor, prompt_fingerprint);
+        CREATE INDEX IF NOT EXISTS idx_airix_events_ws_actor_created
+            ON airix_routing_events(workspace, actor, created_at DESC);
+        """,
+    ),
+    (
+        "008_airix_routing_phase5",
+        """
+        ALTER TABLE airix_routing_events ADD COLUMN input_tokens INTEGER;
+        ALTER TABLE airix_routing_events ADD COLUMN output_tokens INTEGER;
+        ALTER TABLE airix_routing_events ADD COLUMN estimated_tokens INTEGER;
+        ALTER TABLE airix_routing_events ADD COLUMN estimated_cost_usd REAL;
+        ALTER TABLE airix_routing_events ADD COLUMN actual_cost_usd REAL;
+        ALTER TABLE airix_routing_events ADD COLUMN findings_reused_json TEXT NOT NULL DEFAULT '[]';
+        ALTER TABLE airix_routing_events ADD COLUMN rbac_role TEXT NOT NULL DEFAULT '';
+        ALTER TABLE airix_routing_events ADD COLUMN permission_denied INTEGER NOT NULL DEFAULT 0;
+
+        CREATE TABLE IF NOT EXISTS airix_routing_acl (
+            workspace TEXT NOT NULL,
+            actor TEXT NOT NULL,
+            role_id TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (workspace, actor)
+        );
+        CREATE INDEX IF NOT EXISTS idx_airix_acl_ws_role
+            ON airix_routing_acl(workspace, role_id);
+        """,
+    ),
 ]
 
 

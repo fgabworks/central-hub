@@ -61,8 +61,8 @@
 </section>
 
 <section class="panel panel-body" style="margin-top:0.85rem">
-  <h2 style="margin:0 0 0.75rem;font-size:14px">AiriX Smart Routing (Phase 3)</h2>
-  <p class="muted" style="margin-top:0">History-aware recommend + execute. Capability/risk rules stay authoritative. Codex still requires approval.</p>
+  <h2 style="margin:0 0 0.75rem;font-size:14px">AiriX Smart Routing (Phase 5)</h2>
+  <p class="muted" style="margin-top:0">Cost intelligence, RBAC, relevant findings, budgets, and orchestration. Token budgets stay authoritative; Codex still requires approval.</p>
   {% if workspace == 'work' and routing_settings %}
   <form method="post" class="builder-form" style="margin-top:0.75rem">
     <input type="hidden" name="action" value="airix_routing_settings">
@@ -79,7 +79,17 @@
     <label class="nb-check"><input type="checkbox" name="require_approval_before_codex" value="1" {% if routing_settings.require_approval_before_codex %}checked{% endif %}> Require approval before Codex</label>
     <label class="nb-check"><input type="checkbox" name="allow_escalation" value="1" {% if routing_settings.allow_escalation %}checked{% endif %}> Allow escalation</label>
     <label class="nb-check"><input type="checkbox" name="use_history" value="1" {% if routing_settings.use_history %}checked{% endif %}> Use performance history</label>
+    <label class="nb-check"><input type="checkbox" name="enable_orchestration" value="1" {% if routing_settings.enable_orchestration %}checked{% endif %}> Enable multi-step orchestration</label>
+    <label class="nb-check"><input type="checkbox" name="warn_before_expensive_escalation" value="1" {% if routing_settings.warn_before_expensive_escalation %}checked{% endif %}> Warn before expensive escalation</label>
+    <label class="nb-check"><input type="checkbox" name="enable_cost_estimates" value="1" {% if routing_settings.enable_cost_estimates %}checked{% endif %}> Enable estimated USD cost (from public rates)</label>
     <label><span>Max retries</span><input type="number" name="max_retries" min="0" max="5" value="{{ routing_settings.max_retries }}"></label>
+    <label><span>Max orchestration steps</span><input type="number" name="max_orchestration_steps" min="1" max="8" value="{{ routing_settings.max_orchestration_steps }}"></label>
+    <label><span>Daily token budget (0=unlimited)</span><input type="number" name="daily_token_budget" min="0" value="{{ routing_settings.daily_token_budget }}"></label>
+    <label><span>Monthly token budget (0=unlimited)</span><input type="number" name="monthly_token_budget" min="0" value="{{ routing_settings.monthly_token_budget }}"></label>
+    <label><span>Per-task max tokens (0=unlimited)</span><input type="number" name="per_task_max_tokens" min="0" value="{{ routing_settings.per_task_max_tokens }}"></label>
+    <label><span>Grok USD / 1M tokens (optional)</span><input type="number" step="0.0001" min="0" name="price_grok" value="{{ routing_settings.price_per_mtok.grok if routing_settings.price_per_mtok and routing_settings.price_per_mtok.grok is defined else 0 }}"></label>
+    <label><span>Codex USD / 1M tokens (optional)</span><input type="number" step="0.0001" min="0" name="price_codex" value="{{ routing_settings.price_per_mtok.codex if routing_settings.price_per_mtok and routing_settings.price_per_mtok.codex is defined else 0 }}"></label>
+    <label><span>Default USD / 1M tokens (optional)</span><input type="number" step="0.0001" min="0" name="price_default" value="{{ routing_settings.price_per_mtok.default if routing_settings.price_per_mtok and routing_settings.price_per_mtok.default is defined else 0 }}"></label>
     <button class="btn btn-primary" type="submit">Save Smart Routing settings</button>
   </form>
   {% if routing_analytics %}
@@ -89,11 +99,27 @@
       <div><dt>Executions</dt><dd>{{ routing_analytics.executions_total }}</dd></div>
       <div><dt>Success rate</dt><dd>{% if routing_analytics.success_rate is not none %}{{ (routing_analytics.success_rate * 100)|round(0) }}%{% else %}—{% endif %}</dd></div>
       <div><dt>Retries</dt><dd>{{ routing_analytics.retries_total }}</dd></div>
+      <div><dt>Escalations</dt><dd>{{ routing_analytics.escalations_total or 0 }}</dd></div>
       <div><dt>Avg runtime</dt><dd>{% if routing_analytics.average_runtime_ms %}{{ routing_analytics.average_runtime_ms }} ms{% else %}—{% endif %}</dd></div>
       <div><dt>Est. tokens</dt><dd>{{ routing_analytics.estimated_tokens_total }}</dd></div>
       <div><dt>Actual tokens</dt><dd>{{ routing_analytics.actual_tokens_total }}</dd></div>
       <div><dt>T0 LLM avoided</dt><dd>{{ routing_analytics.t0_llm_avoided }}</dd></div>
+      <div><dt>Findings reused</dt><dd>{{ routing_analytics.prior_findings_reused or 0 }}</dd></div>
+      <div><dt>Permission blocked</dt><dd>{{ routing_analytics.permission_blocked or 0 }}</dd></div>
       <div><dt>Findings</dt><dd>{{ routing_analytics.findings_count }}</dd></div>
+      {% if routing_analytics.budget %}
+      <div><dt>Daily used</dt><dd>{{ routing_analytics.budget.daily_used }}{% if routing_analytics.budget.daily_limit %}/{{ routing_analytics.budget.daily_limit }}{% endif %}</dd></div>
+      <div><dt>Monthly used</dt><dd>{{ routing_analytics.budget.monthly_used }}{% if routing_analytics.budget.monthly_limit %}/{{ routing_analytics.budget.monthly_limit }}{% endif %}</dd></div>
+      {% endif %}
+      {% if routing_analytics.cost and routing_analytics.cost.t0_savings %}
+      <div><dt>T0 tokens saved (est.)</dt><dd>{{ routing_analytics.cost.t0_savings.estimated_tokens_avoided }}</dd></div>
+      {% if routing_analytics.cost.t0_savings.estimated_cost_usd_avoided is not none %}
+      <div><dt>T0 $ saved (est.)</dt><dd>{{ routing_analytics.cost.t0_savings.estimated_cost_usd_avoided }}</dd></div>
+      {% endif %}
+      {% endif %}
+      {% if routing_analytics.permissions %}
+      <div><dt>Your RBAC role</dt><dd>{{ routing_analytics.permissions.role_id }}</dd></div>
+      {% endif %}
     </dl>
     {% if routing_analytics.executions_by_tier %}
     <p class="muted" style="margin:0.65rem 0 0;font-size:12px">By tier:

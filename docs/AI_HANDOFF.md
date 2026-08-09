@@ -4,25 +4,61 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**AiriX Smart Routing Phase 3 (2026-08-10)**
+**AiriX manual-run stuck "Running" fix (2026-08-10)**
 
-History-aware routing on the Phase 1–2 stack: sanitized execution metrics and
-compact prior findings in `agent_center.db` (`airix_routing_*` tables), success-rate
-bias within capability rules, escalation recommendations after repeated failures
-(Codex still approval-gated), retry limits + identical-retry blocking, routing
-explanations in the dock card, and compact analytics on Work Settings +
-`GET /api/assistants/airix/routing/analytics`. No parallel executor; still uses
-`RouteExecutor` → Hub tools / `AgentCenterService`. Tests: `tests/test_airix_routing.py`.
+Root cause: dock `pollRun` treated the GET `/runs/<id>` wrapper `{run: {...}}`
+as the run object and only stopped on `succeeded|failed|cancelled`, while
+AgentCenter finishes as `completed` — so the spinner never stopped after Choose
+Agent / manual override. Fix: unwrap `data.run`, treat
+`completed|failed|cancelled|paused_for_approval|timed_out` as terminal, poll the
+child run id, stop spinner immediately; `skipRoutingOnce` skips recommend once
+only (lifecycle polling always runs); Choose Agent runs the pending prompt in
+one shot; T0 deterministic recommendations auto-execute instead of routing to
+Grok. Cache `shell-dock-12`. Tests: `tests/test_airix_manual_run_lifecycle.py`.
+
+Prior: **AiriX stuck-running lifecycle fix (2026-08-10)**
+
+Executions always finalize to `completed | failed | cancelled | paused_for_approval |
+timed_out`. RouteExecutor waits on async provider runs (timeout → timed_out);
+orchestration maps parent status from child steps; Codex wait uses
+`paused_for_approval` (not running); cancel finalizes step + session; stale
+`active` sessions recover on status poll. Dock stops spinner on every terminal
+status. Module: `hub/agent_center/routing/lifecycle.py`. Tests:
+`tests/test_airix_routing_lifecycle.py`.
+
+Prior: **AiriX Smart Routing Phase 5 (2026-08-10)**
+
+Cost intelligence, explicit RBAC, and light semantic prior-finding retrieval on
+the Phase 1–4 stack. Token budgets remain authoritative; optional USD estimates
+use configured public rates only (no provider secrets). RBAC roles Viewer /
+Analyst / Developer / Admin gate AI execution, providers, tools, Live, Codex
+approval, and budget/settings. Finding retrieval uses keyword/alias + trigram
+relevance (no embeddings). Order: capability/risk → permissions → budget →
+history. Modules: `cost.py`, `rbac.py`; migration `008`. APIs add `/permissions`
+and `/acl`. Tests: `tests/test_airix_routing_phase5.py`.
+
+Prior: **AiriX Smart Routing Phase 4 (2026-08-10)**
+
+Budgets, multi-step orchestration, specialized roles, and resumable sessions on
+the Phase 1–3 stack. Hard daily/monthly/per-task token stops; orchestrated
+plans (tool lookup → repo search → Grok → optional Codex with approval);
+role scopes (Repository, DHIS2, SQL/Data, HCSC/Reports, UI/Playwright,
+Operations); workspace/actor isolation for events/findings/sessions. New
+modules: `budget.py`, `roles.py`, `orchestrate.py`; migration `007`. APIs add
+`/roles` and session get. Tests: `tests/test_airix_routing_phase4.py`.
+
+Prior: **AiriX Smart Routing Phase 3 (2026-08-10)**
+
+History-aware routing: sanitized metrics/findings, success-rate bias, escalation
+after repeated failures, explanations, analytics.
 
 Prior: **AiriX Smart Routing Phase 2 (2026-08-10)**
 
-After recommendation, **Use Recommended** executes via existing adapters.
-Canonical APIs under `/api/assistants/airix/routing/*`. T0–T3 tiers, minimal
-context, cancel/duplicate prevention, safe unavailable fallback.
+Use Recommended executes via adapters; T0–T3; cancel/duplicate prevention.
 
 Prior: **AiriX Smart Routing Phase 1 (2026-08-10)**
 
-Classify + recommend only; dock card and settings introduced.
+Classify + recommend only.
 
 Prior: **TODAY Mission Control (2026-08-04)**
 

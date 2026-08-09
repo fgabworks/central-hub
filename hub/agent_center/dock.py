@@ -192,7 +192,7 @@ def dock_shell_bootstrap(
         "lazy_agents_url": f"/api/assistants/{profile.id}/agents",
         "smart_routing": {
             "enabled": profile.id == "okarun",
-            "phase": 3,
+            "phase": 5,
             # Canonical AiriX routing APIs (legacy /okarun/... still accepted).
             "recommend_url": "/api/assistants/airix/routing/recommend",
             "execute_url": "/api/assistants/airix/routing/execute",
@@ -201,6 +201,8 @@ def dock_shell_bootstrap(
             "settings_url": "/api/assistants/airix/routing/settings",
             "providers_url": "/api/assistants/airix/routing/providers",
             "analytics_url": "/api/assistants/airix/routing/analytics",
+            "roles_url": "/api/assistants/airix/routing/roles",
+            "permissions_url": "/api/assistants/airix/routing/permissions",
             "execute": True,
         },
     }
