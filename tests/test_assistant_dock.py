@@ -112,7 +112,7 @@ class DockRouteTests(unittest.TestCase):
         self.assertIn('id="ad-topbar-toggle"', html)
         self.assertNotIn('id="ad-toggle"', html)
         self.assertNotIn("ad-rail", html)
-        self.assertIn("Okarun", html)
+        self.assertIn("AiriX", html)
         self.assertIn("Read-only mode. No actions are executed.", html)
         self.assertIn("ad-tab-conversation", html)
         self.assertIn("ad-tab-output", html)
@@ -133,7 +133,7 @@ class DockRouteTests(unittest.TestCase):
     def test_assistant_center_keeps_dock_and_full_page(self) -> None:
         """Assistant Center is history/management; dock still mounts for new prompts."""
         self._set_workspace("work")
-        html = self.client.get("/work/okarun").get_data(as_text=True)
+        html = self.client.get("/work/airix").get_data(as_text=True)
         self.assertIn('id="assistant-dock-host"', html)
         self.assertIn("assistant_dock.js", html)
         self.assertIn("has-activity-rail", html)
@@ -261,7 +261,7 @@ class DockRouteTests(unittest.TestCase):
         self.assertIn('class="ad-composer"', html)
         self.assertIn('class="ad-body"', html)
         self.assertIn('id="ad-messages"', html)
-        self.assertIn("No conversation yet. Select a suggestion or ask Okarun a question.", html)
+        self.assertIn("No conversation yet. Select a suggestion or ask AiriX a question.", html)
         self.assertIn('id="ad-more"', html)
         self.assertIn('id="ad-menu-pop"', html)
         self.assertIn('id="ad-pin"', html)

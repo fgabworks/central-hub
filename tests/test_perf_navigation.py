@@ -110,7 +110,7 @@ class PerformanceRegressionTests(unittest.TestCase):
             "get",
             wraps=connections.get,
         ) as get_mock:
-            resp = self.client.get("/work/okarun")
+            resp = self.client.get("/work/airix")
             self.assertEqual(resp.status_code, 200)
             for call in get_mock.call_args_list:
                 kwargs = call.kwargs
@@ -139,7 +139,7 @@ class PerformanceRegressionTests(unittest.TestCase):
             ("/repositories", NAV_BUDGET_MS),
             ("/health", NAV_BUDGET_MS),
             ("/dhis2", NAV_BUDGET_MS),
-            ("/work/okarun", DASH_SHELL_BUDGET_MS),
+            ("/work/airix", DASH_SHELL_BUDGET_MS),
             ("/personal/aira", DASH_SHELL_BUDGET_MS),
         ]
         # Warm AI connection placeholders / templates once.

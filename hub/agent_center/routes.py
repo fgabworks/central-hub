@@ -75,14 +75,19 @@ def register_agent_center_routes(app: Flask) -> None:
     def personal_aira():
         return _page("aira")
 
+    @app.get("/work/airix")
+    def work_airix():
+        return _page("okarun")
+
     @app.get("/work/okarun")
     def work_okarun():
-        return _page("okarun")
+        # Legacy path — display name is AiriX.
+        return redirect(url_for("work_airix"))
 
     @app.get("/agents")
     @app.get("/prompting")
     def agent_center():
-        return _page("okarun")
+        return redirect(url_for("work_airix"))
 
     @app.get("/api/assistant-dock/bootstrap")
     def api_assistant_dock_bootstrap():

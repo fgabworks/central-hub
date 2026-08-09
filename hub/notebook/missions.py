@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
 from typing import Any
 
 from hub.notebook.db import utcnow
@@ -49,7 +49,10 @@ def _completed_day(value: str | None) -> date | None:
         return None
     try:
         if "T" in raw:
-            return datetime.fromisoformat(raw.replace("Z", "+00:00")).date()
+            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            if dt.tzinfo is not None:
+                dt = dt.astimezone().replace(tzinfo=None)
+            return dt.date()
         return date.fromisoformat(raw[:10])
     except ValueError:
         return None
@@ -219,7 +222,12 @@ class MissionControl:
         note = self.store.get(note_id)
         if not note or not self._is_mission(note):
             return None
-        stamp = utcnow()
+        if now is not None:
+            # Tests inject a naive local clock; stamp so completed_day matches that day.
+            local = _local_now(now)
+            stamp = local.replace(tzinfo=timezone.utc).isoformat()
+        else:
+            stamp = utcnow()
         with self.store.db.connect() as conn:
             conn.execute(
                 """
@@ -319,6 +327,41 @@ class MissionControl:
             )
         return _hydrate_mission_flags(self.store.get(note_id) or {})
 
+    def repair_completion_state(
+        self,
+        *,
+        actor: str = "system",
+    ) -> list[dict[str, Any]]:
+        """Restore status=done when completed_at is set but status was left open."""
+        repaired: list[dict[str, Any]] = []
+        for note in self.list_missions(include_done=True):
+            completed_at = str(note.get("completed_at") or "").strip()
+            if not completed_at or not _is_open(note):
+                continue
+            stamp = utcnow()
+            with self.store.db.connect() as conn:
+                conn.execute(
+                    """
+                    UPDATE notes SET
+                        status = 'done',
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (stamp, note["id"]),
+                )
+                self.store._add_activity(
+                    conn,
+                    note["id"],
+                    action="mission_completed",
+                    detail="Restored done status from completed_at",
+                    actor=actor,
+                    when=stamp,
+                )
+            updated = self.store.get(note["id"])
+            if updated:
+                repaired.append(_hydrate_mission_flags(updated))
+        return repaired
+
     def process_carry_over(
         self,
         *,
@@ -414,9 +457,11 @@ class MissionControl:
         now: datetime | None = None,
         actor: str = "system",
     ) -> dict[str, Any]:
+        repaired = self.repair_completion_state(actor=actor)
         carried = self.process_carry_over(now=now, actor=actor)
         reminded = self.process_reminders(now=now, actor=actor)
         return {
+            "repaired": repaired,
             "carried": carried,
             "reminded": reminded,
             "today": _today(now).isoformat(),

@@ -52,12 +52,12 @@ PROFILES = {
     ),
     "okarun": AssistantProfile(
         id="okarun",
-        name="Okarun",
+        name="AiriX",
         title="Work & Data Assistant",
         workspace="work",
         tone="Strict, direct, technical, and evidence-focused.",
         instructions=(
-            "You are Okarun, the Work & Data Assistant. Be strict, direct, technical, and "
+            "You are AiriX, the Work & Data Assistant. Be strict, direct, technical, and "
             "evidence-focused. Cite concrete sources and distinguish evidence from inference. "
             "Respect repository ownership and every instruction file loaded for selected repositories."
         ),

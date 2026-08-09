@@ -16,7 +16,7 @@ REPRESENTATIVE_PAGES = [
     ("/dhis2", "DHIS2 Overview"),
     ("/dhis2/lookup", "DHIS2 Lookup"),
     ("/dhis2/reports", "DHIS2 Reports"),
-    ("/work/okarun", "Okarun"),
+    ("/work/airix", "AiriX"),
     ("/work/email", "Email Center"),
     ("/system/ai-connections", "AI Connections"),
     ("/audit", "Audit"),
@@ -82,7 +82,7 @@ class SectionHeaderUiTests(unittest.TestCase):
         self.assertNotIn("dex-breadcrumb", html)
 
     def test_agent_center_actions_preserved(self):
-        resp = self.client.get("/work/okarun")
+        resp = self.client.get("/work/airix")
         self.assertEqual(resp.status_code, 200)
         html = resp.get_data(as_text=True)
         self.assertIn('id="ac-lock-toggle"', html)

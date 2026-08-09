@@ -186,7 +186,7 @@ def dock_shell_bootstrap(
             "message": "Read-only mode. No actions are executed.",
             "voice_disabled": True,
         },
-        "center_url": "/personal/aira" if profile.id == "aira" else "/work/okarun",
+        "center_url": "/personal/aira" if profile.id == "aira" else "/work/airix",
         "api_base": f"/api/assistants/{profile.id}",
         "prefs_url": "/api/assistant-dock/prefs",
         "lazy_agents_url": f"/api/assistants/{profile.id}/agents",

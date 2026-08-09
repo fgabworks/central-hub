@@ -184,6 +184,63 @@ class MissionControlTests(unittest.TestCase):
         self.assertFalse(rescheduled["carry_over"])
         self.assertEqual(rescheduled["original_due_date"], "2026-08-03")
 
+    def test_completed_mission_not_open_tasks_overdue(self) -> None:
+        """Completed missions must not inflate Open Tasks overdue after stale saves."""
+        from hub.notebook.dashboard import open_task_stats
+
+        mission = self.mc.create_mission(
+            title="ECCD PI fix",
+            due_date="2026-08-03",
+            now=self.yesterday,
+        )
+        self.mc.process_carry_over(now=self.today)
+        self.mc.complete_mission(mission["id"], now=self.today)
+
+        # Stale notebook editor save tries to push status back to pending.
+        saved = self.store.save(
+            mission["id"],
+            title="ECCD PI fix",
+            body_md="",
+            note_type="mission",
+            status="pending",
+            priority="medium",
+            due_date="2026-08-03",
+            tags="",
+            repositories=[],
+            checklist=[],
+            links=[],
+            pinned=False,
+        )
+        assert saved is not None
+        self.assertEqual(saved["status"], "done")
+        self.assertTrue(saved.get("completed_at"))
+
+        open_notes = self.store.list_open(scope="work")
+        self.assertFalse(any(n["id"] == mission["id"] for n in open_notes))
+        stats = open_task_stats(open_notes, today=self.today.date())
+        self.assertEqual(stats["overdue"], 0)
+
+    def test_repair_completion_state_restores_done(self) -> None:
+        mission = self.mc.create_mission(title="Corruptible", now=self.today)
+        self.mc.complete_mission(mission["id"], now=self.today)
+        stamp = mission["id"]
+        with self.store.db.connect() as conn:
+            conn.execute(
+                "UPDATE notes SET status = 'pending' WHERE id = ?",
+                (stamp,),
+            )
+        row = self.store.get(stamp)
+        assert row is not None
+        self.assertEqual(row["status"], "pending")
+        self.assertTrue(row.get("completed_at"))
+
+        repaired = self.mc.repair_completion_state()
+        self.assertEqual(len(repaired), 1)
+        self.assertEqual(repaired[0]["status"], "done")
+        self.assertFalse(
+            any(n["id"] == stamp for n in self.store.list_open(scope="work"))
+        )
+
     def test_existing_notebook_notes_still_work(self) -> None:
         note = self.store.create(title="Regular note", scope="work", note_type="task")
         saved = self.store.save(

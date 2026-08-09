@@ -101,6 +101,22 @@ repositories:
     executable: python
     timeout_seconds: 3
   capabilities: []
+- id: sql-queries
+  name: SQL Queries
+  type: command
+  enabled: true
+  git_url: https://github.com/PMNP-IS/SQL-queries.git
+  local_path: C:\PMNP\SQL-queries
+  working_directory: C:\PMNP\SQL-queries
+  tags:
+  - connected
+  - command
+  health_check:
+    type: path
+    local_path: C:\PMNP\SQL-queries
+    executable: python
+    timeout_seconds: 3
+  capabilities: []
 defaults:
   job_timeout_seconds: 3600
   max_concurrent_jobs: 2

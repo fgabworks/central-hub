@@ -255,7 +255,7 @@ class AgentCenterService:
         allowed_profiles = getattr(adapter, "profiles_allowed", None)
         if allowed_profiles and profile.id not in allowed_profiles:
             raise AgentCenterError(
-                f"{adapter.descriptor.label} is available for Okarun only in this MVP",
+                f"{adapter.descriptor.label} is available for AiriX only in this MVP",
                 code="profile_unsupported",
             )
         connection = self.connections.get(agent_id) if agent_id in self.connections.adapters else None

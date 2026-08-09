@@ -631,7 +631,7 @@
       var history = $("ad-history");
       function goCenter() {
         setMenuOpen(false);
-        window.location.href = boot.center_url || "/work/okarun";
+        window.location.href = boot.center_url || "/work/airix";
       }
       if (settings) settings.addEventListener("click", goCenter);
       if (history) history.addEventListener("click", goCenter);

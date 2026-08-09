@@ -475,6 +475,7 @@ def create_app() -> Flask:
             "live_data_export",
             "data_explorer",
             "agent_center",
+            "work_airix",
             "work_okarun",
             "dhis2",
             "jobs",
@@ -602,10 +603,10 @@ def create_app() -> Flask:
         ]
         ai_nav = [
             {
-                "endpoint": "work_okarun",
-                "label": "Okarun",
+                "endpoint": "work_airix",
+                "label": "AiriX",
                 "icon": "AI",
-                "active_prefix": "work_okarun",
+                "active_prefix": "work_airix",
             },
             {
                 "endpoint": "work_email",
@@ -749,6 +750,9 @@ def create_app() -> Flask:
         registered_ids = (
             {repo.id for repo in registry.repositories} if registry else set()
         )
+        if scope_n == "work":
+            # Restore mission done status before Open Tasks / queue stats.
+            mission_control(notebook).repair_completion_state(actor=current_actor())
         work_queue = dashboard_work_queue(
             notebook,
             tab=queue_tab,

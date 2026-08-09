@@ -75,8 +75,12 @@ class NotebookStore:
     def list_open(
         self, *, limit: int = 500, scope: str | None = None
     ) -> list[dict[str, Any]]:
-        """Open notes for dashboard (excludes done + archived)."""
-        clauses = ["n.status NOT IN ('done', 'archived')"]
+        """Open notes for dashboard (excludes done + archived + completion stamp)."""
+        clauses = [
+            "n.status NOT IN ('done', 'archived')",
+            # completed_at means finished (Mission Control); ignore stale open status.
+            "(n.completed_at IS NULL OR TRIM(n.completed_at) = '')",
+        ]
         params: list[Any] = []
         if scope:
             clauses.append("n.scope = ?")
@@ -116,6 +120,7 @@ class NotebookStore:
         if status and status != "all":
             if status in {"open", "active"}:
                 clauses.append("n.status NOT IN ('done', 'archived')")
+                clauses.append("(n.completed_at IS NULL OR TRIM(n.completed_at) = '')")
             elif status == "archived":
                 clauses.append("n.status = 'archived'")
             else:
@@ -252,6 +257,14 @@ class NotebookStore:
 
         now = utcnow()
         status_n = normalize_status(status)
+        type_n = normalize_type(note_type)
+        existing_completed = str(existing.get("completed_at") or "").strip()
+        # Mission completion is owned by Mission Control. A stale notebook editor
+        # save must not reopen a completed mission back into Open Tasks.
+        if (
+            str(existing.get("note_type") or "") == "mission" or type_n == "mission"
+        ) and existing.get("status") == "done" and status_n not in {"done", "archived"}:
+            status_n = "done"
         scope_n = normalize_scope(
             scope if scope is not None else existing.get("scope"),
             default=normalize_scope(existing.get("scope")),
@@ -261,6 +274,12 @@ class NotebookStore:
             archived_at = now
         if status_n != "archived":
             archived_at = None
+        if status_n == "done":
+            completed_at = existing_completed or now
+        elif status_n == "archived":
+            completed_at = existing_completed or None
+        else:
+            completed_at = None
         # Personal notes do not keep repository links.
         if scope_n == "personal":
             repositories = []
@@ -271,13 +290,13 @@ class NotebookStore:
                 UPDATE notes SET
                     title = ?, body_md = ?, note_type = ?, status = ?, priority = ?,
                     due_date = ?, tags_json = ?, updated_at = ?, archived_at = ?,
-                    pinned = ?, scope = ?
+                    pinned = ?, scope = ?, completed_at = ?
                 WHERE id = ?
                 """,
                 (
                     (title or "").strip() or "Untitled note",
                     body_md or "",
-                    normalize_type(note_type),
+                    type_n,
                     status_n,
                     normalize_priority(priority),
                     (due_date or "").strip() or None,
@@ -286,6 +305,7 @@ class NotebookStore:
                     archived_at,
                     1 if pinned else 0,
                     scope_n,
+                    completed_at,
                     note_id,
                 ),
             )
