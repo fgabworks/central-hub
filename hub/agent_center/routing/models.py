@@ -1,4 +1,4 @@
-"""Shared models for AiriX Smart Routing (Phase 1)."""
+"""Shared models for AiriX Smart Routing (Phase 3)."""
 
 from __future__ import annotations
 
@@ -66,6 +66,7 @@ class RoutingSettings:
     require_approval_before_codex: bool = True
     allow_escalation: bool = True
     max_retries: int = 2
+    use_history: bool = True
 
     def public(self) -> dict[str, Any]:
         return asdict(self)
@@ -89,6 +90,32 @@ class PromptClassification:
 
 
 @dataclass
+class RouteExplanation:
+    """Human-readable routing explanation (Phase 3)."""
+
+    recommended_provider: str
+    historical_success_rate: float | None = None
+    sample_size: int = 0
+    expected_retries: int = 0
+    estimated_usage: str = ""
+    escalation_reason: str | None = None
+    history_influenced: bool = False
+    reason: str = ""
+
+    def public(self) -> dict[str, Any]:
+        return {
+            "recommended_provider": self.recommended_provider,
+            "historical_success_rate": self.historical_success_rate,
+            "sample_size": self.sample_size,
+            "expected_retries": self.expected_retries,
+            "estimated_usage": self.estimated_usage,
+            "escalation_reason": self.escalation_reason,
+            "history_influenced": self.history_influenced,
+            "reason": self.reason,
+        }
+
+
+@dataclass
 class RouteRecommendation:
     task_type: str
     complexity: int
@@ -104,8 +131,22 @@ class RouteRecommendation:
     approval_required: bool
     classification: PromptClassification
     providers_considered: list[str] = field(default_factory=list)
+    explanation: RouteExplanation | None = None
+    expected_retries: int = 0
+    history_influenced: bool = False
+    escalation_reason: str | None = None
 
     def public(self) -> dict[str, Any]:
+        expl = self.explanation.public() if self.explanation else {
+            "recommended_provider": self.recommended_agent,
+            "historical_success_rate": None,
+            "sample_size": 0,
+            "expected_retries": self.expected_retries,
+            "estimated_usage": self.estimated_usage,
+            "escalation_reason": self.escalation_reason,
+            "history_influenced": self.history_influenced,
+            "reason": self.reason,
+        }
         return {
             "task_type": self.task_type,
             "complexity": self.complexity,
@@ -121,14 +162,18 @@ class RouteRecommendation:
             "approval_required": self.approval_required,
             "classification": self.classification.public(),
             "providers_considered": list(self.providers_considered),
-            "phase": 1,
-            "execution": "deferred",
+            "explanation": expl,
+            "expected_retries": self.expected_retries,
+            "history_influenced": self.history_influenced,
+            "escalation_reason": self.escalation_reason,
+            "phase": 3,
+            "execution": "ready",
         }
 
 
 @dataclass
 class ExecutionPlan:
-    """Phase 1 plan only — never starts providers."""
+    """Execution plan preview (Phase 3 includes history-aware explanation)."""
 
     prompt: str
     recommended_agent: str
@@ -139,11 +184,23 @@ class ExecutionPlan:
     max_retries: int
     steps: list[str]
     status: str = "planned"
+    context: dict[str, Any] = field(default_factory=dict)
+    explanation: dict[str, Any] = field(default_factory=dict)
 
     def public(self) -> dict[str, Any]:
         return {
-            **asdict(self),
-            "phase": 1,
-            "execute": False,
-            "note": "Phase 1 builds plans only; agent execution is deferred to Phase 2.",
+            "prompt": self.prompt,
+            "recommended_agent": self.recommended_agent,
+            "alternative_agent": self.alternative_agent,
+            "tier": self.tier,
+            "approval_required": self.approval_required,
+            "estimated_usage": self.estimated_usage,
+            "max_retries": self.max_retries,
+            "steps": list(self.steps),
+            "status": self.status,
+            "context": dict(self.context),
+            "explanation": dict(self.explanation),
+            "phase": 3,
+            "execute": True,
+            "note": "Phase 3 executes via adapters; history influences routing; Codex still requires approval.",
         }

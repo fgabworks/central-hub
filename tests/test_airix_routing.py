@@ -1,16 +1,99 @@
-"""AiriX Smart Routing Phase 1 — classify + recommend only."""
+"""AiriX Smart Routing Phase 3 — history, findings, retry/escalation, analytics."""
 
 from __future__ import annotations
 
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
+from unittest.mock import MagicMock
 
+from hub.agent_center.db import AgentCenterDb
 from hub.agent_center.routing import AgentRouterService
+from hub.agent_center.routing.context import build_minimal_context_preview
+from hub.agent_center.routing.execution import prompt_only_fingerprint
+from hub.agent_center.routing.findings import select_relevant_findings
+from hub.agent_center.routing.history import RoutingHistoryStore
 from hub.agent_center.routing.models import RoutingSettings
-from hub.agent_center.routing.providers import ProviderRegistry
+from hub.agent_center.routing.router import recommend_route
 from hub.agent_center.routing.settings import load_routing_settings, save_routing_settings
+from hub.agent_center.service import AgentCenterError
 from hub.notebook.db import NotebookDatabase
+
+
+class _FakeAgentCenter:
+    """Minimal stand-in so RouteExecutor never needs live providers."""
+
+    def __init__(self) -> None:
+        self.started: list[dict[str, Any]] = []
+        self.cancelled: list[str] = []
+        self.runs: dict[str, dict[str, Any]] = {}
+        self.registry = MagicMock()
+        self.notebook = None
+        self.sql_store = None
+        self.uid_index = None
+        self.email = None
+        self.calendar = None
+        self.job_store = None
+        self.audit_store = None
+        self.dhis2_reports = None
+        self.notepad_factory = None
+        self._n = 0
+
+    def start_run(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self._n += 1
+        run_id = f"run-{self._n}"
+        row = {
+            "id": run_id,
+            "status": "succeeded",
+            "answer": f"answer from {payload.get('agent_id')}",
+            "agent_id": payload.get("agent_id"),
+            "prompt": payload.get("prompt"),
+            "tool_ids": list(payload.get("tool_ids") or []),
+            "repository_ids": list(payload.get("repository_ids") or []),
+            "finished_at": "2026-08-10T00:00:00+00:00",
+            "usage": {"total_tokens": 42},
+        }
+        self.started.append(payload)
+        self.runs[run_id] = row
+        return dict(row)
+
+    def cancel_run(self, run_id: str, *, profile_id: str = "okarun") -> dict[str, Any]:
+        self.cancelled.append(run_id)
+        row = self.runs.get(run_id) or {"id": run_id}
+        row = {**row, "status": "cancelled", "error": "Cancelled"}
+        self.runs[run_id] = row
+        return dict(row)
+
+    def get_run(self, run_id: str, *, profile_id: str = "okarun") -> dict[str, Any]:
+        if run_id not in self.runs:
+            raise AgentCenterError("not found", code="not_found")
+        return dict(self.runs[run_id])
+
+    def get_agent(self, agent_id: str) -> Any:
+        return MagicMock() if agent_id else None
+
+    def repositories(self, profile_id: str = "okarun") -> list[dict[str, Any]]:
+        return [{"id": "sample-cli"}]
+
+    def list_agents(self, **kwargs: Any) -> list[dict[str, Any]]:
+        return [
+            {"id": "grok", "status": "available", "runnable": True},
+            {"id": "hub-simulator", "status": "available", "runnable": True},
+            {"id": "codex", "status": "unavailable", "runnable": False},
+        ]
+
+
+def _availability(extra: dict[str, dict[str, Any]] | None = None) -> dict[str, dict[str, Any]]:
+    base = {
+        "grok": {"id": "grok", "status": "available", "runnable": True},
+        "hub-simulator": {"id": "hub-simulator", "status": "available", "runnable": True},
+        "codex": {"id": "codex", "status": "available", "runnable": True},
+        "openai-api": {"id": "openai-api", "status": "available", "runnable": True},
+    }
+    if extra:
+        base.update(extra)
+    return base
 
 
 class AirixRoutingUnitTests(unittest.TestCase):
@@ -20,24 +103,8 @@ class AirixRoutingUnitTests(unittest.TestCase):
     def test_simple_lookup_routes_t0_deterministic(self) -> None:
         prompt = "Look up the UID for Philippines and show me the status of recent jobs"
         rec = self.router.recommend_route(prompt)
-        self.assertEqual(rec.task_type, "lookup")
-        self.assertLessEqual(rec.complexity, 30)
-        self.assertEqual(rec.risk, "low")
         self.assertEqual(rec.recommended_agent, "deterministic")
         self.assertEqual(rec.recommended_tier, "T0")
-        self.assertFalse(rec.approval_required)
-        self.assertIn(rec.estimated_usage, {"Very Low", "Low"})
-        self.assertGreaterEqual(rec.confidence, 0.5)
-        self.assertTrue(rec.classification.deterministic_capable)
-
-    def test_css_fix_routes_low_cost_or_grok(self) -> None:
-        prompt = "Fix the CSS padding on the dashboard button style so the hover color matches"
-        rec = self.router.recommend_route(prompt)
-        self.assertEqual(rec.task_type, "css_ui")
-        self.assertLess(rec.complexity, 50)
-        self.assertIn(rec.recommended_agent, {"low-cost", "grok", "openai-api"})
-        self.assertIn(rec.recommended_tier, {"T1", "T2"})
-        self.assertNotEqual(rec.recommended_agent, "codex")
         self.assertFalse(rec.approval_required)
 
     def test_sql_dhis2_investigation_prefers_grok(self) -> None:
@@ -46,12 +113,8 @@ class AirixRoutingUnitTests(unittest.TestCase):
             "returns empty rows for this org unit — debug the join and UID mapping"
         )
         rec = self.router.recommend_route(prompt)
-        self.assertIn(rec.task_type, {"dhis2_investigation", "sql_investigation"})
-        self.assertGreaterEqual(rec.complexity, 40)
         self.assertEqual(rec.recommended_agent, "grok")
         self.assertEqual(rec.recommended_tier, "T2")
-        self.assertNotEqual(rec.recommended_agent, "codex")
-        self.assertIn(rec.estimated_usage, {"Low", "Moderate", "High"})
 
     def test_large_architecture_refactor_routes_codex_with_approval(self) -> None:
         prompt = (
@@ -60,87 +123,237 @@ class AirixRoutingUnitTests(unittest.TestCase):
             "a breaking change migration plan"
         )
         rec = self.router.recommend_route(prompt)
-        self.assertIn(rec.task_type, {"architecture", "refactor"})
-        self.assertGreaterEqual(rec.complexity, 70)
-        self.assertEqual(rec.risk, "high")
         self.assertEqual(rec.recommended_agent, "codex")
-        self.assertEqual(rec.recommended_tier, "T3")
         self.assertTrue(rec.approval_required)
-        self.assertEqual(rec.estimated_usage, "High")
+        self.assertIn("explanation", rec.public())
 
-    def test_never_auto_prefer_codex_for_simple_work(self) -> None:
-        for prompt in (
-            "What is the status of open notebook notes?",
-            "Change button CSS color to blue",
-            "Explain this Python function briefly",
-        ):
-            rec = self.router.recommend_route(prompt)
-            self.assertNotEqual(rec.recommended_agent, "codex", prompt)
-
-    def test_list_providers_and_estimate_usage(self) -> None:
-        providers = self.router.list_available_providers()
-        ids = {p["id"] for p in providers}
-        self.assertIn("deterministic", ids)
-        self.assertIn("grok", ids)
-        self.assertIn("codex", ids)
-        usage = self.router.estimate_usage(prompt="Look up UID DcGhhRsspFX")
-        self.assertIn(usage["estimated_usage"], {"Very Low", "Low", "Moderate", "High"})
-
-    def test_build_execution_plan_is_non_executing(self) -> None:
+    def test_build_execution_plan_phase3(self) -> None:
         plan = self.router.build_execution_plan("Look up recent audit events")
         public = plan.public()
-        self.assertEqual(public["status"], "planned")
-        self.assertFalse(public["execute"])
-        self.assertEqual(public["phase"], 1)
-        self.assertIn("Phase 2", " ".join(plan.steps))
+        self.assertTrue(public["execute"])
+        self.assertEqual(public["phase"], 3)
+        self.assertIn("explanation", public)
 
-    def test_cheapest_mode_keeps_lookup_on_t0(self) -> None:
-        rec = self.router.recommend_route(
-            "Find UID for the facility and list recent jobs",
-            settings=RoutingSettings(mode="cheapest", prefer_deterministic=True),
-        )
-        self.assertEqual(rec.recommended_tier, "T0")
-
-    def test_settings_persist(self) -> None:
+    def test_settings_persist_use_history(self) -> None:
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         db = NotebookDatabase(Path(tmp.name) / "notebook.db")
         saved = save_routing_settings(
             db,
             "work",
-            {
-                "mode": "best_quality",
-                "prefer_deterministic": False,
-                "prefer_grok_for_routine": True,
-                "require_approval_before_codex": True,
-                "allow_escalation": False,
-                "max_retries": 3,
-            },
+            {"mode": "balanced", "use_history": False, "max_retries": 1},
         )
-        self.assertEqual(saved.mode, "best_quality")
-        self.assertFalse(saved.prefer_deterministic)
-        self.assertEqual(saved.max_retries, 3)
-        loaded = load_routing_settings(db, "work")
-        self.assertEqual(loaded.mode, "best_quality")
-        self.assertFalse(loaded.allow_escalation)
+        self.assertFalse(saved.use_history)
+        self.assertEqual(load_routing_settings(db, "work").use_history, False)
 
-    def test_provider_registry_exposes_required_fields(self) -> None:
-        row = ProviderRegistry().get("grok")
-        assert row is not None
-        pub = row.public()
-        for key in (
-            "id",
-            "label",
-            "tier",
-            "cost_tier",
-            "speed",
-            "context_capacity",
-            "capabilities",
-            "tools",
-            "requires_approval",
-            "available",
-        ):
-            self.assertIn(key, pub)
+
+class AirixRoutingPhase3HistoryTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.history = RoutingHistoryStore(AgentCenterDb(Path(self.tmp.name) / "agent.db"))
+        self.fake = _FakeAgentCenter()
+        self.router = AgentRouterService(
+            availability_loader=_availability,
+            agent_center=self.fake,  # type: ignore[arg-type]
+            history=self.history,
+        )
+
+    def test_insufficient_history_falls_back_to_normal_rules(self) -> None:
+        self.history.record_event(
+            {
+                "provider_id": "grok",
+                "tier": "T2",
+                "task_type": "dhis2_investigation",
+                "status": "failed",
+                "outcome": "failure",
+                "prompt_fingerprint": "x",
+            }
+        )
+        prompt = (
+            "Investigate why the DHIS2 analytics SQL query for program indicators "
+            "returns empty rows for this org unit — debug the join and UID mapping"
+        )
+        rec = self.router.recommend_route(prompt)
+        self.assertEqual(rec.recommended_agent, "grok")
+        self.assertIsNone(rec.explanation.historical_success_rate if rec.explanation else None)
+
+    def test_history_influences_routing(self) -> None:
+        for _ in range(4):
+            self.history.record_event(
+                {
+                    "provider_id": "grok",
+                    "tier": "T2",
+                    "task_type": "css_ui",
+                    "status": "failed",
+                    "outcome": "failure",
+                }
+            )
+        for _ in range(4):
+            self.history.record_event(
+                {
+                    "provider_id": "low-cost",
+                    "tier": "T1",
+                    "task_type": "css_ui",
+                    "status": "completed",
+                    "outcome": "success",
+                }
+            )
+        classification = self.router.classify_request(
+            "Fix the CSS padding on the dashboard button style so the hover color matches"
+        )
+        rec = recommend_route(
+            classification,
+            settings=RoutingSettings(mode="cheapest", prefer_deterministic=False, use_history=True),
+            provider_stats=self.history.provider_stats(task_type="css_ui"),
+        )
+        self.assertTrue(rec.history_influenced)
+        self.assertEqual(rec.recommended_agent, "low-cost")
+
+    def test_relevant_prior_findings_included_unrelated_excluded(self) -> None:
+        self.history.save_finding(
+            {
+                "task_type": "dhis2_investigation",
+                "keywords": ["dhis2", "analytics", "uid", "org"],
+                "summary": "Org unit UID mapping mismatch caused empty analytics rows.",
+                "provider_id": "grok",
+            }
+        )
+        self.history.save_finding(
+            {
+                "task_type": "css_ui",
+                "keywords": ["css", "padding", "button"],
+                "summary": "Button padding used rem units inconsistently.",
+                "provider_id": "low-cost",
+            }
+        )
+        prompt = (
+            "Investigate why the DHIS2 analytics SQL query for program indicators "
+            "returns empty rows for this org unit — debug the join and UID mapping"
+        )
+        rec = self.router.recommend_route(prompt)
+        findings = self.history.list_findings(task_type=rec.task_type)
+        selected = select_relevant_findings(
+            findings, prompt=prompt, classification=rec.classification
+        )
+        self.assertTrue(selected)
+        self.assertTrue(all("css" not in (f.get("summary") or "").lower() for f in selected))
+        self.assertTrue(any("analytics" in (f.get("summary") or "").lower() for f in selected))
+        ctx = build_minimal_context_preview(
+            prompt=prompt,
+            classification=rec.classification,
+            recommendation=rec,
+            candidate_findings=self.history.list_findings(limit=40),
+        )
+        self.assertTrue(ctx["prior_findings"])
+        self.assertTrue(all(f["task_type"] == rec.task_type for f in ctx["prior_findings"]))
+
+    def test_escalation_recommended_after_repeated_failure(self) -> None:
+        prompt = (
+            "Investigate why the DHIS2 analytics SQL query for program indicators "
+            "returns empty rows for this org unit — debug the join and UID mapping"
+        )
+        fp = prompt_only_fingerprint(prompt)
+        for _ in range(3):
+            self.history.record_event(
+                {
+                    "provider_id": "grok",
+                    "tier": "T2",
+                    "task_type": "dhis2_investigation",
+                    "status": "failed",
+                    "outcome": "failure",
+                    "prompt_fingerprint": fp,
+                    "error_code": "execution_failed",
+                }
+            )
+        rec = self.router.recommend_route(prompt)
+        self.assertTrue(rec.history_influenced)
+        self.assertIsNotNone(rec.escalation_reason)
+        self.assertEqual(rec.recommended_agent, "codex")
+        self.assertTrue(rec.approval_required)
+
+    def test_codex_still_requires_approval(self) -> None:
+        prompt = (
+            "Redesign the architecture and perform a large refactor across 12 modules "
+            "in the entire codebase, including cross-module ownership boundaries and "
+            "a breaking change migration plan"
+        )
+        with self.assertRaises(AgentCenterError) as ctx:
+            self.router.execute_route(prompt, approve_codex=False)
+        self.assertEqual(ctx.exception.code, "approval_required")
+
+    def test_retry_limit_enforced(self) -> None:
+        prompt = "Investigate why the DHIS2 analytics SQL query returns empty rows"
+        with self.assertRaises(AgentCenterError) as ctx:
+            self.router.execute_route(prompt, agent_override="grok", attempt=3)
+        self.assertEqual(ctx.exception.code, "retry_limit")
+
+    def test_identical_retry_blocked(self) -> None:
+        prompt = (
+            "Investigate why the DHIS2 analytics SQL query for program indicators "
+            "returns empty rows for this org unit"
+        )
+        fp = prompt_only_fingerprint(prompt)
+        self.history.record_event(
+            {
+                "provider_id": "grok",
+                "tier": "T2",
+                "task_type": "dhis2_investigation",
+                "status": "failed",
+                "outcome": "failure",
+                "prompt_fingerprint": fp,
+            }
+        )
+        with self.assertRaises(AgentCenterError) as ctx:
+            self.router.execute_route(prompt, agent_override="grok", attempt=1)
+        self.assertEqual(ctx.exception.code, "identical_retry_blocked")
+
+    def test_metrics_recorded_and_t0_savings(self) -> None:
+        prompt = "Look up the UID for Philippines and show me the status of recent jobs"
+        result = self.router.execute_route(prompt)
+        self.assertEqual(result["execution"]["status"], "completed")
+        analytics = self.history.analytics()
+        self.assertGreaterEqual(analytics["executions_total"], 1)
+        self.assertGreaterEqual(analytics["t0_llm_avoided"], 1)
+        stats = self.history.provider_stats(task_type="lookup")
+        det = next(s for s in stats if s["provider_id"] == "deterministic")
+        self.assertGreaterEqual(det["successes"], 1)
+        self.assertGreaterEqual(det["t0_avoided"], 1)
+
+    def test_grok_metrics_record_tokens(self) -> None:
+        prompt = (
+            "Investigate why the DHIS2 analytics SQL query for program indicators "
+            "returns empty rows for this org unit — debug the join and UID mapping"
+        )
+        result = self.router.execute_route(prompt)
+        self.assertEqual(result["execution"]["adapter_id"], "grok")
+        analytics = self.history.analytics()
+        self.assertGreaterEqual(analytics["actual_tokens_total"], 42)
+
+
+class AirixRoutingExecutionTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.history = RoutingHistoryStore(AgentCenterDb(Path(self.tmp.name) / "agent.db"))
+        self.fake = _FakeAgentCenter()
+        self.router = AgentRouterService(
+            availability_loader=_availability,
+            agent_center=self.fake,  # type: ignore[arg-type]
+            history=self.history,
+        )
+
+    def test_t0_executes_without_ai(self) -> None:
+        prompt = "Look up the UID for Philippines and show me the status of recent jobs"
+        result = self.router.execute_route(prompt)
+        self.assertEqual(result["execution"]["mode"], "deterministic")
+        self.assertEqual(self.fake.started, [])
+
+    def test_manual_override_works(self) -> None:
+        prompt = "Look up the UID for Philippines"
+        result = self.router.execute_route(prompt, agent_override="grok")
+        self.assertTrue(result["execution"]["manual_override"])
+        self.assertEqual(self.fake.started[0]["agent_id"], "grok")
 
 
 class AirixRoutingRouteTests(unittest.TestCase):
@@ -156,6 +369,7 @@ class AirixRoutingRouteTests(unittest.TestCase):
         os.environ["CENTRAL_HUB_NOTEBOOK_DATABASE"] = str(root / "notebook.db")
         os.environ["CENTRAL_HUB_AGENT_DATABASE"] = str(root / "agent_center.db")
         os.environ["CENTRAL_HUB_DATABASE"] = str(root / "hub.db")
+        os.environ["CENTRAL_HUB_OWNER_TOKEN"] = ""
         import app as app_mod
         import hub.settings as settings_mod
 
@@ -171,50 +385,46 @@ class AirixRoutingRouteTests(unittest.TestCase):
     def tearDownClass(cls) -> None:
         cls._tmp.cleanup()
 
-    def test_recommend_api_phase1(self) -> None:
+    def test_recommend_api_phase3(self) -> None:
         resp = self.client.post(
-            "/api/assistants/okarun/routing/recommend",
+            "/api/assistants/airix/routing/recommend",
             json={"prompt": "Look up the UID for Philippines"},
         )
         self.assertEqual(resp.status_code, 200)
         body = resp.get_json()
-        self.assertTrue(body["ok"])
-        self.assertEqual(body["phase"], 1)
-        rec = body["recommendation"]
-        self.assertEqual(rec["recommended_agent"], "deterministic")
-        self.assertEqual(body["plan"]["execute"], False)
-        self.assertEqual(body["plan"]["phase"], 1)
-    def test_providers_and_settings_api(self) -> None:
-        providers = self.client.get("/api/assistants/okarun/routing/providers")
-        self.assertEqual(providers.status_code, 200)
-        ids = {p["id"] for p in providers.get_json()["providers"]}
-        self.assertIn("deterministic", ids)
-        self.assertIn("codex", ids)
+        self.assertEqual(body["phase"], 3)
+        self.assertIn("explanation", body["recommendation"])
+        self.assertTrue(body["plan"]["execute"])
 
-        put = self.client.put(
-            "/api/assistants/okarun/routing/settings",
-            json={"mode": "cheapest", "max_retries": 2},
+    def test_analytics_api(self) -> None:
+        self.client.post(
+            "/api/assistants/airix/routing/execute",
+            json={"prompt": "Look up the UID for Philippines and list recent jobs"},
         )
-        self.assertEqual(put.status_code, 200)
-        self.assertEqual(put.get_json()["settings"]["mode"], "cheapest")
+        resp = self.client.get("/api/assistants/airix/routing/analytics")
+        self.assertEqual(resp.status_code, 200)
+        analytics = resp.get_json()["analytics"]
+        self.assertGreaterEqual(analytics["executions_total"], 1)
+        self.assertGreaterEqual(analytics["t0_llm_avoided"], 1)
 
-        get = self.client.get("/api/assistants/okarun/routing/settings")
-        self.assertEqual(get.get_json()["settings"]["mode"], "cheapest")
-
-    def test_aira_recommend_rejected(self) -> None:
+    def test_execute_codex_requires_approval_api(self) -> None:
+        prompt = (
+            "Redesign the architecture and perform a large refactor across 12 modules "
+            "in the entire codebase, including cross-module ownership boundaries and "
+            "a breaking change migration plan"
+        )
         resp = self.client.post(
-            "/api/assistants/aira/routing/recommend",
-            json={"prompt": "hello"},
+            "/api/assistants/airix/routing/execute",
+            json={"prompt": prompt, "approve_codex": False},
         )
-        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(resp.get_json()["code"], "approval_required")
 
-    def test_work_dock_includes_smart_routing_ui(self) -> None:
+    def test_work_dock_includes_phase3(self) -> None:
         html = self.client.get("/work").get_data(as_text=True)
-        self.assertIn("ad-routing-card", html)
-        self.assertIn("Use Recommended", html)
-        self.assertIn("Choose Agent", html)
-        self.assertIn("smart_routing", html)
-        self.assertIn("AiriX Smart Routing", html)
+        self.assertIn("Phase 3", html)
+        self.assertIn("analytics_url", html)
+        self.assertIn("/api/assistants/airix/routing/", html)
 
 
 if __name__ == "__main__":

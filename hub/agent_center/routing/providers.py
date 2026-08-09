@@ -51,7 +51,7 @@ _PROVIDER_SPECS: tuple[ProviderSpec, ...] = (
         tools=("repo_search", "read_file", "notebook_lookup"),
         requires_approval=False,
         adapter_id="hub-simulator",
-        notes="Maps to Hub Simulator / future low-cost cloud; Phase 1 recommend only.",
+        notes="Maps to Hub Simulator / future low-cost cloud (T1).",
     ),
     ProviderSpec(
         id="grok",
@@ -104,7 +104,7 @@ _PROVIDER_SPECS: tuple[ProviderSpec, ...] = (
         tools=("repo_search", "read_file"),
         requires_approval=False,
         adapter_id="openai-api",
-        notes="Future/low-cost cloud path; registered for Phase 1 selection.",
+        notes="Low-cost cloud path via existing OpenAI adapter.",
     ),
     ProviderSpec(
         id="claude-code",

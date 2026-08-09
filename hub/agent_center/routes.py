@@ -121,33 +121,51 @@ def register_agent_center_routes(app: Flask) -> None:
         prefs = save_dock_prefs(notebook.db, workspace, payload)
         return jsonify({"ok": True, "prefs": prefs})
 
-    # ---- AiriX Smart Routing (Phase 1: recommend / plan only) ----
+    # ---- AiriX Smart Routing (Phase 3: history-aware recommend + execute) ----
+    # Canonical: /api/assistants/airix/routing/*
+    # Legacy:    /api/assistants/okarun/routing/* (compatibility)
+
+    def _routing_work_ok(profile_id: str) -> bool:
+        from hub.agent_center.routing.profile import is_work_routing_profile
+
+        return is_work_routing_profile(profile_id)
+
+    def _routing_http_error(exc: AgentCenterError):
+        status = 400
+        if exc.code == "approval_required":
+            status = 403
+        elif exc.code in {"duplicate_execution", "identical_retry_blocked", "retry_limit"}:
+            status = 409
+        elif exc.code in {"execution_not_found"}:
+            status = 404
+        return jsonify({"ok": False, "error": str(exc), "code": exc.code}), status
 
     @app.get("/api/assistants/<profile_id>/routing/providers")
     def api_airix_routing_providers(profile_id: str):
-        if profile_id not in {"okarun", "aira"}:
+        if profile_id not in {"airix", "okarun", "aira"}:
             return jsonify({"ok": False, "error": "Unknown assistant profile"}), 404
         probe = request.args.get("probe") == "1"
         return jsonify(
             {
                 "ok": True,
-                "phase": 1,
+                "phase": 3,
                 "providers": _router().list_available_providers(probe=probe),
             }
         )
 
     @app.get("/api/assistants/<profile_id>/routing/settings")
     def api_airix_routing_settings_get(profile_id: str):
-        if profile_id not in {"okarun", "aira"}:
+        if profile_id not in {"airix", "okarun", "aira"}:
             return jsonify({"ok": False, "error": "Unknown assistant profile"}), 404
-        notebook = app.config["NOTEBOOK"]
         workspace = "personal" if profile_id == "aira" else "work"
         return jsonify({"ok": True, "settings": _router().get_settings(workspace).public()})
 
     @app.put("/api/assistants/<profile_id>/routing/settings")
     def api_airix_routing_settings_put(profile_id: str):
-        if profile_id != "okarun":
-            return jsonify({"ok": False, "error": "Smart Routing settings are Work/AiriX only in Phase 1"}), 400
+        if not _routing_work_ok(profile_id):
+            return jsonify(
+                {"ok": False, "error": "Smart Routing settings are Work/AiriX only"}
+            ), 400
         payload = request.get_json(silent=True) or {}
         settings = _router().save_settings(payload, workspace="work")
         _audit(
@@ -156,10 +174,22 @@ def register_agent_center_routes(app: Flask) -> None:
         )
         return jsonify({"ok": True, "settings": settings.public()})
 
+    @app.get("/api/assistants/<profile_id>/routing/analytics")
+    def api_airix_routing_analytics(profile_id: str):
+        if not _routing_work_ok(profile_id):
+            return jsonify(
+                {"ok": False, "error": "Smart Routing analytics are AiriX (Work) only"}
+            ), 400
+        data = _router().analytics(workspace="work")
+        _audit(audit_actions.AIRIX_ROUTING_ANALYTICS, detail={"executions": data.get("executions_total")})
+        return jsonify({"ok": True, "analytics": data})
+
     @app.post("/api/assistants/<profile_id>/routing/recommend")
     def api_airix_routing_recommend(profile_id: str):
-        if profile_id != "okarun":
-            return jsonify({"ok": False, "error": "Smart Routing is AiriX (Work) only in Phase 1"}), 400
+        if not _routing_work_ok(profile_id):
+            return jsonify(
+                {"ok": False, "error": "Smart Routing is AiriX (Work) only"}
+            ), 400
         payload = request.get_json(silent=True) or {}
         prompt = str(payload.get("prompt") or "").strip()
         if not prompt:
@@ -174,17 +204,104 @@ def register_agent_center_routes(app: Flask) -> None:
                 "complexity": rec.complexity,
                 "recommended_agent": rec.recommended_agent,
                 "tier": rec.recommended_tier,
-                "execution": "deferred",
+                "history_influenced": rec.history_influenced,
+                "execution": "ready",
             },
         )
         return jsonify(
             {
                 "ok": True,
-                "phase": 1,
+                "phase": 3,
                 "recommendation": rec.public(),
                 "plan": plan.public(),
             }
         )
+
+    @app.post("/api/assistants/<profile_id>/routing/execute")
+    @require_owner
+    def api_airix_routing_execute(profile_id: str):
+        if not _routing_work_ok(profile_id):
+            return jsonify(
+                {"ok": False, "error": "Smart Routing is AiriX (Work) only"}
+            ), 400
+        payload = request.get_json(silent=True) or {}
+        prompt = str(payload.get("prompt") or "").strip()
+        if not prompt:
+            return jsonify({"ok": False, "error": "prompt is required"}), 400
+        agent_override = str(payload.get("agent_override") or "").strip() or None
+        approve_codex = bool(payload.get("approve_codex"))
+        force = bool(payload.get("force"))
+        repository_ids = list(payload.get("repository_ids") or [])
+        try:
+            attempt = int(payload.get("attempt") or 0)
+        except (TypeError, ValueError):
+            attempt = 0
+        previous_partial = str(payload.get("previous_partial") or "")
+        try:
+            result = _router().execute_route(
+                prompt,
+                workspace="work",
+                agent_override=agent_override,
+                repository_ids=repository_ids,
+                approve_codex=approve_codex,
+                force=force,
+                attempt=attempt,
+                previous_partial=previous_partial,
+            )
+        except AgentCenterError as exc:
+            return _routing_http_error(exc)
+        except RuntimeError as exc:
+            return jsonify({"ok": False, "error": str(exc), "code": "router_unavailable"}), 503
+        execution = result.get("execution") or {}
+        _audit(
+            audit_actions.AIRIX_ROUTING_EXECUTE,
+            detail={
+                "execution_id": execution.get("id"),
+                "provider_id": execution.get("provider_id"),
+                "adapter_id": execution.get("adapter_id"),
+                "status": execution.get("status"),
+                "manual_override": bool(agent_override),
+                "tier": execution.get("tier"),
+                "attempt": attempt,
+            },
+        )
+        return jsonify(result)
+
+    @app.post("/api/assistants/<profile_id>/routing/cancel")
+    @require_owner
+    def api_airix_routing_cancel(profile_id: str):
+        if not _routing_work_ok(profile_id):
+            return jsonify(
+                {"ok": False, "error": "Smart Routing is AiriX (Work) only"}
+            ), 400
+        payload = request.get_json(silent=True) or {}
+        execution_id = str(payload.get("execution_id") or "").strip()
+        if not execution_id:
+            return jsonify({"ok": False, "error": "execution_id is required"}), 400
+        try:
+            row = _router().cancel_execution(execution_id)
+        except AgentCenterError as exc:
+            return _routing_http_error(exc)
+        _audit(
+            audit_actions.AIRIX_ROUTING_CANCEL,
+            detail={"execution_id": execution_id, "status": row.get("status")},
+        )
+        return jsonify({"ok": True, "execution": row})
+
+    @app.get("/api/assistants/<profile_id>/routing/status/<execution_id>")
+    @app.get("/api/assistants/<profile_id>/routing/status")
+    def api_airix_routing_status(profile_id: str, execution_id: str | None = None):
+        if not _routing_work_ok(profile_id):
+            return jsonify(
+                {"ok": False, "error": "Smart Routing is AiriX (Work) only"}
+            ), 400
+        eid = (execution_id or request.args.get("execution_id") or "").strip()
+        if not eid:
+            return jsonify({"ok": False, "error": "execution_id is required"}), 400
+        row = _router().execution_status(eid)
+        if row is None:
+            return jsonify({"ok": False, "error": "Execution not found", "code": "execution_not_found"}), 404
+        return jsonify({"ok": True, "execution": row})
 
     @app.get("/api/agents")
     @app.get("/api/assistants/<profile_id>/agents")

@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-04 (TODAY Mission Control dashboard panel).
+Last verified: 2026-08-10 (AiriX Smart Routing Phase 3).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -8,7 +8,7 @@ Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](doc
 **Phases 1–6 MVP + connected Live Processing + DHIS2 enrichment + Repository Notebook
 + Personal/Work workspace switcher + registry Add/Edit/Disable + SQL Workspace (read-only)
 + Email Center (Gmail readonly) + Calendar Center (Calendar readonly, shared Google accounts)
-+ AI Assistant Center (read-only Aira/Okarun profiles, including OpenAI Responses API)
++ AI Assistant Center (read-only Aira/AiriX profiles, including OpenAI Responses API)
 + persistent VS Code-style assistant dock across pages
 + navigation performance (async secondary panels; cached AI connection status)
 + Repository Workspace Phases 1–2 + Connect Local Workspace
@@ -40,7 +40,7 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Google Connections | System page to connect/assign/enable Gmail+Calendar scopes |
 | SQL Workspace | Read-only query library/runner (`/sql`); sqlglot allowlist; optional trusted-host-key Stage/Live SSH tunnels; Live warning; layout `minmax(260px,320px) | 1fr` under shell |
 | Data Explorer | `/data-explorer` — unified RO schema/data/relationship/lineage browser plus allowlisted CSV/XLSX/csv.gz exports, large jobs, presets, history, masking, and audit. `/live-data-export` redirects to `?tab=export`; one runtime service/store/export engine with shared SELECT/security primitives; no ad-hoc SQL or arbitrary table input; Stage/Live remain isolated |
-| AI Assistant Center | Aira at `/personal/aira`; AiriX at `/work/airix` (history/management; legacy `/work/okarun` redirects); full-height right dock + fixed composer via topbar + activity rail (`hub/agent_center/dock.py`); **Smart Routing Phase 1** (recommend only: `hub/agent_center/routing/`); Find/Ask/Plan/Review; Codex CLI, Claude Code, Cursor, Grok, OpenAI |
+| AI Assistant Center | Aira at `/personal/aira`; AiriX at `/work/airix` (legacy `/work/okarun` redirects); full-height right dock + fixed composer (`hub/agent_center/dock.py`); **Smart Routing Phase 3** (`hub/agent_center/routing/` — history-aware recommend + execute; findings; analytics; `/api/assistants/airix/routing/*`); Find/Ask/Plan/Review; Codex CLI, Claude Code, Cursor, Grok, OpenAI |
 | Workspace Console | Bottom panel under main content only (`left: var(--sidebar-w)`); bounded height; Ctrl+J; collapsed by default |
 | Activity Rail | Far-right icons for AI Assistant, Quick Notepad, Workspace Console (future utilities placeholders); reduces main width only |
 | App shell | Fixed sidebar 210–216px + `padding-left` on `.app-shell`; `.main-column` / `.content` `flex:1; min-width:0`; `.sidebar-scroll` for nav |
@@ -106,9 +106,10 @@ shared and unchanged.
 
 | Route | Purpose |
 |---|---|
-| Persistent dock | Aira/Okarun full-height panel on all pages; prefs `/api/assistant-dock/prefs`; lazy agents; composer fixed at bottom |
+| Persistent dock | Aira/AiriX full-height panel on all pages; prefs `/api/assistant-dock/prefs`; lazy agents; composer fixed at bottom |
 | `/personal/aira` | Personal UI; no repository/SQL/DHIS2/jobs/logs/Audit access |
-| `/work/airix` | Work UI (AiriX); selected repositories and Work read-only services; Smart Routing Phase 1 |
+| `/work/airix` | Work UI (AiriX); selected repositories and Work read-only services; Smart Routing Phase 3 |
+| `/api/assistants/airix/routing/*` | Smart Routing recommend / execute / cancel / status / settings / providers / analytics (legacy `okarun` slug accepted) |
 | `/api/assistants/<profile>/agents` | Profile-bound adapter availability |
 | `/api/assistants/<profile>/agents/<id>/models` | Dynamic adapter model list |
 | `/api/assistants/<profile>/context/preview` | Included/excluded sources and secret-safe context |
@@ -123,10 +124,10 @@ Implementation: `hub/agent_center/` (incl. `dock.py`), `config/agents.yaml`, SQL
 Modes: Find / Ask / Plan / Review. Edit / Test labeled **Not yet available**.
 Adapters: Hub Simulator (demo), **OpenAI API** and **Grok/xAI** Responses APIs,
 plus Claude Code / Cursor Agent / Codex CLIs. Provider accounts are managed at
-`/system/ai-connections`; Aira and Okarun are profiles, never providers.
+`/system/ai-connections`; Aira and AiriX are profiles, never providers.
 OpenAI and Grok models come from the provider model-list endpoint; Codex MVP uses the
 authenticated Codex default model only (`__provider_default__`, no discovery yet) via
-`codex exec -C <repo> --sandbox read-only --ephemeral --json` for Okarun. Cursor uses
+`codex exec -C <repo> --sandbox read-only --ephemeral --json` for AiriX. Cursor uses
 `agent models`. Claude Code currently exposes only its provider default because its
 supported non-interactive CLI has no model-list command.
 Inaccessible models are never shown. Optional `OPENAI_ALLOWED_MODELS` can further restrict
@@ -139,7 +140,7 @@ Reasoning-effort selector only for models that support it.
 Read-only tools: repository search/read, scoped Notebook/Quick Notepad, SQL-library
 lookup, DHIS2 UID metadata, scoped Email/Calendar search, jobs, and redacted Audit.
 Schemas are filtered by profile and user selection. Repository instructions load only
-for Okarun's selected repositories. No repositories, emails, documents, or old messages
+for AiriX's selected repositories. No repositories, emails, documents, or old messages
 are bulk-loaded. Never packs `.env`, credentials, token paths, binaries, or oversized
 files. Output is untrusted. No SQL/shell/repository execution or external writes.
 

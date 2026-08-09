@@ -63,7 +63,7 @@
   <div class="ad-routing-card" id="ad-routing-card" hidden>
     <div class="ad-routing-head">
       <strong>AiriX Smart Routing</strong>
-      <span class="ad-routing-phase muted">Phase 1 · recommend only</span>
+      <span class="ad-routing-phase muted">Phase 3 · history-aware</span>
     </div>
     <div class="ad-routing-body" id="ad-routing-body"></div>
     <div class="ad-routing-actions">
@@ -91,12 +91,15 @@
       <label class="ad-routing-check"><input type="checkbox" name="prefer_grok_for_routine" id="ad-routing-pref-grok"> Prefer Grok for routine work</label>
       <label class="ad-routing-check"><input type="checkbox" name="require_approval_before_codex" id="ad-routing-pref-codex"> Require approval before Codex</label>
       <label class="ad-routing-check"><input type="checkbox" name="allow_escalation" id="ad-routing-pref-esc"> Allow escalation</label>
+      <label class="ad-routing-check"><input type="checkbox" name="use_history" id="ad-routing-pref-hist"> Use performance history</label>
       <label class="ad-routing-field">
         <span>Max retries</span>
         <input type="number" name="max_retries" id="ad-routing-retries" min="0" max="5" value="2">
       </label>
       <button type="submit" class="btn btn-sm btn-primary">Save settings</button>
+      <button type="button" class="btn btn-sm" id="ad-routing-analytics-btn">View analytics</button>
     </form>
+    <pre class="ad-routing-analytics muted" id="ad-routing-analytics" hidden style="margin-top:0.5rem;white-space:pre-wrap;font-size:11px"></pre>
   </div>
   {% endif %}
 

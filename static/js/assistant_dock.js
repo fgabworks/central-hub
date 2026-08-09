@@ -1,5 +1,5 @@
 /**
- * Persistent Aira/Okarun assistant dock (VS Code / Cursor-style right rail).
+ * Persistent Aira/AiriX assistant dock (VS Code / Cursor-style right rail).
  * Lazy-loads providers only after open; never blocks navigation.
  */
 (function () {
@@ -62,8 +62,11 @@
     var routingBody = $("ad-routing-body");
     var routingSettings = $("ad-routing-settings");
     var pendingRoute = null;
+    var pendingPlan = null;
     var pendingPrompt = "";
     var skipRoutingOnce = false;
+    var activeRouteExecutionId = null;
+    var routePollTimer = null;
 
     function isMobile() {
       return window.matchMedia(MOBILE_MQ).matches;
@@ -436,6 +439,10 @@
     }
 
     function cancelActiveRun() {
+      if (activeRouteExecutionId) {
+        cancelRouteExecution();
+        return;
+      }
       if (!activeRunId) return;
       fetch(apiBase + "/runs/" + encodeURIComponent(activeRunId) + "/cancel", {
         method: "POST",
@@ -501,11 +508,20 @@
     function hideRoutingCard() {
       if (routingCard) routingCard.hidden = true;
       pendingRoute = null;
+      pendingPlan = null;
     }
 
-    function showRoutingCard(rec) {
+    function stopRoutePoll() {
+      if (routePollTimer) {
+        clearTimeout(routePollTimer);
+        routePollTimer = null;
+      }
+    }
+
+    function showRoutingCard(rec, plan) {
       if (!routingCard || !routingBody || !rec) return;
       pendingRoute = rec;
+      pendingPlan = plan || null;
       var alt = rec.alternative_label
         ? "<div class=\"ad-routing-line\"><span>Alternative</span><strong>" +
           escapeHtml(rec.alternative_label) +
@@ -514,6 +530,58 @@
       var approval = rec.approval_required
         ? '<span class="ad-routing-badge is-warn">Approval required</span>'
         : '<span class="ad-routing-badge">No approval</span>';
+      var ctx = (plan && plan.context) || {};
+      var ctxLine =
+        '<div class="ad-routing-line"><span>Context</span><strong>' +
+        escapeHtml(ctx.strategy || "minimal") +
+        " · " +
+        escapeHtml(String((ctx.tool_ids || []).length)) +
+        " tools · max " +
+        escapeHtml(String(ctx.max_context_files || 0)) +
+        " files</strong></div>";
+      var steps = (plan && plan.steps) || [];
+      var planNote =
+        steps.length > 0
+          ? '<p class="ad-routing-reason muted">Plan: ' +
+            escapeHtml(steps.slice(0, 3).join(" → ")) +
+            (steps.length > 3 ? "…" : "") +
+            "</p>"
+          : "";
+      var expl = rec.explanation || {};
+      var histRate =
+        expl.historical_success_rate != null
+          ? Math.round(Number(expl.historical_success_rate) * 100) +
+            "% (" +
+            escapeHtml(String(expl.sample_size || 0)) +
+            " runs)"
+          : "insufficient history";
+      var histLine =
+        "<div class=\"ad-routing-line\"><span>History</span><strong>" +
+        escapeHtml(histRate) +
+        "</strong></div>" +
+        "<div class=\"ad-routing-line\"><span>Expected retries</span><strong>" +
+        escapeHtml(String(expl.expected_retries != null ? expl.expected_retries : rec.expected_retries || 0)) +
+        "</strong></div>";
+      var escLine = (expl.escalation_reason || rec.escalation_reason)
+        ? '<p class="ad-routing-reason muted">Escalation: ' +
+          escapeHtml(expl.escalation_reason || rec.escalation_reason) +
+          "</p>"
+        : "";
+      var findings = (plan && plan.context && plan.context.prior_findings) || [];
+      var findingsLine =
+        findings.length > 0
+          ? '<p class="ad-routing-reason muted">Prior findings: ' +
+            escapeHtml(
+              findings
+                .map(function (f) {
+                  return f.summary || "";
+                })
+                .filter(Boolean)
+                .slice(0, 2)
+                .join(" · ")
+            ) +
+            "</p>"
+          : "";
       routingBody.innerHTML =
         '<div class="ad-routing-grid">' +
         "<div class=\"ad-routing-line\"><span>Task</span><strong>" +
@@ -537,22 +605,23 @@
         "<div class=\"ad-routing-line\"><span>Usage</span><strong>" +
         escapeHtml(rec.estimated_usage || "") +
         "</strong></div>" +
+        histLine +
+        ctxLine +
         "<div class=\"ad-routing-line\">" +
         approval +
         "</div>" +
         '<p class="ad-routing-reason muted">' +
         escapeHtml(rec.reason || "") +
         "</p>" +
-        '<p class="ad-routing-note muted">Phase 1: recommendation only — agent execution is not started.</p>' +
+        escLine +
+        findingsLine +
+        planNote +
+        '<p class="ad-routing-note muted">Phase 3: history-aware routing; Codex still requires approval.</p>' +
         "</div>";
       routingCard.hidden = false;
     }
 
-    function applyRecommendedAgent(rec) {
-      if (!rec) return;
-      ensureAgents();
-      var agentId = rec.recommended_agent;
-      // Map routing provider ids onto adapter select values.
+    function mapRoutingAgent(agentId) {
       var map = {
         deterministic: "",
         "low-cost": "hub-simulator",
@@ -562,7 +631,13 @@
         "claude-code": "claude-code",
         "cursor-agent": "cursor-agent",
       };
-      var target = map[agentId] || agentId;
+      return map[agentId] || agentId;
+    }
+
+    function applyRecommendedAgent(rec) {
+      if (!rec) return;
+      ensureAgents();
+      var target = mapRoutingAgent(rec.recommended_agent);
       if (agentSel && target) {
         var opt = Array.prototype.find.call(agentSel.options || [], function (o) {
           return o.value === target;
@@ -574,13 +649,210 @@
         }
       }
       if (promptEl && pendingPrompt) promptEl.value = pendingPrompt;
-      skipRoutingOnce = true;
+    }
+
+    function renderRouteExecution(execution) {
+      if (!execution) return;
+      var status = execution.status || "";
+      var label =
+        escapeHtml(execution.provider_id || "") +
+        (execution.fallback_from
+          ? " (fallback from " + escapeHtml(execution.fallback_from) + ")"
+          : "");
+      if (status === "completed") {
+        appendMessage(
+          "assistant",
+          "<strong>Route complete</strong> · " +
+            label +
+            "<pre class=\"ad-run-answer\">" +
+            escapeHtml(execution.answer || "(no answer)") +
+            "</pre>"
+        );
+        setRunControls("idle");
+        activeRouteExecutionId = null;
+        stopRoutePoll();
+        return;
+      }
+      if (status === "cancelled") {
+        appendMessage("assistant", "Route execution cancelled.");
+        setRunControls("idle");
+        activeRouteExecutionId = null;
+        stopRoutePoll();
+        return;
+      }
+      if (status === "failed" || status === "unavailable") {
+        appendMessage(
+          "assistant",
+          "Route " +
+            escapeHtml(status) +
+            ": " +
+            escapeHtml(execution.error || "unknown error")
+        );
+        setRunControls("failed");
+        activeRouteExecutionId = null;
+        stopRoutePoll();
+        return;
+      }
+      setRunControls("running");
+      if (execution.agent_run_id) {
+        activeRunId = execution.agent_run_id;
+      }
+    }
+
+    function pollRouteExecution(executionId) {
+      stopRoutePoll();
+      var base = smartRouting.status_url || "/api/assistants/airix/routing/status";
+      var url = base.indexOf("?") >= 0 ? base : base + "/" + encodeURIComponent(executionId);
+      if (base.indexOf("/status") >= 0 && base.slice(-7) === "/status") {
+        url = base + "/" + encodeURIComponent(executionId);
+      }
+      routePollTimer = setTimeout(function () {
+        fetch(url, { headers: { Accept: "application/json" }, credentials: "same-origin" })
+          .then(function (r) {
+            return r.json().then(function (data) {
+              return { ok: r.ok, data: data };
+            });
+          })
+          .then(function (res) {
+            if (!res.ok || !res.data || !res.data.execution) {
+              setRunControls("failed");
+              appendMessage("assistant", "Lost route execution status.");
+              return;
+            }
+            var ex = res.data.execution;
+            if (ex.status === "queued" || ex.status === "running") {
+              pollRouteExecution(executionId);
+              return;
+            }
+            renderRouteExecution(ex);
+          })
+          .catch(function () {
+            setRunControls("failed");
+            appendMessage("assistant", "Could not poll route status.");
+          });
+      }, 900);
+    }
+
+    function executeRecommendedRoute(rec, opts) {
+      opts = opts || {};
+      var url = smartRouting.execute_url;
+      if (!url) {
+        appendMessage("assistant", "Route execute URL unavailable.");
+        return;
+      }
+      var prompt = pendingPrompt || lastPrompt || "";
+      if (!prompt) {
+        appendMessage("assistant", "No prompt to execute.");
+        return;
+      }
+      if (rec && rec.approval_required && !opts.approveCodex) {
+        var ok = window.confirm(
+          "This route requires Codex/advanced approval. Execute with approval?"
+        );
+        if (!ok) {
+          appendMessage("assistant", "Codex approval declined — choose another agent or cancel.");
+          return;
+        }
+        opts.approveCodex = true;
+      }
+      hideRoutingCard();
+      setRunControls("running");
       appendMessage(
         "assistant",
-        "Recommended <strong>" +
-          escapeHtml(rec.recommended_label || rec.recommended_agent) +
-          "</strong> selected. Phase 1 does not auto-run agents — press Send again to use the existing run flow, or change the agent first."
+        "Executing recommended route: <strong>" +
+          escapeHtml((rec && (rec.recommended_label || rec.recommended_agent)) || "") +
+          "</strong>…"
       );
+      fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          prompt: prompt,
+          approve_codex: !!opts.approveCodex,
+          agent_override: opts.agentOverride || null,
+          force: !!opts.force,
+          repository_ids: opts.repositoryIds || [],
+        }),
+      })
+        .then(function (r) {
+          return r.json().then(function (data) {
+            return { ok: r.ok, status: r.status, data: data };
+          });
+        })
+        .then(function (res) {
+          if (!res.ok || !res.data || !res.data.ok) {
+            var code = (res.data && res.data.code) || "";
+            if (code === "approval_required") {
+              appendMessage(
+                "assistant",
+                "Codex approval required. Press Use Recommended again and confirm, or Choose Agent."
+              );
+              setRunControls("idle");
+              return;
+            }
+            if (code === "duplicate_execution") {
+              appendMessage(
+                "assistant",
+                "An execution for this prompt is already active. Cancel it first or wait."
+              );
+              setRunControls("idle");
+              return;
+            }
+            appendMessage(
+              "assistant",
+              escapeHtml((res.data && res.data.error) || "Route execution failed.")
+            );
+            setRunControls("failed");
+            return;
+          }
+          var execution = res.data.execution || {};
+          activeRouteExecutionId = execution.id || null;
+          if (execution.agent_run_id) activeRunId = execution.agent_run_id;
+          if (execution.status === "queued" || execution.status === "running") {
+            appendMessage("assistant", "Route running…");
+            if (activeRouteExecutionId) pollRouteExecution(activeRouteExecutionId);
+            else setRunControls("running");
+            return;
+          }
+          renderRouteExecution(execution);
+        })
+        .catch(function () {
+          appendMessage("assistant", "Could not execute route.");
+          setRunControls("failed");
+        });
+    }
+
+    function cancelRouteExecution() {
+      stopRoutePoll();
+      if (!activeRouteExecutionId || !smartRouting.cancel_url) {
+        hideRoutingCard();
+        pendingPrompt = "";
+        appendMessage("assistant", "Smart Routing cancelled.");
+        setRunControls("idle");
+        return;
+      }
+      fetch(smartRouting.cancel_url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ execution_id: activeRouteExecutionId }),
+      })
+        .then(function (r) {
+          return r.json();
+        })
+        .then(function (data) {
+          activeRouteExecutionId = null;
+          hideRoutingCard();
+          appendMessage("assistant", "Route execution cancelled.");
+          setRunControls("idle");
+          if (data && data.execution) renderRouteExecution(data.execution);
+        })
+        .catch(function () {
+          activeRouteExecutionId = null;
+          setRunControls("idle");
+          appendMessage("assistant", "Cancel requested.");
+        });
     }
 
     function requestRoute(prompt) {
@@ -623,6 +895,8 @@
           if (codex) codex.checked = !!s.require_approval_before_codex;
           var esc = $("ad-routing-pref-esc");
           if (esc) esc.checked = !!s.allow_escalation;
+          var hist = $("ad-routing-pref-hist");
+          if (hist) hist.checked = s.use_history !== false;
           var retries = $("ad-routing-retries");
           if (retries) retries.value = String(s.max_retries != null ? s.max_retries : 2);
         })
@@ -643,7 +917,7 @@
         requestRoute(prompt)
           .then(function (data) {
             setRunControls("idle");
-            showRoutingCard(data.recommendation || {});
+            showRoutingCard(data.recommendation || {}, data.plan || null);
           })
           .catch(function () {
             setRunControls("idle");
@@ -831,6 +1105,9 @@
             allow_escalation: !!(
               $("ad-routing-pref-esc") && $("ad-routing-pref-esc").checked
             ),
+            use_history: !!(
+              $("ad-routing-pref-hist") && $("ad-routing-pref-hist").checked
+            ),
             max_retries: Number(($("ad-routing-retries") && $("ad-routing-retries").value) || 2),
           };
           fetch(smartRouting.settings_url, {
@@ -851,11 +1128,48 @@
             .catch(function () {});
         });
       }
+      var analyticsBtn = $("ad-routing-analytics-btn");
+      var analyticsEl = $("ad-routing-analytics");
+      if (analyticsBtn && smartRouting.analytics_url) {
+        analyticsBtn.addEventListener("click", function () {
+          fetch(smartRouting.analytics_url, {
+            headers: { Accept: "application/json" },
+            credentials: "same-origin",
+          })
+            .then(function (r) {
+              return r.json();
+            })
+            .then(function (data) {
+              if (!analyticsEl || !data || !data.analytics) return;
+              var a = data.analytics;
+              analyticsEl.hidden = false;
+              analyticsEl.textContent =
+                "Executions: " +
+                (a.executions_total || 0) +
+                "\nSuccess rate: " +
+                (a.success_rate != null ? Math.round(a.success_rate * 100) + "%" : "—") +
+                "\nRetries: " +
+                (a.retries_total || 0) +
+                "\nAvg runtime: " +
+                (a.average_runtime_ms != null ? a.average_runtime_ms + " ms" : "—") +
+                "\nEst tokens: " +
+                (a.estimated_tokens_total || 0) +
+                "\nActual tokens: " +
+                (a.actual_tokens_total || 0) +
+                "\nT0 LLM avoided: " +
+                (a.t0_llm_avoided || 0) +
+                "\nBy tier: " +
+                JSON.stringify(a.executions_by_tier || {}) +
+                "\nBy provider: " +
+                JSON.stringify(a.executions_by_provider || {});
+            })
+            .catch(function () {});
+        });
+      }
       var useRec = $("ad-routing-use");
       if (useRec) {
         useRec.addEventListener("click", function () {
-          applyRecommendedAgent(pendingRoute);
-          hideRoutingCard();
+          executeRecommendedRoute(pendingRoute, {});
         });
       }
       var chooseAgent = $("ad-routing-choose");
@@ -868,16 +1182,14 @@
           if (agentSel) agentSel.focus();
           appendMessage(
             "assistant",
-            "Choose an agent from the selector, then Send. Phase 1 will not auto-execute."
+            "Choose an agent from the selector, then Send. Manual override uses the existing run flow."
           );
         });
       }
       var cancelRoute = $("ad-routing-cancel");
       if (cancelRoute) {
         cancelRoute.addEventListener("click", function () {
-          hideRoutingCard();
-          pendingPrompt = "";
-          appendMessage("assistant", "Smart Routing cancelled.");
+          cancelRouteExecution();
         });
       }
       if (moreBtn) {

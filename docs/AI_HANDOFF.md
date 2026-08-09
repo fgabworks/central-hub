@@ -4,16 +4,25 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**AiriX Smart Routing Phase 1 (2026-08-10)**
+**AiriX Smart Routing Phase 3 (2026-08-10)**
 
-Work AiriX analyzes each prompt and recommends the cheapest capable provider
-before any agent run. New package `hub/agent_center/routing/` provides a
-provider-agnostic registry (T0 deterministic → T1 low-cost → T2 Grok → T3 Codex)
-plus `classify_request`, `recommend_route`, `list_available_providers`,
-`estimate_usage`, and `build_execution_plan`. Dock shows a compact Smart Routing
-card (Use Recommended / Choose Agent / Cancel). Settings live in Work Settings
-and the dock menu. Phase 1 does **not** execute agents, retries, Codex dispatch,
-or learning. Tests: `tests/test_airix_routing.py`.
+History-aware routing on the Phase 1–2 stack: sanitized execution metrics and
+compact prior findings in `agent_center.db` (`airix_routing_*` tables), success-rate
+bias within capability rules, escalation recommendations after repeated failures
+(Codex still approval-gated), retry limits + identical-retry blocking, routing
+explanations in the dock card, and compact analytics on Work Settings +
+`GET /api/assistants/airix/routing/analytics`. No parallel executor; still uses
+`RouteExecutor` → Hub tools / `AgentCenterService`. Tests: `tests/test_airix_routing.py`.
+
+Prior: **AiriX Smart Routing Phase 2 (2026-08-10)**
+
+After recommendation, **Use Recommended** executes via existing adapters.
+Canonical APIs under `/api/assistants/airix/routing/*`. T0–T3 tiers, minimal
+context, cancel/duplicate prevention, safe unavailable fallback.
+
+Prior: **AiriX Smart Routing Phase 1 (2026-08-10)**
+
+Classify + recommend only; dock card and settings introduced.
 
 Prior: **TODAY Mission Control (2026-08-04)**
 

@@ -343,6 +343,8 @@ def create_app() -> Flask:
     app.config["AIRIX_ROUTER"] = AgentRouterService(
         availability_loader=_routing_availability,
         db=app.config["NOTEBOOK"].db,
+        agent_center=app.config["AGENT_CENTER"],
+        history_db=agent_store.db,
     )
     register_agent_center_routes(app)
     def _repo_ws_audit(action: str, target: str, detail: str, ok: bool = True) -> None:
@@ -4064,6 +4066,8 @@ def create_app() -> Flask:
                         in {"1", "on", "true"},
                         "allow_escalation": request.form.get("allow_escalation")
                         in {"1", "on", "true"},
+                        "use_history": request.form.get("use_history")
+                        in {"1", "on", "true"},
                         "max_retries": request.form.get("max_retries") or 2,
                     },
                     workspace="work",
@@ -4078,6 +4082,9 @@ def create_app() -> Flask:
         router = app.config.get("AIRIX_ROUTER")
         routing_settings = (
             router.get_settings("work").public() if router is not None else None
+        )
+        routing_analytics = (
+            router.analytics(workspace="work") if router is not None else None
         )
         return render_template(
             "settings.html",
@@ -4096,6 +4103,7 @@ def create_app() -> Flask:
             flash_notice=flash_notice,
             actor=current_actor(),
             routing_settings=routing_settings,
+            routing_analytics=routing_analytics,
         )
 
     @app.get("/api/healthz")

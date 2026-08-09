@@ -18,7 +18,7 @@ job engine (SQLite), safe command/API capabilities, uploads/results, owner role.
 - Uploads under `data/uploads/{job_id}/`, results under `data/results/{job_id}/`
 - Confirm gates for non-dry-run; optional `CENTRAL_HUB_OWNER_TOKEN`
 - Audit JSONL + SQLite job history
-- AI Assistant Center: Aira under Personal and Okarun under Work, using one
+- AI Assistant Center: Aira under Personal and AiriX under Work, using one
   read-only engine with isolated histories, summaries, context, and tools
 
 ## What is *not* included
@@ -27,7 +27,7 @@ job engine (SQLite), safe command/API capabilities, uploads/results, owner role.
 - PMNP / Live Processing / report calculation domain logic inside the hub
 - Free-form / unrestricted shell outside connected repository paths
 - Arbitrary working directories, symlink/junction escapes, or user-supplied shell binaries
-- AI auto-execution of terminal commands (Aira/Okarun may suggest; user must insert + Enter)
+- AI auto-execution of terminal commands (Aira/AiriX may suggest; user must insert + Enter)
 - Multi-user auth beyond a single local owner token
 - Assistant file edits, SQL execution, email/calendar actions, DHIS2
   writes, voice input, and text-to-speech
@@ -40,13 +40,14 @@ WebSocket with xterm.js. Sessions start only inside enabled connected repo paths
 
 - **Aira**: /personal/aira; Personal Notebook/tasks, Quick Notepad, and explicitly
   selected Personal Email/Calendar search.
-- **Okarun**: /work/okarun; selected repositories and instructions, Work Notebook,
-  SQL library, DHIS2 UID metadata, Work Email/Calendar, jobs, and Audit.
+- **AiriX**: /work/airix (legacy /work/okarun redirects); selected repositories and
+  instructions, Work Notebook, SQL library, DHIS2 UID metadata, Work Email/Calendar,
+  jobs, Audit, and Smart Routing Phase 3 (history-aware).
 - Adapters include Codex, Claude Code, Cursor Agent, Grok, OpenAI API, Hub Simulator,
   and future config-driven adapters. Models refresh for the selected adapter.
 - System -> AI Connections provides Connect/Reconnect, Test Connection, Refresh Models,
   capability inspection, and Disconnect. Credentials remain in supported CLI storage or
-  server environment variables; Aira/Okarun data remains isolated.
+  server environment variables; Aira/AiriX data remains isolated.
 - Modes are Ask, Find, Plan, and Review. Context preview lists included and
   excluded sources. Runs support streaming, cancel, retry, files, tools, and usage.
 - Context is search-first; repositories, mail, and documents are never bulk-loaded.

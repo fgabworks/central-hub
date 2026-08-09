@@ -50,6 +50,7 @@ def load_routing_settings(db: Any, workspace: str = "work") -> RoutingSettings:
         ),
         allow_escalation=bool(data.get("allow_escalation", base.allow_escalation)),
         max_retries=max_retries,
+        use_history=bool(data.get("use_history", base.use_history)),
     )
 
 

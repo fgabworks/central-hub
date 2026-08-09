@@ -1,4 +1,4 @@
-"""AiriX Smart Routing — Phase 1 (recommend only, no agent execution)."""
+"""AiriX Smart Routing — Phase 3 (history-aware recommend + execute)."""
 
 from __future__ import annotations
 

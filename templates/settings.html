@@ -61,8 +61,8 @@
 </section>
 
 <section class="panel panel-body" style="margin-top:0.85rem">
-  <h2 style="margin:0 0 0.75rem;font-size:14px">AiriX Smart Routing (Phase 1)</h2>
-  <p class="muted" style="margin-top:0">Recommend-only. No agent execution, retries, or Codex dispatch yet.</p>
+  <h2 style="margin:0 0 0.75rem;font-size:14px">AiriX Smart Routing (Phase 3)</h2>
+  <p class="muted" style="margin-top:0">History-aware recommend + execute. Capability/risk rules stay authoritative. Codex still requires approval.</p>
   {% if workspace == 'work' and routing_settings %}
   <form method="post" class="builder-form" style="margin-top:0.75rem">
     <input type="hidden" name="action" value="airix_routing_settings">
@@ -78,9 +78,35 @@
     <label class="nb-check"><input type="checkbox" name="prefer_grok_for_routine" value="1" {% if routing_settings.prefer_grok_for_routine %}checked{% endif %}> Prefer Grok for routine work</label>
     <label class="nb-check"><input type="checkbox" name="require_approval_before_codex" value="1" {% if routing_settings.require_approval_before_codex %}checked{% endif %}> Require approval before Codex</label>
     <label class="nb-check"><input type="checkbox" name="allow_escalation" value="1" {% if routing_settings.allow_escalation %}checked{% endif %}> Allow escalation</label>
+    <label class="nb-check"><input type="checkbox" name="use_history" value="1" {% if routing_settings.use_history %}checked{% endif %}> Use performance history</label>
     <label><span>Max retries</span><input type="number" name="max_retries" min="0" max="5" value="{{ routing_settings.max_retries }}"></label>
     <button class="btn btn-primary" type="submit">Save Smart Routing settings</button>
   </form>
+  {% if routing_analytics %}
+  <div class="panel panel-body" style="margin-top:1rem;padding:0.75rem 1rem">
+    <h3 style="margin:0 0 0.5rem;font-size:13px">Routing diagnostics</h3>
+    <dl class="meta-grid" style="margin:0">
+      <div><dt>Executions</dt><dd>{{ routing_analytics.executions_total }}</dd></div>
+      <div><dt>Success rate</dt><dd>{% if routing_analytics.success_rate is not none %}{{ (routing_analytics.success_rate * 100)|round(0) }}%{% else %}—{% endif %}</dd></div>
+      <div><dt>Retries</dt><dd>{{ routing_analytics.retries_total }}</dd></div>
+      <div><dt>Avg runtime</dt><dd>{% if routing_analytics.average_runtime_ms %}{{ routing_analytics.average_runtime_ms }} ms{% else %}—{% endif %}</dd></div>
+      <div><dt>Est. tokens</dt><dd>{{ routing_analytics.estimated_tokens_total }}</dd></div>
+      <div><dt>Actual tokens</dt><dd>{{ routing_analytics.actual_tokens_total }}</dd></div>
+      <div><dt>T0 LLM avoided</dt><dd>{{ routing_analytics.t0_llm_avoided }}</dd></div>
+      <div><dt>Findings</dt><dd>{{ routing_analytics.findings_count }}</dd></div>
+    </dl>
+    {% if routing_analytics.executions_by_tier %}
+    <p class="muted" style="margin:0.65rem 0 0;font-size:12px">By tier:
+      {% for tier, n in routing_analytics.executions_by_tier.items() %}{{ tier }}={{ n }}{% if not loop.last %}, {% endif %}{% endfor %}
+    </p>
+    {% endif %}
+    {% if routing_analytics.executions_by_provider %}
+    <p class="muted" style="margin:0.35rem 0 0;font-size:12px">By provider:
+      {% for pid, n in routing_analytics.executions_by_provider.items() %}{{ pid }}={{ n }}{% if not loop.last %}, {% endif %}{% endfor %}
+    </p>
+    {% endif %}
+  </div>
+  {% endif %}
   {% else %}
   <p class="muted">Switch to the Work workspace to edit AiriX routing settings.</p>
   {% endif %}

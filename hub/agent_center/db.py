@@ -101,6 +101,70 @@ _MIGRATIONS: list[tuple[str, str]] = [
             ON agent_prompts(profile_id, updated_at DESC);
         """,
     ),
+    (
+        "006_airix_routing_history",
+        """
+        CREATE TABLE IF NOT EXISTS airix_routing_events (
+            id TEXT PRIMARY KEY,
+            workspace TEXT NOT NULL DEFAULT 'work',
+            created_at TEXT NOT NULL,
+            provider_id TEXT NOT NULL,
+            adapter_id TEXT NOT NULL DEFAULT '',
+            tier TEXT NOT NULL DEFAULT '',
+            task_type TEXT NOT NULL DEFAULT 'general',
+            status TEXT NOT NULL,
+            outcome TEXT NOT NULL,
+            retries INTEGER NOT NULL DEFAULT 0,
+            runtime_ms INTEGER NOT NULL DEFAULT 0,
+            estimated_usage TEXT NOT NULL DEFAULT '',
+            actual_tokens INTEGER,
+            usage_source TEXT NOT NULL DEFAULT 'estimate',
+            t0_llm_avoided INTEGER NOT NULL DEFAULT 0,
+            fallback_from TEXT NOT NULL DEFAULT '',
+            escalated_to TEXT NOT NULL DEFAULT '',
+            prompt_fingerprint TEXT NOT NULL DEFAULT '',
+            error_code TEXT NOT NULL DEFAULT '',
+            partial_summary TEXT NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_airix_events_ws_created
+            ON airix_routing_events(workspace, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_airix_events_provider_task
+            ON airix_routing_events(workspace, provider_id, task_type);
+        CREATE INDEX IF NOT EXISTS idx_airix_events_fingerprint
+            ON airix_routing_events(workspace, prompt_fingerprint, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS airix_routing_findings (
+            id TEXT PRIMARY KEY,
+            workspace TEXT NOT NULL DEFAULT 'work',
+            created_at TEXT NOT NULL,
+            task_type TEXT NOT NULL,
+            keywords_json TEXT NOT NULL DEFAULT '[]',
+            summary TEXT NOT NULL,
+            provider_id TEXT NOT NULL DEFAULT '',
+            source_event_id TEXT NOT NULL DEFAULT '',
+            hit_count INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_airix_findings_ws_task
+            ON airix_routing_findings(workspace, task_type, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS airix_routing_provider_stats (
+            workspace TEXT NOT NULL,
+            provider_id TEXT NOT NULL,
+            task_type TEXT NOT NULL,
+            successes INTEGER NOT NULL DEFAULT 0,
+            failures INTEGER NOT NULL DEFAULT 0,
+            cancels INTEGER NOT NULL DEFAULT 0,
+            retries_total INTEGER NOT NULL DEFAULT 0,
+            runtime_ms_total INTEGER NOT NULL DEFAULT 0,
+            tokens_total INTEGER NOT NULL DEFAULT 0,
+            t0_avoided INTEGER NOT NULL DEFAULT 0,
+            fallbacks INTEGER NOT NULL DEFAULT 0,
+            escalations INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (workspace, provider_id, task_type)
+        );
+        """,
+    ),
 ]
 
 
