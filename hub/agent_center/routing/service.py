@@ -122,8 +122,9 @@ class AgentRouterService:
         prompt: str,
         *,
         hints: list[str] | None = None,
+        repository_ids: list[str] | None = None,
     ) -> PromptClassification:
-        return classify_prompt(prompt, hints=hints)
+        return classify_prompt(prompt, hints=hints, repository_ids=repository_ids)
 
     def get_settings(self, workspace: str = "work") -> RoutingSettings:
         if self.db is None:
@@ -309,6 +310,54 @@ class AgentRouterService:
         except Exception:  # noqa: BLE001
             pass
 
+    def _attach_recommended_model(self, rec: RouteRecommendation) -> None:
+        """Recommend Provider + Model using discovered provider catalogs when available."""
+        from hub.agent_center.codex_models import pick_model_for_complexity
+        from hub.agent_center.routing.context import provider_to_adapter_id
+
+        provider = str(rec.recommended_agent or "").strip()
+        if provider in {"", "deterministic"}:
+            rec.recommended_model = None
+            rec.recommended_model_reason = "t0_no_model"
+            return
+        adapter_id = provider_to_adapter_id(provider) or provider
+        models: list[str] = []
+        source = ""
+        if self.agent_center is not None:
+            try:
+                details = self.agent_center.list_models(adapter_id)
+                models = [str(m) for m in (details.get("models") or []) if str(m).strip()]
+                source = str(details.get("models_source") or "")
+                recommended = str(details.get("recommended_model") or "").strip()
+            except Exception:  # noqa: BLE001
+                details = {}
+                recommended = ""
+        else:
+            recommended = ""
+
+        pick = pick_model_for_complexity(
+            models,
+            complexity=int(rec.complexity or 0),
+            task_type=str(rec.task_type or ""),
+        )
+        if pick:
+            rec.recommended_model = pick
+            reason = "lower_cost_available" if int(rec.complexity or 0) < 45 else "strongest_appropriate"
+            if int(rec.complexity or 0) >= 65 or rec.task_type in {"architecture", "refactor"}:
+                reason = "strongest_appropriate"
+            elif int(rec.complexity or 0) < 35:
+                reason = "lower_cost_available"
+            else:
+                reason = "balanced_available"
+            rec.recommended_model_reason = f"{reason};source={source or 'catalog'}"
+            return
+        if recommended and not recommended.startswith("__"):
+            rec.recommended_model = recommended
+            rec.recommended_model_reason = f"provider_recommended;source={source or 'catalog'}"
+            return
+        rec.recommended_model = recommended or None
+        rec.recommended_model_reason = f"provider_default;source={source or 'none'}"
+
     def recommend_route(
         self,
         prompt: str,
@@ -319,24 +368,57 @@ class AgentRouterService:
         probe_providers: bool = False,
         hints: list[str] | None = None,
         session_id: str | None = None,
+        repository_ids: list[str] | None = None,
     ) -> RouteRecommendation:
-        classification = self.classify_request(prompt, hints=hints)
+        classification = self.classify_request(
+            prompt, hints=hints, repository_ids=repository_ids
+        )
         cfg = settings or self.get_settings(workspace)
         role = detect_role(prompt, classification)
         available_ids: set[str] | None = None
-        if probe_providers and self._availability_loader is not None:
+        # Always exclude providers that are not installed+authenticated+healthy when a
+        # loader is configured. probe_providers forces a cache invalidate first.
+        if self._availability_loader is not None:
+            if probe_providers and self.agent_center is not None:
+                try:
+                    self.agent_center.connections.invalidate()
+                except Exception:  # noqa: BLE001
+                    pass
             try:
                 raw = self._availability_loader() or {}
+                if probe_providers and self.agent_center is not None:
+                    # Live probe coding CLIs once so recommend does not target stale offline agents.
+                    for pid in ("codex", "claude-code", "cursor-agent", "openai-api", "grok"):
+                        if pid in self.agent_center.connections.adapters:
+                            try:
+                                live = self.agent_center.connections.get(pid, refresh=True, probe=True)
+                                raw[pid] = {
+                                    **(raw.get(pid) or {}),
+                                    "runnable": live.get("state") == "connected",
+                                    "status": live.get("state"),
+                                    "detail": live.get("detail"),
+                                }
+                            except Exception:  # noqa: BLE001
+                                continue
                 available_ids = {
                     str(k)
                     for k, v in raw.items()
                     if isinstance(v, dict)
                     and (
                         v.get("runnable")
-                        or str(v.get("status") or "") in {"available", "degraded"}
+                        or str(v.get("status") or "") in {"available", "degraded", "connected"}
                     )
                 }
                 available_ids.add("deterministic")
+                # Hub simulator remains a local demo fallback when configured/runnable.
+                if "hub-simulator" in raw:
+                    sim = raw.get("hub-simulator") or {}
+                    if sim.get("runnable") or str(sim.get("status") or "") in {
+                        "available",
+                        "degraded",
+                        "connected",
+                    }:
+                        available_ids.add("hub-simulator")
             except Exception:  # noqa: BLE001
                 available_ids = None
 
@@ -358,6 +440,7 @@ class AgentRouterService:
             provider_stats=provider_stats,
             recent_failures=recent_failures,
         )
+        self._attach_recommended_model(rec)
 
         completed: list[str] = []
         if self.history is not None and session_id:
@@ -528,6 +611,8 @@ class AgentRouterService:
         actor: str = "owner",
         agent_override: str | None = None,
         repository_ids: list[str] | None = None,
+        active_repository_id: str | None = None,
+        selected_repository_id: str | None = None,
         approve_codex: bool = False,
         force: bool = False,
         recommendation: RouteRecommendation | None = None,
@@ -535,6 +620,7 @@ class AgentRouterService:
         previous_partial: str = "",
         session_id: str | None = None,
         orchestrate: bool | None = None,
+        model: str | None = None,
     ) -> dict[str, Any]:
         if self.executor is None:
             raise RuntimeError("RouteExecutor requires AgentCenterService")
@@ -548,15 +634,20 @@ class AgentRouterService:
                 workspace=workspace,
                 actor=actor,
                 repository_ids=repository_ids,
+                active_repository_id=active_repository_id,
+                selected_repository_id=selected_repository_id,
                 approve_codex=approve_codex,
                 force=force,
                 recommendation=recommendation,
                 session_id=session_id,
+                model=model,
             )
 
         rec = recommendation or self.recommend_route(
             prompt, workspace=workspace, actor=actor, settings=cfg, session_id=session_id
         )
+        if not (model or "").strip():
+            model = (rec.recommended_model or "").strip() or None
         provider = (agent_override or rec.recommended_agent or "").strip()
         rbac_role = self.acl.get_role(actor, workspace=workspace)
         perms = permissions_for_role(rbac_role)
@@ -616,6 +707,8 @@ class AgentRouterService:
             settings=cfg,
             agent_override=agent_override,
             repository_ids=repository_ids,
+            active_repository_id=active_repository_id,
+            selected_repository_id=selected_repository_id,
             approve_codex=approve_codex,
             force=force,
             workspace=workspace,
@@ -624,6 +717,8 @@ class AgentRouterService:
             previous_partial=previous_partial,
             actor=actor,
             rbac_role=rbac_role,
+            model=model,
+            manual_override=bool(agent_override),
         )
         return {
             "ok": True,
@@ -648,10 +743,13 @@ class AgentRouterService:
         workspace: str,
         actor: str,
         repository_ids: list[str] | None,
+        active_repository_id: str | None = None,
+        selected_repository_id: str | None = None,
         approve_codex: bool,
         force: bool,
         recommendation: RouteRecommendation | None,
         session_id: str | None,
+        model: str | None = None,
     ) -> dict[str, Any]:
         assert self.executor is not None
         cfg = self.get_settings(workspace)
@@ -830,6 +928,8 @@ class AgentRouterService:
                     settings=cfg,
                     agent_override=override,
                     repository_ids=repository_ids,
+                    active_repository_id=active_repository_id,
+                    selected_repository_id=selected_repository_id,
                     approve_codex=approve_codex if step.approval_required else False,
                     force=force,
                     workspace=workspace,
@@ -838,6 +938,11 @@ class AgentRouterService:
                     tool_ids_override=step_tools,
                     actor=actor,
                     rbac_role=rbac_role,
+                    model=(
+                        model
+                        if model and override == rec.recommended_agent
+                        else None
+                    ),
                 )
             except AgentCenterError as exc:
                 if exc.code == "approval_required":

@@ -133,6 +133,14 @@
         <span class="sr-only">Model</span>
         <select id="ad-model" aria-label="Model" hidden></select>
       </label>
+      {% if assistant_dock.profile.repositories_allowed %}
+      <label class="ad-select-wrap">
+        <span class="sr-only">Repository</span>
+        <select id="ad-repo" aria-label="Connected repository" title="Required for Codex, Claude Code, and Cursor Agent">
+          <option value="">Select repo…</option>
+        </select>
+      </label>
+      {% endif %}
     </div>
     <p class="ad-safety muted">🔒 {{ assistant_dock.safety.message }}</p>
   </footer>

@@ -20,6 +20,7 @@ ALLOWED_TOOLS = frozenset(
         "repo_search",
         "read_file",
         "uid_lookup",
+        "org_unit_lookup",
         "sql_lookup",
         "notebook_lookup",
         "notepad_lookup",
@@ -116,6 +117,31 @@ def tool_definitions(allowed_tools: set[str] | None = None) -> list[dict[str, An
                     "resource": {"type": "string", "description": "Resource/type key used by the index"},
                     "uid": {"type": "string"},
                     "query": {"type": "string", "description": "Optional search string when uid omitted"},
+                    "limit": {"type": "integer"},
+                },
+                "additionalProperties": False,
+            },
+        },
+        {
+            "type": "function",
+            "name": "org_unit_lookup",
+            "description": (
+                "Search DHIS2 organisation units from Hub cache/SQLite (read-only). "
+                "Use for regions, provinces, municipalities — project OU trees, not general geography."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Name/code search (e.g. Region III, Central Luzon)"},
+                    "environment": {
+                        "type": "string",
+                        "description": "stage or live (default stage)",
+                    },
+                    "parent_id": {
+                        "type": "string",
+                        "description": "Optional parent OU UID to list direct children",
+                    },
+                    "level": {"type": "integer", "description": "Optional OU level filter"},
                     "limit": {"type": "integer"},
                 },
                 "additionalProperties": False,
@@ -236,6 +262,7 @@ def execute_tool(name: str, arguments: dict[str, Any] | str, ctx: AgentToolsCont
         "repo_search": _tool_repo_search,
         "read_file": _tool_read_file,
         "uid_lookup": _tool_uid_lookup,
+        "org_unit_lookup": _tool_org_unit_lookup,
         "sql_lookup": _tool_sql_lookup,
         "notebook_lookup": _tool_notebook_lookup,
         "notepad_lookup": _tool_notepad_lookup,
@@ -371,6 +398,75 @@ def _tool_uid_lookup(args: dict[str, Any], ctx: AgentToolsContext) -> dict[str, 
         return {"error": "uid or query is required"}
     rows = ctx.uid_index.search(resource, query, limit=limit)
     return {"summary": f"{len(rows)} hits", "resource": resource, "results": rows}
+
+
+def _tool_org_unit_lookup(args: dict[str, Any], ctx: AgentToolsContext) -> dict[str, Any]:
+    if ctx.dhis2_reports is None:
+        return {"error": "DHIS2 Reports / org-unit service is not available"}
+    query = str(args.get("query") or "").strip()
+    environment = str(args.get("environment") or "stage").strip().lower() or "stage"
+    parent_id = str(args.get("parent_id") or "").strip()
+    limit = max(1, min(int(args.get("limit") or 25), 50))
+    level = args.get("level")
+    level_i: int | None = None
+    if level is not None and str(level).strip() != "":
+        try:
+            level_i = int(level)
+        except (TypeError, ValueError):
+            return {"error": "level must be an integer"}
+    try:
+        payload = ctx.dhis2_reports.search_org_units(
+            environment,
+            q=query,
+            limit=limit,
+            parent_id=parent_id,
+            level=level_i,
+            refresh=False,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"org_unit_lookup failed: {exc}"}
+    rows = list(payload.get("org_units") or payload.get("items") or payload.get("results") or [])
+    children: list[dict[str, Any]] = []
+    # If the top hit looks like a region and no children were requested, fetch children.
+    if not parent_id and rows and re_search_region(query):
+        top = rows[0] if isinstance(rows[0], dict) else {}
+        top_uid = str(top.get("id") or top.get("uid") or "").strip()
+        if top_uid:
+            try:
+                child_payload = ctx.dhis2_reports.search_org_units(
+                    environment,
+                    q="",
+                    limit=limit,
+                    parent_id=top_uid,
+                    refresh=False,
+                )
+                children = list(
+                    child_payload.get("org_units")
+                    or child_payload.get("items")
+                    or child_payload.get("results")
+                    or []
+                )
+            except Exception:  # noqa: BLE001
+                children = []
+    return {
+        "summary": (
+            f"{len(rows)} org units"
+            + (f"; {len(children)} children" if children else "")
+            + f" ({payload.get('source') or 'cache'})"
+        ),
+        "environment": environment,
+        "query": query,
+        "org_units": rows[:limit],
+        "children": children[:limit],
+        "cache": payload.get("cache"),
+        "source": payload.get("source") or "dhis2_reports",
+    }
+
+
+def re_search_region(query: str) -> bool:
+    import re
+
+    return bool(re.search(r"\bregion\b|\bcentral\s+luzon\b", query or "", re.I))
 
 
 def _tool_sql_lookup(args: dict[str, Any], ctx: AgentToolsContext) -> dict[str, Any]:

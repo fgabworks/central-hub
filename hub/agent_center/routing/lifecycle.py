@@ -159,4 +159,12 @@ def public_execution_fields(row: dict[str, Any]) -> dict[str, Any]:
     out["terminal"] = status in TERMINAL_STATUSES
     if "finished_at" not in out and status in TERMINAL_STATUSES:
         out["finished_at"] = out.get("finished_at") or _utcnow()
+    # Always attach usage telemetry from actual execution events (not UI labels).
+    try:
+        from hub.agent_center.routing.telemetry import attach_execution_telemetry
+
+        out = attach_execution_telemetry(out)
+    except Exception:  # noqa: BLE001
+        # Telemetry must never break status delivery.
+        pass
     return out

@@ -17,11 +17,12 @@ T0_AVOIDED_TOKEN_BAND = "Low"
 
 
 def parse_usage(usage: Any) -> dict[str, Any]:
-    """Normalize provider usage dict → input/output/total + source."""
+    """Normalize provider usage dict → input/output/cached/total + source."""
     if not isinstance(usage, dict) or not usage:
         return {
             "input_tokens": None,
             "output_tokens": None,
+            "cached_tokens": None,
             "total_tokens": None,
             "usage_source": "estimate",
             "raw_keys": [],
@@ -36,6 +37,15 @@ def parse_usage(usage: Any) -> dict[str, Any]:
         if usage.get("output_tokens") is not None
         else usage.get("completion_tokens")
     )
+    cached = _int_or_none(
+        usage.get("cached_tokens")
+        if usage.get("cached_tokens") is not None
+        else usage.get("cached_input_tokens")
+        if usage.get("cached_input_tokens") is not None
+        else usage.get("cache_read_input_tokens")
+        if usage.get("cache_read_input_tokens") is not None
+        else usage.get("input_tokens_cached")
+    )
     total = _int_or_none(
         usage.get("total_tokens")
         if usage.get("total_tokens") is not None
@@ -45,10 +55,16 @@ def parse_usage(usage: Any) -> dict[str, Any]:
         total = int(inp or 0) + int(out or 0)
     if total is None and out is not None:
         total = out
-    source = "actual" if total is not None else "estimate"
+    # Prefer explicit usage_source when caller already classified the payload.
+    explicit = str(usage.get("usage_source") or "").strip().lower()
+    if explicit in {"actual", "estimate"}:
+        source = explicit
+    else:
+        source = "actual" if total is not None else "estimate"
     return {
         "input_tokens": inp,
         "output_tokens": out,
+        "cached_tokens": cached,
         "total_tokens": total,
         "usage_source": source,
         "raw_keys": sorted(str(k) for k in usage.keys())[:12],

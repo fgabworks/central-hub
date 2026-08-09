@@ -67,7 +67,7 @@ class _FakeAgentCenter:
         return MagicMock() if agent_id else None
 
     def repositories(self, profile_id: str = "okarun") -> list[dict[str, Any]]:
-        return [{"id": "sample-cli"}]
+        return [{"id": "sample-cli", "name": "sample-cli", "selectable": True}]
 
 
 def _availability() -> dict[str, dict[str, Any]]:

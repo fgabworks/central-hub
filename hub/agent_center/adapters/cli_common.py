@@ -13,6 +13,7 @@ from hub.agent_center.adapters.base import (
     which_executable,
 )
 from hub.agent_center.models import MODES
+from hub.agent_center.redact import redact_text
 
 
 class BaseCliAdapter:
@@ -57,31 +58,113 @@ class BaseCliAdapter:
     def connection_status(self, *, force_refresh: bool = False) -> dict[str, Any]:
         exe = self.resolve_executable()
         if not exe:
-            return {"state": "unavailable", "detail": f"Executable not found on PATH: {self.descriptor.executable}", "installed": False, "available": False}
-        probe = self._authentication_probe(exe)
-        return {"installed": True, "available": probe.get("state") == "connected", **probe}
+            return {
+                "state": "unavailable",
+                "detail": self._missing_cli_detail(),
+                "error_code": "missing_cli",
+                "installed": False,
+                "authenticated": False,
+                "version": "",
+                "available": False,
+                "cli_commands": list(self._cli_command_candidates()),
+                "install_help": self._install_help(),
+            }
+        version = self._detect_version(exe)
+        try:
+            probe = self._authentication_probe(exe)
+        except Exception as exc:  # noqa: BLE001
+            return {
+                "state": "error",
+                "detail": redact_text(str(exc), limit=400),
+                "error_code": "probe_failed",
+                "installed": True,
+                "authenticated": False,
+                "version": version,
+                "available": False,
+                "cli_commands": list(self._cli_command_candidates()),
+                "install_help": self._install_help(),
+            }
+        state = str(probe.get("state") or "authentication_required")
+        authenticated = state == "connected"
+        return {
+            **probe,
+            "state": state,
+            "installed": True,
+            "authenticated": authenticated,
+            "version": version or str(probe.get("version") or ""),
+            "available": authenticated,
+            "cli_commands": list(self._cli_command_candidates()),
+            "install_help": self._install_help(),
+            "error_code": str(probe.get("error_code") or ("" if authenticated else "authentication_required")),
+        }
+
+    def _missing_cli_detail(self) -> str:
+        names = " / ".join(f"`{c}`" for c in self._cli_command_candidates())
+        return f"Executable not found on PATH (expected {names or self.descriptor.executable})"
+
+    def _install_help(self) -> str:
+        return ""
+
+    def _cli_command_candidates(self) -> tuple[str, ...]:
+        primary = (self.descriptor.executable or "").strip()
+        return (primary,) if primary else ()
+
+    def _detect_version(self, executable: str) -> str:
+        for args in ([executable, "--version"], [executable, "version"], [executable, "-v"]):
+            try:
+                result = self._run_probe(args, timeout=8.0)
+            except Exception:  # noqa: BLE001
+                continue
+            text = (result.stdout or result.stderr or "").strip()
+            if result.returncode == 0 and text:
+                first = text.splitlines()[0].strip()
+                return first[:80]
+        return ""
 
     def test_connection(self) -> dict[str, Any]:
         status = self.connection_status(force_refresh=True)
-        return {"ok": status["state"] == "connected", **status}
+        return {"ok": status.get("state") == "connected", **status}
 
     def connect(self) -> dict[str, Any]:
         exe = self.resolve_executable()
         if not exe:
-            return {"ok": False, "state": "unavailable", "detail": "Provider CLI is not installed"}
+            return {
+                "ok": False,
+                "state": "unavailable",
+                "detail": self._missing_cli_detail(),
+                "error_code": "missing_cli",
+                "installed": False,
+                "install_help": self._install_help(),
+                "cli_commands": list(self._cli_command_candidates()),
+            }
         argv = self._login_argv(exe)
         if not argv:
             return {"ok": False, "state": "authentication_required", "detail": "Use the provider's supported authentication flow"}
         flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0) if os.name == "nt" else 0
         subprocess.Popen(argv, shell=False, creationflags=flags, env=_safe_cli_env())
-        return {"ok": True, "state": "authentication_required", "detail": "Provider authentication started; complete it in the provider window, then Test Connection"}
+        return {
+            "ok": True,
+            "state": "authentication_required",
+            "detail": "Provider authentication started; complete it in the provider window, then Test Connection",
+            "installed": True,
+            "authenticated": False,
+            "available": False,
+            "cli_commands": list(self._cli_command_candidates()),
+        }
 
     def disconnect(self) -> dict[str, Any]:
         exe = self.resolve_executable()
         argv = self._logout_argv(exe) if exe else []
         if argv:
             subprocess.run(argv, shell=False, capture_output=True, text=True, timeout=20, check=False, env=_safe_cli_env())
-        return {"ok": True, "state": "authentication_required", "detail": "Disconnected"}
+        return {
+            "ok": True,
+            "state": "authentication_required",
+            "detail": "Signed out of provider CLI (Hub disconnect)",
+            "installed": bool(exe),
+            "authenticated": False,
+            "available": False,
+        }
 
     def _authentication_probe(self, executable: str) -> dict[str, Any]:
         return {"state": "authentication_required", "detail": "Authentication status is not exposed by this CLI"}

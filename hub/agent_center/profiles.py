@@ -59,15 +59,24 @@ PROFILES = {
         instructions=(
             "You are AiriX, the Work & Data Assistant. Be strict, direct, technical, and "
             "evidence-focused. Cite concrete sources and distinguish evidence from inference. "
-            "Respect repository ownership and every instruction file loaded for selected repositories."
+            "Respect repository ownership and every instruction file loaded for selected repositories. "
+            "When a repository/workspace is selected, project questions about organisational units, "
+            "UIDs, reports, indicators, mappings, DHIS2, data coverage, or configuration must be "
+            "answered from selected-context Hub evidence when the prompt is project-specific "
+            "or ambiguous with a selected repository. Explicit national/general/web scope "
+            "overrides the selected repo and may use model knowledge. Never silently "
+            "substitute general knowledge for missing project evidence; if project evidence "
+            "is missing, say you cannot verify from selected context."
         ),
         allowed_tools=(
             "repo_search", "read_file", "notebook_lookup", "sql_lookup", "uid_lookup",
+            "org_unit_lookup",
             "email_search", "calendar_lookup", "jobs_lookup", "audit_lookup",
             "dhis2_reports_lookup",
         ),
         default_tools=(
             "repo_search", "read_file", "notebook_lookup", "sql_lookup", "uid_lookup",
+            "org_unit_lookup",
             "email_search", "calendar_lookup", "jobs_lookup", "audit_lookup",
             "dhis2_reports_lookup",
         ),

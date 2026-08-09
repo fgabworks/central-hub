@@ -173,16 +173,24 @@ def is_task_solved(step_result: dict[str, Any], *, step: OrchestrationStep) -> b
     status = str(step_result.get("status") or "")
     if status != "completed":
         return False
+    if step_result.get("t0_fallthrough"):
+        return False
     answer = str(step_result.get("answer") or "").strip()
     if not answer:
         return False
     if step.kind == "tool" and step.id == "step_tool_lookup":
-        # Deterministic lookup is enough when it produced tool results without hard errors.
+        evidence = step_result.get("evidence_packet") or {}
+        grounding = step_result.get("grounding") or {}
+        if grounding.get("cannot_verify"):
+            # Project miss is a terminal honest answer — treat as solved (no escalate).
+            return True
+        # Only stop when Hub tools produced usable evidence (not a weak dump).
+        if evidence.get("usable") or grounding.get("grounded"):
+            return True
         tools = step_result.get("tool_results") or []
-        if tools and all(bool(t.get("ok")) for t in tools):
+        if tools and all(bool(t.get("ok")) for t in tools) and evidence.get("usable"):
             return True
-        if "Deterministic lookup" in answer and "failed" not in answer.lower():
-            return True
+        return False
     if step.id == "step_ai_analysis" and len(answer) >= 40:
         return True
     return False

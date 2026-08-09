@@ -41,6 +41,7 @@ def default_dock_state(workspace: str) -> dict[str, Any]:
         "width": DEFAULT_WIDTH,
         "min_width": MIN_WIDTH,
         "max_width": MAX_WIDTH,
+        "selected_repository_id": "",
     }
 
 
@@ -63,6 +64,8 @@ def load_dock_prefs(db: Any, workspace: str) -> dict[str, Any]:
         state["minimized"] = bool(data.get("minimized"))
     if "width" in data:
         state["width"] = clamp_width(data.get("width"))
+    if "selected_repository_id" in data:
+        state["selected_repository_id"] = str(data.get("selected_repository_id") or "")[:128]
     return state
 
 
@@ -77,6 +80,8 @@ def save_dock_prefs(db: Any, workspace: str, payload: dict[str, Any] | None) -> 
         current["minimized"] = bool(data.get("minimized"))
     if "width" in data:
         current["width"] = clamp_width(data.get("width"))
+    if "selected_repository_id" in data:
+        current["selected_repository_id"] = str(data.get("selected_repository_id") or "")[:128]
     # Minimized implies closed chrome but host stays mounted; keep open flag for restore.
     set_pref(
         db,
@@ -87,6 +92,7 @@ def save_dock_prefs(db: Any, workspace: str, payload: dict[str, Any] | None) -> 
                 "pinned": current["pinned"],
                 "minimized": current["minimized"],
                 "width": current["width"],
+                "selected_repository_id": current["selected_repository_id"],
             }
         ),
     )
@@ -179,6 +185,7 @@ def dock_shell_bootstrap(
             "width": prefs["width"],
             "min_width": prefs["min_width"],
             "max_width": prefs["max_width"],
+            "selected_repository_id": prefs.get("selected_repository_id") or "",
         },
         "suggestions": page_aware_suggestions(profile.id, endpoint),
         "safety": {
@@ -190,6 +197,7 @@ def dock_shell_bootstrap(
         "api_base": f"/api/assistants/{profile.id}",
         "prefs_url": "/api/assistant-dock/prefs",
         "lazy_agents_url": f"/api/assistants/{profile.id}/agents",
+        "lazy_repositories_url": f"/api/assistants/{profile.id}/repositories",
         "smart_routing": {
             "enabled": profile.id == "okarun",
             "phase": 5,

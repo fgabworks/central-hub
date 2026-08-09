@@ -23,7 +23,15 @@
     if (!host) return null;
     var boot = parseBootstrap(host);
     var prefs = Object.assign(
-      { open: false, pinned: true, minimized: false, width: 400, min_width: 300, max_width: 560 },
+      {
+        open: false,
+        pinned: true,
+        minimized: false,
+        width: 400,
+        min_width: 300,
+        max_width: 560,
+        selected_repository_id: "",
+      },
       boot.prefs || {}
     );
     var profile = boot.profile || {};
@@ -33,6 +41,15 @@
     var agentsLoading = false;
     var selectedAgent = "";
     var selectedModel = "";
+    var selectedRepoIds = [];
+    var reposLoaded = false;
+    var reposLoading = false;
+    var repoCatalog = [];
+    var REPO_REQUIRED_AGENTS = {
+      codex: true,
+      "claude-code": true,
+      "cursor-agent": true,
+    };
     var shell = document.querySelector(".app-shell");
     var panel = $("ad-panel");
     var toggleBtn = $("ar-assistant");
@@ -41,6 +58,7 @@
     var promptEl = $("ad-prompt");
     var agentSel = $("ad-agent");
     var modelSel = $("ad-model");
+    var repoSel = $("ad-repo");
     var messages = $("ad-messages");
     var output = $("ad-output");
     var contextBody = $("ad-context-body");
@@ -113,6 +131,7 @@
         pinned: !!prefs.pinned,
         minimized: !!prefs.minimized,
         width: prefs.width,
+        selected_repository_id: prefs.selected_repository_id || "",
       };
       function send() {
         fetch(prefsUrl, {
@@ -128,6 +147,141 @@
       }
       if (saveTimer) clearTimeout(saveTimer);
       saveTimer = setTimeout(send, 250);
+    }
+
+    function agentRequiresRepository(agentId) {
+      return !!REPO_REQUIRED_AGENTS[String(agentId || "").toLowerCase()];
+    }
+
+    function activeWorkspaceRepositoryId() {
+      var wc = document.getElementById("wc-term-repo");
+      if (wc && wc.value) return String(wc.value).trim();
+      return "";
+    }
+
+    function setSelectedRepository(repoId, persist) {
+      var rid = String(repoId || "").trim();
+      selectedRepoIds = rid ? [rid] : [];
+      prefs.selected_repository_id = rid;
+      if (repoSel) repoSel.value = rid;
+      if (persist !== false) persistPrefs(true);
+    }
+
+    function currentRepositoryIds() {
+      if (repoSel && repoSel.value) {
+        selectedRepoIds = [repoSel.value];
+        prefs.selected_repository_id = repoSel.value;
+        return selectedRepoIds.slice();
+      }
+      if (prefs.selected_repository_id) {
+        selectedRepoIds = [prefs.selected_repository_id];
+        return selectedRepoIds.slice();
+      }
+      return selectedRepoIds.slice();
+    }
+
+    function repositoryPayloadFields() {
+      var ids = currentRepositoryIds();
+      return {
+        repository_ids: ids,
+        selected_repository_id: prefs.selected_repository_id || (ids[0] || "") || null,
+        active_repository_id: activeWorkspaceRepositoryId() || null,
+      };
+    }
+
+    function repositoryLabel(repoId) {
+      var rid = String(repoId || "").trim();
+      if (!rid) return "";
+      for (var i = 0; i < repoCatalog.length; i++) {
+        if (repoCatalog[i].id === rid) {
+          return repoCatalog[i].name || repoCatalog[i].id;
+        }
+      }
+      return rid;
+    }
+
+    function ensureRepositories() {
+      if (!repoSel || !profile.repositories_allowed) return;
+      if (reposLoaded || reposLoading) return;
+      reposLoading = true;
+      var url = boot.lazy_repositories_url || apiBase + "/repositories";
+      fetch(url, { credentials: "same-origin", headers: { Accept: "application/json" } })
+        .then(function (r) {
+          return r.json();
+        })
+        .then(function (data) {
+          var repos = (data.repositories || []).filter(function (r) {
+            return r && r.id && r.selectable !== false;
+          });
+          repoCatalog = repos;
+          repoSel.innerHTML = "";
+          var placeholder = document.createElement("option");
+          placeholder.value = "";
+          placeholder.textContent =
+            repos.length > 1 ? "Select repo…" : repos.length === 1 ? "Repository" : "No connected repos";
+          repoSel.appendChild(placeholder);
+          repos.forEach(function (repo) {
+            var opt = document.createElement("option");
+            opt.value = repo.id;
+            opt.textContent = repo.name || repo.id;
+            repoSel.appendChild(opt);
+          });
+
+          var persisted = String(prefs.selected_repository_id || "").trim();
+          var active = activeWorkspaceRepositoryId();
+          var pick = "";
+          if (persisted && repos.some(function (r) { return r.id === persisted; })) {
+            pick = persisted;
+          } else if (active && repos.some(function (r) { return r.id === active; })) {
+            pick = active;
+          } else if (repos.length === 1) {
+            pick = repos[0].id;
+          }
+          // Multiple repos with no persisted/active selection: leave blank (require user pick).
+          setSelectedRepository(pick, false);
+          if (pick && pick !== persisted) {
+            prefs.selected_repository_id = pick;
+            persistPrefs(true);
+          }
+          reposLoaded = true;
+        })
+        .catch(function () {
+          selectedRepoIds = [];
+          repoCatalog = [];
+        })
+        .finally(function () {
+          reposLoading = false;
+        });
+    }
+
+    function assertRepositoryReady(agentId) {
+      if (!agentRequiresRepository(agentId)) return true;
+      var ids = currentRepositoryIds();
+      if (ids.length) return true;
+      var selectable = repoCatalog.filter(function (r) {
+        return r && r.id && r.selectable !== false;
+      });
+      if (selectable.length === 1) {
+        setSelectedRepository(selectable[0].id, true);
+        return true;
+      }
+      if (!selectable.length) {
+        appendMessage(
+          "assistant",
+          "No connected repository is available. Connect a local repository before using " +
+            escapeHtml(agentId) +
+            "."
+        );
+      } else {
+        appendMessage(
+          "assistant",
+          "Select a connected repository for <strong>" +
+            escapeHtml(agentId) +
+            "</strong> (multiple repos are connected — AiriX will not auto-pick)."
+        );
+        if (repoSel) repoSel.focus();
+      }
+      return false;
     }
 
     function setOpen(open) {
@@ -238,20 +392,33 @@
         .then(function (data) {
           var agents = data.agents || [];
           agentSel.innerHTML = "";
+          selectedAgent = "";
           if (!agents.length) {
             agentSel.innerHTML = '<option value="">No providers configured</option>';
             return;
           }
-          agents.forEach(function (agent, idx) {
+          agents.forEach(function (agent) {
             var opt = document.createElement("option");
             opt.value = agent.id;
-            opt.textContent = agent.label || agent.id;
-            if (idx === 0) selectedAgent = agent.id;
+            var runnable = !!agent.runnable;
+            var label = agent.label || agent.id;
+            if (!runnable) {
+              opt.disabled = true;
+              label += " (unavailable)";
+              if (agent.detail) opt.title = String(agent.detail);
+            }
+            opt.textContent = label;
+            opt.setAttribute("data-runnable", runnable ? "1" : "0");
             agentSel.appendChild(opt);
           });
+          var firstOk = Array.prototype.find.call(agentSel.options || [], function (o) {
+            return o.getAttribute("data-runnable") === "1";
+          });
+          selectedAgent = firstOk ? firstOk.value : "";
           agentSel.value = selectedAgent;
           agentsLoaded = true;
-          loadModels(selectedAgent);
+          if (selectedAgent) loadModels(selectedAgent);
+          ensureRepositories();
         })
         .catch(function () {
           agentSel.innerHTML = '<option value="">Providers unavailable</option>';
@@ -261,8 +428,17 @@
         });
     }
 
-    function loadModels(agentId) {
+    function currentSelectedModel() {
+      if (modelSel && !modelSel.hidden && modelSel.value) {
+        selectedModel = modelSel.value;
+        return modelSel.value;
+      }
+      return selectedModel || "";
+    }
+
+    function loadModels(agentId, preferredModel) {
       if (!modelSel || !agentId) return;
+      var preserve = (preferredModel || selectedModel || "").trim();
       fetch(apiBase + "/agents/" + encodeURIComponent(agentId) + "/models", {
         credentials: "same-origin",
       })
@@ -277,17 +453,39 @@
             selectedModel = "";
             return;
           }
-          models.forEach(function (model, idx) {
+          var ids = [];
+          models.forEach(function (model) {
             var id = typeof model === "string" ? model : model.id || model.name;
             var label =
-              typeof model === "string" ? model : model.label || model.name || id;
+              typeof model === "string" ? model : model.display_name || model.label || model.name || id;
+            if (!id) return;
+            if (id === "__provider_default__") {
+              label = label && label !== id ? label : "Provider configured default";
+            }
+            ids.push(id);
             var opt = document.createElement("option");
             opt.value = id;
             opt.textContent = label;
-            if (idx === 0) selectedModel = id;
             modelSel.appendChild(opt);
           });
-          modelSel.value = selectedModel;
+          // Prefer recommended/real model over bare __provider_default__ when both exist.
+          var realIds = ids.filter(function (id) {
+            return id && id.indexOf("__") !== 0;
+          });
+          var pick = "";
+          if (preserve && ids.indexOf(preserve) >= 0) {
+            pick = preserve;
+          } else if (data.recommended_model && ids.indexOf(data.recommended_model) >= 0) {
+            pick = data.recommended_model;
+          } else if (data.default_model && ids.indexOf(data.default_model) >= 0) {
+            pick = data.default_model;
+          } else if (realIds.length) {
+            pick = realIds[0];
+          } else {
+            pick = ids[0] || "";
+          }
+          selectedModel = pick;
+          modelSel.value = pick;
           modelSel.hidden = false;
         })
         .catch(function () {
@@ -296,6 +494,7 @@
     }
 
     function previewContext(prompt) {
+      var repoFields = repositoryPayloadFields();
       return fetch(apiBase + "/context/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -304,9 +503,9 @@
           mode: profile.default_mode || "ask",
           prompt: prompt,
           agent_id: selectedAgent,
-          model: selectedModel,
+          model: currentSelectedModel(),
           tools: profile.default_tools || [],
-          repository_ids: [],
+          repository_ids: repoFields.repository_ids,
         }),
       })
         .then(function (r) {
@@ -315,8 +514,11 @@
         .then(function (data) {
           if (contextBody) {
             var preview = data.preview || data;
+            var repoIds = repoFields.repository_ids || preview.repository_ids || [];
             contextBody.textContent = JSON.stringify(
               {
+                repository_ids: repoIds,
+                repository: repoIds.map(repositoryLabel).filter(Boolean),
                 included_sources: preview.included_sources || [],
                 excluded_sources: preview.excluded_sources || [],
                 excluded_secrets: preview.excluded_secrets || [],
@@ -393,6 +595,36 @@
       if (!sourceBits && (run.agent_label || run.agent_id)) {
         sourceBits = run.agent_label || run.agent_id;
       }
+      var repoBits = (run.repository_ids || []).map(repositoryLabel).filter(Boolean).join(", ");
+      if (repoBits) {
+        sourceBits = sourceBits ? sourceBits + " · repo " + repoBits : "repo " + repoBits;
+      }
+      var grounding = run.grounding || (run.context && run.context.grounding) || {};
+      var groundingLine = "";
+      if (grounding && (grounding.grounded_label || grounding.source || grounding.required)) {
+        groundingLine =
+          '<div class="ad-source">Source: ' +
+          escapeHtml(String(grounding.source || sourceBits || "unknown")) +
+          " · Grounded: " +
+          escapeHtml(String(grounding.grounded_label || (grounding.grounded ? "Yes" : "No"))) +
+          (grounding.grounded
+            ? ""
+            : grounding.reason
+              ? " — " + escapeHtml(String(grounding.reason))
+              : "") +
+          "</div>";
+      }
+      var selectedM = (run.context && run.context.selected_model) || "";
+      var resolvedM = run.model || (run.context && run.context.resolved_model) || "";
+      var modelLine = "";
+      if (selectedM || resolvedM || run.agent_id) {
+        modelLine =
+          '<div class="ad-source">Selected: ' +
+          escapeHtml(String(run.agent_label || run.agent_id || "") + (selectedM ? " / " + selectedM : "")) +
+          " · Resolved: " +
+          escapeHtml(String(run.agent_label || run.agent_id || "") + (resolvedM ? " / " + resolvedM : "")) +
+          "</div>";
+      }
       var codeBlocks = extractCodeBlocks(answer);
       var insertBtns = codeBlocks
         .map(function (code, idx) {
@@ -434,11 +666,14 @@
                 insertBtns +
                 "</div>"
               : "") +
-            (sourceBits
-              ? '<div class="ad-source">Source: ' +
-                escapeHtml(sourceBits) +
-                " (read-only)</div>"
-              : "")
+            (modelLine || "") +
+            (groundingLine
+              ? groundingLine
+              : sourceBits
+                ? '<div class="ad-source">Source: ' +
+                  escapeHtml(sourceBits) +
+                  " (read-only)</div>"
+                : "")
         );
       }
       if (messages) {
@@ -610,7 +845,29 @@
       var approval = rec.approval_required
         ? '<span class="ad-routing-badge is-warn">Approval required</span>'
         : '<span class="ad-routing-badge">No approval</span>';
+      var modelLine =
+        '<div class="ad-routing-line"><span>Model</span><strong>' +
+        escapeHtml(
+          (rec && rec.recommended_model) ||
+            currentSelectedModel() ||
+            "Provider default"
+        ) +
+        (rec && rec.recommended_model_reason
+          ? " · " + escapeHtml(String(rec.recommended_model_reason).split(";")[0])
+          : "") +
+        "</strong></div>";
       var ctx = (plan && plan.context) || {};
+      var repoIds = ctx.repository_ids || currentRepositoryIds() || [];
+      var repoLine =
+        '<div class="ad-routing-line"><span>Repository</span><strong>' +
+        escapeHtml(
+          repoIds.length
+            ? repoIds.map(repositoryLabel).filter(Boolean).join(", ") || repoIds.join(", ")
+            : agentRequiresRepository(mapRoutingAgent(rec.recommended_agent))
+              ? "Required — select a repo"
+              : "Not required"
+        ) +
+        "</strong></div>";
       var ctxLine =
         '<div class="ad-routing-line"><span>Context</span><strong>' +
         escapeHtml(ctx.strategy || "minimal") +
@@ -618,7 +875,9 @@
         escapeHtml(String((ctx.tool_ids || []).length)) +
         " tools · max " +
         escapeHtml(String(ctx.max_context_files || 0)) +
-        " files</strong></div>";
+        " files</strong></div>" +
+        modelLine +
+        repoLine;
       var steps = (plan && plan.steps) || [];
       var planNote =
         steps.length > 0
@@ -775,6 +1034,53 @@
       return status === "queued" || status === "running" || status === "active";
     }
 
+    function formatUsageTelemetryHtml(execution) {
+      var t = (execution && execution.telemetry) || (execution && execution.usage) || null;
+      if (!t || (!t.execution_type && t.llm_invoked == null && t.total_ai_tokens == null && t.total_tokens == null)) {
+        return "";
+      }
+      var llm = t.llm_invoked ? "Yes" : "No";
+      var src = String(t.usage_source || "");
+      var total = t.total_ai_tokens != null ? t.total_ai_tokens : t.total_tokens;
+      var totalLabel = total == null ? "—" : String(total);
+      if (src === "estimate") {
+        totalLabel = total == null ? "est. unavailable" : totalLabel + " (est.)";
+      }
+      var tools = Array.isArray(t.tools_used) ? t.tools_used.join(", ") : "";
+      return (
+        '<div class="ad-telemetry muted">' +
+        "<div>Tier: " +
+        escapeHtml(String(t.routing_tier || execution.tier || "?")) +
+        " · Type: " +
+        escapeHtml(String(t.execution_type || "?")) +
+        " · LLM: " +
+        escapeHtml(llm) +
+        "</div>" +
+        "<div>Provider: " +
+        escapeHtml(String(t.provider != null && t.provider !== "" ? t.provider : "None")) +
+        " · Model: " +
+        escapeHtml(String(t.model != null && t.model !== "" ? t.model : "None")) +
+        "</div>" +
+        "<div>Tokens in/out/cached/total: " +
+        escapeHtml(String(t.input_tokens != null ? t.input_tokens : 0)) +
+        "/" +
+        escapeHtml(String(t.output_tokens != null ? t.output_tokens : 0)) +
+        "/" +
+        escapeHtml(String(t.cached_tokens != null ? t.cached_tokens : 0)) +
+        "/" +
+        escapeHtml(totalLabel) +
+        "</div>" +
+        "<div>Tools: " +
+        escapeHtml(tools || "None") +
+        " · Runtime: " +
+        escapeHtml(String(t.runtime_ms != null ? t.runtime_ms : "—")) +
+        " ms · Child run: " +
+        escapeHtml(String(t.child_ai_run_id || "None")) +
+        "</div>" +
+        "</div>"
+      );
+    }
+
     function renderRouteExecution(execution) {
       if (!execution) return;
       var status = execution.status || "";
@@ -783,16 +1089,32 @@
         (execution.fallback_from
           ? " (fallback from " + escapeHtml(execution.fallback_from) + ")"
           : "");
-      if (status === "completed") {
+      if (status === "completed" || (status === "failed" && execution.grounding)) {
+        var g = execution.grounding || {};
+        var gLine =
+          g.grounded_label || g.source
+            ? '<div class="ad-source">Source: ' +
+              escapeHtml(String(g.source || "selected context")) +
+              " · Grounded: " +
+              escapeHtml(String(g.grounded_label || (g.grounded ? "Yes" : "No"))) +
+              (g.grounded || !g.reason
+                ? ""
+                : " — " + escapeHtml(String(g.reason))) +
+              "</div>"
+            : "";
         appendMessage(
           "assistant",
-          "<strong>Route complete</strong> · " +
+          "<strong>Route " +
+            escapeHtml(status === "failed" ? "failed" : "complete") +
+            "</strong> · " +
             label +
-            "<pre class=\"ad-run-answer\">" +
+            '<pre class="ad-run-answer">' +
             escapeHtml(execution.answer || execution.partial_summary || "(no answer)") +
-            "</pre>"
+            "</pre>" +
+            gLine +
+            formatUsageTelemetryHtml(execution)
         );
-        setRunControls("idle");
+        setRunControls(status === "failed" ? "failed" : "idle");
         activeRouteExecutionId = null;
         stopRoutePoll();
         return;
@@ -920,12 +1242,41 @@
       }
       hideRoutingCard();
       setRunControls("running");
+      var routeAgent = mapRoutingAgent((rec && rec.recommended_agent) || "");
+      var overrideAgent = opts.agentOverride || null;
       appendMessage(
         "assistant",
-        "Executing recommended route: <strong>" +
-          escapeHtml((rec && (rec.recommended_label || rec.recommended_agent)) || "") +
-          "</strong>…"
+        overrideAgent
+          ? "Executing with selected provider: <strong>" +
+              escapeHtml(overrideAgent) +
+              "</strong>…"
+          : "Executing recommended route: <strong>" +
+              escapeHtml((rec && (rec.recommended_label || rec.recommended_agent)) || "") +
+              "</strong>…"
       );
+      var modelForRoute = "";
+      // Preserve UI model only when it belongs to the provider about to run.
+      if (overrideAgent) {
+        if (!routeAgent || overrideAgent === selectedAgent || overrideAgent === routeAgent) {
+          modelForRoute = currentSelectedModel();
+        }
+      } else if (routeAgent && routeAgent === selectedAgent) {
+        modelForRoute = currentSelectedModel();
+      }
+      if (opts.model) modelForRoute = opts.model;
+      if (!modelForRoute && rec && rec.recommended_model) {
+        modelForRoute = rec.recommended_model;
+      }
+      var repoFields = repositoryPayloadFields();
+      var routeNeedsRepo =
+        agentRequiresRepository(overrideAgent || routeAgent || mapRoutingAgent((rec && rec.recommended_agent) || ""));
+      if (routeNeedsRepo && !(repoFields.repository_ids || []).length) {
+        if (!assertRepositoryReady(overrideAgent || routeAgent || "codex")) {
+          setRunControls("idle");
+          return;
+        }
+        repoFields = repositoryPayloadFields();
+      }
       fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -933,9 +1284,12 @@
         body: JSON.stringify({
           prompt: prompt,
           approve_codex: !!opts.approveCodex,
-          agent_override: opts.agentOverride || null,
+          agent_override: overrideAgent,
           force: !!opts.force,
-          repository_ids: opts.repositoryIds || [],
+          repository_ids: opts.repositoryIds || repoFields.repository_ids,
+          selected_repository_id: repoFields.selected_repository_id,
+          active_repository_id: repoFields.active_repository_id,
+          model: modelForRoute || null,
         }),
       })
         .then(function (r) {
@@ -960,6 +1314,15 @@
                 "assistant",
                 "Codex approval required. Press Use Recommended again and confirm, or Choose Agent."
               );
+              setRunControls("idle");
+              return;
+            }
+            if (code === "repository_required" || code === "repository_unavailable") {
+              appendMessage(
+                "assistant",
+                escapeHtml(detail || "Select a connected repository before running this agent.")
+              );
+              if (repoSel) repoSel.focus();
               setRunControls("idle");
               return;
             }
@@ -1057,11 +1420,15 @@
     function requestRoute(prompt) {
       var url = smartRouting.recommend_url;
       if (!url) return Promise.reject(new Error("routing unavailable"));
+      var repoFields = repositoryPayloadFields();
       return fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ prompt: prompt }),
+        body: JSON.stringify({
+          prompt: prompt,
+          repository_ids: repoFields.repository_ids,
+        }),
       }).then(function (r) {
         return r.json().then(function (data) {
           if (!r.ok || !data || !data.ok) {
@@ -1140,6 +1507,16 @@
             }
             setRunControls("idle");
             showRoutingCard(rec, data.plan || null);
+            // Do NOT overwrite the user's agent/model selection with the
+            // recommendation — execution requires explicit acceptance
+            // (Use Recommended) or Choose Agent with the current selection.
+            if (routingBody) {
+              var keepNote = document.createElement("p");
+              keepNote.className = "ad-routing-note muted";
+              keepNote.textContent =
+                "Your selected provider stays unchanged until you press Use Recommended or Choose Agent.";
+              routingBody.appendChild(keepNote);
+            }
           })
           .catch(function () {
             setRunControls("idle");
@@ -1162,12 +1539,34 @@
       if (!selectedAgent) {
         appendMessage(
           "assistant",
-          "Select a provider first (lazy-loaded when the panel opens)."
+          "Select an available provider first. Unavailable CLIs (for example Cursor Agent without `agent` on PATH) are disabled."
         );
         ensureAgents();
         setRunControls("idle");
         return;
       }
+      var selectedOpt =
+        agentSel &&
+        Array.prototype.find.call(agentSel.options || [], function (o) {
+          return o.value === selectedAgent;
+        });
+      if (selectedOpt && selectedOpt.getAttribute("data-runnable") === "0") {
+        appendMessage(
+          "assistant",
+          "Provider <strong>" +
+            escapeHtml(selectedAgent) +
+            "</strong> is unavailable. " +
+            "Install its CLI or pick OpenAI / Grok / Codex / Hub Simulator. " +
+            "Cursor Agent needs `agent` or `cursor-agent` on PATH (the IDE <code>cursor</code> binary is not valid)."
+        );
+        setRunControls("idle");
+        return;
+      }
+      if (!assertRepositoryReady(selectedAgent)) {
+        setRunControls("idle");
+        return;
+      }
+      var repoFields = repositoryPayloadFields();
       previewContext(prompt).then(function () {
         setContextOpen(false);
       });
@@ -1179,9 +1578,11 @@
           mode: profile.default_mode || "ask",
           prompt: prompt,
           agent_id: selectedAgent,
-          model: selectedModel,
+          model: currentSelectedModel(),
           tools: profile.default_tools || [],
-          repository_ids: [],
+          repository_ids: repoFields.repository_ids,
+          selected_repository_id: repoFields.selected_repository_id,
+          active_repository_id: repoFields.active_repository_id,
         }),
       })
         .then(function (r) {
@@ -1282,11 +1683,17 @@
         agentSel.addEventListener("change", function () {
           selectedAgent = agentSel.value;
           loadModels(selectedAgent);
+          ensureRepositories();
         });
       }
       if (modelSel) {
         modelSel.addEventListener("change", function () {
           selectedModel = modelSel.value;
+        });
+      }
+      if (repoSel) {
+        repoSel.addEventListener("change", function () {
+          setSelectedRepository(repoSel.value, true);
         });
       }
       var settings = $("ad-settings");
@@ -1401,13 +1808,14 @@
       var useRec = $("ad-routing-use");
       if (useRec) {
         useRec.addEventListener("click", function () {
+          // Explicit acceptance of the Smart Routing recommendation.
+          applyRecommendedAgent(pendingRoute);
           executeRecommendedRoute(pendingRoute, {});
         });
       }
       var chooseAgent = $("ad-routing-choose");
       if (chooseAgent) {
         chooseAgent.addEventListener("click", function () {
-          hideRoutingCard();
           ensureAgents();
           var prompt = pendingPrompt || lastPrompt || "";
           if (!prompt) {
@@ -1424,15 +1832,24 @@
             );
             return;
           }
-          // Explicit manual override: one-shot skip of recommend only; still poll child run.
-          skipRoutingOnce = true;
+          // Explicit manual override — preserve selected provider/model; do not
+          // substitute the recommendation (and never Hub Simulator unless chosen).
+          var rec = pendingRoute || {
+            recommended_agent: selectedAgent,
+            recommended_label: selectedAgent,
+            approval_required: /^(codex|claude-code|cursor-agent)$/.test(selectedAgent),
+          };
           appendMessage(
             "assistant",
             "Manual override — running with <strong>" +
               escapeHtml(selectedAgent) +
               "</strong>…"
           );
-          sendPrompt(prompt, { suppressUserBubble: true, forceManual: true });
+          executeRecommendedRoute(rec, {
+            agentOverride: selectedAgent,
+            model: currentSelectedModel() || null,
+            approveCodex: true,
+          });
         });
       }
       var cancelRoute = $("ad-routing-cancel");

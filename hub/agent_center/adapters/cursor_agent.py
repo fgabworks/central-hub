@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from hub.agent_center.adapters.base import AgentAvailability, which_executable
 from hub.agent_center.adapters.cli_common import BaseCliAdapter
 
@@ -8,12 +10,15 @@ class CursorAgentAdapter(BaseCliAdapter):
     """Cursor Agent CLI only — never the IDE `cursor` editor binary."""
 
     _CANDIDATES = ("agent", "cursor-agent")
-    authentication_method = "Cursor CLI browser authentication"
+    authentication_method = "Official Cursor Agent CLI login (`agent login`)"
+    credential_storage = "Cursor Agent CLI managed. Hub never stores Cursor credentials."
 
     def _authentication_probe(self, executable: str) -> dict[str, Any]:
         result = self._run_probe([executable, "status"])
         text = (result.stdout or result.stderr or "").strip()
-        if result.returncode == 0 and not any(word in text.lower() for word in ("not logged", "unauthenticated", "login required")):
+        if result.returncode == 0 and not any(
+            word in text.lower() for word in ("not logged", "unauthenticated", "login required")
+        ):
             return {"state": "connected", "detail": "Cursor Agent authenticated"}
         return {"state": "authentication_required", "detail": "Cursor Agent authentication required"}
 
@@ -22,6 +27,21 @@ class CursorAgentAdapter(BaseCliAdapter):
 
     def _logout_argv(self, executable: str) -> list[str]:
         return [executable, "logout"]
+
+    def _cli_command_candidates(self) -> tuple[str, ...]:
+        return self._CANDIDATES
+
+    def _install_help(self) -> str:
+        return (
+            "Install the Cursor Agent CLI so `agent` or `cursor-agent` is on PATH. "
+            "The IDE `cursor` binary is not a valid AiriX runner."
+        )
+
+    def _missing_cli_detail(self) -> str:
+        return (
+            "Cursor Agent CLI not found on PATH (expected `agent` or `cursor-agent`). "
+            "The IDE `cursor` binary is not an agent runner."
+        )
 
     def list_models(self) -> tuple[list[str], str]:
         exe = self.resolve_executable()
@@ -60,18 +80,26 @@ class CursorAgentAdapter(BaseCliAdapter):
                 models=[],
                 models_source="none",
             )
-        models, source = self.list_models()
-        exe = self.resolve_executable()
-        if not exe:
+        status = self.connection_status()
+        models, source = self.list_models() if status.get("installed") else ([], "none")
+        if not status.get("installed"):
             return AgentAvailability(
                 id=desc.id,
                 label=desc.label,
                 status="unavailable",
-                detail=(
-                    "Cursor Agent CLI not found on PATH (expected `agent` or `cursor-agent`). "
-                    "The IDE `cursor` binary is not an agent runner."
-                ),
+                detail=str(status.get("detail") or self._missing_cli_detail()),
                 executable_found=False,
+                modes=list(desc.modes),
+                models=models,
+                models_source=source,
+            )
+        if status.get("state") != "connected":
+            return AgentAvailability(
+                id=desc.id,
+                label=desc.label,
+                status="unavailable",
+                detail=str(status.get("detail") or "Not authenticated"),
+                executable_found=True,
                 modes=list(desc.modes),
                 models=models,
                 models_source=source,
@@ -80,7 +108,7 @@ class CursorAgentAdapter(BaseCliAdapter):
             id=desc.id,
             label=desc.label,
             status="available",
-            detail=f"Found {exe}",
+            detail=f"Found {self.resolve_executable()}",
             executable_found=True,
             modes=list(desc.modes),
             models=models,
@@ -88,16 +116,20 @@ class CursorAgentAdapter(BaseCliAdapter):
         )
 
     def _default_template(self, mode: str) -> list[str]:
-        # Prompt is large; pass via file path for the CLI when supported.
         return [
-            "{executable}", "-p", "{prompt}", "--mode=ask",
-            "--output-format", "text", "--model", "{model}",
+            "{executable}",
+            "-p",
+            "{prompt}",
+            "--mode=ask",
+            "--output-format",
+            "text",
+            "--model",
+            "{model}",
         ]
 
     @staticmethod
     def _looks_like_editor_cli(path: str) -> bool:
         lowered = path.replace("\\", "/").lower()
-        # Windows ships cursor.CMD / cursor.exe as the editor launcher.
         if lowered.endswith("/cursor.cmd") or lowered.endswith("/cursor.exe"):
             return True
         if lowered.endswith("/cursor") and "/resources/app/bin/" in lowered:

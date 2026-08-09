@@ -190,8 +190,21 @@ class OpenAIClient:
 
 
 def _is_text_model_candidate(model_id: str) -> bool:
-    """Exclude obviously non-text modalities without hardcoding chat model names."""
-    mid = model_id.lower()
+    """Exclude non-chat / legacy completion / non-text modalities.
+
+    Does not hard-code a preferred chat model — only filters families that are
+    incompatible with the Responses-style adapters used by Agent Center.
+    """
+    mid = (model_id or "").strip().lower()
+    if not mid:
+        return False
+    # Legacy completion engines (e.g. babbage-002) sort first alphabetically and
+    # must never become a silent default when the UI sends no/empty model.
+    for legacy in ("babbage", "davinci", "curie", "ada"):
+        if mid == legacy or mid.startswith(legacy + "-"):
+            return False
+    if mid.startswith("text-") or mid.startswith("code-"):
+        return False
     blocked = (
         "embedding",
         "whisper",
@@ -199,7 +212,6 @@ def _is_text_model_candidate(model_id: str) -> bool:
         "audio",
         "realtime",
         "dall-e",
-        "davinci-codex",
         "moderation",
         "transcribe",
         "image",

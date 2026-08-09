@@ -45,7 +45,12 @@ class FakeProvider:
         return {
             "state": self.state, "detail": f"state={self.state}", "installed": True,
             "available": self.state == "connected", "account_label": "safe-account",
+            "authenticated": self.state == "connected", "version": "1.0.0",
+            "cli_commands": [self.descriptor.executable or self.descriptor.id],
         }
+
+    def resolve_executable(self):
+        return sys.executable
 
     def connect(self):
         self.state = "connected"

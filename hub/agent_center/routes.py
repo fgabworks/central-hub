@@ -276,12 +276,23 @@ def register_agent_center_routes(app: Flask) -> None:
             return jsonify({"ok": False, "error": "prompt is required"}), 400
         probe = bool(payload.get("probe_providers"))
         session_id = str(payload.get("session_id") or "").strip() or None
+        repository_ids = list(payload.get("repository_ids") or [])
         actor = _routing_actor()
         rec = _router().recommend_route(
-            prompt, workspace="work", actor=actor, probe_providers=probe, session_id=session_id
+            prompt,
+            workspace="work",
+            actor=actor,
+            probe_providers=probe,
+            session_id=session_id,
+            repository_ids=repository_ids,
         )
         plan = _router().build_execution_plan(
-            prompt, workspace="work", actor=actor, recommendation=rec, session_id=session_id
+            prompt,
+            workspace="work",
+            actor=actor,
+            recommendation=rec,
+            session_id=session_id,
+            repository_ids=repository_ids,
         )
         _audit(
             audit_actions.AIRIX_ROUTING_RECOMMEND,
@@ -319,8 +330,11 @@ def register_agent_center_routes(app: Flask) -> None:
         approve_codex = bool(payload.get("approve_codex"))
         force = bool(payload.get("force"))
         repository_ids = list(payload.get("repository_ids") or [])
+        active_repository_id = str(payload.get("active_repository_id") or "").strip() or None
+        selected_repository_id = str(payload.get("selected_repository_id") or "").strip() or None
         session_id = str(payload.get("session_id") or "").strip() or None
         orchestrate = payload.get("orchestrate")
+        model = str(payload.get("model") or "").strip() or None
         try:
             attempt = int(payload.get("attempt") or 0)
         except (TypeError, ValueError):
@@ -334,12 +348,15 @@ def register_agent_center_routes(app: Flask) -> None:
                 actor=actor,
                 agent_override=agent_override,
                 repository_ids=repository_ids,
+                active_repository_id=active_repository_id,
+                selected_repository_id=selected_repository_id,
                 approve_codex=approve_codex,
                 force=force,
                 attempt=attempt,
                 previous_partial=previous_partial,
                 session_id=session_id,
                 orchestrate=None if orchestrate is None else bool(orchestrate),
+                model=model,
             )
         except AgentCenterError as exc:
             return _routing_http_error(exc)
@@ -352,7 +369,25 @@ def register_agent_center_routes(app: Flask) -> None:
                 "execution_id": execution.get("id"),
                 "provider_id": execution.get("provider_id"),
                 "status": execution.get("status"),
-                "manual_override": bool(agent_override),
+                "manual_override": bool(agent_override) or bool(execution.get("manual_override")),
+                "selected_provider": execution.get("selected_provider")
+                or agent_override
+                or "",
+                "recommended_provider": execution.get("recommended_provider") or "",
+                "resolved_provider": execution.get("resolved_provider")
+                or execution.get("adapter_id")
+                or execution.get("provider_id")
+                or "",
+                "selected_model": model
+                or execution.get("selected_model")
+                or "",
+                "recommended_model": execution.get("recommended_model") or "",
+                "resolved_model": execution.get("resolved_model")
+                or execution.get("model")
+                or "",
+                "fallback_reason": execution.get("fallback_reason")
+                or execution.get("fallback_from")
+                or "",
                 "mode": execution.get("mode"),
                 "attempt": attempt,
             },
@@ -407,6 +442,30 @@ def register_agent_center_routes(app: Flask) -> None:
         # Default: serve cache/placeholder; refresh=1 probes providers.
         probe = refresh or request.args.get("probe", "0") == "1"
         return jsonify({"agents": _svc().list_agents(mode=mode, probe=probe, profile_id=profile_id)})
+
+    @app.get("/api/agents/repositories")
+    @app.get("/api/assistants/<profile_id>/repositories")
+    def api_agent_repositories(profile_id: str = "okarun"):
+        try:
+            _svc().page_bootstrap(profile_id)
+        except ValueError:
+            return jsonify({"error": "Unknown assistant profile"}), 404
+        repos = _svc().repositories(profile_id)
+        return jsonify(
+            {
+                "repositories": [
+                    {
+                        "id": r.get("id"),
+                        "name": r.get("name") or r.get("label") or r.get("id"),
+                        "path": r.get("local_path") or r.get("path") or "",
+                        "selectable": bool(r.get("selectable")),
+                        "connected": bool(r.get("selectable")),
+                    }
+                    for r in repos
+                    if r.get("id") and r.get("selectable")
+                ]
+            }
+        )
 
     @app.get("/api/agents/<agent_id>/models")
     @app.get("/api/assistants/<profile_id>/agents/<agent_id>/models")
@@ -540,8 +599,19 @@ def _public_run(run: dict[str, Any], *, include_body: bool = False) -> dict[str,
             "included_sources": (run.get("context") or {}).get("included_sources") or [],
             "excluded_sources": (run.get("context") or {}).get("excluded_sources") or [],
             "connection": (run.get("context") or {}).get("connection") or {},
+            "grounding": (run.get("context") or {}).get("grounding") or {},
+            "evidence_packet": (run.get("context") or {}).get("evidence_packet") or {},
+            "selected_model": (run.get("context") or {}).get("selected_model") or "",
+            "resolved_model": (run.get("context") or {}).get("resolved_model")
+            or run.get("model")
+            or "",
         },
     }
+    grounding = out["context"].get("grounding") or {}
+    if grounding:
+        out["grounding"] = grounding
+    out["selected_model"] = out["context"]["selected_model"]
+    out["resolved_model"] = out["context"]["resolved_model"]
     if include_body:
         out["answer"] = run.get("answer") or ""
         out["logs"] = run.get("logs") or ""

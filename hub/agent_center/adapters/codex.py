@@ -31,7 +31,7 @@ class CodexAdapter(BaseCliAdapter):
         caps = super().capabilities()
         caps.update(
             {
-                "dynamic_models": False,
+                "dynamic_models": True,
                 "provider_default_model": True,
                 "jsonl_streaming": True,
                 "repository_runs": True,
@@ -41,25 +41,26 @@ class CodexAdapter(BaseCliAdapter):
         return caps
 
     def list_models(self) -> tuple[list[str], str]:
-        # MVP: authenticated Codex default model only — no discovery yet.
-        return [self.default_model_token], "provider_default"
+        details = self.list_model_details(force_refresh=False)
+        return list(details.get("models") or []), str(details.get("models_source") or "none")
 
     def list_model_details(self, *, mode: str = "ask", force_refresh: bool = False) -> dict[str, Any]:
-        models, source = self.list_models()
+        from hub.agent_center.codex_models import discover_codex_models
+
+        exe = self.resolve_executable()
+        discovered = discover_codex_models(exe, force_refresh=force_refresh)
         return {
-            "models": models,
-            "model_details": [
-                {
-                    "id": self.default_model_token,
-                    "display_name": "Codex default (authenticated)",
-                    "availability": "available",
-                }
-            ],
-            "groups": {},
-            "recommended_model": self.default_model_token,
-            "models_source": source,
+            "models": list(discovered.get("models") or []),
+            "model_details": list(discovered.get("model_details") or []),
+            "groups": {
+                "codex": [m for m in (discovered.get("models") or []) if m != self.default_model_token]
+            },
+            "recommended_model": discovered.get("recommended_model") or self.default_model_token,
+            "recommendation_reason": discovered.get("models_source") or "provider_default",
+            "models_source": discovered.get("models_source") or "provider_default",
+            "configured_default": discovered.get("configured_default") or "",
             "reasoning_efforts": [],
-            "error": "",
+            "error": discovered.get("error") or "",
         }
 
     def connection_status(self, *, force_refresh: bool = False) -> dict[str, Any]:
@@ -73,6 +74,11 @@ class CodexAdapter(BaseCliAdapter):
                 "authenticated": False,
                 "version": "",
                 "available": False,
+                "cli_commands": ["codex"],
+                "install_help": (
+                    "Install the Codex CLI (`codex`) and use Connect to run official `codex login`. "
+                    "Codex uses the authenticated Codex/ChatGPT account — separate from OPENAI_API_KEY billing."
+                ),
             }
         version = self._detect_version(exe)
         try:
@@ -249,9 +255,8 @@ class CodexAdapter(BaseCliAdapter):
             "--json",
             prompt_arg,
         ]
-        # Default model only — omit --model so Codex uses the authenticated default.
+        # Omit --model when using provider default so Codex uses its configured/recommended default.
         if model and model not in {"", self.default_model_token, "__provider_default__"}:
-            # Still allow an explicit model later; MVP UI always sends provider default.
             insert_at = argv.index("--json")
             argv[insert_at:insert_at] = ["--model", model]
         assert_safe_codex_argv(argv)

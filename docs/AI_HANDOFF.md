@@ -4,7 +4,125 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**AiriX manual-run stuck "Running" fix (2026-08-10)**
+**AiriX manual provider selection is authoritative (2026-08-10)**
+
+Root cause: (1) RouteExecutor silently substituted an alternate adapter when the
+selected provider was unavailable — often `low-cost` → Hub Simulator; (2) the dock
+overwrote the user's agent dropdown with the Smart Routing recommendation before
+acceptance.
+
+Fix: explicit `agent_override` / Choose Agent is authoritative; unavailable /
+unauthenticated providers fail with the real error (no auto-fallback); Hub Simulator
+runs only when explicitly selected or accepted via Use Recommended (low-cost);
+selected + recommended + resolved provider/model and `manual_override` /
+`fallback_reason` are logged and audited; dock cache `shell-dock-20`. Tests:
+`tests/test_airix_manual_provider_selection.py`.
+
+Prior: **AiriX dynamic data-query classification (2026-08-10)**
+
+Root cause: locality abbreviations like `Brgy.` did not match geo regexes, so structured
+count/indicator prompts (e.g. Baloy 2026 Q2) were classified as general knowledge and
+routed to Hub Simulator (T1) instead of T0 tools.
+
+Fix: `hub/agent_center/data_intent.py` detects structured data intent from value cues
+(count/total/%/eligible/indicator/status) + admin/OU/period/UID filters — not fixed
+place or beneficiary lists. `scope.py` applies data-query before simple GK; bare
+`national` inside a count is admin scope, not a GK override. Classifier marks
+`authoritative_data_query` → T0. Router never recommends `low-cost`/Hub Simulator for
+these prompts. T0 miss → `Cannot verify from selected context` (no demo/GK substitute).
+Tests: `tests/test_airix_data_query_classification.py`.
+
+Prior: **AiriX AI usage telemetry (2026-08-10)**
+
+Every Smart Routing execution stamps event-sourced usage telemetry
+(`hub/agent_center/routing/telemetry.py`): tier, Deterministic/AI/Hybrid,
+LLM Yes/No, provider, model, input/output/cached/total AI tokens, tools,
+runtime, child AI run id. Pure T0 forces provider/model/run id = None and all
+AI tokens = 0 (never inferred from UI labels). Persisted on
+`airix_routing_events` (migration `009_airix_usage_telemetry`); shown in dock
+diagnostics (`shell-dock-20`). Tests: `tests/test_airix_usage_telemetry.py`.
+
+Prior: **AiriX dynamic scope detection + GK routing (2026-08-10)**
+
+Root cause: grounding treated any province/region/OU phrase as project-bound whenever
+a repo was selected (hard-coded topic regex), so national/general prompts were forced
+into selected-context evidence and simple GK could still escalate oddly.
+
+Fix: `hub/agent_center/scope.py` classifies each prompt as project / dhis2_data /
+national_general / general_knowledge / current_web / ambiguous. Explicit broader scope
+overrides the selected repo; selected repo is authoritative only for project or
+ambiguous prompts. T0 answers when evidence exists; T0 miss + project → cannot-verify;
+T0 miss + national/GK/web → fall through to lowest-tier model. Simple GK routes to T1
+(never Codex). Evidence hits dedupe by UID. Prior findings drop on incompatible scope
+change. Smart Routing still recommends Provider + Model. Tests:
+`tests/test_airix_scope_routing.py`.
+
+Prior: **AiriX grounding + dynamic Codex models (2026-08-10)**
+
+1) Selected-context grounding: project OU/UID/DHIS2 questions use Hub tools +
+selected repo evidence; no silent general-knowledge fallback; T0 first;
+`Grounded: Yes/No` on results (`hub/agent_center/grounding.py`).
+
+2) Dynamic provider models: Codex discovers models via official
+`codex debug models` (+ `~/.codex/models_cache.json` fallback). Dropdown is
+populated from the account catalog (Sol/Terra/Luna when listed). Never hard-codes
+`__provider_default__` as the only choice when real models exist. Selected model
+is passed as `codex exec --model …`; empty/default omits the flag so Codex uses
+its configured default. Smart Routing recommends **Provider + Model**. UI shows
+Selected/Resolved provider·model and grounding source. Cache `shell-dock-18`.
+Tests: `tests/test_airix_codex_models.py`, `tests/test_airix_grounding.py`,
+`tests/test_airix_model_selection.py`.
+
+**Limitation:** Claude Code has no supported non-interactive model-catalog CLI;
+Cursor discovers via `agent models`. Codex catalog depends on CLI install +
+auth + `codex debug models` / models cache freshness.
+
+Prior: **AiriX selected-context grounding (2026-08-10)**
+
+When a repository is selected, project questions (OU / UID / DHIS2 / reports /
+indicators / mappings / coverage / configuration) must be answered from Hub
+tools + selected-repo evidence — never silent general-knowledge fallback.
+Region III-style prompts prefer T0 (`org_unit_lookup`, UID index, repo search).
+Coding CLIs without usable evidence return "Cannot verify from selected context"
+with `Grounded: No`. Answers that admit lookup unavailable then invent facts are
+marked `ungrounded_answer` / failed. Module: `hub/agent_center/grounding.py`.
+Cache `shell-dock-17`. Tests: `tests/test_airix_grounding.py`.
+
+Prior: **AiriX repository context for coding agents (2026-08-10)**
+
+Codex / Claude Code / Cursor Agent require a connected repository. Resolution
+priority (never blind first-of-many): explicit selection → persisted dock
+selection → active workspace terminal repo → sole connected repo → else require
+user selection. Dock `#ad-repo` selector; prefs `selected_repository_id` per
+workspace; IDs pass through recommend / execute / manual / retry / resume;
+T0/DHIS2/non-repo agents stay repo-free; access validated before run; preview
+shows selected repo. Module: `hub/agent_center/repository_context.py`. Cache
+`shell-dock-16`. Tests: `tests/test_airix_repository_context.py`.
+
+Prior: **AiriX coding-CLI provider connections (2026-08-10)**
+
+Account-backed coding agents (Codex, Claude Code, Cursor Agent): detect
+installed/missing CLI, authenticated status, version, last checked; Connect /
+Re-authenticate / Test / Sign out via official CLI auth only (no cookies/secrets
+in Hub). Compact **AI Provider Connections** panel on Settings; full page at
+`/system/ai-connections`. Smart Routing excludes providers that are not
+installed+authenticated+healthy; dock keeps unavailable agents disabled.
+Module notes: `hub/agent_center/connections.py`, CLI adapters. Tests:
+`tests/test_airix_coding_cli_connections.py`.
+
+Prior: **AiriX dynamic model selection fix (2026-08-10)**
+
+UI-selected provider + model are passed end-to-end (dock → payload → AgentCenter →
+adapter → API). Root cause: OpenAI `/v1/models` included legacy completion IDs
+(`babbage-002`, …) that sorted first; dock defaulted to `models[0]`; Smart Routing
+`start_run` omitted `model`. Fix: filter legacy completion families; dock prefers
+`recommended_model` / preserves selection and reads the selector at send time;
+shared `model_selection.resolve_model_for_run` validates availability (no silent
+substitute); routing/execute/retry/fallback preserve or re-resolve with logged
+`selected`/`resolved`/`fallback_reason`. Cache `shell-dock-13`. Tests:
+`tests/test_airix_model_selection.py`.
+
+Prior: **AiriX manual-run stuck "Running" fix (2026-08-10)**
 
 Root cause: dock `pollRun` treated the GET `/runs/<id>` wrapper `{run: {...}}`
 as the run object and only stopped on `succeeded|failed|cancelled`, while

@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-10 (AiriX manual-run stuck Running fix).
+Last verified: 2026-08-10 (AiriX AI usage telemetry).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -120,9 +120,33 @@ shared and unchanged.
 | `/api/assistants/<profile>/prompts` | Isolated saved prompt library |
 
 Implementation: `hub/agent_center/` (incl. `dock.py`, `routing/lifecycle.py`), `config/agents.yaml`, SQLite `data/agent_center.db`,
-`templates/partials/assistant_dock_panel.html`, `static/js/assistant_dock.js` (`shell-dock-12`).
+`templates/partials/assistant_dock_panel.html`, `static/js/assistant_dock.js` (`shell-dock-20`).
+Coding CLIs (Codex / Claude Code / Cursor Agent) resolve repository context via
+`hub/agent_center/repository_context.py` (explicit → persisted dock selection →
+active workspace terminal repo → sole connected; never first-of-many).
+Selected-context grounding (`hub/agent_center/grounding.py` + `scope.py` + `data_intent.py`)
+classifies prompt scope (project / dhis2 / national / GK / web / ambiguous) and detects
+structured data queries from value intent + admin/OU/period/UID filters (abbreviations
+like `Brgy.` included). Explicit broader scope overrides the selected repo; ambiguous +
+selected repo stays project-bound. Authoritative data questions prefer T0 tools and never
+route to Hub Simulator; T0 miss → cannot-verify (no demo/GK substitute). Project T0 miss →
+cannot-verify; national/GK/web T0 miss (non-data) → lowest-tier model. Evidence deduped by UID.
+Results expose Source + Grounded Yes/No.
+Manual provider selection (`agent_override` / Choose Agent) is authoritative: never silently
+swap Codex/Claude/Cursor/Grok to Hub Simulator; unavailable providers fail with the real
+error; Smart Routing recommendations require Use Recommended acceptance. Executions log
+selected/recommended/resolved provider+model, `manual_override`, and `fallback_reason`.
+Every Smart Routing execution records event-sourced AI usage telemetry
+(`hub/agent_center/routing/telemetry.py`): tier, Deterministic/AI/Hybrid, LLM Yes/No,
+provider/model, tokens (actual when provider-reported, else marked estimate), tools,
+runtime, child AI run id. Pure T0 forces zero AI tokens and null provider/model/run id.
+Codex models are discovered via `codex debug models` / CLI models cache
+(`hub/agent_center/codex_models.py`); Smart Routing recommends Provider + Model;
+selected model reaches `codex exec --model`.
 Dock polls unwrap `{run: ...}` and stop on `completed|failed|cancelled|paused_for_approval|timed_out`;
 T0 lookups auto-execute; Choose Agent is a one-shot manual override (skip recommend once only).
+Selected provider/model are validated and passed through (`hub/agent_center/model_selection.py`);
+legacy completion IDs are never used as silent defaults.
 Modes: Find / Ask / Plan / Review. Edit / Test labeled **Not yet available**.
 Adapters: Hub Simulator (demo), **OpenAI API** and **Grok/xAI** Responses APIs,
 plus Claude Code / Cursor Agent / Codex CLIs. Provider accounts are managed at

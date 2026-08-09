@@ -92,6 +92,35 @@ class RoutingHistoryStore:
         actor = str(payload.get("actor") or "owner").strip() or "owner"
         rbac_role = str(payload.get("rbac_role") or "")[:40]
         permission_denied = 1 if payload.get("permission_denied") or outcome == "permission_denied" else 0
+        cached_tokens = payload.get("cached_tokens")
+        try:
+            cached_tokens_i = int(cached_tokens) if cached_tokens is not None else None
+        except (TypeError, ValueError):
+            cached_tokens_i = None
+        tools_used = payload.get("tools_used") or []
+        if not isinstance(tools_used, list):
+            tools_used = []
+        telemetry = payload.get("telemetry") if isinstance(payload.get("telemetry"), dict) else {}
+        llm_invoked = 1 if payload.get("llm_invoked") else 0
+        if telemetry:
+            llm_invoked = 1 if telemetry.get("llm_invoked") else 0
+        execution_type = str(
+            payload.get("execution_type") or telemetry.get("execution_type") or ""
+        )[:40]
+        model = str(payload.get("model") or telemetry.get("model") or "")[:120]
+        child_ai_run_id = str(
+            payload.get("child_ai_run_id") or telemetry.get("child_ai_run_id") or ""
+        )[:64]
+        # T0 purity: never persist AI identity/tokens for pure deterministic events.
+        if (t0_avoided or execution_type == "Deterministic") and not llm_invoked:
+            actual_tokens_i = 0
+            input_tokens_i = 0
+            output_tokens_i = 0
+            cached_tokens_i = 0
+            model = ""
+            child_ai_run_id = ""
+            llm_invoked = 0
+            execution_type = "Deterministic"
         row = {
             "id": event_id,
             "workspace": workspace,
@@ -109,6 +138,7 @@ class RoutingHistoryStore:
             "actual_tokens": actual_tokens_i,
             "input_tokens": input_tokens_i,
             "output_tokens": output_tokens_i,
+            "cached_tokens": cached_tokens_i,
             "estimated_tokens": estimated_tokens_i,
             "estimated_cost_usd": estimated_cost,
             "actual_cost_usd": actual_cost,
@@ -125,15 +155,22 @@ class RoutingHistoryStore:
             ),
             "rbac_role": rbac_role,
             "permission_denied": permission_denied,
-            "usage_source": str(payload.get("usage_source") or ("actual" if actual_tokens_i is not None else "estimate"))[
-                :20
-            ],
+            "usage_source": str(
+                payload.get("usage_source")
+                or ("actual" if actual_tokens_i is not None else "estimate")
+            )[:20],
             "t0_llm_avoided": t0_avoided,
             "fallback_from": fallback_from,
             "escalated_to": escalated_to,
             "prompt_fingerprint": str(payload.get("prompt_fingerprint") or "")[:64],
             "error_code": str(payload.get("error_code") or "")[:80],
             "partial_summary": partial,
+            "execution_type": execution_type,
+            "llm_invoked": llm_invoked,
+            "model": model,
+            "child_ai_run_id": child_ai_run_id,
+            "tools_used_json": json.dumps([str(t) for t in tools_used[:20]]),
+            "telemetry_json": json.dumps(telemetry or {}),
         }
         with self.db.connect() as conn:
             cols = {r[1] for r in conn.execute("PRAGMA table_info(airix_routing_events)").fetchall()}
@@ -163,12 +200,19 @@ class RoutingHistoryStore:
                 "actor",
                 "input_tokens",
                 "output_tokens",
+                "cached_tokens",
                 "estimated_tokens",
                 "estimated_cost_usd",
                 "actual_cost_usd",
                 "findings_reused_json",
                 "rbac_role",
                 "permission_denied",
+                "execution_type",
+                "llm_invoked",
+                "model",
+                "child_ai_run_id",
+                "tools_used_json",
+                "telemetry_json",
             ]
             insert_cols = [c for c in base_cols if c in cols] + [c for c in optional if c in cols]
             placeholders = ",".join("?" for _ in insert_cols)
@@ -749,11 +793,22 @@ class RoutingHistoryStore:
         t0_avoided = 0
         permission_blocked = 0
         findings_reused = 0
+        by_execution_type: dict[str, int] = {}
+        llm_invoked_count = 0
+        t0_pure_count = 0
         for ev in events:
             tier = str(ev.get("tier") or "?")
             prov = str(ev.get("provider_id") or "?")
             by_tier[tier] = by_tier.get(tier, 0) + 1
             by_provider[prov] = by_provider.get(prov, 0) + 1
+            et = str(ev.get("execution_type") or "") or (
+                "Deterministic" if ev.get("t0_llm_avoided") else "AI"
+            )
+            by_execution_type[et] = by_execution_type.get(et, 0) + 1
+            if ev.get("llm_invoked"):
+                llm_invoked_count += 1
+            if ev.get("t0_llm_avoided") or et == "Deterministic":
+                t0_pure_count += 1
             outcome = str(ev.get("outcome") or "")
             if outcome == "success":
                 successes += 1
@@ -797,6 +852,9 @@ class RoutingHistoryStore:
             "executions_total": total,
             "executions_by_tier": by_tier,
             "executions_by_provider": by_provider,
+            "executions_by_type": by_execution_type,
+            "llm_invoked_total": llm_invoked_count,
+            "t0_pure_total": t0_pure_count,
             "success_rate": round(successes / total, 3) if total else None,
             "successes": successes,
             "failures": failures,

@@ -71,11 +71,37 @@ class XaiApiAdapter:
 
     def resolve_run_model(self, *, mode: str, requested_model: str | None, force_refresh: bool = True) -> dict[str, Any]:
         details = self.list_model_details(mode=mode, force_refresh=force_refresh)
-        models = details["models"]
-        model = (requested_model or "").strip() or details.get("recommended_model")
+        models = list(details["models"] or [])
+        requested = (requested_model or "").strip()
+        if requested and requested not in models:
+            return {
+                "ok": False,
+                "code": "model_unavailable",
+                "error": f"Model {requested!r} is not available to this xAI API key",
+                "selected_model": requested,
+                "resolved_model": "",
+            }
+        model = requested or details.get("recommended_model")
         if not model or model not in models:
-            return {"ok": False, "code": "model_unavailable", "error": "Selected Grok model is not available to this API key"}
-        return {"ok": True, "model": model, "reason": "dynamic", "supports_reasoning_effort": False, "background": False, "is_pro": False, "timeout_seconds": self.settings.timeout_seconds}
+            return {
+                "ok": False,
+                "code": "model_unavailable",
+                "error": details.get("error") or "No Grok models are accessible for this API key",
+                "selected_model": requested,
+                "resolved_model": "",
+            }
+        return {
+            "ok": True,
+            "model": model,
+            "reason": "user_selected" if requested else "provider_default",
+            "supports_reasoning_effort": False,
+            "background": False,
+            "is_pro": False,
+            "timeout_seconds": self.settings.timeout_seconds,
+            "selected_model": requested,
+            "resolved_model": model,
+            "models_source": details.get("models_source"),
+        }
 
     def availability(self) -> AgentAvailability:
         status = self.connection_status()

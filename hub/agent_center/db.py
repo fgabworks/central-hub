@@ -219,6 +219,18 @@ _MIGRATIONS: list[tuple[str, str]] = [
             ON airix_routing_acl(workspace, role_id);
         """,
     ),
+    (
+        "009_airix_usage_telemetry",
+        """
+        ALTER TABLE airix_routing_events ADD COLUMN cached_tokens INTEGER;
+        ALTER TABLE airix_routing_events ADD COLUMN execution_type TEXT NOT NULL DEFAULT '';
+        ALTER TABLE airix_routing_events ADD COLUMN llm_invoked INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE airix_routing_events ADD COLUMN model TEXT NOT NULL DEFAULT '';
+        ALTER TABLE airix_routing_events ADD COLUMN child_ai_run_id TEXT NOT NULL DEFAULT '';
+        ALTER TABLE airix_routing_events ADD COLUMN tools_used_json TEXT NOT NULL DEFAULT '[]';
+        ALTER TABLE airix_routing_events ADD COLUMN telemetry_json TEXT NOT NULL DEFAULT '{}';
+        """,
+    ),
 ]
 
 

@@ -199,6 +199,143 @@ class AgentCenterService:
         profile = get_profile(profile_id)
         return selectable_repositories(self.registry) if profile.repositories_allowed else []
 
+    def resolve_repository_ids(
+        self,
+        profile_id: str,
+        *,
+        repository_ids: list[str] | None = None,
+        agent_id: str = "",
+        active_repository_id: str | None = None,
+        selected_repository_id: str | None = None,
+        raise_on_error: bool = True,
+    ) -> list[str]:
+        """
+        Resolve repository scope for a run.
+
+        Priority: explicit → persisted selection → active workspace → sole connected.
+        Never blind-picks the first of many. Raises when a coding CLI needs a repo
+        and none can be resolved.
+        """
+        from hub.agent_center.repository_context import resolve_repository_context
+
+        try:
+            selectable = self.repositories(profile_id)
+        except Exception:  # noqa: BLE001
+            selectable = []
+        resolved = resolve_repository_context(
+            agent_id=agent_id,
+            repository_ids=repository_ids,
+            active_repository_id=active_repository_id,
+            selected_repository_id=selected_repository_id,
+            repositories=selectable,
+        )
+        if not resolved["ok"]:
+            if raise_on_error:
+                raise AgentCenterError(
+                    str(resolved.get("error") or "Repository required"),
+                    code=str(resolved.get("code") or "repository_required"),
+                )
+            return []
+        return list(resolved.get("repository_ids") or [])
+
+    def default_repository_ids(
+        self,
+        profile_id: str,
+        *,
+        repository_ids: list[str] | None = None,
+        agent_id: str = "",
+        active_repository_id: str | None = None,
+        selected_repository_id: str | None = None,
+    ) -> list[str]:
+        """Compatibility wrapper — does not raise; returns [] when unresolved."""
+        return self.resolve_repository_ids(
+            profile_id,
+            repository_ids=repository_ids,
+            agent_id=agent_id,
+            active_repository_id=active_repository_id,
+            selected_repository_id=selected_repository_id,
+            raise_on_error=False,
+        )
+
+    def tools_context(
+        self,
+        *,
+        profile_id: str = "okarun",
+        tool_ids: list[str] | None = None,
+        repository_ids: list[str] | None = None,
+    ) -> AgentToolsContext:
+        profile = get_profile(profile_id)
+        tools = normalize_tools(profile, tool_ids)
+        return AgentToolsContext(
+            registry=self.registry,
+            repository_ids=list(repository_ids or []),
+            notebook=self.notebook,
+            sql_store=self.sql_store,
+            uid_index=self.uid_index,
+            email=self.email,
+            calendar=self.calendar,
+            job_store=self.job_store,
+            audit_store=self.audit_store,
+            dhis2_reports=self.dhis2_reports,
+            notepad_factory=self.notepad_factory,
+            profile_id=profile.id,
+            workspace=profile.workspace,
+            allowed_tools=set(tools),
+        )
+
+    def prepare_grounding(
+        self,
+        prompt: str,
+        *,
+        profile_id: str = "okarun",
+        repository_ids: list[str] | None = None,
+        tool_ids: list[str] | None = None,
+        evidence_packet: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Collect evidence and grounding rules for a prompt."""
+        from hub.agent_center.grounding import (
+            collect_evidence_packet,
+            format_evidence_for_prompt,
+            grounding_rules_text,
+            requires_project_grounding,
+            resolve_prompt_scope,
+        )
+
+        repos = list(repository_ids or [])
+        scope = resolve_prompt_scope(prompt, repository_ids=repos)
+        requires = scope.requires_project_evidence
+        if not scope.use_selected_repo:
+            # Explicit broader/national/GK scope — do not force repo evidence.
+            collect_repos = []
+        else:
+            collect_repos = repos
+        packet = evidence_packet
+        if packet is None and (requires or scope.try_deterministic_tools):
+            ctx = self.tools_context(
+                profile_id=profile_id,
+                tool_ids=tool_ids,
+                repository_ids=collect_repos,
+            )
+            packet = collect_evidence_packet(prompt, ctx, repository_ids=collect_repos)
+        elif packet is None:
+            from hub.agent_center.grounding import empty_evidence_packet
+
+            packet = empty_evidence_packet(repository_ids=collect_repos)
+        rules = grounding_rules_text(
+            repository_ids=repos if scope.use_selected_repo else [],
+            requires=requires,
+            scope=scope,
+        )
+        return {
+            "required": requires,
+            "evidence_packet": packet,
+            "evidence_packet_text": format_evidence_for_prompt(packet),
+            "grounding_rules": rules,
+            "usable": bool((packet or {}).get("usable")),
+            "scope": scope.public(),
+            "allow_general_knowledge": scope.allow_general_knowledge,
+        }
+
     def preview_context(self, payload: dict[str, Any]) -> dict[str, Any]:
         try:
             profile = get_profile(str(payload.get("profile_id") or "okarun"))
@@ -208,15 +345,28 @@ class AgentCenterService:
         selected_tools = normalize_tools(
             profile, list(requested_tools) if isinstance(requested_tools, list) else None
         )
+        repos = list(payload.get("repository_ids") or [])
+        grounding = self.prepare_grounding(
+            str(payload.get("prompt") or ""),
+            profile_id=profile.id,
+            repository_ids=repos,
+            tool_ids=selected_tools,
+            evidence_packet=payload.get("evidence_packet")
+            if isinstance(payload.get("evidence_packet"), dict)
+            else None,
+        )
         preview = build_context_preview(
             self.registry,
-            repository_ids=list(payload.get("repository_ids") or []),
+            repository_ids=repos,
             mode=str(payload.get("mode") or "ask"),
             prompt=str(payload.get("prompt") or ""),
             query_hints=list(payload.get("hints") or []),
             explicit_files=dict(payload.get("files") or {}),
             profile=profile,
             selected_tools=selected_tools,
+            grounding_rules=str(grounding.get("grounding_rules") or ""),
+            evidence_packet_text=str(grounding.get("evidence_packet_text") or ""),
+            evidence_packet=grounding.get("evidence_packet") or {},
         )
         preview["tools"] = {
             "enabled": selected_tools,
@@ -230,6 +380,10 @@ class AgentCenterService:
                 "repository_run",
                 "auto_apply",
             ],
+        }
+        preview["grounding"] = {
+            "required": grounding.get("required"),
+            "usable": grounding.get("usable"),
         }
         return preview
 
@@ -258,6 +412,100 @@ class AgentCenterService:
                 f"{adapter.descriptor.label} is available for AiriX only in this MVP",
                 code="profile_unsupported",
             )
+        resolved_repos = self.resolve_repository_ids(
+            profile.id,
+            repository_ids=list(payload.get("repository_ids") or []),
+            agent_id=agent_id,
+            active_repository_id=str(payload.get("active_repository_id") or "").strip() or None,
+            selected_repository_id=str(payload.get("selected_repository_id") or "").strip() or None,
+        )
+        payload = {**payload, "repository_ids": resolved_repos}
+
+        from hub.agent_center.grounding import (
+            apply_grounding_to_answer,
+            evaluate_answer_grounding,
+            format_cannot_verify,
+        )
+        from hub.agent_center.repository_context import agent_requires_repository
+
+        grounding = self.prepare_grounding(
+            prompt,
+            profile_id=profile.id,
+            repository_ids=resolved_repos,
+            tool_ids=list(payload.get("tool_ids") or []) or None,
+            evidence_packet=payload.get("evidence_packet")
+            if isinstance(payload.get("evidence_packet"), dict)
+            else None,
+        )
+        payload["evidence_packet"] = grounding.get("evidence_packet")
+        payload["grounding_rules"] = grounding.get("grounding_rules")
+        # Coding CLIs have no Hub tool loop — never send project questions without evidence.
+        if (
+            grounding.get("required")
+            and agent_requires_repository(agent_id)
+            and not grounding.get("usable")
+            and not bool(payload.get("allow_general_knowledge"))
+            and not bool((grounding.get("scope") or {}).get("allow_general_knowledge"))
+        ):
+            packet = grounding.get("evidence_packet") or {}
+            answer = format_cannot_verify(
+                repository_ids=resolved_repos,
+                reason=str(packet.get("summary") or "No usable project evidence from Hub tools."),
+                errors=list(packet.get("errors") or []),
+            )
+            status = evaluate_answer_grounding(
+                prompt,
+                answer,
+                repository_ids=resolved_repos,
+                evidence=packet,
+            )
+            answer = apply_grounding_to_answer(answer, status)
+            conversation_id = str(payload.get("conversation_id") or "").strip()
+            if not conversation_id:
+                conversation = self.store.create_conversation(
+                    profile_id=profile.id, title=prompt[:80]
+                )
+                conversation_id = conversation["id"]
+            run = self.store.create_run(
+                {
+                    "status": "completed",
+                    "mode": mode,
+                    "agent_id": agent_id,
+                    "agent_label": adapter.descriptor.label,
+                    "model": str(payload.get("model") or ""),
+                    "repository_ids": resolved_repos,
+                    "prompt": prompt,
+                    "packed_prompt": "",
+                    "answer": answer,
+                    "context": {
+                        "grounding": status,
+                        "evidence_packet": {
+                            "summary": packet.get("summary"),
+                            "usable": False,
+                            "sources": packet.get("sources") or [],
+                            "errors": packet.get("errors") or [],
+                            "hit_count": len(packet.get("hits") or []),
+                        },
+                        "included_sources": list(packet.get("sources") or [])
+                        + [f"repository:{r}" for r in resolved_repos],
+                        "tools": {"enabled": list(payload.get("tool_ids") or [])},
+                    },
+                    "referenced_files": [],
+                    "profile_id": profile.id,
+                    "conversation_id": conversation_id,
+                    "error": "",
+                    "finished_at": __import__("datetime").datetime.now(
+                        __import__("datetime").timezone.utc
+                    ).isoformat(),
+                }
+            )
+            if self.audit:
+                self.audit(
+                    action="AGENT_RUN_UNGROUNDED_BLOCK",
+                    detail={"run_id": run.get("id"), "agent_id": agent_id, "repos": resolved_repos},
+                )
+            return run
+
         connection = self.connections.get(agent_id) if agent_id in self.connections.adapters else None
         av = adapter.availability()
         if connection is not None and connection["state"] != "connected" or connection is None and av.status not in {"available", "degraded"}:
@@ -294,50 +542,57 @@ class AgentCenterService:
         if mode not in av.modes:
             raise AgentCenterError(f"Agent does not support mode {mode}", code="mode_unsupported")
 
-        model = str(payload.get("model") or "").strip()
+        selected_model = str(payload.get("model") or "").strip()
         reasoning_effort_raw = str(payload.get("reasoning_effort") or "").strip()
         run_opts: dict[str, Any] = {}
 
-        if getattr(adapter, "is_api_adapter", False) and hasattr(adapter, "resolve_run_model"):
-            resolved = adapter.resolve_run_model(
-                mode=mode,
-                requested_model=model or None,
-                force_refresh=True,
+        from hub.agent_center.model_selection import resolve_model_for_run
+
+        resolution = resolve_model_for_run(
+            adapter,
+            agent_id=agent_id,
+            mode=mode,
+            selected_model=selected_model,
+            force_refresh=True,
+            provider_changed=bool(payload.get("provider_changed")),
+            previous_provider=str(payload.get("previous_provider") or ""),
+        )
+        if not resolution.ok:
+            raise AgentCenterError(
+                resolution.error or "Model unavailable",
+                code=resolution.code or "model_unavailable",
             )
-            if not resolved.get("ok"):
-                code = str(resolved.get("code") or "model_unavailable")
-                raise AgentCenterError(str(resolved.get("error") or "Model unavailable"), code=code)
-            model = str(resolved["model"])
+        model = resolution.resolved_model
+        details = resolution.details or {}
+        if getattr(adapter, "is_api_adapter", False):
             from hub.agent_center.openai_catalog import normalize_reasoning_effort
 
             effort = normalize_reasoning_effort(
                 reasoning_effort_raw,
-                supported=bool(resolved.get("supports_reasoning_effort")),
+                supported=bool(details.get("supports_reasoning_effort")),
             )
-            if reasoning_effort_raw and resolved.get("supports_reasoning_effort") and effort is None:
+            if reasoning_effort_raw and details.get("supports_reasoning_effort") and effort is None:
                 raise AgentCenterError(
                     f"Invalid reasoning_effort {reasoning_effort_raw!r}",
                     code="reasoning_effort_invalid",
                 )
             run_opts = {
                 "reasoning_effort": effort,
-                "background": bool(resolved.get("background")),
-                "is_pro": bool(resolved.get("is_pro")),
-                "timeout_seconds": float(resolved.get("timeout_seconds") or self.openai_settings.timeout_seconds),
-                "selection_reason": resolved.get("reason"),
+                "background": bool(details.get("background")),
+                "is_pro": bool(details.get("is_pro")),
+                "timeout_seconds": float(
+                    details.get("timeout_seconds") or self.openai_settings.timeout_seconds
+                ),
+                "selection_reason": resolution.reason,
+                "selected_model": resolution.selected_model,
+                "fallback_reason": resolution.fallback_reason,
             }
         else:
-            models, source = adapter.list_models()
-            default_token = getattr(adapter, "default_model_token", None)
-            if not model:
-                model = default_token or (models[0] if models else "")
-            if default_token and model in {"", default_token, "__provider_default__"}:
-                model = default_token
-            elif models and model and model not in models:
-                if not (source == "fallback" and model == self.openai_settings.default_model):
-                    raise AgentCenterError(f"Model not offered by agent: {model}", code="model_invalid")
-            if not model:
-                raise AgentCenterError("No model available", code="model_unavailable")
+            run_opts = {
+                "selection_reason": resolution.reason,
+                "selected_model": resolution.selected_model,
+                "fallback_reason": resolution.fallback_reason,
+            }
 
         preview = self.preview_context(payload)
         if not preview.get("ok"):
@@ -350,7 +605,8 @@ class AgentCenterService:
         if isinstance(adapter, CodexAdapter):
             if not roots:
                 raise AgentCenterError(
-                    "Codex requires a selected connected repository",
+                    "Codex requires a selected connected repository. "
+                    "Connect a repository in Work, then choose it in the assistant (or leave blank to use the first connected repo).",
                     code="repository_required",
                 )
             approved = [Path(r["path"]) for r in roots]
@@ -398,7 +654,18 @@ class AgentCenterService:
                     "excluded_sources": preview.get("excluded_sources") or [],
                     "packed_prompt_chars": preview.get("packed_prompt_chars"),
                     "tools": preview.get("tools"),
+                    "grounding": preview.get("grounding") or {},
+                    "evidence_packet": {
+                        "summary": (preview.get("evidence_packet") or {}).get("summary"),
+                        "usable": (preview.get("evidence_packet") or {}).get("usable"),
+                        "sources": (preview.get("evidence_packet") or {}).get("sources") or [],
+                        "hit_count": len((preview.get("evidence_packet") or {}).get("hits") or []),
+                        "errors": (preview.get("evidence_packet") or {}).get("errors") or [],
+                    },
                     "model_selection": run_opts.get("selection_reason"),
+                    "selected_model": run_opts.get("selected_model"),
+                    "resolved_model": model,
+                    "fallback_reason": run_opts.get("fallback_reason") or "",
                     "reasoning_effort": run_opts.get("reasoning_effort"),
                     "background": run_opts.get("background"),
                     "is_pro": run_opts.get("is_pro"),
@@ -420,7 +687,10 @@ class AgentCenterService:
                     "run_id": run["id"],
                     "agent_id": agent_id,
                     "mode": mode,
+                    "selected_model": run_opts.get("selected_model") or "",
                     "model": model,
+                    "model_selection": run_opts.get("selection_reason"),
+                    "fallback_reason": run_opts.get("fallback_reason") or "",
                     "reasoning_effort": run_opts.get("reasoning_effort"),
                     "background": run_opts.get("background"),
                     "repository_ids": preview["repository_ids"],

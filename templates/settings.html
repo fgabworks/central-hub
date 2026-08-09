@@ -61,6 +61,51 @@
 </section>
 
 <section class="panel panel-body" style="margin-top:0.85rem">
+  <h2 style="margin:0 0 0.5rem;font-size:14px">AI Provider Connections</h2>
+  <p class="muted" style="margin:0 0 0.75rem">
+    Detect and connect account-backed coding CLIs for AiriX. Hub never reads browser cookies or stores provider credentials.
+    <a href="{{ url_for('ai_connections') }}">Open full AI Connections</a>
+  </p>
+  <div class="ai-provider-compact" id="ai-provider-compact" data-workspace="{{ workspace }}">
+    {% if coding_cli_connections %}
+    <table class="ai-provider-table">
+      <thead>
+        <tr><th>Provider</th><th>Status</th><th>CLI</th><th>Version</th><th>Last checked</th><th></th></tr>
+      </thead>
+      <tbody>
+      {% for item in coding_cli_connections %}
+        <tr data-provider-id="{{ item.id }}">
+          <td><strong>{{ item.label }}</strong></td>
+          <td><span class="status-pill connection-status status-{{ item.state|replace('_', '-') }}">{{ item.summary_label or item.status }}</span></td>
+          <td class="muted connection-installed">{{ 'Installed' if item.installed else 'Missing' }}</td>
+          <td class="muted connection-version">{{ item.version or '—' }}</td>
+          <td class="muted connection-last-check">{{ item.last_check or 'Never' }}</td>
+          <td class="ai-provider-actions">
+            {% if not item.installed %}
+            <button type="button" class="btn btn-sm" data-action="install_help" title="{{ item.install_help }}">Install help</button>
+            {% elif item.state == 'connected' %}
+            <button type="button" class="btn btn-sm" data-action="test">Test</button>
+            <button type="button" class="btn btn-sm" data-action="reauthenticate">Re-authenticate</button>
+            <button type="button" class="btn btn-sm" data-action="disconnect">Sign out</button>
+            {% else %}
+            <button type="button" class="btn btn-sm btn-primary" data-action="connect">Connect</button>
+            <button type="button" class="btn btn-sm" data-action="test">Test</button>
+            {% endif %}
+          </td>
+        </tr>
+        <tr class="ai-provider-detail-row" data-provider-detail="{{ item.id }}">
+          <td colspan="6" class="connection-detail muted">{{ item.detail }}{% if item.install_help and not item.installed %} — {{ item.install_help }}{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">Provider connection status unavailable.</p>
+    {% endif %}
+  </div>
+</section>
+
+<section class="panel panel-body" style="margin-top:0.85rem">
   <h2 style="margin:0 0 0.75rem;font-size:14px">AiriX Smart Routing (Phase 5)</h2>
   <p class="muted" style="margin-top:0">Cost intelligence, RBAC, relevant findings, budgets, and orchestration. Token budgets stay authoritative; Codex still requires approval.</p>
   {% if workspace == 'work' and routing_settings %}
@@ -137,4 +182,6 @@
   <p class="muted">Switch to the Work workspace to edit AiriX routing settings.</p>
   {% endif %}
 </section>
+<script src="{{ url_for('static', filename='js/hub_perf.js') }}?v=perf-1"></script>
+<script src="{{ url_for('static', filename='js/ai_connections.js') }}?v=cli-conn-2" defer></script>
 {% endblock %}

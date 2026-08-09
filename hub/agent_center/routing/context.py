@@ -10,11 +10,12 @@ from hub.agent_center.routing.models import PromptClassification, RouteRecommend
 
 # Keep AI context lean: task-scoped tools only, no whole-repo dumps.
 _TASK_TOOLS: dict[str, tuple[str, ...]] = {
-    "lookup": ("notebook_lookup", "uid_lookup", "jobs_lookup", "audit_lookup"),
+    "lookup": ("notebook_lookup", "uid_lookup", "org_unit_lookup", "jobs_lookup", "audit_lookup"),
     "css_ui": ("repo_search", "read_file"),
     "sql_investigation": ("sql_lookup", "notebook_lookup", "repo_search", "read_file"),
     "dhis2_investigation": (
         "uid_lookup",
+        "org_unit_lookup",
         "dhis2_reports_lookup",
         "sql_lookup",
         "repo_search",
@@ -30,10 +31,31 @@ _TASK_TOOLS: dict[str, tuple[str, ...]] = {
 
 def select_minimal_tools(classification: PromptClassification) -> list[str]:
     tools = list(_TASK_TOOLS.get(classification.task_type, _TASK_TOOLS["general"]))
+    signals = set(classification.signals or [])
+    if (
+        "project_lookup" in signals
+        or "project_grounding_required" in signals
+        or "authoritative_data_query" in signals
+        or "structured_data_lookup" in signals
+        or "data_query" in signals
+    ):
+        tools = [
+            "org_unit_lookup",
+            "uid_lookup",
+            "dhis2_reports_lookup",
+            "sql_lookup",
+            "repo_search",
+            "notebook_lookup",
+        ] + tools
     if classification.deterministic_capable:
-        tools = [t for t in tools if t.endswith("_lookup") or t in {"notebook_lookup", "uid_lookup"}]
+        tools = [
+            t
+            for t in tools
+            if t.endswith("_lookup")
+            or t in {"notebook_lookup", "uid_lookup", "org_unit_lookup", "sql_lookup", "repo_search"}
+        ]
         if not tools:
-            tools = ["notebook_lookup", "uid_lookup", "jobs_lookup"]
+            tools = ["notebook_lookup", "uid_lookup", "org_unit_lookup", "jobs_lookup"]
     return list(dict.fromkeys(tools))[:6]
 
 
@@ -43,9 +65,29 @@ def select_repository_ids(
     *,
     max_repos: int = 2,
 ) -> list[str]:
-    """Only attach repositories when coding/architecture genuinely needs them."""
+    """Attach repositories when coding/architecture needs them, or when selected for project grounding."""
     ids = [str(x).strip() for x in (requested or []) if str(x).strip()]
     if not ids:
+        return []
+    signals = set(classification.signals or [])
+    # Explicit broader/national/GK scope drops selected repo from packing.
+    if any(
+        s.startswith("scope:national_general")
+        or s.startswith("scope:general_knowledge")
+        or s.startswith("scope:current_web")
+        or s == "allow_general_knowledge"
+        for s in signals
+    ) and "project_grounding_required" not in signals and "project_lookup" not in signals:
+        # Keep repos only for coding tasks that still need workspace files.
+        if classification.needs_coding or classification.task_type in {
+            "architecture",
+            "refactor",
+            "coding",
+            "testing",
+            "css_ui",
+            "sql_investigation",
+        }:
+            return ids[: max(1, min(int(max_repos), 3))]
         return []
     if classification.needs_architecture or classification.task_type in {
         "architecture",
@@ -57,6 +99,16 @@ def select_repository_ids(
         "dhis2_investigation",
     }:
         return ids[: max(1, min(int(max_repos), 3))]
+    # Preserve explicit selection for project-grounded lookups (OU/DHIS2/config).
+    if (
+        "project_grounding_required" in signals
+        or "project_lookup" in signals
+        or "authoritative_data_query" in signals
+        or "structured_data_lookup" in signals
+    ):
+        return ids[: max(1, min(int(max_repos), 3))]
+    if "dhis2_or_ou_topic" in signals and "national_or_general_lookup" not in signals:
+        return ids[:1]
     return []
 
 

@@ -130,9 +130,20 @@ def recommend_route(
     base_target_reason = ""
 
     # Target tier from classification (authoritative).
+    signals = set(c.signals or [])
+    simple_gk = "simple_general_knowledge" in signals
+    authoritative_data = (
+        "authoritative_data_query" in signals
+        or "data_query" in signals
+        or "structured_data_lookup" in signals
+    )
     if c.deterministic_capable and settings.prefer_deterministic:
         target = "T0"
-        reason = "Simple lookup can be answered with free Hub tools."
+        reason = (
+            "Structured data/DHIS2 lookup — Hub tools first (never Hub Simulator)."
+            if authoritative_data
+            else "Simple lookup can be answered with free Hub tools."
+        )
     elif c.needs_architecture or c.complexity >= 75 or (
         c.task_type in {"architecture", "refactor"} and c.estimated_scope_files >= 8
     ):
@@ -143,6 +154,19 @@ def recommend_route(
     ):
         target = "T2"
         reason = "Investigation/coding fits Grok as the routine capable agent."
+    elif authoritative_data:
+        # Safety: never treat structured data as cheap simulator GK.
+        target = "T0" if c.deterministic_capable else "T2"
+        reason = (
+            "Authoritative data question — deterministic tools first; escalate to real AI only if needed."
+            if c.deterministic_capable
+            else "Authoritative data question — prefer capable AI over Hub Simulator."
+        )
+    elif simple_gk or (
+        c.task_type == "general" and c.complexity < 30 and not c.needs_coding
+    ):
+        target = "T1"
+        reason = "Simple general-knowledge question fits the lowest-tier available model."
     elif c.task_type == "css_ui" or c.complexity < 35:
         target = "T1"
         reason = "Small UI/simple change fits a low-cost agent."
@@ -156,6 +180,7 @@ def recommend_route(
         settings.prefer_grok_for_routine
         and target in {"T1", "T2"}
         and c.task_type not in {"lookup"}
+        and not simple_gk
         and c.complexity < 75
     ):
         if target == "T1" and c.task_type in {"coding", "css_ui", "general", "testing"}:
@@ -170,6 +195,13 @@ def recommend_route(
         if c.deterministic_capable:
             target = "T0"
             reason = "Cheapest mode: deterministic tools first."
+        elif authoritative_data:
+            # Still never Hub Simulator for authoritative counts/indicators.
+            target = "T2"
+            reason = "Cheapest mode: authoritative data uses capable AI, not Hub Simulator."
+        elif simple_gk:
+            target = "T1"
+            reason = "Cheapest mode: lowest-tier model for general knowledge."
         elif target == "T3" and settings.allow_escalation:
             pass
         elif target == "T2" and c.complexity < 50:
@@ -179,7 +211,7 @@ def recommend_route(
             target = "T2"
             reason = "Cheapest mode: avoid Codex unless clearly required."
     elif settings.mode == "best_quality":
-        if target in {"T0", "T1"} and not c.deterministic_capable:
+        if target in {"T0", "T1"} and not c.deterministic_capable and not simple_gk:
             target = "T2"
             reason = "Best-quality mode prefers Grok over low-cost agents."
         if c.complexity >= 60 or c.needs_architecture:
@@ -189,6 +221,12 @@ def recommend_route(
         if c.deterministic_capable:
             target = "T0"
             reason = "Maximum speed: free tools first."
+        elif authoritative_data:
+            target = "T2"
+            reason = "Maximum speed: authoritative data skips Hub Simulator."
+        elif simple_gk:
+            target = "T1"
+            reason = "Maximum speed: lowest-tier model for simple general knowledge."
         elif target == "T3":
             target = "T2"
             reason = "Maximum speed: prefer Grok over slower advanced agents."
@@ -196,6 +234,14 @@ def recommend_route(
             target = "T1"
             reason = "Maximum speed: low-cost agent for small tasks."
 
+    # Never route pure general knowledge to Codex / coding CLIs.
+    if simple_gk and target == "T3":
+        target = "T1"
+        reason = "Simple general knowledge must not use Codex; using lowest-tier model."
+    # Never recommend Hub Simulator (low-cost) for authoritative structured data.
+    if authoritative_data and target == "T1":
+        target = "T0" if c.deterministic_capable else "T2"
+        reason = f"{reason} Authoritative data must not use Hub Simulator.".strip()
     # Repeated failures for this prompt fingerprint → recommend stronger route.
     failures = list(recent_failures or [])
     expected_retries = 0
@@ -247,7 +293,19 @@ def recommend_route(
         "T2": ["grok", "low-cost", "openai-api"],
         "T3": ["codex", "claude-code", "cursor-agent", "grok"],
     }
+    if authoritative_data:
+        # Prefer real providers over Hub Simulator for structured/project data.
+        tier_prefs = {
+            **tier_prefs,
+            "T0": ["deterministic"],
+            "T1": ["openai-api", "grok"],
+            "T2": ["grok", "openai-api"],
+        }
     preferred = list(preferred_override or tier_prefs.get(target, ["grok"]))
+    if authoritative_data:
+        preferred = [p for p in preferred if p not in {"low-cost", "hub-simulator"}] or [
+            "deterministic" if c.deterministic_capable else "grok"
+        ]
     stats_map = {
         str(s.get("provider_id")): s
         for s in (provider_stats or [])
@@ -267,7 +325,11 @@ def recommend_route(
     chosen = _pick_available(registry, preferred, available_ids=available_provider_ids)
     if chosen is None and settings.allow_escalation:
         escalate_order = {
-            "T0": ["low-cost", "openai-api", "grok"],
+            "T0": (
+                ["openai-api", "grok"]
+                if authoritative_data
+                else ["low-cost", "openai-api", "grok"]
+            ),
             "T1": ["grok"],
             "T2": ["codex", "claude-code"],
             "T3": ["grok", "low-cost"],
@@ -296,15 +358,20 @@ def recommend_route(
 
     alt_prefs: list[str] = []
     if tier == "T0":
-        alt_prefs = ["low-cost", "grok"]
+        alt_prefs = ["openai-api", "grok"] if authoritative_data else ["low-cost", "grok"]
     elif tier == "T1":
         alt_prefs = ["grok", "deterministic"] if c.deterministic_capable else ["grok"]
     elif tier == "T2":
-        alt_prefs = (
-            ["codex", "low-cost"]
-            if (c.complexity >= 55 or c.needs_architecture or escalation_reason)
-            else ["low-cost", "openai-api"]
-        )
+        if authoritative_data:
+            alt_prefs = ["openai-api", "codex"] if (
+                c.complexity >= 55 or c.needs_architecture or escalation_reason
+            ) else ["openai-api"]
+        else:
+            alt_prefs = (
+                ["codex", "low-cost"]
+                if (c.complexity >= 55 or c.needs_architecture or escalation_reason)
+                else ["low-cost", "openai-api"]
+            )
     else:
         alt_prefs = ["grok", "claude-code"]
 

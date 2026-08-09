@@ -61,6 +61,9 @@ def build_context_preview(
     explicit_files: dict[str, list[str]] | None = None,
     profile: AssistantProfile | None = None,
     selected_tools: list[str] | None = None,
+    grounding_rules: str = "",
+    evidence_packet_text: str = "",
+    evidence_packet: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     mode = normalize_mode(mode)
     prompt = (prompt or "")[:MAX_PROMPT_CHARS]
@@ -121,7 +124,14 @@ def build_context_preview(
         roots=roots,
         profile=profile,
         selected_tools=selected_tools or [],
+        grounding_rules=grounding_rules,
+        evidence_packet_text=evidence_packet_text,
     )
+    included = _included_sources(profile, roots, selected_tools or [])
+    if evidence_packet and isinstance(evidence_packet, dict):
+        for src in evidence_packet.get("sources") or []:
+            if src and src not in included:
+                included.append(str(src))
     return {
         "mode": mode,
         "mode_label": mode_label(mode),
@@ -154,8 +164,10 @@ def build_context_preview(
         and not scope_errors
         and not missing,
         "profile": profile.public() if profile else None,
-        "included_sources": _included_sources(profile, roots, selected_tools or []),
+        "included_sources": included,
         "excluded_sources": _excluded_sources(profile, selected_tools or []),
+        "evidence_packet": evidence_packet or {},
+        "grounding_rules": grounding_rules,
         "notes": (
             []
             if instructions
@@ -176,6 +188,8 @@ def _pack_prompt(
     roots: list[dict[str, Any]],
     profile: AssistantProfile | None = None,
     selected_tools: list[str] | None = None,
+    grounding_rules: str = "",
+    evidence_packet_text: str = "",
 ) -> str:
     parts = [
         f"Mode: {mode_label(mode)} (read-only).",
@@ -188,6 +202,10 @@ def _pack_prompt(
             profile.instructions,
             "Enabled read-only tools: " + (", ".join(selected_tools or []) or "none") + ".",
         ])
+    if grounding_rules:
+        parts.append("\n" + grounding_rules.strip())
+    if evidence_packet_text:
+        parts.append("\n" + evidence_packet_text.strip())
     if roots:
         parts.append("Repository roots:")
     for root in roots:

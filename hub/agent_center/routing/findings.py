@@ -156,11 +156,17 @@ def extract_findings_from_answer(
     provider_id: str = "",
     source_event_id: str = "",
     max_findings: int = 2,
+    grounding_scope: str = "",
 ) -> list[dict[str, Any]]:
     summary = compact_finding_summary(answer)
     if not summary or len(summary) < 12:
         return []
     keywords = extract_keywords(f"{prompt} {summary} {task_type}")
+    scope = grounding_scope
+    if not scope and prompt:
+        from hub.agent_center.scope import detect_prompt_scope
+
+        scope = detect_prompt_scope(prompt).kind
     return [
         {
             "task_type": task_type or "general",
@@ -168,6 +174,7 @@ def extract_findings_from_answer(
             "summary": summary,
             "provider_id": provider_id or "",
             "source_event_id": source_event_id or "",
+            "grounding_scope": scope or "",
         }
     ][:max_findings]
 
@@ -247,8 +254,21 @@ def select_relevant_findings(
     min_score: float = 1.25,
 ) -> list[dict[str, Any]]:
     """Keep a small set of compact, relevant findings (never full chats)."""
+    from hub.agent_center.scope import detect_prompt_scope, scopes_compatible
+
+    current_scope = ""
+    for sig in classification.signals or []:
+        if str(sig).startswith("scope:") and not str(sig).startswith("scope_signal:"):
+            current_scope = str(sig).split(":", 1)[1]
+            break
+    if not current_scope:
+        current_scope = detect_prompt_scope(prompt).kind
+
     scored: list[tuple[float, dict[str, Any]]] = []
     for row in findings:
+        prior_scope = str(row.get("grounding_scope") or row.get("scope") or "").strip()
+        if prior_scope and not scopes_compatible(current_scope, prior_scope):
+            continue
         ft = str(row.get("task_type") or "")
         if ft not in {classification.task_type, "general", ""}:
             # Still allow cross-type if semantic score clears a higher bar later.
@@ -272,6 +292,7 @@ def select_relevant_findings(
                 "keywords": list(row.get("keywords") or [])[:8],
                 "relevance_score": score,
                 "reused": True,
+                "grounding_scope": row.get("grounding_scope") or row.get("scope") or "",
             }
         )
     return out

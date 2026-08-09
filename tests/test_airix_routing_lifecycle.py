@@ -95,7 +95,7 @@ class _AsyncFakeAgentCenter:
         return MagicMock() if agent_id else None
 
     def repositories(self, profile_id: str = "okarun") -> list[dict[str, Any]]:
-        return [{"id": "sample-cli"}]
+        return [{"id": "sample-cli", "name": "sample-cli", "selectable": True}]
 
 
 def _availability() -> dict[str, dict[str, Any]]:
@@ -157,7 +157,7 @@ class AirixLifecycleTests(unittest.TestCase):
         fake = _AsyncFakeAgentCenter(mode="succeed")
         router = self._router(fake)
         result = router.execute_route(
-            "Investigate DHIS2 analytics SQL join for program indicators",
+            "Debug why the analytics SQL join returns empty rows in this module",
             orchestrate=False,
             agent_override="grok",
         )
@@ -170,7 +170,7 @@ class AirixLifecycleTests(unittest.TestCase):
         fake = _AsyncFakeAgentCenter(mode="fail_later")
         router = self._router(fake)
         result = router.execute_route(
-            "Investigate DHIS2 analytics SQL join for program indicators",
+            "Debug why the analytics SQL join returns empty rows in this module",
             orchestrate=False,
             agent_override="grok",
         )

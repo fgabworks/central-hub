@@ -1,0 +1,74 @@
+{
+  "prompt": "Count the number of pregnant women in Brgy. Baloy for 2026 Q2.",
+  "repo_id": "live-processing-local",
+  "codex_model": "gpt-5.6-sol",
+  "qualifies_same_verified_count": false,
+  "qualification_note": "Neither run produced a verified pregnant-women count. Earlier auto-extract matched '2026' from the quarter string — discarded.",
+  "test_a_direct_codex": {
+    "provider": "codex",
+    "model": "gpt-5.6-sol",
+    "status": "completed",
+    "runtime_seconds": 16.32,
+    "usage_actual": {
+      "input_tokens": 33067,
+      "output_tokens": 215,
+      "cached_tokens": null,
+      "total_tokens": 33282,
+      "usage_source": "actual"
+    },
+    "hub_visible_sources": [
+      "AI_REFERENCE/bulk_correction_postgres_performance.md",
+      "lookup/static/js/theme.js",
+      "lookup/test_anc_counting.py",
+      "lookup/test_live_stage_diff_count.py",
+      "lookup/test_theme_ui.py",
+      "lookup/test_whole_convergence_formula_tooltips.py",
+      "OU Baloy mkvLp2ySTPb (from answer)"
+    ],
+    "codex_jsonl_tool_calls_recorded": null,
+    "final_count": null,
+    "answer_summary": "Cannot verify count from selected evidence; Baloy OU found (mkvLp2ySTPb); needs DHIS2/SQL lookup."
+  },
+  "test_b_airix_smart_routing": {
+    "recommended_tier": "T1",
+    "recommended_provider": "low-cost",
+    "recommended_model": "simulator",
+    "routing_reason": "Cheapest mode: lowest-tier model for general knowledge.",
+    "scope_signals": [
+      "scope:general_knowledge",
+      "simple_general_knowledge",
+      "allow_general_knowledge"
+    ],
+    "orchestration_steps": [
+      {"id": "step_tool_lookup", "provider": "deterministic", "runtime_ms": 444, "actual_tokens": null, "t0_llm_avoided": true},
+      {"id": "step_ai_analysis", "provider": "low-cost/hub-simulator", "runtime_ms": 425, "actual_tokens": null}
+    ],
+    "runtime_seconds": 1.303,
+    "ai_tokens_actual": 0,
+    "ai_tokens_note": "Provider events recorded actual_tokens=null (simulator + T0). Session actual_tokens=200 is band estimate leakage — not used as actual.",
+    "session_estimated_tokens_recorded": 200,
+    "codex_avoided": true,
+    "tool_steps": 2,
+    "sources_used": ["hub-simulator demo", "notebook_lookup (T0 step)"],
+    "final_count": null,
+    "answer_summary": "Hub Simulator demo acknowledgment — did not compute pregnant-women count."
+  },
+  "comparison": {
+    "codex_token_reduction_pct": 100.0,
+    "total_ai_token_reduction_pct": 100.0,
+    "runtime_difference_pct": 92.02,
+    "tool_call_difference_note": "A: Codex JSONL tool calls not exported (6 Hub-packed file refs). B: 2 orchestration steps (T0 + simulator).",
+    "estimated_codex_capacity_avoided_tokens": 33282,
+    "formula": "saving % = (Direct Codex tokens - AiriX total AI tokens) / Direct Codex tokens × 100",
+    "tokens_a_actual": 33282,
+    "tokens_b_actual_ai": 0,
+    "runtime_a_s": 16.32,
+    "runtime_b_s": 1.303
+  },
+  "verdict": {
+    "token_efficiency": "AiriX used 0 actual AI tokens vs Codex 33,282 (100% AI-token reduction) by avoiding Codex — but via hub-simulator, not a data-capable route.",
+    "time_efficiency": "AiriX ~12.5× faster (1.3s vs 16.3s; ~92% runtime reduction).",
+    "answer_accuracy_equivalence": "FAIL — neither returned a verified count; answers are not equivalent or correct for the task.",
+    "airix_beneficial": "Not for this task. Token/time savings are real but hollow: scope misclassified the prompt as general_knowledge (Brgy. ≠ barangay), routed to T1 hub-simulator, and produced no count. Direct Codex also failed to verify without DHIS2/SQL evidence."
+  }
+}

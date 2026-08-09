@@ -168,6 +168,8 @@ class RouteRecommendation:
     permissions: dict[str, Any] = field(default_factory=dict)
     prior_findings: list[dict[str, Any]] = field(default_factory=list)
     estimated_cost_usd: float | None = None
+    recommended_model: str | None = None
+    recommended_model_reason: str = ""
 
     def public(self) -> dict[str, Any]:
         expl = self.explanation.public() if self.explanation else {
@@ -192,6 +194,8 @@ class RouteRecommendation:
             "recommended_agent": self.recommended_agent,
             "recommended_label": self.recommended_label,
             "recommended_tier": self.recommended_tier,
+            "recommended_model": self.recommended_model,
+            "recommended_model_reason": self.recommended_model_reason,
             "alternative_agent": self.alternative_agent,
             "alternative_label": self.alternative_label,
             "confidence": round(float(self.confidence), 3),

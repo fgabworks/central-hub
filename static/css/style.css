@@ -4452,6 +4452,44 @@ body.qn-maximized .qn-history[open] {
   border-radius: 8px;
 }
 
+.ai-provider-compact {
+  overflow-x: auto;
+}
+
+.ai-provider-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.ai-provider-table th,
+.ai-provider-table td {
+  text-align: left;
+  padding: 0.45rem 0.55rem;
+  border-bottom: 1px solid var(--border, #2a3140);
+  vertical-align: middle;
+}
+
+.ai-provider-table th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.ai-provider-detail-row td {
+  border-bottom: 1px solid var(--border, #2a3140);
+  padding-top: 0;
+  padding-bottom: 0.65rem;
+  font-size: 12px;
+}
+
+.ai-provider-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: flex-end;
+}
+
 .connection-main,
 .connection-actions {
   display: flex;
@@ -5449,6 +5487,14 @@ body.qn-maximized .qn-history[open] {
   margin-top: 0.45rem;
   font-size: 0.72rem;
   color: var(--cool);
+}
+.ad-telemetry {
+  margin-top: 0.4rem;
+  font-size: 0.7rem;
+  line-height: 1.35;
+  color: var(--cool);
+  border-top: 1px solid color-mix(in srgb, var(--cool) 25%, transparent);
+  padding-top: 0.35rem;
 }
 .ad-table-wrap { overflow: auto; margin-top: 0.35rem; }
 .ad-table-wrap table.data { font-size: 0.75rem; }

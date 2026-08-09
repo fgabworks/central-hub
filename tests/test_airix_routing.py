@@ -74,7 +74,7 @@ class _FakeAgentCenter:
         return MagicMock() if agent_id else None
 
     def repositories(self, profile_id: str = "okarun") -> list[dict[str, Any]]:
-        return [{"id": "sample-cli"}]
+        return [{"id": "sample-cli", "name": "sample-cli", "selectable": True}]
 
     def list_agents(self, **kwargs: Any) -> list[dict[str, Any]]:
         return [
@@ -415,7 +415,13 @@ class AirixRoutingRouteTests(unittest.TestCase):
         )
         resp = self.client.post(
             "/api/assistants/airix/routing/execute",
-            json={"prompt": prompt, "approve_codex": False, "orchestrate": False},
+            json={
+                "prompt": prompt,
+                "agent_override": "codex",
+                "approve_codex": False,
+                "orchestrate": False,
+                "repository_ids": ["sample-cli"],
+            },
         )
         self.assertEqual(resp.status_code, 403)
         self.assertEqual(resp.get_json()["code"], "approval_required")

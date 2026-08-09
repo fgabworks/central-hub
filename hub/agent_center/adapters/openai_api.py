@@ -71,15 +71,24 @@ class OpenAIApiAdapter:
         model = requested or details.get("recommended_model")
         if not model:
             return {"ok": False, "code": "model_unavailable", "error": details.get("error") or "No text models are accessible for this API key"}
+        if requested and model != requested:
+            # Never silently substitute a different model for an explicit selection.
+            return {
+                "ok": False,
+                "code": "model_unavailable",
+                "error": f"Model {requested!r} resolved to {model!r}; refusing silent substitute",
+            }
         spec = get_spec(model)
         is_pro = bool(spec and spec.is_pro)
         return {
-            "ok": True, "model": model, "reason": "user_override" if requested else details.get("recommendation_reason"),
+            "ok": True, "model": model, "reason": "user_selected" if requested else details.get("recommendation_reason"),
             "is_pro": is_pro, "supports_reasoning_effort": bool(spec and spec.supports_reasoning_effort),
             "background": is_pro,
             "timeout_seconds": self.settings.pro_model_timeout_seconds if is_pro else self.settings.timeout_seconds,
             "spec": spec.public_dict(availability="available") if spec else None,
             "models_source": details.get("models_source"),
+            "selected_model": requested,
+            "resolved_model": model,
         }
 
     def connection_status(self, *, force_refresh: bool = False) -> dict[str, Any]:

@@ -4105,6 +4105,13 @@ def create_app() -> Flask:
         routing_analytics = (
             router.analytics(workspace="work") if router is not None else None
         )
+        coding_cli_connections = []
+        agent_center = app.config.get("AGENT_CENTER")
+        if agent_center is not None and hasattr(agent_center, "connections"):
+            try:
+                coding_cli_connections = agent_center.connections.list_coding_clis(probe=False)
+            except Exception:  # noqa: BLE001
+                coding_cli_connections = []
         return render_template(
             "settings.html",
             settings_view={
@@ -4123,6 +4130,7 @@ def create_app() -> Flask:
             actor=current_actor(),
             routing_settings=routing_settings,
             routing_analytics=routing_analytics,
+            coding_cli_connections=coding_cli_connections,
         )
 
     @app.get("/api/healthz")
