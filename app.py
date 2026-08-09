@@ -333,6 +333,17 @@ def create_app() -> Flask:
             app.config["NOTEBOOK"].db, scope=scope
         ),
     )
+
+    def _routing_availability() -> dict:
+        agents = app.config["AGENT_CENTER"].list_agents(probe=False, profile_id="okarun")
+        return {str(a.get("id")): a for a in agents if a.get("id")}
+
+    from hub.agent_center.routing import AgentRouterService
+
+    app.config["AIRIX_ROUTER"] = AgentRouterService(
+        availability_loader=_routing_availability,
+        db=app.config["NOTEBOOK"].db,
+    )
     register_agent_center_routes(app)
     def _repo_ws_audit(action: str, target: str, detail: str, ok: bool = True) -> None:
         app.config["AUDIT"].append(
@@ -562,18 +573,6 @@ def create_app() -> Flask:
                 "icon": "▤",
                 "active_prefix": "data_explorer",
             },
-            {
-                "endpoint": "jobs",
-                "label": "Jobs",
-                "icon": "▶",
-                "active_prefix": None,
-            },
-            {
-                "endpoint": "health",
-                "label": "Health",
-                "icon": "♡",
-                "active_prefix": None,
-            },
         ]
         dhis2_nav = [
             {
@@ -622,6 +621,18 @@ def create_app() -> Flask:
             },
         ]
         system_nav = [
+            {
+                "endpoint": "jobs",
+                "label": "Jobs",
+                "icon": "▶",
+                "active_prefix": "job",
+            },
+            {
+                "endpoint": "health",
+                "label": "Health",
+                "icon": "♡",
+                "active_prefix": None,
+            },
             {
                 "endpoint": "ai_connections",
                 "label": "AI Connections",
@@ -4011,8 +4022,10 @@ def create_app() -> Flask:
     def settings_page():
         client: Dhis2Client = app.config["DHIS2"]
         audit: AuditStore = app.config["AUDIT"]
+        notebook: NotebookStore = app.config["NOTEBOOK"]
         flash_error = None
         flash_notice = None
+        workspace = read_workspace(request, notebook.db)
         if request.method == "POST" and request.form.get("action") == "owner_login":
             token = request.form.get("owner_token") or ""
             if login_owner(token):
@@ -4031,6 +4044,41 @@ def create_app() -> Flask:
                     detail="Owner login failed",
                     ok=False,
                 )
+        elif (
+            request.method == "POST"
+            and request.form.get("action") == "airix_routing_settings"
+            and workspace == "work"
+        ):
+            router = app.config.get("AIRIX_ROUTER")
+            if router is not None:
+                saved = router.save_settings(
+                    {
+                        "mode": request.form.get("mode") or "balanced",
+                        "prefer_deterministic": request.form.get("prefer_deterministic")
+                        in {"1", "on", "true"},
+                        "prefer_grok_for_routine": request.form.get("prefer_grok_for_routine")
+                        in {"1", "on", "true"},
+                        "require_approval_before_codex": request.form.get(
+                            "require_approval_before_codex"
+                        )
+                        in {"1", "on", "true"},
+                        "allow_escalation": request.form.get("allow_escalation")
+                        in {"1", "on", "true"},
+                        "max_retries": request.form.get("max_retries") or 2,
+                    },
+                    workspace="work",
+                )
+                flash_notice = "AiriX Smart Routing settings saved."
+                audit.append(
+                    action=audit_actions.AIRIX_ROUTING_SETTINGS,
+                    target="settings",
+                    detail=f"mode={saved.mode}",
+                    ok=True,
+                )
+        router = app.config.get("AIRIX_ROUTER")
+        routing_settings = (
+            router.get_settings("work").public() if router is not None else None
+        )
         return render_template(
             "settings.html",
             settings_view={
@@ -4047,6 +4095,7 @@ def create_app() -> Flask:
             flash_error=flash_error,
             flash_notice=flash_notice,
             actor=current_actor(),
+            routing_settings=routing_settings,
         )
 
     @app.get("/api/healthz")

@@ -13,6 +13,9 @@
         <div class="ad-menu-pop" id="ad-menu-pop" role="menu" hidden>
           <a class="ad-menu-item" role="menuitem" id="ad-open-center" href="{{ assistant_dock.center_url }}">Assistant Center</a>
           <button type="button" class="ad-menu-item" role="menuitem" id="ad-history">Recent runs</button>
+          {% if assistant_dock.smart_routing and assistant_dock.smart_routing.enabled %}
+          <button type="button" class="ad-menu-item" role="menuitem" id="ad-routing-settings-open">Smart Routing</button>
+          {% endif %}
           <button type="button" class="ad-menu-item" role="menuitem" id="ad-settings">Settings</button>
         </div>
       </div>
@@ -55,6 +58,47 @@
     </div>
     <pre class="ad-context-body muted" id="ad-context-body">No context packed yet.</pre>
   </div>
+
+  {% if assistant_dock.smart_routing and assistant_dock.smart_routing.enabled %}
+  <div class="ad-routing-card" id="ad-routing-card" hidden>
+    <div class="ad-routing-head">
+      <strong>AiriX Smart Routing</strong>
+      <span class="ad-routing-phase muted">Phase 1 · recommend only</span>
+    </div>
+    <div class="ad-routing-body" id="ad-routing-body"></div>
+    <div class="ad-routing-actions">
+      <button type="button" class="btn btn-sm btn-primary" id="ad-routing-use">Use Recommended</button>
+      <button type="button" class="btn btn-sm" id="ad-routing-choose">Choose Agent</button>
+      <button type="button" class="btn btn-sm" id="ad-routing-cancel">Cancel</button>
+    </div>
+  </div>
+  <div class="ad-routing-settings" id="ad-routing-settings" hidden>
+    <div class="ad-routing-head">
+      <strong>Routing settings</strong>
+      <button type="button" class="btn btn-sm ad-icon-btn" id="ad-routing-settings-close" title="Close">×</button>
+    </div>
+    <form id="ad-routing-settings-form" class="ad-routing-form">
+      <label class="ad-routing-field">
+        <span>Mode</span>
+        <select name="mode" id="ad-routing-mode">
+          <option value="balanced">Balanced</option>
+          <option value="cheapest">Cheapest</option>
+          <option value="best_quality">Best Quality</option>
+          <option value="max_speed">Maximum Speed</option>
+        </select>
+      </label>
+      <label class="ad-routing-check"><input type="checkbox" name="prefer_deterministic" id="ad-routing-pref-det"> Prefer deterministic/free</label>
+      <label class="ad-routing-check"><input type="checkbox" name="prefer_grok_for_routine" id="ad-routing-pref-grok"> Prefer Grok for routine work</label>
+      <label class="ad-routing-check"><input type="checkbox" name="require_approval_before_codex" id="ad-routing-pref-codex"> Require approval before Codex</label>
+      <label class="ad-routing-check"><input type="checkbox" name="allow_escalation" id="ad-routing-pref-esc"> Allow escalation</label>
+      <label class="ad-routing-field">
+        <span>Max retries</span>
+        <input type="number" name="max_retries" id="ad-routing-retries" min="0" max="5" value="2">
+      </label>
+      <button type="submit" class="btn btn-sm btn-primary">Save settings</button>
+    </form>
+  </div>
+  {% endif %}
 
   <footer class="ad-composer">
     <div class="ad-prompt-row">

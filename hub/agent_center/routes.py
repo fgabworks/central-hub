@@ -10,11 +10,15 @@ from hub.agent_center.service import AgentCenterError, AgentCenterService
 from hub.agent_center.dock import dock_shell_bootstrap, load_dock_prefs, save_dock_prefs
 from hub.jobs.auth import require_owner
 from hub.notebook.workspace import read_workspace
+from hub.audit import actions as audit_actions
 
 
 def register_agent_center_routes(app: Flask) -> None:
     def _svc() -> AgentCenterService:
         return app.config["AGENT_CENTER"]
+
+    def _router():
+        return app.config["AIRIX_ROUTER"]
 
     def _audit(action: str, **kwargs: Any) -> None:
         detail = kwargs.get("detail")
@@ -116,6 +120,71 @@ def register_agent_center_routes(app: Flask) -> None:
         payload = request.get_json(silent=True) or {}
         prefs = save_dock_prefs(notebook.db, workspace, payload)
         return jsonify({"ok": True, "prefs": prefs})
+
+    # ---- AiriX Smart Routing (Phase 1: recommend / plan only) ----
+
+    @app.get("/api/assistants/<profile_id>/routing/providers")
+    def api_airix_routing_providers(profile_id: str):
+        if profile_id not in {"okarun", "aira"}:
+            return jsonify({"ok": False, "error": "Unknown assistant profile"}), 404
+        probe = request.args.get("probe") == "1"
+        return jsonify(
+            {
+                "ok": True,
+                "phase": 1,
+                "providers": _router().list_available_providers(probe=probe),
+            }
+        )
+
+    @app.get("/api/assistants/<profile_id>/routing/settings")
+    def api_airix_routing_settings_get(profile_id: str):
+        if profile_id not in {"okarun", "aira"}:
+            return jsonify({"ok": False, "error": "Unknown assistant profile"}), 404
+        notebook = app.config["NOTEBOOK"]
+        workspace = "personal" if profile_id == "aira" else "work"
+        return jsonify({"ok": True, "settings": _router().get_settings(workspace).public()})
+
+    @app.put("/api/assistants/<profile_id>/routing/settings")
+    def api_airix_routing_settings_put(profile_id: str):
+        if profile_id != "okarun":
+            return jsonify({"ok": False, "error": "Smart Routing settings are Work/AiriX only in Phase 1"}), 400
+        payload = request.get_json(silent=True) or {}
+        settings = _router().save_settings(payload, workspace="work")
+        _audit(
+            audit_actions.AIRIX_ROUTING_SETTINGS,
+            detail={"mode": settings.mode, "max_retries": settings.max_retries},
+        )
+        return jsonify({"ok": True, "settings": settings.public()})
+
+    @app.post("/api/assistants/<profile_id>/routing/recommend")
+    def api_airix_routing_recommend(profile_id: str):
+        if profile_id != "okarun":
+            return jsonify({"ok": False, "error": "Smart Routing is AiriX (Work) only in Phase 1"}), 400
+        payload = request.get_json(silent=True) or {}
+        prompt = str(payload.get("prompt") or "").strip()
+        if not prompt:
+            return jsonify({"ok": False, "error": "prompt is required"}), 400
+        probe = bool(payload.get("probe_providers"))
+        rec = _router().recommend_route(prompt, workspace="work", probe_providers=probe)
+        plan = _router().build_execution_plan(prompt, workspace="work", recommendation=rec)
+        _audit(
+            audit_actions.AIRIX_ROUTING_RECOMMEND,
+            detail={
+                "task_type": rec.task_type,
+                "complexity": rec.complexity,
+                "recommended_agent": rec.recommended_agent,
+                "tier": rec.recommended_tier,
+                "execution": "deferred",
+            },
+        )
+        return jsonify(
+            {
+                "ok": True,
+                "phase": 1,
+                "recommendation": rec.public(),
+                "plan": plan.public(),
+            }
+        )
 
     @app.get("/api/agents")
     @app.get("/api/assistants/<profile_id>/agents")

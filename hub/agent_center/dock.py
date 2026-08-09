@@ -190,4 +190,12 @@ def dock_shell_bootstrap(
         "api_base": f"/api/assistants/{profile.id}",
         "prefs_url": "/api/assistant-dock/prefs",
         "lazy_agents_url": f"/api/assistants/{profile.id}/agents",
+        "smart_routing": {
+            "enabled": profile.id == "okarun",
+            "phase": 1,
+            "recommend_url": f"/api/assistants/{profile.id}/routing/recommend",
+            "settings_url": f"/api/assistants/{profile.id}/routing/settings",
+            "providers_url": f"/api/assistants/{profile.id}/routing/providers",
+            "execute": False,
+        },
     }

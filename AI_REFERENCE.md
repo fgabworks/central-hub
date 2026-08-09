@@ -40,7 +40,7 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Google Connections | System page to connect/assign/enable Gmail+Calendar scopes |
 | SQL Workspace | Read-only query library/runner (`/sql`); sqlglot allowlist; optional trusted-host-key Stage/Live SSH tunnels; Live warning; layout `minmax(260px,320px) | 1fr` under shell |
 | Data Explorer | `/data-explorer` — unified RO schema/data/relationship/lineage browser plus allowlisted CSV/XLSX/csv.gz exports, large jobs, presets, history, masking, and audit. `/live-data-export` redirects to `?tab=export`; one runtime service/store/export engine with shared SELECT/security primitives; no ad-hoc SQL or arbitrary table input; Stage/Live remain isolated |
-| AI Assistant Center | Aira at `/personal/aira`; Okarun at `/work/okarun` (history/management); full-height right dock + fixed composer via topbar + activity rail (`hub/agent_center/dock.py`); Find/Ask/Plan/Review; Codex CLI (Okarun MVP), Claude Code, Cursor, Grok, OpenAI |
+| AI Assistant Center | Aira at `/personal/aira`; AiriX at `/work/airix` (history/management; legacy `/work/okarun` redirects); full-height right dock + fixed composer via topbar + activity rail (`hub/agent_center/dock.py`); **Smart Routing Phase 1** (recommend only: `hub/agent_center/routing/`); Find/Ask/Plan/Review; Codex CLI, Claude Code, Cursor, Grok, OpenAI |
 | Workspace Console | Bottom panel under main content only (`left: var(--sidebar-w)`); bounded height; Ctrl+J; collapsed by default |
 | Activity Rail | Far-right icons for AI Assistant, Quick Notepad, Workspace Console (future utilities placeholders); reduces main width only |
 | App shell | Fixed sidebar 210–216px + `padding-left` on `.app-shell`; `.main-column` / `.content` `flex:1; min-width:0`; `.sidebar-scroll` for nav |
@@ -108,7 +108,7 @@ shared and unchanged.
 |---|---|
 | Persistent dock | Aira/Okarun full-height panel on all pages; prefs `/api/assistant-dock/prefs`; lazy agents; composer fixed at bottom |
 | `/personal/aira` | Personal UI; no repository/SQL/DHIS2/jobs/logs/Audit access |
-| `/work/okarun` | Work UI; selected repositories and Work read-only services |
+| `/work/airix` | Work UI (AiriX); selected repositories and Work read-only services; Smart Routing Phase 1 |
 | `/api/assistants/<profile>/agents` | Profile-bound adapter availability |
 | `/api/assistants/<profile>/agents/<id>/models` | Dynamic adapter model list |
 | `/api/assistants/<profile>/context/preview` | Included/excluded sources and secret-safe context |

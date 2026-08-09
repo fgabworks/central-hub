@@ -56,6 +56,14 @@
     var emptyEl = $("ad-empty");
     var moreBtn = $("ad-more");
     var menuPop = $("ad-menu-pop");
+    var smartRouting = boot.smart_routing || {};
+    var routingEnabled = !!smartRouting.enabled;
+    var routingCard = $("ad-routing-card");
+    var routingBody = $("ad-routing-body");
+    var routingSettings = $("ad-routing-settings");
+    var pendingRoute = null;
+    var pendingPrompt = "";
+    var skipRoutingOnce = false;
 
     function isMobile() {
       return window.matchMedia(MOBILE_MQ).matches;
@@ -490,9 +498,165 @@
         });
     }
 
+    function hideRoutingCard() {
+      if (routingCard) routingCard.hidden = true;
+      pendingRoute = null;
+    }
+
+    function showRoutingCard(rec) {
+      if (!routingCard || !routingBody || !rec) return;
+      pendingRoute = rec;
+      var alt = rec.alternative_label
+        ? "<div class=\"ad-routing-line\"><span>Alternative</span><strong>" +
+          escapeHtml(rec.alternative_label) +
+          "</strong></div>"
+        : "";
+      var approval = rec.approval_required
+        ? '<span class="ad-routing-badge is-warn">Approval required</span>'
+        : '<span class="ad-routing-badge">No approval</span>';
+      routingBody.innerHTML =
+        '<div class="ad-routing-grid">' +
+        "<div class=\"ad-routing-line\"><span>Task</span><strong>" +
+        escapeHtml(rec.task_type) +
+        "</strong></div>" +
+        "<div class=\"ad-routing-line\"><span>Complexity</span><strong>" +
+        escapeHtml(String(rec.complexity)) +
+        "/100</strong></div>" +
+        "<div class=\"ad-routing-line\"><span>Risk</span><strong>" +
+        escapeHtml(rec.risk) +
+        "</strong></div>" +
+        "<div class=\"ad-routing-line\"><span>Recommended</span><strong>" +
+        escapeHtml(rec.recommended_label || rec.recommended_agent) +
+        " · " +
+        escapeHtml(rec.recommended_tier || "") +
+        "</strong></div>" +
+        alt +
+        "<div class=\"ad-routing-line\"><span>Confidence</span><strong>" +
+        Math.round(Number(rec.confidence || 0) * 100) +
+        "%</strong></div>" +
+        "<div class=\"ad-routing-line\"><span>Usage</span><strong>" +
+        escapeHtml(rec.estimated_usage || "") +
+        "</strong></div>" +
+        "<div class=\"ad-routing-line\">" +
+        approval +
+        "</div>" +
+        '<p class="ad-routing-reason muted">' +
+        escapeHtml(rec.reason || "") +
+        "</p>" +
+        '<p class="ad-routing-note muted">Phase 1: recommendation only — agent execution is not started.</p>' +
+        "</div>";
+      routingCard.hidden = false;
+    }
+
+    function applyRecommendedAgent(rec) {
+      if (!rec) return;
+      ensureAgents();
+      var agentId = rec.recommended_agent;
+      // Map routing provider ids onto adapter select values.
+      var map = {
+        deterministic: "",
+        "low-cost": "hub-simulator",
+        grok: "grok",
+        codex: "codex",
+        "openai-api": "openai-api",
+        "claude-code": "claude-code",
+        "cursor-agent": "cursor-agent",
+      };
+      var target = map[agentId] || agentId;
+      if (agentSel && target) {
+        var opt = Array.prototype.find.call(agentSel.options || [], function (o) {
+          return o.value === target;
+        });
+        if (opt) {
+          agentSel.value = target;
+          selectedAgent = target;
+          loadModels(selectedAgent);
+        }
+      }
+      if (promptEl && pendingPrompt) promptEl.value = pendingPrompt;
+      skipRoutingOnce = true;
+      appendMessage(
+        "assistant",
+        "Recommended <strong>" +
+          escapeHtml(rec.recommended_label || rec.recommended_agent) +
+          "</strong> selected. Phase 1 does not auto-run agents — press Send again to use the existing run flow, or change the agent first."
+      );
+    }
+
+    function requestRoute(prompt) {
+      var url = smartRouting.recommend_url;
+      if (!url) return Promise.reject(new Error("routing unavailable"));
+      return fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ prompt: prompt }),
+      }).then(function (r) {
+        return r.json().then(function (data) {
+          if (!r.ok || !data || !data.ok) {
+            throw new Error((data && data.error) || "Routing failed");
+          }
+          return data;
+        });
+      });
+    }
+
+    function loadRoutingSettings() {
+      if (!smartRouting.settings_url || !routingSettings) return;
+      fetch(smartRouting.settings_url, {
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+      })
+        .then(function (r) {
+          return r.json();
+        })
+        .then(function (data) {
+          if (!data || !data.settings) return;
+          var s = data.settings;
+          var mode = $("ad-routing-mode");
+          if (mode) mode.value = s.mode || "balanced";
+          var det = $("ad-routing-pref-det");
+          if (det) det.checked = !!s.prefer_deterministic;
+          var grok = $("ad-routing-pref-grok");
+          if (grok) grok.checked = !!s.prefer_grok_for_routine;
+          var codex = $("ad-routing-pref-codex");
+          if (codex) codex.checked = !!s.require_approval_before_codex;
+          var esc = $("ad-routing-pref-esc");
+          if (esc) esc.checked = !!s.allow_escalation;
+          var retries = $("ad-routing-retries");
+          if (retries) retries.value = String(s.max_retries != null ? s.max_retries : 2);
+        })
+        .catch(function () {});
+    }
+
     function sendPrompt(text) {
       var prompt = String(text || "").trim();
       if (!prompt) return;
+
+      if (routingEnabled && !skipRoutingOnce) {
+        pendingPrompt = prompt;
+        lastPrompt = prompt;
+        appendMessage("user", escapeHtml(prompt));
+        if (promptEl) promptEl.value = "";
+        setRunControls("running");
+        appendMessage("assistant", "Analyzing prompt for Smart Routing…");
+        requestRoute(prompt)
+          .then(function (data) {
+            setRunControls("idle");
+            showRoutingCard(data.recommendation || {});
+          })
+          .catch(function () {
+            setRunControls("idle");
+            appendMessage(
+              "assistant",
+              "Smart Routing unavailable — select an agent manually, then Send again."
+            );
+            if (promptEl) promptEl.value = pendingPrompt;
+          });
+        return;
+      }
+
+      skipRoutingOnce = false;
       lastPrompt = prompt;
       setRunControls("running");
       appendMessage("user", escapeHtml(prompt));
@@ -635,6 +799,87 @@
       }
       if (settings) settings.addEventListener("click", goCenter);
       if (history) history.addEventListener("click", goCenter);
+      var routingOpen = $("ad-routing-settings-open");
+      if (routingOpen) {
+        routingOpen.addEventListener("click", function () {
+          setMenuOpen(false);
+          if (routingSettings) {
+            routingSettings.hidden = false;
+            loadRoutingSettings();
+          }
+        });
+      }
+      var routingClose = $("ad-routing-settings-close");
+      if (routingClose) {
+        routingClose.addEventListener("click", function () {
+          if (routingSettings) routingSettings.hidden = true;
+        });
+      }
+      var routingForm = $("ad-routing-settings-form");
+      if (routingForm && smartRouting.settings_url) {
+        routingForm.addEventListener("submit", function (ev) {
+          ev.preventDefault();
+          var payload = {
+            mode: ($("ad-routing-mode") && $("ad-routing-mode").value) || "balanced",
+            prefer_deterministic: !!($("ad-routing-pref-det") && $("ad-routing-pref-det").checked),
+            prefer_grok_for_routine: !!(
+              $("ad-routing-pref-grok") && $("ad-routing-pref-grok").checked
+            ),
+            require_approval_before_codex: !!(
+              $("ad-routing-pref-codex") && $("ad-routing-pref-codex").checked
+            ),
+            allow_escalation: !!(
+              $("ad-routing-pref-esc") && $("ad-routing-pref-esc").checked
+            ),
+            max_retries: Number(($("ad-routing-retries") && $("ad-routing-retries").value) || 2),
+          };
+          fetch(smartRouting.settings_url, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify(payload),
+          })
+            .then(function (r) {
+              return r.json();
+            })
+            .then(function (data) {
+              if (data && data.ok) {
+                appendMessage("assistant", "Smart Routing settings saved.");
+                if (routingSettings) routingSettings.hidden = true;
+              }
+            })
+            .catch(function () {});
+        });
+      }
+      var useRec = $("ad-routing-use");
+      if (useRec) {
+        useRec.addEventListener("click", function () {
+          applyRecommendedAgent(pendingRoute);
+          hideRoutingCard();
+        });
+      }
+      var chooseAgent = $("ad-routing-choose");
+      if (chooseAgent) {
+        chooseAgent.addEventListener("click", function () {
+          hideRoutingCard();
+          ensureAgents();
+          if (promptEl && pendingPrompt) promptEl.value = pendingPrompt;
+          skipRoutingOnce = true;
+          if (agentSel) agentSel.focus();
+          appendMessage(
+            "assistant",
+            "Choose an agent from the selector, then Send. Phase 1 will not auto-execute."
+          );
+        });
+      }
+      var cancelRoute = $("ad-routing-cancel");
+      if (cancelRoute) {
+        cancelRoute.addEventListener("click", function () {
+          hideRoutingCard();
+          pendingPrompt = "";
+          appendMessage("assistant", "Smart Routing cancelled.");
+        });
+      }
       if (moreBtn) {
         moreBtn.addEventListener("click", function (ev) {
           ev.stopPropagation();

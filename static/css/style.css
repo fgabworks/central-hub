@@ -5270,6 +5270,73 @@ body.qn-maximized .qn-history[open] {
   white-space: pre-wrap;
   font-size: 0.72rem;
 }
+.ad-routing-card,
+.ad-routing-settings {
+  margin: 0 0.65rem 0.55rem;
+  padding: 0.65rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid rgba(96, 165, 250, 0.35);
+  background: rgba(30, 64, 175, 0.16);
+}
+.ad-routing-card[hidden],
+.ad-routing-settings[hidden] { display: none !important; }
+.ad-routing-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.45rem;
+}
+.ad-routing-phase { font-size: 0.72rem; }
+.ad-routing-grid { display: grid; gap: 0.28rem; }
+.ad-routing-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.82rem;
+}
+.ad-routing-line span { color: rgba(148, 163, 184, 0.95); }
+.ad-routing-reason,
+.ad-routing-note { margin: 0.35rem 0 0; font-size: 0.78rem; }
+.ad-routing-badge {
+  display: inline-flex;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+}
+.ad-routing-badge.is-warn {
+  color: #fecaca;
+  border-color: rgba(248, 113, 113, 0.45);
+  background: rgba(239, 68, 68, 0.12);
+}
+.ad-routing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.55rem;
+}
+.ad-routing-form { display: grid; gap: 0.4rem; }
+.ad-routing-field {
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.8rem;
+}
+.ad-routing-field select,
+.ad-routing-field input[type="number"] {
+  height: 2rem;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(0, 0, 0, 0.25);
+  color: inherit;
+  padding: 0 0.45rem;
+}
+.ad-routing-check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+}
 .ad-composer {
   border-top: 1px solid var(--border);
   padding: 0.55rem 0.65rem 0.6rem;

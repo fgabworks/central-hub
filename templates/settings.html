@@ -59,4 +59,30 @@
     <div><dt>ALLOW_DHIS2_WRITES</dt><dd>{{ status_badge('disabled') }} <span class="muted">forced off — write APIs not implemented</span></dd></div>
   </dl>
 </section>
+
+<section class="panel panel-body" style="margin-top:0.85rem">
+  <h2 style="margin:0 0 0.75rem;font-size:14px">AiriX Smart Routing (Phase 1)</h2>
+  <p class="muted" style="margin-top:0">Recommend-only. No agent execution, retries, or Codex dispatch yet.</p>
+  {% if workspace == 'work' and routing_settings %}
+  <form method="post" class="builder-form" style="margin-top:0.75rem">
+    <input type="hidden" name="action" value="airix_routing_settings">
+    <label><span>Mode</span>
+      <select name="mode">
+        <option value="balanced" {% if routing_settings.mode == 'balanced' %}selected{% endif %}>Balanced</option>
+        <option value="cheapest" {% if routing_settings.mode == 'cheapest' %}selected{% endif %}>Cheapest</option>
+        <option value="best_quality" {% if routing_settings.mode == 'best_quality' %}selected{% endif %}>Best Quality</option>
+        <option value="max_speed" {% if routing_settings.mode == 'max_speed' %}selected{% endif %}>Maximum Speed</option>
+      </select>
+    </label>
+    <label class="nb-check"><input type="checkbox" name="prefer_deterministic" value="1" {% if routing_settings.prefer_deterministic %}checked{% endif %}> Prefer deterministic/free</label>
+    <label class="nb-check"><input type="checkbox" name="prefer_grok_for_routine" value="1" {% if routing_settings.prefer_grok_for_routine %}checked{% endif %}> Prefer Grok for routine work</label>
+    <label class="nb-check"><input type="checkbox" name="require_approval_before_codex" value="1" {% if routing_settings.require_approval_before_codex %}checked{% endif %}> Require approval before Codex</label>
+    <label class="nb-check"><input type="checkbox" name="allow_escalation" value="1" {% if routing_settings.allow_escalation %}checked{% endif %}> Allow escalation</label>
+    <label><span>Max retries</span><input type="number" name="max_retries" min="0" max="5" value="{{ routing_settings.max_retries }}"></label>
+    <button class="btn btn-primary" type="submit">Save Smart Routing settings</button>
+  </form>
+  {% else %}
+  <p class="muted">Switch to the Work workspace to edit AiriX routing settings.</p>
+  {% endif %}
+</section>
 {% endblock %}
