@@ -130,6 +130,68 @@ def provider_to_adapter_id(provider_id: str) -> str | None:
     return key or None
 
 
+ROUTING_MODE_SMART = "smart"
+ROUTING_MODE_DIRECT = "direct"
+
+
+def normalize_routing_mode(value: str | None) -> str:
+    key = str(value or ROUTING_MODE_SMART).strip().lower()
+    if key in {ROUTING_MODE_DIRECT, "direct_agent", "efficient"}:
+        return ROUTING_MODE_DIRECT
+    return ROUTING_MODE_SMART
+
+
+def build_direct_agent_recommendation(
+    prompt: str,
+    *,
+    provider_id: str,
+    model: str | None = None,
+    repository_ids: list[str] | None = None,
+) -> RouteRecommendation:
+    """
+    Lightweight recommendation used only for Direct Agent context packing.
+
+    Does not choose a provider — the caller already selected one. Classification
+    still drives minimal tools / file hints / prior-finding relevance.
+    """
+    from hub.agent_center.routing.classifier import classify_prompt
+    from hub.agent_center.routing.providers import ProviderRegistry
+
+    provider = (provider_id or "").strip()
+    if not provider or provider_to_adapter_id(provider) is None:
+        raise ValueError("Direct Agent requires an explicit AI provider (not T0/deterministic)")
+    c = classify_prompt(prompt, repository_ids=repository_ids)
+    try:
+        spec = ProviderRegistry().get(provider)
+        label = spec.label if spec else provider
+    except Exception:  # noqa: BLE001
+        label = provider
+    # Tier is informational only in Direct mode (routing bypassed).
+    tier = "T3" if provider in {"codex", "claude-code", "cursor-agent"} else (
+        "T1" if provider in {"low-cost", "hub-simulator"} else "T2"
+    )
+    return RouteRecommendation(
+        task_type=c.task_type,
+        complexity=c.complexity,
+        risk=c.risk,
+        recommended_agent=provider,
+        recommended_label=str(label),
+        recommended_tier=tier,
+        recommended_model=(model or "").strip(),
+        recommended_model_reason="Direct Agent — selected model",
+        alternative_agent=None,
+        alternative_label=None,
+        confidence=1.0,
+        reason="Direct Agent — Efficient (Smart Routing bypassed)",
+        estimated_usage="Medium",
+        approval_required=provider in {"codex", "claude-code", "cursor-agent"},
+        classification=c,
+        providers_considered=[provider],
+        escalation_reason=None,
+        history_influenced=False,
+    )
+
+
 def build_minimal_context_preview(
     *,
     prompt: str,

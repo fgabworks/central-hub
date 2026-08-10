@@ -48,6 +48,8 @@ class AgentToolsContext:
     repository_ids: list[str]
     notebook: Any | None = None
     sql_store: Any | None = None
+    sql_executor: Any | None = None
+    sql_connections: Any | None = None
     uid_index: Any | None = None
     profile_id: str = "okarun"
     workspace: str = "work"

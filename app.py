@@ -324,6 +324,8 @@ def create_app() -> Flask:
         openai_settings=load_openai_settings(),
         notebook=app.config["NOTEBOOK"],
         sql_store=app.config["SQL_WS_STORE"],
+        sql_executor=app.config["SQL_WS_EXECUTOR"],
+        sql_connections=app.config["SQL_WS_CONNECTIONS"],
         uid_index=app.config["DHIS2_UID_INDEX"],
         email=app.config["EMAIL"],
         calendar=app.config["CALENDAR"],

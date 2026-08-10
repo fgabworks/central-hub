@@ -105,14 +105,13 @@ def git_status_snapshot(repo: Path) -> dict[str, Any]:
     if not (repo / ".git").exists() and not _is_git_worktree(repo):
         return {"ok": False, "error": "Not a git repository", "porcelain": "", "files": []}
     try:
-        result = subprocess.run(
+        from hub.agent_center.adapters.cli_common import run_cli_capture
+
+        result = run_cli_capture(
             ["git", "status", "--porcelain", "-uall"],
+            timeout=20.0,
             cwd=str(repo),
-            shell=False,
-            capture_output=True,
-            text=True,
-            timeout=20,
-            check=False,
+            env=os.environ.copy(),
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         return {"ok": False, "error": redact_text(str(exc), limit=240), "porcelain": "", "files": []}
@@ -137,14 +136,13 @@ def assert_git_unchanged(before: dict[str, Any], after: dict[str, Any]) -> None:
 
 def _is_git_worktree(repo: Path) -> bool:
     try:
-        result = subprocess.run(
+        from hub.agent_center.adapters.cli_common import run_cli_capture
+
+        result = run_cli_capture(
             ["git", "rev-parse", "--is-inside-work-tree"],
+            timeout=10.0,
             cwd=str(repo),
-            shell=False,
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
+            env=os.environ.copy(),
         )
     except (OSError, subprocess.TimeoutExpired):
         return False

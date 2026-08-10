@@ -42,6 +42,8 @@ def default_dock_state(workspace: str) -> dict[str, Any]:
         "min_width": MIN_WIDTH,
         "max_width": MAX_WIDTH,
         "selected_repository_id": "",
+        "routing_mode": "smart",
+        "direct_conversation_id": "",
     }
 
 
@@ -66,6 +68,11 @@ def load_dock_prefs(db: Any, workspace: str) -> dict[str, Any]:
         state["width"] = clamp_width(data.get("width"))
     if "selected_repository_id" in data:
         state["selected_repository_id"] = str(data.get("selected_repository_id") or "")[:128]
+    if "routing_mode" in data:
+        mode = str(data.get("routing_mode") or "smart").strip().lower()
+        state["routing_mode"] = "direct" if mode in {"direct", "direct_agent", "efficient"} else "smart"
+    if "direct_conversation_id" in data:
+        state["direct_conversation_id"] = str(data.get("direct_conversation_id") or "")[:64]
     return state
 
 
@@ -82,6 +89,13 @@ def save_dock_prefs(db: Any, workspace: str, payload: dict[str, Any] | None) -> 
         current["width"] = clamp_width(data.get("width"))
     if "selected_repository_id" in data:
         current["selected_repository_id"] = str(data.get("selected_repository_id") or "")[:128]
+    if "routing_mode" in data:
+        mode = str(data.get("routing_mode") or "smart").strip().lower()
+        current["routing_mode"] = (
+            "direct" if mode in {"direct", "direct_agent", "efficient"} else "smart"
+        )
+    if "direct_conversation_id" in data:
+        current["direct_conversation_id"] = str(data.get("direct_conversation_id") or "")[:64]
     # Minimized implies closed chrome but host stays mounted; keep open flag for restore.
     set_pref(
         db,
@@ -93,6 +107,8 @@ def save_dock_prefs(db: Any, workspace: str, payload: dict[str, Any] | None) -> 
                 "minimized": current["minimized"],
                 "width": current["width"],
                 "selected_repository_id": current["selected_repository_id"],
+                "routing_mode": current.get("routing_mode") or "smart",
+                "direct_conversation_id": current.get("direct_conversation_id") or "",
             }
         ),
     )
@@ -186,6 +202,8 @@ def dock_shell_bootstrap(
             "min_width": prefs["min_width"],
             "max_width": prefs["max_width"],
             "selected_repository_id": prefs.get("selected_repository_id") or "",
+            "routing_mode": prefs.get("routing_mode") or "smart",
+            "direct_conversation_id": prefs.get("direct_conversation_id") or "",
         },
         "suggestions": page_aware_suggestions(profile.id, endpoint),
         "safety": {

@@ -56,6 +56,8 @@ class AgentCenterService:
         audit_store: Any | None = None,
         notepad_factory: Callable[[str], Any] | None = None,
         dhis2_reports: Any | None = None,
+        sql_executor: Any | None = None,
+        sql_connections: Any | None = None,
     ) -> None:
         self.registry = registry
         self.store = store or AgentCenterStore()
@@ -65,6 +67,8 @@ class AgentCenterService:
         self.openai_settings = openai_settings or load_openai_settings()
         self.notebook = notebook
         self.sql_store = sql_store
+        self.sql_executor = sql_executor
+        self.sql_connections = sql_connections
         self.uid_index = uid_index
         self.email = email
         self.calendar = calendar

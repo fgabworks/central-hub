@@ -141,7 +141,21 @@
         </select>
       </label>
       {% endif %}
+      {% if assistant_dock.smart_routing and assistant_dock.smart_routing.enabled %}
+      <label class="ad-select-wrap">
+        <span class="sr-only">Routing Mode</span>
+        <select id="ad-routing-mode-select" aria-label="Routing mode" title="Smart Routing or Direct Agent">
+          <option value="smart">⚡ Smart Routing</option>
+          <option value="direct">🎯 Direct Agent — Efficient</option>
+        </select>
+      </label>
+      {% endif %}
     </div>
+    {% if assistant_dock.smart_routing and assistant_dock.smart_routing.enabled %}
+    <p class="ad-direct-hint muted" id="ad-direct-hint" hidden style="margin:0 0 0.35rem;font-size:11px;line-height:1.35">
+      Direct Agent — routing bypassed; lightweight context optimization remains enabled.
+    </p>
+    {% endif %}
     <p class="ad-safety muted">🔒 {{ assistant_dock.safety.message }}</p>
   </footer>
 </aside>

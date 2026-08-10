@@ -31,6 +31,8 @@
         min_width: 300,
         max_width: 560,
         selected_repository_id: "",
+        routing_mode: "smart",
+        direct_conversation_id: "",
       },
       boot.prefs || {}
     );
@@ -59,6 +61,8 @@
     var agentSel = $("ad-agent");
     var modelSel = $("ad-model");
     var repoSel = $("ad-repo");
+    var routingModeSel = $("ad-routing-mode-select");
+    var directHint = $("ad-direct-hint");
     var messages = $("ad-messages");
     var output = $("ad-output");
     var contextBody = $("ad-context-body");
@@ -132,6 +136,8 @@
         minimized: !!prefs.minimized,
         width: prefs.width,
         selected_repository_id: prefs.selected_repository_id || "",
+        routing_mode: prefs.routing_mode === "direct" ? "direct" : "smart",
+        direct_conversation_id: prefs.direct_conversation_id || "",
       };
       function send() {
         fetch(prefsUrl, {
@@ -178,6 +184,53 @@
         return selectedRepoIds.slice();
       }
       return selectedRepoIds.slice();
+    }
+
+    function currentRoutingMode() {
+      if (routingModeSel && routingModeSel.value) {
+        return routingModeSel.value === "direct" ? "direct" : "smart";
+      }
+      return prefs.routing_mode === "direct" ? "direct" : "smart";
+    }
+
+    function applyRoutingModeChrome() {
+      var mode = currentRoutingMode();
+      prefs.routing_mode = mode;
+      if (routingModeSel && routingModeSel.value !== mode) {
+        routingModeSel.value = mode;
+      }
+      if (directHint) directHint.hidden = mode !== "direct";
+      var hint = document.querySelector(".ad-routing-hint");
+      if (hint) {
+        hint.hidden = mode === "direct";
+      }
+      if (routingCard && mode === "direct") {
+        routingCard.hidden = true;
+        pendingRoute = null;
+        pendingPlan = null;
+      }
+    }
+
+    function setRoutingMode(mode) {
+      prefs.routing_mode = mode === "direct" ? "direct" : "smart";
+      if (prefs.routing_mode === "smart") {
+        // Switching back to Smart clears Direct session resume handle.
+        prefs.direct_conversation_id = "";
+      }
+      applyRoutingModeChrome();
+      persistPrefs();
+    }
+
+    function contextFingerprint(prompt) {
+      var repoFields = repositoryPayloadFields();
+      var bits = [
+        currentRoutingMode(),
+        selectedAgent || "",
+        currentSelectedModel() || "",
+        (repoFields.selected_repository_id || "") + "",
+        String(prompt || "").trim().slice(0, 80),
+      ];
+      return bits.join("|").slice(0, 120);
     }
 
     function repositoryPayloadFields() {
@@ -1035,38 +1088,76 @@
     }
 
     function formatUsageTelemetryHtml(execution) {
-      var t = (execution && execution.telemetry) || (execution && execution.usage) || null;
+      var t = (execution && execution.telemetry) || null;
+      if (!t) {
+        t = (execution && execution.usage) || null;
+      }
       if (!t || (!t.execution_type && t.llm_invoked == null && t.total_ai_tokens == null && t.total_tokens == null)) {
         return "";
       }
-      var llm = t.llm_invoked ? "Yes" : "No";
+      // Prefer event-sourced telemetry; never invent AI from missing fields.
+      var isDeterministic =
+        t.execution_type === "Deterministic" ||
+        t.t0_pure === true ||
+        (execution &&
+          (execution.mode === "deterministic" ||
+            execution.mode === "grounding_gate" ||
+            execution.provider_id === "deterministic") &&
+          !execution.agent_run_id);
+      var llmInvoked = isDeterministic ? false : !!t.llm_invoked;
+      var llm = llmInvoked ? "Yes" : "No";
+      var execType =
+        t.execution_type ||
+        (isDeterministic ? "Deterministic" : llmInvoked ? "AI" : "Deterministic");
+      var tier =
+        t.routing_tier ||
+        (execution && execution.tier) ||
+        (isDeterministic ? "T0" : "");
+      if (!tier || tier === "?" || tier === "T?") {
+        tier = isDeterministic ? "T0" : String((execution && execution.tier) || "T2");
+        if (!String(tier).startsWith("T")) tier = isDeterministic ? "T0" : "T2";
+      }
       var src = String(t.usage_source || "");
-      var total = t.total_ai_tokens != null ? t.total_ai_tokens : t.total_tokens;
+      var total = isDeterministic
+        ? 0
+        : t.total_ai_tokens != null
+          ? t.total_ai_tokens
+          : t.total_tokens;
       var totalLabel = total == null ? "—" : String(total);
-      if (src === "estimate") {
+      if (!isDeterministic && src === "estimate") {
         totalLabel = total == null ? "est. unavailable" : totalLabel + " (est.)";
       }
       var tools = Array.isArray(t.tools_used) ? t.tools_used.join(", ") : "";
+      var provider = isDeterministic
+        ? "None"
+        : t.provider != null && t.provider !== ""
+          ? t.provider
+          : "None";
+      var model = isDeterministic
+        ? "None"
+        : t.model != null && t.model !== ""
+          ? t.model
+          : "None";
       return (
         '<div class="ad-telemetry muted">' +
         "<div>Tier: " +
-        escapeHtml(String(t.routing_tier || execution.tier || "?")) +
+        escapeHtml(String(tier)) +
         " · Type: " +
-        escapeHtml(String(t.execution_type || "?")) +
+        escapeHtml(String(execType)) +
         " · LLM: " +
         escapeHtml(llm) +
         "</div>" +
         "<div>Provider: " +
-        escapeHtml(String(t.provider != null && t.provider !== "" ? t.provider : "None")) +
+        escapeHtml(String(provider)) +
         " · Model: " +
-        escapeHtml(String(t.model != null && t.model !== "" ? t.model : "None")) +
+        escapeHtml(String(model)) +
         "</div>" +
         "<div>Tokens in/out/cached/total: " +
-        escapeHtml(String(t.input_tokens != null ? t.input_tokens : 0)) +
+        escapeHtml(String(isDeterministic ? 0 : t.input_tokens != null ? t.input_tokens : 0)) +
         "/" +
-        escapeHtml(String(t.output_tokens != null ? t.output_tokens : 0)) +
+        escapeHtml(String(isDeterministic ? 0 : t.output_tokens != null ? t.output_tokens : 0)) +
         "/" +
-        escapeHtml(String(t.cached_tokens != null ? t.cached_tokens : 0)) +
+        escapeHtml(String(isDeterministic ? 0 : t.cached_tokens != null ? t.cached_tokens : 0)) +
         "/" +
         escapeHtml(totalLabel) +
         "</div>" +
@@ -1075,8 +1166,95 @@
         " · Runtime: " +
         escapeHtml(String(t.runtime_ms != null ? t.runtime_ms : "—")) +
         " ms · Child run: " +
-        escapeHtml(String(t.child_ai_run_id || "None")) +
+        escapeHtml(String(isDeterministic ? "None" : t.child_ai_run_id || "None")) +
         "</div>" +
+        (t.t0_failure_reason || t.next_capability || t.db_query_attempted || t.ai_escalation_occurred
+          ? "<div>T0 failure: " +
+            escapeHtml(String(t.t0_failure_reason || "None")) +
+            " · Next: " +
+            escapeHtml(String(t.next_capability || "None")) +
+            " · DB query: " +
+            escapeHtml(t.db_query_attempted ? "Yes" : "No") +
+            " · AI escalate: " +
+            escapeHtml(t.ai_escalation_occurred ? "Yes" : "No") +
+            "</div>"
+          : "") +
+        (t.routing_mode ||
+        (execution && execution.routing_mode) ||
+        t.session_reused != null ||
+        (execution && execution.session_reused) ||
+        (Array.isArray(t.context_items) && t.context_items.length) ||
+        (execution &&
+          Array.isArray(execution.context_items) &&
+          execution.context_items.length) ||
+        t.context_chars != null ||
+        (execution && execution.context_chars != null)
+          ? "<div>Mode: " +
+            escapeHtml(String(t.routing_mode || (execution && execution.routing_mode) || "smart")) +
+            " · Selected: " +
+            escapeHtml(
+              String(
+                (execution &&
+                  (execution.selected_provider || execution.provider_id || "")) ||
+                  provider
+              )
+            ) +
+            ((execution && (execution.selected_model || execution.resolved_model)) ||
+            model !== "None"
+              ? " / " +
+                escapeHtml(
+                  String(
+                    (execution &&
+                      (execution.selected_model ||
+                        execution.resolved_model ||
+                        execution.model)) ||
+                      model
+                  )
+                )
+              : "") +
+            " · Resolved: " +
+            escapeHtml(
+              String(
+                (execution &&
+                  (execution.resolved_provider ||
+                    execution.adapter_id ||
+                    execution.provider_id)) ||
+                  provider
+              )
+            ) +
+            ((execution && (execution.resolved_model || execution.model)) || model !== "None"
+              ? " / " +
+                escapeHtml(
+                  String(
+                    (execution && (execution.resolved_model || execution.model)) || model
+                  )
+                )
+              : "") +
+            " · Session reused: " +
+            escapeHtml(
+              t.session_reused || (execution && execution.session_reused) ? "Yes" : "No"
+            ) +
+            " · Context items: " +
+            escapeHtml(
+              Array.isArray(t.context_items) && t.context_items.length
+                ? t.context_items.slice(0, 6).join(", ")
+                : Array.isArray(execution && execution.context_items) &&
+                    execution.context_items.length
+                  ? execution.context_items.slice(0, 6).join(", ")
+                  : "None"
+            ) +
+            (t.context_chars != null || (execution && execution.context_chars != null)
+              ? " · Context chars: " +
+                escapeHtml(
+                  String(
+                    t.context_chars != null
+                      ? t.context_chars
+                      : execution.context_chars
+                  )
+                )
+              : "") +
+            "</div>"
+          : "") +
         "</div>"
       );
     }
@@ -1091,17 +1269,29 @@
           : "");
       if (status === "completed" || (status === "failed" && execution.grounding)) {
         var g = execution.grounding || {};
-        var gLine =
-          g.grounded_label || g.source
-            ? '<div class="ad-source">Source: ' +
-              escapeHtml(String(g.source || "selected context")) +
-              " · Grounded: " +
-              escapeHtml(String(g.grounded_label || (g.grounded ? "Yes" : "No"))) +
-              (g.grounded || !g.reason
-                ? ""
-                : " — " + escapeHtml(String(g.reason))) +
-              "</div>"
-            : "";
+        var gLine = "";
+        if (g.grounded_label || g.source || g.evidence_found_label || g.task_solved_label) {
+          var sources =
+            (Array.isArray(g.sources_used) && g.sources_used.length
+              ? g.sources_used.join(", ")
+              : "") ||
+            g.source ||
+            "selected context";
+          gLine =
+            '<div class="ad-source">' +
+            "Evidence Found: " +
+            escapeHtml(String(g.evidence_found_label || (g.evidence_found ? "Yes" : "No"))) +
+            " · Task Solved: " +
+            escapeHtml(String(g.task_solved_label || (g.task_solved ? "Yes" : "No"))) +
+            " · Grounded: " +
+            escapeHtml(String(g.grounded_label || (g.grounded ? "Yes" : "No"))) +
+            "<br>Sources used: " +
+            escapeHtml(String(sources)) +
+            (g.grounded || !g.reason
+              ? ""
+              : " — " + escapeHtml(String(g.reason))) +
+            "</div>";
+        }
         appendMessage(
           "assistant",
           "<strong>Route " +
@@ -1216,6 +1406,128 @@
             appendMessage("assistant", "Could not poll route status.");
           });
       }, 900);
+    }
+
+    function executeDirectAgent(opts) {
+      opts = opts || {};
+      var url = smartRouting.execute_url;
+      if (!url) {
+        appendMessage("assistant", "Route execute URL unavailable.");
+        return;
+      }
+      var prompt = pendingPrompt || lastPrompt || "";
+      if (!prompt) {
+        appendMessage("assistant", "No prompt to execute.");
+        return;
+      }
+      if (!selectedAgent) {
+        appendMessage("assistant", "Select a provider for Direct Agent mode.");
+        return;
+      }
+      if (
+        (selectedAgent === "codex" ||
+          selectedAgent === "claude-code" ||
+          selectedAgent === "cursor-agent") &&
+        !opts.approveCodex
+      ) {
+        var ok = window.confirm(
+          "Direct Agent will run " +
+            selectedAgent +
+            " with your selected model. Continue?"
+        );
+        if (!ok) {
+          appendMessage("assistant", "Direct Agent run cancelled.");
+          return;
+        }
+        opts.approveCodex = true;
+      }
+      hideRoutingCard();
+      setRunControls("running");
+      appendMessage(
+        "assistant",
+        "Direct Agent — Efficient: selected provider/model <strong>" +
+          escapeHtml(selectedAgent) +
+          "</strong>" +
+          (currentSelectedModel()
+            ? " · <strong>" + escapeHtml(currentSelectedModel()) + "</strong>"
+            : " · (provider default)") +
+          " · routing bypassed · lightweight context prep only…"
+      );
+      var repoFields = repositoryPayloadFields();
+      if (agentRequiresRepository(selectedAgent) && !(repoFields.repository_ids || []).length) {
+        if (!assertRepositoryReady(selectedAgent)) {
+          setRunControls("idle");
+          return;
+        }
+        repoFields = repositoryPayloadFields();
+      }
+      var fp = contextFingerprint(prompt);
+      var reused = !!(prefs.direct_conversation_id || "");
+      fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          prompt: prompt,
+          approve_codex: !!opts.approveCodex,
+          agent_override: selectedAgent,
+          force: !!opts.force,
+          repository_ids: repoFields.repository_ids,
+          selected_repository_id: repoFields.selected_repository_id,
+          active_repository_id: repoFields.active_repository_id,
+          model: currentSelectedModel() || null,
+          routing_mode: "direct",
+          conversation_id: prefs.direct_conversation_id || null,
+          context_fingerprint: fp,
+        }),
+      })
+        .then(function (r) {
+          return r.json().then(function (data) {
+            return { ok: r.ok, status: r.status, data: data };
+          });
+        })
+        .then(function (res) {
+          if (!res.ok || !res.data || !res.data.ok) {
+            var detail =
+              (res.data && res.data.error) ||
+              ((res.data && res.data.execution) || {}).error ||
+              "Direct Agent execution failed.";
+            appendMessage("assistant", escapeHtml(detail));
+            setRunControls("failed");
+            return;
+          }
+          var exec = (res.data && res.data.execution) || {};
+          if (exec.conversation_id) {
+            prefs.direct_conversation_id = exec.conversation_id;
+            persistPrefs();
+          }
+          if (exec.id) {
+            activeRouteExecutionId = exec.id;
+            renderRouteExecution(exec);
+            if (!isRouteActiveStatus(exec.status)) {
+              // already terminal
+            } else {
+              pollRouteExecution(exec.id);
+            }
+          } else {
+            renderRouteExecution(exec);
+            setRunControls("idle");
+          }
+          // Surface session reuse note once when starting.
+          if (reused || exec.session_reused) {
+            appendMessage(
+              "assistant",
+              "Session reused: Yes · provider/model preserved for this Direct Agent thread."
+            );
+          }
+        })
+        .catch(function (err) {
+          var msg =
+            (err && err.message) ||
+            "Direct Agent request failed (network or server error).";
+          appendMessage("assistant", escapeHtml(String(msg)));
+          setRunControls("failed");
+        });
     }
 
     function executeRecommendedRoute(rec, opts) {
@@ -1482,6 +1794,29 @@
       var prompt = String(text || "").trim();
       if (!prompt) return;
 
+      // Direct Agent — Efficient: skip Smart Routing recommend / T0 / escalation.
+      if (routingEnabled && currentRoutingMode() === "direct" && !opts.forceManual) {
+        pendingPrompt = prompt;
+        lastPrompt = prompt;
+        if (!opts.suppressUserBubble) {
+          appendMessage("user", escapeHtml(prompt));
+        }
+        if (promptEl) promptEl.value = "";
+        if (!selectedAgent) {
+          appendMessage(
+            "assistant",
+            "Direct Agent requires a selected provider. Pick one, then send again."
+          );
+          ensureAgents();
+          return;
+        }
+        if (!assertRepositoryReady(selectedAgent)) {
+          return;
+        }
+        executeDirectAgent({});
+        return;
+      }
+
       // skipRoutingOnce skips Smart Routing recommend once only — lifecycle
       // polling / terminal handling still always runs for the AgentCenter child.
       if (routingEnabled && !skipRoutingOnce && !opts.forceManual) {
@@ -1624,6 +1959,12 @@
     function bind() {
       if (toggleBtn) toggleBtn.addEventListener("click", toggle);
       if (topbarBtn) topbarBtn.addEventListener("click", toggle);
+      if (routingModeSel) {
+        routingModeSel.value = prefs.routing_mode === "direct" ? "direct" : "smart";
+        routingModeSel.addEventListener("change", function () {
+          setRoutingMode(routingModeSel.value);
+        });
+      }
       var closeBtn = $("ad-close");
       if (closeBtn) closeBtn.addEventListener("click", function () { setOpen(false); });
       if (backdrop) backdrop.addEventListener("click", function () { setOpen(false); });
@@ -1903,6 +2244,7 @@
 
     bind();
     applyChrome();
+    applyRoutingModeChrome();
     if (expanded()) ensureAgents();
     function openWithPrompt(text) {
       setOpen(true);

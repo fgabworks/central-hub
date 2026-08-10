@@ -241,6 +241,17 @@ def collect_evidence_packet(
     if re.search(r"\b(report|dhis2)\b", prompt, re.I):
         tool_plan.append(("dhis2_reports_lookup", {"query": primary, "limit": 15}))
 
+    # Structured value intents → also search saved SQL library (metadata; execute later).
+    if re.search(
+        r"\b(count|how\s+many|total|numerator|denominator|coverage|eligible|"
+        r"status|approved|households?|beneficiar)\b",
+        prompt,
+        re.I,
+    ):
+        tool_plan.append(("sql_lookup", {"search": primary, "limit": 15}))
+        for term in terms[1:3]:
+            tool_plan.append(("sql_lookup", {"search": term, "limit": 10}))
+
     # Deduplicate tool+query pairs
     seen_keys: set[str] = set()
     unique_plan: list[tuple[str, dict[str, Any]]] = []
@@ -392,6 +403,40 @@ def _extract_hits(tool: str, parsed: dict[str, Any]) -> list[dict[str, Any]]:
                     "environment": row.get("environment"),
                 }
             )
+    elif tool == "sql_lookup":
+        for row in (parsed.get("queries") or [])[:15]:
+            if not isinstance(row, dict):
+                continue
+            hits.append(
+                {
+                    "source": "sql:saved_query",
+                    "query_id": row.get("id"),
+                    "name": row.get("title") or row.get("name"),
+                    "path": row.get("id"),
+                }
+            )
+        q = parsed.get("query")
+        if isinstance(q, dict) and q.get("id"):
+            hits.append(
+                {
+                    "source": "sql:saved_query",
+                    "query_id": q.get("id"),
+                    "name": q.get("title"),
+                    "connection_id": q.get("connection_id"),
+                    "path": q.get("id"),
+                }
+            )
+    elif tool == "sql_query_execute":
+        if parsed.get("value") is not None or parsed.get("ok"):
+            hits.append(
+                {
+                    "source": "sql:query",
+                    "query_id": parsed.get("query_id"),
+                    "connection_id": parsed.get("connection_id"),
+                    "title": parsed.get("title"),
+                    "value": parsed.get("value"),
+                }
+            )
     return hits
 
 
@@ -455,9 +500,15 @@ def evaluate_answer_grounding(
     """
     Return grounding status for UI/API.
 
-    Keys: grounded (bool), grounded_label (Yes/No), source, reason, policy_violation,
-    cannot_verify.
+    Keys: grounded, grounded_label, source, reason, policy_violation, cannot_verify,
+    evidence_found, task_solved, answer_grounded (+ labels).
     """
+    from hub.agent_center.completion import (
+        derive_completion_contract,
+        merge_completion_into_grounding,
+        validate_completion,
+    )
+
     repos = list(repository_ids or [])
     scope = resolve_prompt_scope(prompt, repository_ids=repos)
     requires = scope.requires_project_evidence
@@ -467,10 +518,19 @@ def evaluate_answer_grounding(
         sources.extend(f"repository:{r}" for r in repos)
     sources = list(dict.fromkeys(sources))
 
+    contract = derive_completion_contract(prompt)
+    completion = validate_completion(
+        contract,
+        prompt=prompt,
+        answer=text,
+        evidence=evidence,
+        require_authoritative_evidence=bool(requires),
+    )
+
     if not requires:
         usable = evidence_has_usable_hits(evidence)
-        if usable:
-            return {
+        if completion.task_solved and completion.answer_grounded:
+            status = {
                 "grounded": True,
                 "grounded_label": "Yes",
                 "source": ", ".join(sources) or "hub tools",
@@ -480,22 +540,49 @@ def evaluate_answer_grounding(
                 "required": False,
                 "scope": scope.kind,
             }
+            return merge_completion_into_grounding(status, completion)
+        if completion.evidence_found and not completion.task_solved:
+            status = {
+                "grounded": False,
+                "grounded_label": "No",
+                "source": ", ".join(sources) or "hub tools",
+                "reason": completion.reason,
+                "policy_violation": False,
+                "cannot_verify": True,
+                "required": False,
+                "scope": scope.kind,
+            }
+            return merge_completion_into_grounding(status, completion)
         src = "general knowledge"
         if scope.kind in {SCOPE_NATIONAL, SCOPE_WEB}:
             src = f"{scope.kind.replace('_', ' ')} / model knowledge"
-        return {
-            "grounded": True,
-            "grounded_label": "Yes",
-            "source": src,
-            "reason": scope.reason or "Prompt does not require project-data grounding.",
+        status = {
+            # Spec: Grounded=Yes only with authoritative evidence.
+            "grounded": bool(completion.answer_grounded),
+            "grounded_label": "Yes" if completion.answer_grounded else "No",
+            "source": src if not usable else (", ".join(sources) or "hub tools"),
+            "reason": (
+                scope.reason
+                if completion.task_solved
+                else completion.reason
+            )
+            or "Prompt does not require project-data grounding.",
             "policy_violation": False,
-            "cannot_verify": False,
+            "cannot_verify": bool(not completion.task_solved and completion.evidence_found),
             "required": False,
             "scope": scope.kind,
         }
+        merged = merge_completion_into_grounding(status, completion)
+        if completion.task_solved and not completion.answer_grounded:
+            merged["source"] = src if not usable else merged.get("source") or src
+            merged["cannot_verify"] = False
+            merged["reason"] = (
+                scope.reason or "Answer allowed from model knowledge for this scope."
+            )
+        return merged
 
     if allow_general:
-        return {
+        status = {
             "grounded": False,
             "grounded_label": "No",
             "source": "general knowledge (explicitly requested)",
@@ -505,29 +592,31 @@ def evaluate_answer_grounding(
             "required": True,
             "scope": scope.kind,
         }
+        return merge_completion_into_grounding(status, completion)
 
     usable = evidence_has_usable_hits(evidence)
     admits_unavailable = bool(_LOOKUP_UNAVAILABLE.search(text))
     cannot_verify = bool(
         re.search(r"cannot\s+verify\s+from\s+selected\s+context", text, re.I)
-    )
+    ) or (completion.evidence_found and not completion.task_solved)
 
     if cannot_verify and not admits_unavailable:
-        # Honest cannot-verify without GK substitution.
-        return {
+        status = {
             "grounded": False,
             "grounded_label": "No",
             "source": ", ".join(sources) or "selected context (no evidence)",
-            "reason": "No usable evidence in selected context; answered cannot-verify.",
+            "reason": completion.reason
+            if not completion.task_solved
+            else "No usable evidence in selected context; answered cannot-verify.",
             "policy_violation": False,
             "cannot_verify": True,
             "required": True,
             "scope": scope.kind,
         }
+        return merge_completion_into_grounding(status, completion)
 
     if admits_unavailable and text and not cannot_verify:
-        # Classic failure: admits tools unavailable then answers from GK.
-        return {
+        status = {
             "grounded": False,
             "grounded_label": "No",
             "source": ", ".join(sources) or "none",
@@ -540,10 +629,11 @@ def evaluate_answer_grounding(
             "required": True,
             "scope": scope.kind,
         }
+        return merge_completion_into_grounding(status, completion)
 
     if not usable:
         if cannot_verify:
-            return {
+            status = {
                 "grounded": False,
                 "grounded_label": "No",
                 "source": ", ".join(sources) or "selected context (no evidence)",
@@ -554,8 +644,8 @@ def evaluate_answer_grounding(
                 "required": True,
                 "scope": scope.kind,
             }
-        # Answered as if grounded without evidence.
-        return {
+            return merge_completion_into_grounding(status, completion)
+        status = {
             "grounded": False,
             "grounded_label": "No",
             "source": ", ".join(sources) or "none",
@@ -565,32 +655,64 @@ def evaluate_answer_grounding(
             "required": True,
             "scope": scope.kind,
         }
+        return merge_completion_into_grounding(status, completion)
 
-    return {
-        "grounded": True,
-        "grounded_label": "Yes",
+    # Usable evidence exists — only grounded if completion contract is satisfied.
+    if completion.task_solved and completion.answer_grounded:
+        status = {
+            "grounded": True,
+            "grounded_label": "Yes",
+            "source": ", ".join(sources) or "selected context",
+            "reason": (evidence or {}).get("summary")
+            or "Answer grounded in tool/repo evidence.",
+            "policy_violation": False,
+            "cannot_verify": False,
+            "required": True,
+            "scope": scope.kind,
+        }
+        return merge_completion_into_grounding(status, completion)
+
+    status = {
+        "grounded": False,
+        "grounded_label": "No",
         "source": ", ".join(sources) or "selected context",
-        "reason": (evidence or {}).get("summary") or "Answer grounded in tool/repo evidence.",
+        "reason": completion.reason,
         "policy_violation": False,
-        "cannot_verify": False,
+        "cannot_verify": True,
         "required": True,
         "scope": scope.kind,
     }
+    return merge_completion_into_grounding(status, completion)
 
 
 def format_grounding_status_block(status: dict[str, Any] | None) -> str:
     if not isinstance(status, dict):
         return ""
-    return (
-        "\n\n—\n"
-        f"Source: {status.get('source') or 'unknown'}\n"
-        f"Grounded: {status.get('grounded_label') or ('Yes' if status.get('grounded') else 'No')}\n"
-        + (
-            f"Why not grounded: {status.get('reason')}\n"
-            if not status.get("grounded") and status.get("reason")
-            else ""
-        )
+    evidence = status.get("evidence_found_label")
+    if evidence is None and "evidence_found" in status:
+        evidence = "Yes" if status.get("evidence_found") else "No"
+    solved = status.get("task_solved_label")
+    if solved is None and "task_solved" in status:
+        solved = "Yes" if status.get("task_solved") else "No"
+    sources = status.get("sources_used") or []
+    if not sources and status.get("source"):
+        sources = [str(status.get("source"))]
+    source_line = ", ".join(str(s) for s in sources if str(s).strip()) or (
+        status.get("source") or "unknown"
     )
+    lines = [
+        "",
+        "—",
+        f"Evidence Found: {evidence or 'No'}",
+        f"Task Solved: {solved or ('Yes' if status.get('task_solved') else 'No')}",
+        f"Grounded: {status.get('grounded_label') or ('Yes' if status.get('grounded') else 'No')}",
+        f"Sources used: {source_line}",
+    ]
+    if not status.get("grounded") and status.get("reason"):
+        lines.append(f"Why not grounded: {status.get('reason')}")
+    if not status.get("task_solved") and status.get("completion_reason"):
+        lines.append(f"Completion: {status.get('completion_reason')}")
+    return "\n".join(lines) + "\n"
 
 
 def apply_grounding_to_answer(answer: str, status: dict[str, Any] | None) -> str:
@@ -598,7 +720,7 @@ def apply_grounding_to_answer(answer: str, status: dict[str, Any] | None) -> str
     footer = format_grounding_status_block(status)
     if not footer:
         return text
-    if "Grounded:" in text and "Source:" in text:
+    if "Grounded:" in text and ("Evidence Found:" in text or "Source:" in text):
         return text
     return text + footer
 
@@ -607,12 +729,48 @@ def answer_from_evidence(
     prompt: str,
     packet: dict[str, Any],
 ) -> str | None:
-    """Build a deterministic answer when OU/region evidence is available."""
+    """
+    Build a deterministic answer only when evidence satisfies the completion contract.
+
+    Finding related files/UIDs alone is not enough for count/status/etc.
+    """
+    from hub.agent_center.completion import (
+        INTENT_COUNT,
+        INTENT_FILE_SEARCH,
+        INTENT_GENERAL,
+        INTENT_LIST,
+        INTENT_LOOKUP,
+        INTENT_STATUS,
+        INTENT_TRACE,
+        derive_completion_contract,
+        validate_completion,
+    )
+
     if not evidence_has_usable_hits(packet):
         return None
+    contract = derive_completion_contract(prompt)
     hits = dedupe_evidence_hits(
         [h for h in (packet.get("hits") or []) if isinstance(h, dict)]
     )
+
+    # Prefer verified SQL numeric/status/list hits when present.
+    sql_hits = [h for h in hits if str(h.get("source") or "") == "sql:query" and h.get("value") is not None]
+    candidate: str | None = None
+    if sql_hits:
+        hit = sql_hits[0]
+        value = str(hit.get("value"))
+        conn = str(hit.get("connection_id") or "connected database")
+        title = str(hit.get("title") or "")
+        title_s = f" ({title})" if title else ""
+        if contract.intent == INTENT_COUNT:
+            candidate = f"Count: {value}\nSource: read-only SQL{title_s} via {conn}"
+        elif contract.intent == INTENT_STATUS:
+            candidate = f"Status: {value}\nSource: read-only SQL{title_s} via {conn}"
+        elif contract.intent in {INTENT_LIST, INTENT_LOOKUP}:
+            candidate = f"Results from read-only SQL{title_s} via {conn}:\n{value}"
+        else:
+            candidate = f"Value: {value}\nSource: read-only SQL{title_s} via {conn}"
+
     ou_hits = [
         h
         for h in hits
@@ -634,23 +792,36 @@ def answer_from_evidence(
         label = name if not uid else f"{name} ({uid})" if name else uid
         if label and label not in names:
             names.append(label)
-    if names and re.search(r"\b(province|region|org|ou)\b", prompt, re.I):
-        label = "Organisation units from selected DHIS2/project context"
-        body = "\n".join(f"- {n}" for n in names[:30])
-        return f"{label}:\n{body}"
+
+    if candidate is None and names and re.search(
+        r"\b(province|region|org|ou|list|what\s+are)\b", prompt, re.I
+    ):
+        if contract.intent in {INTENT_LIST, INTENT_LOOKUP, INTENT_GENERAL}:
+            label = "Organisation units from selected DHIS2/project context"
+            body = "\n".join(f"- {n}" for n in names[:30])
+            candidate = f"{label}:\n{body}"
 
     repo_hits = [h for h in hits if h.get("source") == "repository"]
-    if repo_hits:
+    if candidate is None and repo_hits:
         paths = []
         for h in repo_hits[:15]:
             path = str(h.get("path") or "").strip()
             rid = str(h.get("repo_id") or "").strip()
             if path:
                 paths.append(f"{rid}:{path}" if rid else path)
-        if paths:
-            return (
-                "Selected-repository matches (read-only). Open these paths for project facts "
-                "rather than using general knowledge:\n"
+        if paths and contract.intent in {INTENT_FILE_SEARCH, INTENT_TRACE}:
+            candidate = (
+                "Selected-repository matches (read-only):\n"
                 + "\n".join(f"- {p}" for p in paths)
             )
+        # For other intents, path discovery is evidence only — not a final answer.
+
+    if not candidate:
+        return None
+
+    completion = validate_completion(
+        contract, prompt=prompt, answer=candidate, evidence=packet
+    )
+    if completion.task_solved and completion.answer_grounded:
+        return candidate
     return None

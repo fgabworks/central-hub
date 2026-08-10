@@ -264,5 +264,73 @@ class HybridAndAiTelemetryTests(unittest.TestCase):
         self.assertEqual(tel["child_ai_run_id"], "child-1")
 
 
+class DeterministicRepoSearchTelemetryTests(unittest.TestCase):
+    def test_repo_search_no_provider_renders_t0_deterministic(self) -> None:
+        """Exact observed shape: deterministic repo_search, no provider child run."""
+        # Sparse/missing fields that previously produced Tier T? / Type AI / LLM Yes.
+        row = {
+            "status": "completed",
+            "provider_id": "deterministic",
+            "adapter_id": None,
+            "agent_run_id": None,
+            "agent_run": None,
+            # mode / tier intentionally omitted — must still derive T0 Deterministic.
+            "grounding": {
+                "grounded": True,
+                "grounded_label": "Yes",
+                "source": "repo_search",
+            },
+            "evidence_packet": {
+                "usable": True,
+                "sources": ["tool:repo_search"],
+                "tool_results": [
+                    {"tool": "repo_search", "ok": True, "result": {"summary": "1 hit"}}
+                ],
+                "hits": [{"source": "repo_search", "path": "README.md"}],
+            },
+            "tool_results": [],  # tools may live only on the evidence packet
+            "started_at": "2026-08-10T00:00:00+00:00",
+            "finished_at": "2026-08-10T00:00:01+00:00",
+        }
+        stamped = attach_execution_telemetry(row)
+        tel = stamped["telemetry"]
+        assert_t0_telemetry_pure(tel)
+        self.assertEqual(tel["routing_tier"], "T0")
+        self.assertEqual(tel["execution_type"], "Deterministic")
+        self.assertFalse(tel["llm_invoked"])
+        self.assertIsNone(tel["provider"])
+        self.assertIsNone(tel["model"])
+        self.assertIsNone(tel["child_ai_run_id"])
+        self.assertEqual(tel["total_ai_tokens"], 0)
+        self.assertEqual(tel["input_tokens"], 0)
+        self.assertEqual(tel["output_tokens"], 0)
+        self.assertIn("repo_search", tel["tools_used"])
+        self.assertGreaterEqual(tel["runtime_ms"], 1000)
+        # Diagnostics text must not say T? / AI / LLM Yes.
+        from hub.agent_center.routing.telemetry import format_telemetry_block
+
+        block = format_telemetry_block(tel)
+        self.assertIn("Tier: T0", block)
+        self.assertIn("Type: Deterministic", block)
+        self.assertIn("LLM: No", block)
+        self.assertIn("repo_search", block)
+        self.assertNotIn("T?", block)
+        self.assertNotIn("Type: AI", block)
+        self.assertNotIn("LLM: Yes", block)
+
+    def test_llm_invoked_false_without_child_run_even_if_ai_adapter_set(self) -> None:
+        tel = build_execution_telemetry(
+            {
+                "provider_id": "grok",
+                "adapter_id": "grok",
+                "agent_run_id": None,
+                "tier": "T2",
+            }
+        )
+        self.assertFalse(tel["llm_invoked"])
+        self.assertIsNone(tel["child_ai_run_id"])
+        self.assertEqual(tel["total_ai_tokens"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

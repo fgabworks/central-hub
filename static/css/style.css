@@ -5426,12 +5426,12 @@ body.qn-maximized .qn-history[open] {
 }
 .ad-composer-selects {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
   gap: 0.35rem;
   margin-bottom: 0.35rem;
 }
 .ad-composer-selects:has(#ad-model[hidden]) {
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
 }
 .ad-select-wrap {
   display: block;
@@ -5439,7 +5439,9 @@ body.qn-maximized .qn-history[open] {
 }
 .ad-select-wrap select,
 #ad-agent,
-#ad-model {
+#ad-model,
+#ad-repo,
+#ad-routing-mode-select {
   display: block;
   width: 100%;
   max-width: none;

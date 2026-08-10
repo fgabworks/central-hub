@@ -209,13 +209,19 @@ class RouteExecutor:
         rbac_role: str = "",
         model: str | None = None,
         manual_override: bool = False,
+        routing_mode: str | None = None,
+        conversation_id: str | None = None,
+        context_fingerprint: str | None = None,
     ) -> dict[str, Any]:
         prompt_n = (prompt or "").strip()
         if not prompt_n:
             raise AgentCenterError("Prompt is required", code="prompt_required")
 
+        from hub.agent_center.routing.context import normalize_routing_mode
+
+        mode_key = normalize_routing_mode(routing_mode)
         # Explicit UI/API selection is authoritative; never silently swap providers.
-        is_manual = bool(manual_override)
+        is_manual = bool(manual_override) or mode_key == "direct"
         recommended_provider = (recommendation.recommended_agent or "").strip()
         provider_id = (agent_override or recommended_provider).strip()
         if not provider_id:
@@ -292,6 +298,17 @@ class RouteExecutor:
         selected_model = (model or "").strip()
         if selected_model:
             context_preview = {**context_preview, "model": selected_model}
+        if conversation_id:
+            context_preview = {
+                **context_preview,
+                "conversation_id": str(conversation_id).strip(),
+            }
+        if context_fingerprint:
+            context_preview = {
+                **context_preview,
+                "context_fingerprint": str(context_fingerprint).strip()[:128],
+            }
+        context_preview = {**context_preview, "routing_mode": mode_key}
 
         with self._lock:
             existing_id = self._fingerprints.get(fingerprint)
@@ -318,15 +335,19 @@ class RouteExecutor:
                 "approval_required": requires_approval,
                 "approved": bool(approve_codex),
                 "manual_override": is_manual,
+                "routing_mode": mode_key,
                 "selected_provider": (agent_override or "").strip() or provider_id,
-                "recommended_provider": recommended_provider,
+                "recommended_provider": recommended_provider if mode_key != "direct" else provider_id,
                 "resolved_provider": provider_id,
                 "selected_model": selected_model,
                 "recommended_model": str(
                     getattr(recommendation, "recommended_model", None) or ""
-                ).strip(),
+                ).strip()
+                if mode_key != "direct"
+                else selected_model,
                 "resolved_model": selected_model,
                 "fallback_reason": "",
+                "session_reused": False,
                 "context": context_preview,
                 "prior_findings": list(context_preview.get("prior_findings") or []),
                 "rbac_role": (rbac_role or "").strip(),
@@ -364,70 +385,20 @@ class RouteExecutor:
             )
 
         try:
-            if adapter_id is None:
-                result = self._execute_t0(execution_id, prompt_n, recommendation, context_preview)
-                # T0 miss on general/national/GK scope → continue to a real model.
-                # Never auto-fall through to Hub Simulator (demo only).
-                signals = set(recommendation.classification.signals or [])
-                authoritative_data = (
-                    "authoritative_data_query" in signals
-                    or "data_query" in signals
-                    or "structured_data_lookup" in signals
-                )
-                if result.get("t0_fallthrough") and not authoritative_data:
-                    alt = recommendation.alternative_agent or "grok"
-                    alt_adapter = provider_to_adapter_id(str(alt))
-                    # Prefer openai-api / grok — never Hub Simulator as automatic fallback.
-                    candidates = []
-                    for cand in (alt_adapter, "openai-api", "grok"):
-                        if not cand or cand == "hub-simulator" or cand in candidates:
-                            continue
-                        candidates.append(cand)
-                    chosen_alt = None
-                    for candidate in candidates:
-                        ok, _detail = self._provider_available(candidate)
-                        if ok:
-                            chosen_alt = candidate
-                            break
-                    if chosen_alt is None:
-                        result = self._fail(
-                            execution_id,
-                            "No capable AI provider available after T0 miss "
-                            "(Hub Simulator is not used as an automatic fallback).",
-                            code="unavailable",
-                        )
-                    else:
-                        self._update(
-                            execution_id,
-                            status="running",
-                            fallback_from="deterministic",
-                            fallback_reason="t0_miss_general_knowledge",
-                            escalated_to=chosen_alt,
-                            adapter_id=chosen_alt,
-                            resolved_provider=chosen_alt,
-                            finished_at=None,
-                            answer="",
-                            error="",
-                            error_code="",
-                        )
-                        result = self._execute_agent(
-                            execution_id,
-                            prompt_n,
-                            recommendation,
-                            {
-                                **context_preview,
-                                "allow_general_knowledge": True,
-                                "evidence_packet": result.get("evidence_packet")
-                                or context_preview.get("evidence_packet"),
-                            },
-                            adapter_id=chosen_alt,
-                            repository_ids=[]
-                            if "allow_general_knowledge" in signals
-                            else repository_ids,
-                            settings=settings,
-                            manual_override=False,
-                        )
-            else:
+            signals = set(recommendation.classification.signals or [])
+            authoritative_data = (
+                "authoritative_data_query" in signals
+                or "data_query" in signals
+                or "structured_data_lookup" in signals
+            )
+            # Direct Agent: skip Smart Routing / T0 / automatic escalation entirely.
+            if mode_key == "direct":
+                if adapter_id is None:
+                    return self._fail(
+                        execution_id,
+                        "Direct Agent requires an explicit AI provider (not T0/deterministic).",
+                        code="agent_required",
+                    )
                 result = self._execute_agent(
                     execution_id,
                     prompt_n,
@@ -436,8 +407,184 @@ class RouteExecutor:
                     adapter_id=adapter_id,
                     repository_ids=repository_ids,
                     settings=settings,
-                    manual_override=is_manual,
+                    manual_override=True,
                 )
+            else:
+                # Prefer T0 + connected DB before any selected AI for deterministic-capable work.
+                try_t0_first = adapter_id is None or (
+                    recommendation.classification.deterministic_capable
+                    and (
+                        authoritative_data
+                        or recommendation.recommended_agent == "deterministic"
+                    )
+                )
+
+                def _escalate_to_ai(
+                    *,
+                    chosen: str,
+                    reason: str,
+                    prior: dict[str, Any],
+                    preserve_model: bool,
+                ) -> dict[str, Any]:
+                    self._update(
+                        execution_id,
+                        status="running",
+                        fallback_from="deterministic",
+                        fallback_reason=reason,
+                        escalated_to=chosen,
+                        adapter_id=chosen,
+                        resolved_provider=chosen,
+                        finished_at=None,
+                        answer="",
+                        error="",
+                        error_code="",
+                        ai_escalation_occurred=True,
+                        t0_failure_reason=prior.get("t0_failure_reason") or reason,
+                        next_capability=prior.get("next_capability") or "ai_escalate",
+                        db_query_attempted=bool(prior.get("db_query_attempted")),
+                    )
+                    esc_context = {
+                        **context_preview,
+                        "evidence_packet": prior.get("evidence_packet")
+                        or context_preview.get("evidence_packet"),
+                        "detected_filters": prior.get("detected_filters")
+                        or context_preview.get("detected_filters"),
+                        "completion_contract": prior.get("completion_contract")
+                        or context_preview.get("completion_contract"),
+                        "t0_failure_reason": prior.get("t0_failure_reason") or reason,
+                        "allow_general_knowledge": reason == "t0_miss_general_knowledge",
+                    }
+                    if preserve_model and selected_model:
+                        esc_context["model"] = selected_model
+                    return self._execute_agent(
+                        execution_id,
+                        prompt_n,
+                        recommendation,
+                        esc_context,
+                        adapter_id=chosen,
+                        repository_ids=[]
+                        if reason == "t0_miss_general_knowledge"
+                        else repository_ids,
+                        settings=settings,
+                        manual_override=is_manual and preserve_model,
+                    )
+
+                result: dict[str, Any]
+                if try_t0_first:
+                    result = self._execute_t0(
+                        execution_id, prompt_n, recommendation, context_preview
+                    )
+                    grounding = result.get("grounding") or {}
+                    solved = bool(
+                        grounding.get("task_solved") and grounding.get("answer_grounded")
+                    )
+                    if solved and result.get("status") == "completed" and result.get("answer"):
+                        pass  # Deterministic success — do not escalate.
+                    elif result.get("t0_capability_escalate"):
+                        # AI can materially advance (e.g. query construction) after DB attempt.
+                        preferred = adapter_id or provider_to_adapter_id(
+                            str(
+                                agent_override
+                                or recommendation.alternative_agent
+                                or recommendation.recommended_agent
+                                or "grok"
+                            )
+                        )
+                        candidates: list[str] = []
+                        for cand in (
+                            preferred,
+                            provider_to_adapter_id(str(recommendation.alternative_agent or "")),
+                            "openai-api",
+                            "grok",
+                        ):
+                            if not cand or cand == "hub-simulator" or cand in candidates:
+                                continue
+                            candidates.append(cand)
+                        chosen_alt = None
+                        for candidate in candidates:
+                            ok, _detail = self._provider_available(candidate)
+                            if ok:
+                                chosen_alt = candidate
+                                break
+                        if chosen_alt is None:
+                            # No capable AI — surface Cannot verify rather than inventing values.
+                            from hub.agent_center.grounding import format_cannot_verify
+
+                            cannot = format_cannot_verify(
+                                repository_ids=repository_ids,
+                                reason=str(
+                                    result.get("t0_failure_reason")
+                                    or "No capable AI provider available after deterministic tools."
+                                ),
+                            )
+                            result = public_execution_fields(
+                                self._update(
+                                    execution_id,
+                                    status="completed",
+                                    answer=cannot,
+                                    finished_at=_utcnow(),
+                                    t0_capability_escalate=False,
+                                    ai_escalation_occurred=False,
+                                    next_capability="cannot_verify",
+                                )
+                            )
+                        else:
+                            result = _escalate_to_ai(
+                                chosen=chosen_alt,
+                                reason=str(
+                                    result.get("t0_failure_reason")
+                                    or "t0_capability_escalate"
+                                ),
+                                prior=result,
+                                preserve_model=bool(adapter_id or selected_model),
+                            )
+                    elif result.get("t0_fallthrough") and not authoritative_data:
+                        alt = recommendation.alternative_agent or "grok"
+                        alt_adapter = provider_to_adapter_id(str(alt))
+                        candidates = []
+                        for cand in (adapter_id, alt_adapter, "openai-api", "grok"):
+                            if not cand or cand == "hub-simulator" or cand in candidates:
+                                continue
+                            candidates.append(cand)
+                        chosen_alt = None
+                        for candidate in candidates:
+                            ok, _detail = self._provider_available(candidate)
+                            if ok:
+                                chosen_alt = candidate
+                                break
+                        if chosen_alt is None:
+                            result = self._fail(
+                                execution_id,
+                                "No capable AI provider available after T0 miss "
+                                "(Hub Simulator is not used as an automatic fallback).",
+                                code="unavailable",
+                            )
+                        else:
+                            result = _escalate_to_ai(
+                                chosen=chosen_alt,
+                                reason="t0_miss_general_knowledge",
+                                prior=result,
+                                preserve_model=bool(adapter_id or selected_model),
+                            )
+                    elif (
+                        adapter_id
+                        and not solved
+                        and result.get("t0_unsolved")
+                        and not result.get("answer")
+                    ):
+                        # Selected AI waiting after T0 miss without escalate flag → do not waste.
+                        pass
+                else:
+                    result = self._execute_agent(
+                        execution_id,
+                        prompt_n,
+                        recommendation,
+                        context_preview,
+                        adapter_id=adapter_id,
+                        repository_ids=repository_ids,
+                        settings=settings,
+                        manual_override=is_manual,
+                    )
         except AgentCenterError as exc:
             result = self._fail(execution_id, str(exc), code=exc.code)
         except Exception as exc:  # noqa: BLE001
@@ -677,6 +824,8 @@ class RouteExecutor:
             repository_ids=list(repository_ids or []),
             notebook=svc.notebook,
             sql_store=svc.sql_store,
+            sql_executor=getattr(svc, "sql_executor", None),
+            sql_connections=getattr(svc, "sql_connections", None),
             uid_index=svc.uid_index,
             email=svc.email,
             calendar=svc.calendar,
@@ -704,9 +853,13 @@ class RouteExecutor:
             format_cannot_verify,
             resolve_prompt_scope,
         )
+        from hub.agent_center.completion import (
+            derive_completion_contract,
+            validate_completion,
+        )
         from hub.agent_center.scope import SCOPE_GK, SCOPE_NATIONAL, SCOPE_WEB
 
-        self._update(execution_id, status="running", started_at=_utcnow())
+        self._update(execution_id, status="running", started_at=_utcnow(), mode="deterministic")
         tools = list(context_preview.get("tool_ids") or select_minimal_tools(recommendation.classification))
         repos = list(context_preview.get("repository_ids") or [])
         try:
@@ -721,8 +874,20 @@ class RouteExecutor:
                 packet = collect_evidence_packet(prompt, ctx, repository_ids=repos)
             results = list(packet.get("tool_results") or [])
 
+            contract = derive_completion_contract(
+                prompt,
+                classification_signals=list(recommendation.classification.signals or []),
+            )
+            # Preserve detected filters on the execution row for downstream/AI escalation.
+            self._update(
+                execution_id,
+                completion_contract=contract.public(),
+                detected_filters=dict(contract.filters),
+            )
+
             deterministic_answer = answer_from_evidence(prompt, packet)
             t0_fallthrough = False
+            t0_capability_escalate = False
             fallthrough_kinds = {SCOPE_NATIONAL, SCOPE_GK, SCOPE_WEB}
             signals = set(recommendation.classification.signals or [])
             authoritative_data = (
@@ -731,8 +896,120 @@ class RouteExecutor:
                 or "structured_data_lookup" in signals
                 or scope.kind == "dhis2_data"
             )
+
+            def _completion_for(ans: str):
+                return validate_completion(
+                    contract, prompt=prompt, answer=ans, evidence=packet
+                )
+
+            if deterministic_answer:
+                completion = _completion_for(deterministic_answer)
+                if completion.task_solved and completion.answer_grounded:
+                    answer = deterministic_answer
+                else:
+                    # Evidence ≠ completion — do not present discovery as the final result.
+                    deterministic_answer = None
+
+            sql_attempt = None
+            failure = None
+            # Capability / connected-DB path for structured authoritative asks only.
+            # National/GK/web fallthrough must not be blocked by SQL probing.
+            run_capability_path = bool(authoritative_data) or (
+                requires
+                and contract.intent
+                in {"count", "list", "lookup", "status", "metadata", "comparison"}
+            )
+            if not deterministic_answer and run_capability_path:
+                from hub.agent_center.capability import (
+                    attempt_deterministic_sql,
+                    classify_t0_failure,
+                    find_saved_sql_matches,
+                    merge_sql_attempt_into_packet,
+                    should_escalate_to_ai,
+                    snapshot_capabilities,
+                )
+
+                svc = self.agent_center
+                matches = find_saved_sql_matches(
+                    getattr(svc, "sql_store", None) or getattr(ctx, "sql_store", None),
+                    filters=dict(contract.filters or {}),
+                    prompt=prompt,
+                )
+                # Also pull saved-query ids discovered in the evidence packet.
+                for hit in packet.get("hits") or []:
+                    if not isinstance(hit, dict):
+                        continue
+                    if str(hit.get("source") or "") == "sql:saved_query" and hit.get("query_id"):
+                        qid = str(hit.get("query_id"))
+                        if not any(str(m.get("id")) == qid for m in matches):
+                            store = getattr(svc, "sql_store", None)
+                            if store is not None and callable(getattr(store, "get_query", None)):
+                                try:
+                                    loaded = store.get_query(qid)
+                                    if isinstance(loaded, dict):
+                                        matches.append(loaded)
+                                except Exception:  # noqa: BLE001
+                                    pass
+                sql_attempt = attempt_deterministic_sql(
+                    prompt=prompt,
+                    contract=contract,
+                    sql_store=getattr(svc, "sql_store", None) or getattr(ctx, "sql_store", None),
+                    sql_executor=getattr(svc, "sql_executor", None)
+                    or getattr(ctx, "sql_executor", None),
+                    sql_connections=getattr(svc, "sql_connections", None)
+                    or getattr(ctx, "sql_connections", None),
+                    matches=matches,
+                )
+                if sql_attempt.attempted or sql_attempt.tool_result:
+                    packet = merge_sql_attempt_into_packet(packet, sql_attempt)
+                    results = list(packet.get("tool_results") or results)
+                if sql_attempt.ok and sql_attempt.answer:
+                    completion = validate_completion(
+                        contract,
+                        prompt=prompt,
+                        answer=sql_attempt.answer,
+                        evidence=packet,
+                    )
+                    if completion.task_solved and completion.answer_grounded:
+                        deterministic_answer = sql_attempt.answer
+                caps = snapshot_capabilities(
+                    sql_store=getattr(svc, "sql_store", None),
+                    sql_executor=getattr(svc, "sql_executor", None),
+                    sql_connections=getattr(svc, "sql_connections", None),
+                    dhis2_reports=getattr(svc, "dhis2_reports", None),
+                    saved_matches=matches,
+                )
+                if not deterministic_answer:
+                    failure = classify_t0_failure(
+                        contract=contract,
+                        packet=packet,
+                        caps=caps,
+                        sql_attempt=sql_attempt,
+                        authoritative_data=authoritative_data,
+                    )
+                    self._update(
+                        execution_id,
+                        t0_failure_reason=failure.reason,
+                        next_capability=failure.next_capability,
+                        db_query_attempted=bool(failure.db_query_attempted),
+                        capability_snapshot=caps.public(),
+                        failure_classification=failure.public(),
+                    )
+
             if deterministic_answer:
                 answer = deterministic_answer
+            elif failure is not None and should_escalate_to_ai(failure):
+                t0_capability_escalate = True
+                answer = ""
+            elif (
+                failure is not None
+                and failure.next_capability == "cannot_verify"
+            ):
+                answer = format_cannot_verify(
+                    repository_ids=repos or list(context_preview.get("repository_ids") or []),
+                    reason=failure.detail or failure.reason,
+                    errors=list(packet.get("errors") or []),
+                )
             elif requires and not packet.get("usable"):
                 answer = format_cannot_verify(
                     repository_ids=repos or list(context_preview.get("repository_ids") or []),
@@ -740,7 +1017,6 @@ class RouteExecutor:
                     errors=list(packet.get("errors") or []),
                 )
             elif authoritative_data and not packet.get("usable"):
-                # Structured/project data: never substitute Hub Simulator or GK values.
                 answer = format_cannot_verify(
                     repository_ids=repos or list(context_preview.get("repository_ids") or []),
                     reason=str(
@@ -749,110 +1025,104 @@ class RouteExecutor:
                     ),
                     errors=list(packet.get("errors") or []),
                 )
-            elif (
-                not packet.get("usable")
-                and scope.allow_general_knowledge
-                and scope.kind in fallthrough_kinds
-                and not authoritative_data
-            ):
-                # T0 miss + general/national/web → escalate to lowest-tier model.
-                t0_fallthrough = True
-                answer = ""
-            else:
-                query = _extract_query(prompt)
-                lines = [f"Deterministic lookup for: {query}"]
-                for item in results:
-                    summary = ""
-                    res = item.get("result") or {}
-                    if isinstance(res, dict):
-                        summary = str(res.get("summary") or res.get("error") or "")[:400]
-                    lines.append(
-                        f"- {item.get('tool')}: {summary or ('ok' if item.get('ok') else 'failed')}"
-                    )
-                if not results:
-                    # Fallback: run selected tools with extracted query (legacy path).
-                    for name in tools:
-                        live = self.get_status(execution_id)
-                        if live and live.get("cancel_requested"):
-                            return public_execution_fields(
-                                self._update(execution_id, status="cancelled", finished_at=_utcnow())
-                            )
-                        args: dict[str, Any] = {"query": query, "limit": 10}
-                        if name == "uid_lookup":
-                            args = {
-                                "query": query,
-                                "limit": 10,
-                                "resource": "organisationUnits"
-                                if requires
-                                else "dataElements",
-                            }
-                        elif name == "org_unit_lookup":
-                            args = {"query": query, "limit": 25, "environment": "stage"}
-                        elif name == "sql_lookup":
-                            args = {"search": query, "limit": 10}
-                        elif name in {"jobs_lookup", "audit_lookup"}:
-                            args = {"limit": 15}
-                        raw = execute_tool(name, args, ctx)
-                        try:
-                            parsed = json.loads(raw)
-                        except json.JSONDecodeError:
-                            parsed = {"raw": raw}
-                        results.append({"tool": name, "ok": "error" not in parsed, "result": parsed})
-                        summary = ""
-                        if isinstance(parsed, dict):
-                            summary = str(parsed.get("summary") or parsed.get("error") or "")[:400]
-                        lines.append(
-                            f"- {name}: {summary or ('ok' if 'error' not in parsed else 'failed')}"
-                        )
-                # Weak tool dump with no hits on national/GK/web scopes → fall through instead.
-                # Authoritative structured data always cannot-verify (never demo/GK).
-                if authoritative_data and not packet.get("usable"):
-                    answer = format_cannot_verify(
-                        repository_ids=repos or list(context_preview.get("repository_ids") or []),
-                        reason=str(
-                            packet.get("summary")
-                            or "Authoritative data sources did not return a verifiable value."
-                        ),
-                        errors=list(packet.get("errors") or []),
-                    )
-                elif (
-                    not packet.get("usable")
-                    and scope.allow_general_knowledge
+            elif packet.get("usable") and not deterministic_answer:
+                # Supporting evidence found but completion contract unsatisfied.
+                completion = _completion_for("")
+                if (
+                    scope.allow_general_knowledge
                     and scope.kind in fallthrough_kinds
                     and not authoritative_data
                 ):
                     t0_fallthrough = True
                     answer = ""
                 else:
-                    answer = "\n".join(lines)
+                    answer = format_cannot_verify(
+                        repository_ids=repos or list(context_preview.get("repository_ids") or []),
+                        reason=(
+                            f"Evidence found but task unsolved for intent={contract.intent}; "
+                            f"need {contract.required_output}. "
+                            f"{completion.reason}"
+                        ),
+                        errors=list(packet.get("errors") or []),
+                    )
+            elif (
+                not packet.get("usable")
+                and scope.allow_general_knowledge
+                and scope.kind in fallthrough_kinds
+                and not authoritative_data
+            ):
+                t0_fallthrough = True
+                answer = ""
+            else:
+                # Never present raw tool dumps as the requested final result.
+                completion = _completion_for("")
+                if (
+                    scope.allow_general_knowledge
+                    and scope.kind in fallthrough_kinds
+                    and not authoritative_data
+                ):
+                    t0_fallthrough = True
+                    answer = ""
+                else:
+                    answer = format_cannot_verify(
+                        repository_ids=repos or list(context_preview.get("repository_ids") or []),
+                        reason=(
+                            f"T0 could not satisfy completion contract "
+                            f"(intent={contract.intent}, need {contract.required_output})."
+                        ),
+                        errors=list(packet.get("errors") or []),
+                    )
 
-            if t0_fallthrough:
+            if t0_fallthrough or t0_capability_escalate:
+                from hub.agent_center.completion import merge_completion_into_grounding
+
+                partial_completion = _completion_for(answer or "")
+                fallthrough_grounding = merge_completion_into_grounding(
+                    {
+                        "grounded": False,
+                        "grounded_label": "No",
+                        "source": ", ".join(packet.get("sources") or []) or "none",
+                        "reason": (
+                            (failure.detail if failure else None)
+                            or "T0 unsolved; continuing to next capable route."
+                        ),
+                        "policy_violation": False,
+                        "cannot_verify": False,
+                        "required": bool(requires),
+                        "scope": scope.kind,
+                    },
+                    partial_completion,
+                )
                 return public_execution_fields(
                     self._update(
                         execution_id,
                         status="completed",
                         answer="",
                         tool_results=results,
-                        grounding={
-                            "grounded": False,
-                            "grounded_label": "No",
-                            "source": "none",
-                            "reason": "T0 miss; falling through to lowest-tier model.",
-                            "policy_violation": False,
-                            "cannot_verify": False,
-                            "required": False,
-                            "scope": scope.kind,
-                        },
+                        grounding=fallthrough_grounding,
                         evidence_packet={
                             "summary": packet.get("summary"),
-                            "usable": False,
+                            "usable": packet.get("usable"),
                             "sources": packet.get("sources") or [],
-                            "hit_count": 0,
+                            "hit_count": len(packet.get("hits") or []),
                             "errors": packet.get("errors") or [],
+                            "hits": packet.get("hits") or [],
                         },
                         finished_at=_utcnow(),
                         mode="deterministic",
-                        t0_fallthrough=True,
+                        t0_fallthrough=bool(t0_fallthrough),
+                        t0_capability_escalate=bool(t0_capability_escalate),
+                        t0_unsolved=True,
+                        ai_escalation_occurred=False,
+                        db_query_attempted=bool(
+                            (failure and failure.db_query_attempted)
+                            or (sql_attempt and sql_attempt.attempted)
+                        ),
+                        t0_failure_reason=(failure.reason if failure else "") or "",
+                        next_capability=(
+                            (failure.next_capability if failure else None)
+                            or ("ai_escalate" if t0_capability_escalate else "")
+                        ),
                     )
                 )
 
@@ -865,7 +1135,27 @@ class RouteExecutor:
             status = evaluate_answer_grounding(
                 prompt, answer, repository_ids=repos, evidence=packet
             )
-            answer = apply_grounding_to_answer(answer, status)
+            # Finish only when Task Solved + Grounded for successful data answers.
+            if deterministic_answer and not (
+                status.get("task_solved") and status.get("answer_grounded")
+            ):
+                status = {
+                    **status,
+                    "cannot_verify": True,
+                    "grounded": False,
+                    "grounded_label": "No",
+                    "task_solved": False,
+                    "task_solved_label": "No",
+                    "answer_grounded": False,
+                }
+                answer = format_cannot_verify(
+                    repository_ids=repos or list(context_preview.get("repository_ids") or []),
+                    reason="Completion contract not satisfied after deterministic tools.",
+                    errors=list(packet.get("errors") or []),
+                )
+                answer = apply_grounding_to_answer(answer, status)
+            else:
+                answer = apply_grounding_to_answer(answer, status)
             final_status = "failed" if status.get("policy_violation") else "completed"
             return public_execution_fields(
                 self._update(
@@ -880,12 +1170,18 @@ class RouteExecutor:
                         "sources": packet.get("sources") or [],
                         "hit_count": len(packet.get("hits") or []),
                         "errors": packet.get("errors") or [],
+                        "hits": packet.get("hits") or [],
                     },
                     finished_at=_utcnow(),
                     mode="deterministic",
                     error=status.get("reason") if status.get("policy_violation") else "",
                     error_code="ungrounded_answer" if status.get("policy_violation") else "",
                     t0_fallthrough=False,
+                    t0_capability_escalate=False,
+                    ai_escalation_occurred=False,
+                    db_query_attempted=bool(sql_attempt and sql_attempt.attempted),
+                    t0_failure_reason="",
+                    next_capability="",
                 )
             )
         except AgentCenterError as exc:
@@ -1045,13 +1341,24 @@ class RouteExecutor:
 
         requires = scope.requires_project_evidence
         allow_gk = bool(context_preview.get("allow_general_knowledge")) or scope.allow_general_knowledge
+        direct_mode = str(context_preview.get("routing_mode") or "").strip().lower() == "direct"
         packet = context_preview.get("evidence_packet")
         if not isinstance(packet, dict):
             packet = {}
-        if requires or (scope.try_deterministic_tools and not packet.get("usable")):
+        # Cheap evidence for context packing — never answers/terminates the task in Direct mode.
+        if requires or (scope.try_deterministic_tools and not packet.get("usable")) or direct_mode:
             try:
                 ctx = self._tools_context(tools, repos)
+                # Cap tools for Direct so packing stays lightweight.
+                pack_tools = tools[:4] if direct_mode else tools
                 packet = collect_evidence_packet(prompt, ctx, repository_ids=repos)
+                if direct_mode:
+                    # Keep packet as context only; strip any temptation to treat as final answer.
+                    packet = {
+                        **packet,
+                        "context_only": True,
+                        "tool_ids": pack_tools,
+                    }
             except Exception as exc:  # noqa: BLE001
                 packet = {
                     "repository_ids": repos,
@@ -1061,11 +1368,19 @@ class RouteExecutor:
                     "errors": [str(exc)],
                     "summary": f"Evidence collection failed: {exc}",
                     "tool_results": [],
+                    "context_only": bool(direct_mode),
                 }
 
         # Do not send selected-repo project tasks to agents without usable evidence.
         # General/national/web scope falls through to model knowledge instead.
-        if requires and repos and not packet.get("usable") and not allow_gk:
+        # Direct mode never terminates here — context prep only; grounding still applies after.
+        if (
+            not direct_mode
+            and requires
+            and repos
+            and not packet.get("usable")
+            and not allow_gk
+        ):
             answer = format_cannot_verify(
                 repository_ids=repos,
                 reason=str(packet.get("summary") or "No usable project evidence."),
@@ -1096,7 +1411,14 @@ class RouteExecutor:
 
         # When grounding is required but no repo is selected and evidence is empty,
         # still attach cannot-verify rules for project-lookup prompts; block coding CLIs only.
-        if requires and not repos and not packet.get("usable") and agent_requires_repository(chosen) and not allow_gk:
+        if (
+            not direct_mode
+            and requires
+            and not repos
+            and not packet.get("usable")
+            and agent_requires_repository(chosen)
+            and not allow_gk
+        ):
             answer = format_cannot_verify(
                 repository_ids=repos,
                 reason="Project lookup requires a selected connected repository and Hub evidence.",
@@ -1120,6 +1442,9 @@ class RouteExecutor:
 
         selected_model = str(context_preview.get("model") or "").strip()
         provider_changed = bool(fallback_from)
+        conv_id = str(context_preview.get("conversation_id") or "").strip()
+        session_reused = bool(conv_id)
+        prior_fp = str(context_preview.get("context_fingerprint") or "").strip()
         payload = {
             "profile_id": INTERNAL_WORK_PROFILE,
             "mode": "ask",
@@ -1136,7 +1461,12 @@ class RouteExecutor:
             "grounding_rules": grounding_rules_text(
                 repository_ids=repos, requires=requires, scope=scope
             ),
+            # Direct bypasses routing only — never auto-enable general knowledge.
             "allow_general_knowledge": allow_gk,
+            "conversation_id": conv_id or None,
+            "routing_mode": "direct" if direct_mode else "smart",
+            "reuse_context": bool(prior_fp),
+            "context_fingerprint": prior_fp,
         }
         # Also inject evidence text into hints so adapters without pack hooks still see it.
         evidence_text = format_evidence_for_prompt(packet)
@@ -1153,6 +1483,23 @@ class RouteExecutor:
 
         run_id = str(run.get("id") or "")
         status = str(run.get("status") or "")
+        run_ctx = run.get("context") if isinstance(run.get("context"), dict) else {}
+        context_items: list[str] = []
+        for src in (packet.get("sources") or [])[:8]:
+            if str(src).strip():
+                context_items.append(str(src).strip())
+        for f in (run_ctx.get("files") or [])[:8]:
+            if isinstance(f, dict):
+                path = str(f.get("path") or "").strip()
+                rid = str(f.get("repo_id") or "").strip()
+                if path:
+                    context_items.append(f"{rid}:{path}" if rid else path)
+        for repo in repos[:4]:
+            context_items.append(f"repository:{repo}")
+        context_items = list(dict.fromkeys(context_items))
+        packed_chars = run_ctx.get("packed_prompt_chars")
+        if packed_chars is None:
+            packed_chars = len(str(run.get("packed_prompt") or ""))
         self._update(
             execution_id,
             agent_run_id=run_id,
@@ -1160,7 +1507,18 @@ class RouteExecutor:
             selected_model=selected_model,
             resolved_model=str(run.get("model") or ""),
             grounding=(run.get("context") or {}).get("grounding"),
-            evidence_packet=(run.get("context") or {}).get("evidence_packet"),
+            evidence_packet=(run.get("context") or {}).get("evidence_packet") or {
+                "summary": packet.get("summary"),
+                "usable": packet.get("usable"),
+                "sources": packet.get("sources") or [],
+                "hit_count": len(packet.get("hits") or []),
+                "errors": packet.get("errors") or [],
+            },
+            conversation_id=str(run.get("conversation_id") or conv_id or ""),
+            session_reused=session_reused,
+            context_items=context_items,
+            context_chars=int(packed_chars or 0),
+            routing_mode="direct" if direct_mode else "smart",
         )
 
         if status == "unavailable":

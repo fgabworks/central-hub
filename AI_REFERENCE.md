@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-10 (AiriX AI usage telemetry).
+Last verified: 2026-08-10 (AiriX Routing Mode: Smart vs Direct Agent).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -40,7 +40,7 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Google Connections | System page to connect/assign/enable Gmail+Calendar scopes |
 | SQL Workspace | Read-only query library/runner (`/sql`); sqlglot allowlist; optional trusted-host-key Stage/Live SSH tunnels; Live warning; layout `minmax(260px,320px) | 1fr` under shell |
 | Data Explorer | `/data-explorer` — unified RO schema/data/relationship/lineage browser plus allowlisted CSV/XLSX/csv.gz exports, large jobs, presets, history, masking, and audit. `/live-data-export` redirects to `?tab=export`; one runtime service/store/export engine with shared SELECT/security primitives; no ad-hoc SQL or arbitrary table input; Stage/Live remain isolated |
-| AI Assistant Center | Aira at `/personal/aira`; AiriX at `/work/airix` (legacy `/work/okarun` redirects); full-height right dock + fixed composer (`hub/agent_center/dock.py`); **Smart Routing Phase 5** (`hub/agent_center/routing/` — cost intelligence, RBAC, relevance findings, budgets, orchestration; `/api/assistants/airix/routing/*`); Find/Ask/Plan/Review; Codex CLI, Claude Code, Cursor, Grok, OpenAI |
+| AI Assistant Center | Aira at `/personal/aira`; AiriX at `/work/airix` (legacy `/work/okarun` redirects); full-height right dock + fixed composer (`hub/agent_center/dock.py`); **Smart Routing Phase 5** + **Routing Mode** Smart vs Direct Agent (`hub/agent_center/routing/` — cost intelligence, RBAC, relevance findings, budgets, orchestration; `/api/assistants/airix/routing/*`); Find/Ask/Plan/Review; Codex CLI, Claude Code, Cursor, Grok, OpenAI |
 | Workspace Console | Bottom panel under main content only (`left: var(--sidebar-w)`); bounded height; Ctrl+J; collapsed by default |
 | Activity Rail | Far-right icons for AI Assistant, Quick Notepad, Workspace Console (future utilities placeholders); reduces main width only |
 | App shell | Fixed sidebar 210–216px + `padding-left` on `.app-shell`; `.main-column` / `.content` `flex:1; min-width:0`; `.sidebar-scroll` for nav |
@@ -120,26 +120,39 @@ shared and unchanged.
 | `/api/assistants/<profile>/prompts` | Isolated saved prompt library |
 
 Implementation: `hub/agent_center/` (incl. `dock.py`, `routing/lifecycle.py`), `config/agents.yaml`, SQLite `data/agent_center.db`,
-`templates/partials/assistant_dock_panel.html`, `static/js/assistant_dock.js` (`shell-dock-20`).
+`templates/partials/assistant_dock_panel.html`, `static/js/assistant_dock.js` (`shell-dock-23`).
 Coding CLIs (Codex / Claude Code / Cursor Agent) resolve repository context via
 `hub/agent_center/repository_context.py` (explicit → persisted dock selection →
 active workspace terminal repo → sole connected; never first-of-many).
-Selected-context grounding (`hub/agent_center/grounding.py` + `scope.py` + `data_intent.py`)
-classifies prompt scope (project / dhis2 / national / GK / web / ambiguous) and detects
-structured data queries from value intent + admin/OU/period/UID filters (abbreviations
-like `Brgy.` included). Explicit broader scope overrides the selected repo; ambiguous +
+Selected-context grounding (`hub/agent_center/grounding.py` + `scope.py` + `data_intent.py`
++ `completion.py` + `capability.py`) classifies prompt scope (project / dhis2 / national / GK / web /
+ambiguous) and detects structured data queries from value intent + admin/OU/period/UID
+filters (abbreviations like `Brgy.` included). Each prompt also gets a dynamic completion
+contract (intent → required output); Evidence Found / Task Solved / Grounded are separate —
+discovery alone is not completion; Grounded=Yes only with authoritative evidence.
+After T0 unsolved, capability resolution tries connected RO SQL (saved queries + filters)
+before AI; escalate only when AI can materially help; otherwise Cannot verify.
+Explicit broader scope overrides the selected repo; ambiguous +
 selected repo stays project-bound. Authoritative data questions prefer T0 tools and never
 route to Hub Simulator; T0 miss → cannot-verify (no demo/GK substitute). Project T0 miss →
 cannot-verify; national/GK/web T0 miss (non-data) → lowest-tier model. Evidence deduped by UID.
-Results expose Source + Grounded Yes/No.
+Results expose Evidence Found / Task Solved / Grounded Yes/No + Sources used.
 Manual provider selection (`agent_override` / Choose Agent) is authoritative: never silently
 swap Codex/Claude/Cursor/Grok to Hub Simulator; unavailable providers fail with the real
 error; Smart Routing recommendations require Use Recommended acceptance. Executions log
 selected/recommended/resolved provider+model, `manual_override`, and `fallback_reason`.
+**Routing Mode** (persisted per workspace beside the repository selector): **Smart Routing**
+keeps recommend → T0/DB/capability escalation; **Direct Agent — Efficient** skips Smart
+Routing/T0/recommendations/auto-escalation and always runs the selected provider+model
+(no silent swap; Simulator only when explicitly selected). Direct still packs lightweight
+context (repo, filters, hints, prior findings, rules, cheap evidence) without whole-repo
+dumps or context-prep termination; follow-ups reuse provider sessions when supported.
 Every Smart Routing execution records event-sourced AI usage telemetry
 (`hub/agent_center/routing/telemetry.py`): tier, Deterministic/AI/Hybrid, LLM Yes/No,
 provider/model, tokens (actual when provider-reported, else marked estimate), tools,
-runtime, child AI run id. Pure T0 forces zero AI tokens and null provider/model/run id.
+runtime, child AI run id, T0 failure reason, next capability, DB query attempted, AI escalate,
+plus routing mode / session reused / context items when present.
+Pure T0 forces zero AI tokens and null provider/model/run id.
 Codex models are discovered via `codex debug models` / CLI models cache
 (`hub/agent_center/codex_models.py`); Smart Routing recommends Provider + Model;
 selected model reaches `codex exec --model`.

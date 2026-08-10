@@ -153,7 +153,9 @@ class T0FallbackPolicyTests(unittest.TestCase):
             evidence={"usable": False, "hits": [], "sources": []},
         )
         self.assertFalse(status["required"])
-        self.assertTrue(status["grounded"])
+        self.assertFalse(status["grounded"])
+        self.assertTrue(status.get("task_solved"))
+        self.assertFalse(status.get("evidence_found"))
         self.assertIn("general", status["source"].lower())
 
 

@@ -169,27 +169,36 @@ def plan_estimated_tokens(steps: list[OrchestrationStep]) -> int:
 
 
 def is_task_solved(step_result: dict[str, Any], *, step: OrchestrationStep) -> bool:
-    """Stop early when a tool/agent step clearly answered a simple task."""
+    """Stop early only when the completion contract is satisfied (or honest empty cannot-verify)."""
     status = str(step_result.get("status") or "")
     if status != "completed":
         return False
     if step_result.get("t0_fallthrough"):
         return False
     answer = str(step_result.get("answer") or "").strip()
-    if not answer:
-        return False
+    grounding = step_result.get("grounding") or {}
     if step.kind == "tool" and step.id == "step_tool_lookup":
+        # Fully solved + grounded → stop.
+        if grounding.get("task_solved") and grounding.get("answer_grounded"):
+            return True
+        # Evidence ≠ completion — continue to next capable route when the plan allows it.
+        if grounding.get("evidence_found") and not grounding.get("task_solved"):
+            return False
+        if step_result.get("t0_unsolved"):
+            return False
+        if not answer:
+            return False
+        # Honest empty cannot-verify (no usable evidence) is a terminal T0 outcome.
+        if grounding.get("cannot_verify") and not grounding.get("task_solved"):
+            return True
+        if "task_solved" in grounding:
+            return False
         evidence = step_result.get("evidence_packet") or {}
-        grounding = step_result.get("grounding") or {}
-        if grounding.get("cannot_verify"):
-            # Project miss is a terminal honest answer — treat as solved (no escalate).
+        # Legacy fallback: only stop when usable evidence AND grounded answer (not discovery).
+        if evidence.get("usable") and grounding.get("grounded") and not grounding.get("cannot_verify"):
             return True
-        # Only stop when Hub tools produced usable evidence (not a weak dump).
-        if evidence.get("usable") or grounding.get("grounded"):
-            return True
-        tools = step_result.get("tool_results") or []
-        if tools and all(bool(t.get("ok")) for t in tools) and evidence.get("usable"):
-            return True
+        return False
+    if not answer:
         return False
     if step.id == "step_ai_analysis" and len(answer) >= 40:
         return True

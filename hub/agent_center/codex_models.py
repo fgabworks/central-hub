@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -47,14 +48,9 @@ _STRENGTH_DESC = (
 
 def _run_debug_models(executable: str, *, timeout: float = 25.0) -> tuple[str, int]:
     try:
-        result = subprocess.run(
-            [executable, "debug", "models"],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            shell=False,
-            check=False,
-        )
+        from hub.agent_center.adapters.cli_common import run_cli_capture
+
+        result = run_cli_capture([executable, "debug", "models"], timeout=timeout, env=os.environ.copy())
     except (OSError, subprocess.TimeoutExpired) as exc:
         logger.info("codex debug models failed: %s", exc)
         return "", 1

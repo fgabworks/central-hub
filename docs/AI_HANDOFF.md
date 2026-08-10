@@ -4,7 +4,63 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**AiriX manual provider selection is authoritative (2026-08-10)**
+**AiriX Routing Mode: Smart vs Direct Agent — Efficient (2026-08-10)**
+
+Add a Routing Mode selector beside the repository selector in the AiriX dock.
+
+- **Smart Routing** — existing recommend → T0/DB/capability escalation → AI path.
+- **Direct Agent — Efficient** — skip Smart Routing, tier assessment, T0 attempts,
+  provider recommendation, and automatic escalation. Always execute the manually
+  selected provider + model; never silently change them. Unavailable providers fail
+  clearly (no auto-fallback). Simulator only when explicitly selected.
+
+Direct still applies lightweight context prep (selected repo, filters, search hints,
+prior findings, rules, cheap grounding evidence) and never sends the whole repo by
+default. Context prep must not answer/terminate the task. Follow-ups reuse
+`direct_conversation_id` when supported; mode persists per workspace. Dock shows
+selected/resolved provider+model, context items/chars, cached/total tokens, and
+session reused. Security/grounding/read-only remain active. Dock `shell-dock-25`.
+Tests: `tests/test_airix_routing_mode.py`.
+
+Prior: **AiriX capability-aware escalation after T0 (2026-08-10)**
+
+Root cause: after T0 found evidence but left the task unsolved, AiriX stopped at
+Cannot verify even when a connected read-only database (or AI query construction)
+could materially finish the request. Selected Codex also skipped deterministic work.
+
+Fix: `hub/agent_center/capability.py` classifies T0 failure reasons and chooses the
+cheapest next capability. Structured data: try saved RO SQL against configured
+connections (bind detected filters) before LLM; escalate only when AI can help
+(e.g. unbound params / query construction); preserve selected Codex model; otherwise
+Cannot verify. Telemetry exposes T0 failure reason, next capability, DB attempted,
+AI escalate. Dock `shell-dock-23`. Tests: `tests/test_airix_capability_escalation.py`.
+
+Prior: **AiriX dynamic completion contract (2026-08-10)**
+
+Root cause: T0 treated discovery (repo paths, related SQL/UIDs, prior findings) as task
+completion and could declare success without producing the required output for the intent
+(e.g. a count answered with file matches).
+
+Fix: `hub/agent_center/completion.py` derives a per-prompt contract (intent, required
+output, filters, authoritative sources, criteria) without hard-coded places/indicators.
+Evidence Found / Task Solved / Grounded are tracked separately; Grounded=Yes only with
+authoritative evidence. T0 validates against the contract before finishing; discovery-only
+→ unsolved (escalate when allowed, else Cannot verify). Dock shows the three flags
+(`shell-dock-23`). Tests: `tests/test_airix_completion_contract.py`.
+
+Prior: **AiriX execution telemetry consistency (2026-08-10)**
+
+Root cause: when `mode`/`tier` were missing on a finished T0 row, telemetry fell through
+to the AI path and forced `llm_invoked=True` / `Tier: T?` / empty tools — even though no
+provider child run existed (e.g. deterministic `repo_search`).
+
+Fix: derive telemetry from actual execution events only. `llm_invoked=True` only when a
+child AI run id exists; pure deterministic (no child) → T0 / Deterministic / LLM No /
+0 tokens; tools collected from `tool_results` + evidence packet sources; never emit `T?`
+when T0 is knowable. Dock cache `shell-dock-22`. Tests:
+`tests/test_airix_usage_telemetry.py` (repo_search shape).
+
+Prior: **AiriX manual provider selection is authoritative (2026-08-10)**
 
 Root cause: (1) RouteExecutor silently substituted an alternate adapter when the
 selected provider was unavailable — often `low-cost` → Hub Simulator; (2) the dock
@@ -15,7 +71,7 @@ Fix: explicit `agent_override` / Choose Agent is authoritative; unavailable /
 unauthenticated providers fail with the real error (no auto-fallback); Hub Simulator
 runs only when explicitly selected or accepted via Use Recommended (low-cost);
 selected + recommended + resolved provider/model and `manual_override` /
-`fallback_reason` are logged and audited; dock cache `shell-dock-20`. Tests:
+`fallback_reason` are logged and audited; dock cache `shell-dock-21`. Tests:
 `tests/test_airix_manual_provider_selection.py`.
 
 Prior: **AiriX dynamic data-query classification (2026-08-10)**

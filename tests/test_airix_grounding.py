@@ -133,8 +133,11 @@ class EvidenceAndPolicyTests(unittest.TestCase):
             repository_ids=[],
             evidence={"usable": False, "hits": [], "sources": []},
         )
-        self.assertTrue(status["grounded"])
+        self.assertFalse(status["grounded"])
         self.assertFalse(status["required"])
+        self.assertTrue(status.get("task_solved"))
+        self.assertFalse(status.get("evidence_found"))
+        self.assertEqual(status.get("grounded_label"), "No")
 
 
 class OrgUnitToolTests(unittest.TestCase):

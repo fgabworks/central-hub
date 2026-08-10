@@ -621,31 +621,65 @@ class AgentRouterService:
         session_id: str | None = None,
         orchestrate: bool | None = None,
         model: str | None = None,
+        routing_mode: str | None = None,
+        conversation_id: str | None = None,
+        context_fingerprint: str | None = None,
     ) -> dict[str, Any]:
         if self.executor is None:
             raise RuntimeError("RouteExecutor requires AgentCenterService")
+        from hub.agent_center.routing.context import (
+            build_direct_agent_recommendation,
+            normalize_routing_mode,
+            provider_to_adapter_id,
+        )
+
         cfg = self.get_settings(workspace)
-        use_orch = cfg.enable_orchestration if orchestrate is None else bool(orchestrate)
-        if agent_override:
+        mode = normalize_routing_mode(routing_mode)
+        if mode == "direct":
+            provider = (agent_override or "").strip()
+            if not provider:
+                raise AgentCenterError(
+                    "Direct Agent requires an explicitly selected provider",
+                    code="agent_required",
+                )
+            if provider_to_adapter_id(provider) is None:
+                raise AgentCenterError(
+                    "Direct Agent cannot use T0/deterministic — select an AI provider",
+                    code="agent_required",
+                )
+            try:
+                rec = build_direct_agent_recommendation(
+                    prompt,
+                    provider_id=provider,
+                    model=model,
+                    repository_ids=repository_ids,
+                )
+            except ValueError as exc:
+                raise AgentCenterError(str(exc), code="agent_required") from exc
             use_orch = False
-        if use_orch:
-            return self._execute_orchestrated(
-                prompt,
-                workspace=workspace,
-                actor=actor,
-                repository_ids=repository_ids,
-                active_repository_id=active_repository_id,
-                selected_repository_id=selected_repository_id,
-                approve_codex=approve_codex,
-                force=force,
-                recommendation=recommendation,
-                session_id=session_id,
-                model=model,
+            agent_override = provider
+        else:
+            use_orch = cfg.enable_orchestration if orchestrate is None else bool(orchestrate)
+            if agent_override:
+                use_orch = False
+            if use_orch:
+                return self._execute_orchestrated(
+                    prompt,
+                    workspace=workspace,
+                    actor=actor,
+                    repository_ids=repository_ids,
+                    active_repository_id=active_repository_id,
+                    selected_repository_id=selected_repository_id,
+                    approve_codex=approve_codex,
+                    force=force,
+                    recommendation=recommendation,
+                    session_id=session_id,
+                    model=model,
+                )
+            rec = recommendation or self.recommend_route(
+                prompt, workspace=workspace, actor=actor, settings=cfg, session_id=session_id
             )
 
-        rec = recommendation or self.recommend_route(
-            prompt, workspace=workspace, actor=actor, settings=cfg, session_id=session_id
-        )
         if not (model or "").strip():
             model = (rec.recommended_model or "").strip() or None
         provider = (agent_override or rec.recommended_agent or "").strip()
@@ -718,7 +752,10 @@ class AgentRouterService:
             actor=actor,
             rbac_role=rbac_role,
             model=model,
-            manual_override=bool(agent_override),
+            manual_override=bool(agent_override) or mode == "direct",
+            routing_mode=mode,
+            conversation_id=conversation_id,
+            context_fingerprint=context_fingerprint,
         )
         return {
             "ok": True,
@@ -729,6 +766,7 @@ class AgentRouterService:
             "budget": snap,
             "permissions": plan.permissions,
             "prior_findings_reused": list((result.get("prior_findings") or plan.prior_findings)[:3]),
+            "routing_mode": mode,
             "cost": {
                 "estimated_tokens": est,
                 "estimated_cost_usd": estimate_cost_usd(est, provider_id=provider, settings=cfg),
