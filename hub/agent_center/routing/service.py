@@ -14,7 +14,11 @@ from hub.agent_center.routing.budget import (
     expensive_escalation_warning,
 )
 from hub.agent_center.routing.classifier import classify_prompt
-from hub.agent_center.routing.context import build_minimal_context_preview, select_minimal_tools
+from hub.agent_center.routing.context import (
+    build_minimal_context_preview,
+    select_minimal_tools,
+    tools_for_repository_knowledge,
+)
 from hub.agent_center.routing.cost import cost_intelligence, estimate_cost_usd
 from hub.agent_center.routing.execution import RouteExecutor, prompt_only_fingerprint
 from hub.agent_center.routing.history import RoutingHistoryStore
@@ -371,8 +375,21 @@ class AgentRouterService:
         session_id: str | None = None,
         repository_ids: list[str] | None = None,
     ) -> RouteRecommendation:
+        knowledge: dict[str, Any] = {}
+        if self.agent_center is not None and repository_ids:
+            try:
+                knowledge = self.agent_center.repository_intelligence.retrieve(
+                    list(repository_ids), prompt
+                )
+            except Exception:  # noqa: BLE001
+                knowledge = {}
+        knowledge_hints = list(hints or [])
+        for item in (knowledge.get("items") or [])[:4]:
+            knowledge_hints.extend(
+                [str(item.get("category") or ""), str(item.get("path") or "")]
+            )
         classification = self.classify_request(
-            prompt, hints=hints, repository_ids=repository_ids
+            prompt, hints=knowledge_hints, repository_ids=repository_ids
         )
         cfg = settings or self.get_settings(workspace)
         role = detect_role(prompt, classification)
@@ -483,7 +500,7 @@ class AgentRouterService:
         )
         rbac_role = self.acl.get_role(actor, workspace=workspace)
         perms = permissions_for_role(rbac_role)
-        tools = select_minimal_tools(classification)
+        tools = tools_for_repository_knowledge(select_minimal_tools(classification), knowledge)
         tools = filter_tools_for_permissions(tools, perms)
         live_req = live_requested_from_prompt(prompt, classification.signals)
         perm_ok, perm_reason = check_execution_allowed(
@@ -544,7 +561,12 @@ class AgentRouterService:
     ) -> ExecutionPlan:
         cfg = settings or self.get_settings(workspace)
         rec = recommendation or self.recommend_route(
-            prompt, workspace=workspace, actor=actor, settings=cfg, session_id=session_id
+            prompt,
+            workspace=workspace,
+            actor=actor,
+            settings=cfg,
+            session_id=session_id,
+            repository_ids=repository_ids,
         )
         findings: list[dict[str, Any]] = []
         if self.history is not None:
@@ -559,6 +581,18 @@ class AgentRouterService:
             agent_override=agent_override,
             candidate_findings=findings,
             context_sources=context_sources,
+        )
+        knowledge: dict[str, Any] = {}
+        if self.agent_center is not None and repository_ids:
+            try:
+                knowledge = self.agent_center.repository_intelligence.retrieve(
+                    list(repository_ids), prompt
+                )
+            except Exception:  # noqa: BLE001
+                knowledge = {}
+        context["repository_intelligence"] = knowledge
+        context["tool_ids"] = tools_for_repository_knowledge(
+            list(context.get("tool_ids") or []), knowledge
         )
         # Enforce tool permission filter on packed context.
         perms = self.permissions_for(actor, workspace=workspace)
@@ -700,7 +734,12 @@ class AgentRouterService:
                     dhis2_environment=env,
                 )
             rec = recommendation or self.recommend_route(
-                prompt, workspace=workspace, actor=actor, settings=cfg, session_id=session_id
+                prompt,
+                workspace=workspace,
+                actor=actor,
+                settings=cfg,
+                session_id=session_id,
+                repository_ids=repository_ids,
             )
 
         if not (model or "").strip():
@@ -823,7 +862,12 @@ class AgentRouterService:
         assert self.executor is not None
         cfg = self.get_settings(workspace)
         rec = recommendation or self.recommend_route(
-            prompt, workspace=workspace, actor=actor, settings=cfg, session_id=session_id
+            prompt,
+            workspace=workspace,
+            actor=actor,
+            settings=cfg,
+            session_id=session_id,
+            repository_ids=repository_ids,
         )
         role = detect_role(prompt, rec.classification)
         rbac_role = self.acl.get_role(actor, workspace=workspace)

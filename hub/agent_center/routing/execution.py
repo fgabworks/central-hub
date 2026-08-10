@@ -23,6 +23,7 @@ from hub.agent_center.routing.context import (
     select_repository_ids,
     normalize_context_sources,
     normalize_interaction_mode,
+    tools_for_repository_knowledge,
 )
 from hub.agent_center.routing.history import RoutingHistoryStore
 from hub.agent_center.routing.lifecycle import (
@@ -281,6 +282,24 @@ class RouteExecutor:
             candidate_findings=candidate_findings,
             context_sources=context_sources,
         )
+        repository_knowledge: dict[str, Any] = {}
+        if repository_ids:
+            try:
+                repository_knowledge = self.agent_center.repository_intelligence.retrieve(
+                    list(repository_ids), prompt_n
+                )
+            except Exception:  # noqa: BLE001
+                repository_knowledge = {}
+        context_preview["repository_intelligence"] = repository_knowledge
+        context_preview["tool_ids"] = tools_for_repository_knowledge(
+            list(context_preview.get("tool_ids") or []), repository_knowledge
+        )
+        for item in (repository_knowledge.get("items") or [])[:4]:
+            summary = str(item.get("summary") or "").strip()
+            if summary:
+                context_preview.setdefault("hints", []).append(
+                    f"repo_knowledge:{item.get('category')}:{item.get('path')}:{summary[:180]}"
+                )
         if active_repository_id:
             context_preview = {
                 **context_preview,
@@ -367,6 +386,9 @@ class RouteExecutor:
                 "fallback_reason": "",
                 "session_reused": False,
                 "context": context_preview,
+                "repository_intelligence_diagnostics": dict(
+                    repository_knowledge.get("diagnostics") or {}
+                ),
                 "prior_findings": list(context_preview.get("prior_findings") or []),
                 "rbac_role": (rbac_role or "").strip(),
                 "_routing_settings": settings,
@@ -1528,6 +1550,11 @@ class RouteExecutor:
         run_id = str(run.get("id") or "")
         status = str(run.get("status") or "")
         run_ctx = run.get("context") if isinstance(run.get("context"), dict) else {}
+        run_knowledge = (
+            run_ctx.get("repository_intelligence")
+            if isinstance(run_ctx.get("repository_intelligence"), dict)
+            else {}
+        )
         context_items: list[str] = []
         for src in (packet.get("sources") or [])[:8]:
             if str(src).strip():
@@ -1540,6 +1567,11 @@ class RouteExecutor:
                     context_items.append(f"{rid}:{path}" if rid else path)
         for repo in repos[:4]:
             context_items.append(f"repository:{repo}")
+        for item in (run_knowledge.get("items") or [])[:6]:
+            rid = str(item.get("repository_id") or "").strip()
+            path = str(item.get("path") or "").strip()
+            if path:
+                context_items.append(f"repository_intelligence:{rid}:{path}")
         context_items = list(dict.fromkeys(context_items))
         packed_chars = run_ctx.get("packed_prompt_chars")
         if packed_chars is None:
@@ -1562,6 +1594,9 @@ class RouteExecutor:
             session_reused=session_reused,
             context_items=context_items,
             context_chars=int(packed_chars or 0),
+            repository_intelligence_diagnostics=dict(
+                run_knowledge.get("diagnostics") or {}
+            ),
             routing_mode="direct" if direct_mode else "smart",
             interaction_mode=interaction_mode,
         )

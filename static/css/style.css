@@ -1768,6 +1768,124 @@ table.data tbody tr:last-child td { border-bottom: 0; }
   gap: 0.35rem;
   align-items: center;
 }
+.ri-panel .table-wrap { padding: 0 0.15rem 0.35rem; }
+.ri-table td, .ri-table th { vertical-align: middle; }
+.ri-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  justify-content: flex-end;
+}
+.ri-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+.ri-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.65rem 0.85rem;
+  margin: 0 0 1rem;
+}
+.ri-detail-grid dt {
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.ri-detail-grid dd { margin: 0.2rem 0 0; }
+.ri-detail-block { margin: 0.85rem 0; }
+.ri-detail-block h3 {
+  margin: 0 0 0.45rem;
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+.ri-categories { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+.ri-activity {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.ri-activity-error { color: var(--danger, #f87171); }
+.ri-status-current { background: var(--success-soft); }
+.ri-status-learning { background: rgba(59, 130, 246, 0.16); color: #93c5fd; }
+.ri-status-update_available,
+.ri-status-not_learned { background: var(--warning-soft); }
+.ri-status-failed { background: var(--danger-soft); color: #fecaca; }
+.ri-error { margin-top: 0.55rem; font-size: 0.8rem; }
+.ri-knowledge {
+  margin-top: 0.75rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.6rem;
+  max-height: 420px;
+  overflow: auto;
+}
+.ri-entry { padding: 0.45rem 0; border-bottom: 1px solid var(--border); }
+.ri-entry strong { margin-left: 0.4rem; font-size: 0.78rem; }
+.ri-entry p { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.78rem; }
+.ri-more { position: relative; display: inline-block; }
+.ri-more > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.ri-more > summary::-webkit-details-marker { display: none; }
+.ri-more-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.25rem);
+  z-index: 8;
+  min-width: 11rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+.ri-more-menu a,
+.ri-more-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  text-decoration: none;
+  cursor: pointer;
+}
+.ri-more-menu a:hover,
+.ri-more-menu button:hover {
+  background: var(--panel-2, rgba(255, 255, 255, 0.05));
+}
+.rw-subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0.65rem 0 0.35rem;
+}
+.rw-subtab {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+.rw-subtab.is-active {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--panel-2, rgba(255, 255, 255, 0.04));
+}
 
 .repo-actions .inline-form {
   display: inline;

@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Repository Intelligence · {{ app_name }}{% endblock %}
+{% block content %}
+{% set sh_title = "Repositories" %}
+{% set sh_info = "Compact learned profiles for AiriX. Runtime database and DHIS2 results remain authoritative." %}
+{% set sh_tabs %}{% include "partials/repositories_section_tabs.html" %}{% endset %}
+{% set sh_meta %}
+  <span>{{ intelligence_rows|length }} repositories</span>
+  <a class="btn btn-sm" href="{{ url_for('health') }}">Check health</a>
+  <a class="btn btn-sm btn-primary" href="{{ url_for('repository_new') }}">+ Add Repository</a>
+{% endset %}
+{% include "partials/section_header.html" %}
+
+{% if flash %}<div class="banner" style="background:var(--success-soft);border-color:rgba(34,197,94,.35)">{{ flash }}</div>{% endif %}
+{% if error %}<div class="banner banner-error">{{ error }}</div>{% endif %}
+
+<section class="panel ri-panel" id="repository-intelligence" style="margin-top:0.85rem">
+  <div class="panel-header">
+    <div>
+      <h2>Repository Intelligence</h2>
+      <span class="quiet">Scalable status table · scan once · refresh when commits change</span>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="data ri-table" id="ri-table">
+      <thead>
+        <tr>
+          <th>Repository</th>
+          <th>Connection</th>
+          <th>Intelligence Status</th>
+          <th>Last Updated</th>
+          <th>Indexed Commit</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in intelligence_rows %}
+        <tr class="ri-row" data-ri-repo="{{ item.repository_id }}">
+          <td>
+            <div class="cell-title">
+              <span class="cell-ico">▣</span>
+              <a href="{{ url_for('repository_intelligence', repo_id=item.repository_id) }}">{{ item.name }}</a>
+            </div>
+            <div class="cell-sub mono">{{ item.repository_id }}</div>
+          </td>
+          <td class="mono muted" title="{{ item.connection }}">{{ item.connection_short }}</td>
+          <td>
+            <span class="badge ri-status ri-status-{{ item.status }}">{{ item.status_label }}</span>
+          </td>
+          <td class="muted" data-ri-updated>{{ item.updated_display }}</td>
+          <td class="mono muted" data-ri-commit>{{ item.commit_short }}</td>
+          <td class="ri-actions">
+            {% if item.status == 'not_learned' %}
+            <button type="button" class="btn btn-sm" data-ri-action="scan">Scan &amp; Learn</button>
+            {% else %}
+            <a class="btn btn-sm" href="{{ url_for('repository_intelligence', repo_id=item.repository_id) }}">View Knowledge</a>
+            <button type="button" class="btn btn-sm" data-ri-action="refresh">Refresh</button>
+            {% endif %}
+            <details class="ri-more">
+              <summary class="btn btn-sm" aria-label="More actions">More</summary>
+              <div class="ri-more-menu" role="menu">
+                <a role="menuitem" href="{{ url_for('repository_intelligence', repo_id=item.repository_id) }}">Open detail</a>
+                <a role="menuitem" href="{{ url_for('repository_detail', repo_id=item.repository_id) }}">General</a>
+                <a role="menuitem" href="{{ url_for('repository_connect', repo_id=item.repository_id) }}">Connection</a>
+                <a role="menuitem" href="{{ url_for('repository_files', repo_id=item.repository_id) }}">Files &amp; Changes</a>
+                <a role="menuitem" href="{{ url_for('repository_settings', repo_id=item.repository_id) }}">Settings</a>
+                <a role="menuitem" href="{{ url_for('repository_logs', repo_id=item.repository_id) }}">Logs &amp; History</a>
+                <button type="button" role="menuitem" disabled title="Future capability; not implemented">Deep AI Analysis</button>
+                {% if item.status != 'not_learned' %}
+                <button type="button" role="menuitem" data-ri-action="scan">Rescan fully</button>
+                {% endif %}
+              </div>
+            </details>
+          </td>
+        </tr>
+        {% else %}
+        <tr class="empty-row"><td colspan="6">No connected local repositories are available to learn.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+<script src="{{ url_for('static', filename='js/repository_intelligence.js') }}?v=ri-2"></script>
+{% endblock %}

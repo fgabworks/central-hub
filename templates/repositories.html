@@ -4,6 +4,7 @@
 {% block content %}
 {% set sh_title = "Repositories" %}
 {% set sh_info = "Connected repositories from config/repositories.yaml. Hub never auto-clones or pulls. Entries that share a repository_group_id appear as one project." %}
+{% set sh_tabs %}{% include "partials/repositories_section_tabs.html" %}{% endset %}
 {% set sh_meta %}
   <span>{{ rows|length }} shown</span>
   <a class="btn btn-sm" href="{{ url_for('health') }}">Check health</a>

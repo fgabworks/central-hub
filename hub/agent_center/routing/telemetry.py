@@ -171,6 +171,7 @@ def empty_t0_telemetry(
     session_reused: bool = False,
     context_items: list[str] | None = None,
     context_chars: int | None = None,
+    repository_intelligence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Canonical pure-T0 telemetry (all AI fields zero / None)."""
     resolved_tier = tier if str(tier or "").startswith("T") else "T0"
@@ -197,6 +198,7 @@ def empty_t0_telemetry(
         "session_reused": bool(session_reused),
         "context_items": list(context_items or []),
         "context_chars": context_chars,
+        "repository_intelligence": dict(repository_intelligence or {}),
     }
 
 
@@ -247,6 +249,11 @@ def build_execution_telemetry(row: dict[str, Any] | None) -> dict[str, Any]:
         "session_reused": bool(row.get("session_reused")),
         "context_items": list(row.get("context_items") or []),
         "context_chars": row.get("context_chars"),
+        "repository_intelligence": dict(
+            row.get("repository_intelligence_diagnostics")
+            or ((row.get("context") or {}).get("repository_intelligence") or {}).get("diagnostics")
+            or {}
+        ),
     }
 
     # No child AI run ⇒ never claim LLM invocation.
@@ -326,6 +333,11 @@ def build_execution_telemetry(row: dict[str, Any] | None) -> dict[str, Any]:
         "session_reused": bool(row.get("session_reused")),
         "context_items": list(row.get("context_items") or []),
         "context_chars": row.get("context_chars"),
+        "repository_intelligence": dict(
+            row.get("repository_intelligence_diagnostics")
+            or ((row.get("context") or {}).get("repository_intelligence") or {}).get("diagnostics")
+            or {}
+        ),
     }
 
 
@@ -421,6 +433,15 @@ def format_telemetry_block(telemetry: dict[str, Any] | None) -> str:
             f"Context items: {items}"
             + (f" · Context chars: {chars}" if chars is not None else "")
         )
+    ri = t.get("repository_intelligence") if isinstance(t.get("repository_intelligence"), dict) else {}
+    if ri:
+        repos = ", ".join(str(value) for value in (ri.get("repository_ids") or [])) or "None"
+        lines.append(
+            f"Repository Intelligence used: {'Yes' if ri.get('used') else 'No'} Â· "
+            f"Repository: {repos} Â· Entries: {ri.get('knowledge_entries_used') or 0} Â· "
+            f"Freshness: {ri.get('freshness') or 'not_learned'} Â· "
+            f"Context chars: {ri.get('context_chars_contributed') or 0}"
+        )
     return "\n".join(lines)
 
 
@@ -450,6 +471,7 @@ def public_telemetry(telemetry: dict[str, Any] | None) -> dict[str, Any]:
         "session_reused": bool(telemetry.get("session_reused")),
         "context_items": list(telemetry.get("context_items") or []),
         "context_chars": telemetry.get("context_chars"),
+        "repository_intelligence": dict(telemetry.get("repository_intelligence") or {}),
     }
 
 

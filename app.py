@@ -1133,7 +1133,182 @@ def create_app() -> Flask:
             error=request.args.get("error") or app.config.get("REGISTRY_ERROR"),
             defaults=registry.defaults if registry else None,
             health_async=True,
+            active_section="general",
+            section_tabs=_repository_section_tabs(),
         )
+
+    def _repository_section_tabs() -> list[dict[str, str]]:
+        return [
+            {"id": "general", "label": "General", "endpoint": "repositories"},
+            {"id": "connection", "label": "Connection", "endpoint": "repositories_connection"},
+            {
+                "id": "intelligence",
+                "label": "Repository Intelligence",
+                "endpoint": "repositories_intelligence",
+            },
+            {
+                "id": "files_changes",
+                "label": "Files & Changes",
+                "endpoint": "repositories_files_changes",
+            },
+            {"id": "settings", "label": "Settings", "endpoint": "repositories_settings"},
+            {"id": "logs", "label": "Logs & History", "endpoint": "repositories_logs"},
+        ]
+
+    def _short_path(value: str, *, limit: int = 42) -> str:
+        text = (value or "").strip() or "—"
+        if len(text) <= limit:
+            return text
+        return "…" + text[-(limit - 1) :]
+
+    def _format_updated(value: str | None) -> str:
+        raw = (value or "").strip()
+        if not raw:
+            return "—"
+        return raw.replace("T", " ")[:19]
+
+    def _intelligence_table_rows(registry, agent_center) -> list[dict]:
+        statuses = {
+            str(item.get("repository_id") or ""): item
+            for item in (agent_center.repository_intelligence.list_statuses() if agent_center else [])
+        }
+        rows: list[dict] = []
+        for repo in registry.repositories if registry else []:
+            if not repo.enabled or repo.type != "command":
+                continue
+            item = dict(statuses.get(repo.id) or {
+                "repository_id": repo.id,
+                "status": "not_learned",
+                "status_label": "Not Learned",
+                "indexed_commit": "",
+                "last_scan": None,
+                "updated_at": None,
+                "changed_files": [],
+                "categories": [],
+                "profile": {},
+            })
+            connection = repo.local_path or repo.working_directory or "Not connected"
+            rows.append({
+                **item,
+                "name": repo.name,
+                "connection": connection,
+                "connection_short": _short_path(connection),
+                "commit_short": (item.get("indexed_commit") or "—")[:12],
+                "updated_display": _format_updated(item.get("updated_at") or item.get("last_scan")),
+            })
+        return rows
+
+    def _section_picker_rows(registry, *, href_endpoint: str, extra_actions: list[tuple[str, str]] | None = None):
+        from flask import url_for as _url_for
+
+        rows = []
+        for repo in registry.repositories if registry else []:
+            if not repo.enabled:
+                continue
+            connection = repo.local_path or repo.working_directory or repo.base_url or "—"
+            ready = bool(repo.local_path or repo.working_directory) if repo.type == "command" else bool(repo.base_url)
+            actions = [{"label": "Open", "href": _url_for(href_endpoint, repo_id=repo.id)}]
+            for label, endpoint in extra_actions or []:
+                actions.append({"label": label, "href": _url_for(endpoint, repo_id=repo.id)})
+            rows.append({
+                "id": repo.id,
+                "name": repo.name,
+                "connection": _short_path(str(connection)),
+                "workspace_ready": ready,
+                "href": _url_for(href_endpoint, repo_id=repo.id),
+                "actions": actions,
+            })
+        return rows
+
+    # Nested under /repositories/sections/* so paths never collide with
+    # /repositories/<repo_id> workspace routes registered earlier.
+    @app.get("/repositories/sections/intelligence")
+    def repositories_intelligence():
+        registry = app.config["REGISTRY"]
+        agent_center = app.config.get("AGENT_CENTER")
+        return render_template(
+            "repositories_intelligence.html",
+            intelligence_rows=_intelligence_table_rows(registry, agent_center),
+            flash=request.args.get("notice"),
+            error=request.args.get("error"),
+            active_section="intelligence",
+            section_tabs=_repository_section_tabs(),
+        )
+
+    @app.get("/repositories/sections/connection")
+    def repositories_connection():
+        registry = app.config["REGISTRY"]
+        return render_template(
+            "repositories_section.html",
+            section_title="Connection",
+            section_blurb="Local path / API connection status for each registry entry.",
+            rows=_section_picker_rows(
+                registry,
+                href_endpoint="repository_connect",
+                extra_actions=[("General", "repository_detail")],
+            ),
+            flash=request.args.get("notice"),
+            error=request.args.get("error"),
+            active_section="connection",
+            section_tabs=_repository_section_tabs(),
+        )
+
+    @app.get("/repositories/sections/files-changes")
+    def repositories_files_changes():
+        registry = app.config["REGISTRY"]
+        return render_template(
+            "repositories_section.html",
+            section_title="Files & Changes",
+            section_blurb="Open a repository workspace to browse files or git changes.",
+            rows=_section_picker_rows(
+                registry,
+                href_endpoint="repository_files",
+                extra_actions=[("Changes", "repository_changes")],
+            ),
+            flash=request.args.get("notice"),
+            error=request.args.get("error"),
+            active_section="files_changes",
+            section_tabs=_repository_section_tabs(),
+        )
+
+    @app.get("/repositories/sections/settings")
+    def repositories_settings():
+        registry = app.config["REGISTRY"]
+        return render_template(
+            "repositories_section.html",
+            section_title="Settings",
+            section_blurb="Per-repository settings, run profiles, and configuration.",
+            rows=_section_picker_rows(
+                registry,
+                href_endpoint="repository_settings",
+                extra_actions=[("Edit registry", "repository_edit")],
+            ),
+            flash=request.args.get("notice"),
+            error=request.args.get("error"),
+            active_section="settings",
+            section_tabs=_repository_section_tabs(),
+        )
+
+    @app.get("/repositories/sections/logs")
+    def repositories_logs():
+        registry = app.config["REGISTRY"]
+        return render_template(
+            "repositories_section.html",
+            section_title="Logs & History",
+            section_blurb="Workspace run logs and history for connected repositories.",
+            rows=_section_picker_rows(
+                registry,
+                href_endpoint="repository_logs",
+                extra_actions=[("Run", "repository_run")],
+            ),
+            flash=request.args.get("notice"),
+            error=request.args.get("error"),
+            active_section="logs",
+            section_tabs=_repository_section_tabs(),
+        )
+
+    # Compatibility note: do not register /repositories/<literal> paths that
+    # collide with /repositories/<repo_id> (workspace routes register first).
 
     @app.route("/repositories/new", methods=["GET", "POST"])
     def repository_new():

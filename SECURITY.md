@@ -162,6 +162,15 @@ Scope: personal, local-first tool. Canonical agent rules: [AGENTS.md](AGENTS.md)
 
 ## Audit
 
+Repository Intelligence performs local read-only Git/file inspection with the registry path
+jail, secret-path exclusion, redacted summaries, bounded text/file counts, and fixed Git
+argv using `shell=False`. Scan and refresh endpoints are owner-gated and audited as
+`REPOSITORY_INTELLIGENCE_SCAN` / `REPOSITORY_INTELLIGENCE_REFRESH`. Cached knowledge never
+authorizes writes or overrides runtime DB/DHIS2 evidence.
+Standard scan telemetry enforces deterministic execution, no provider/model invocation, and
+zero AI tokens. Cached repository hits may ground repository/code questions but are never
+accepted as usable authority for runtime database or DHIS2 value queries.
+
 - JSONL at `CENTRAL_HUB_AUDIT_LOG` plus job rows in SQLite `CENTRAL_HUB_DATABASE`.
 - Job actions: `SUBMIT_JOB`, `START_JOB`, `JOB_*`, `UPLOAD_INPUT`, `DOWNLOAD_RESULT`,
   `OWNER_LOGIN`, plus existing DHIS2 events.

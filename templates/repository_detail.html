@@ -15,7 +15,7 @@
 
 <section class="dash-grid" style="margin-top:0.85rem">
   <section class="panel panel-body">
-    <h2 style="margin:0 0 0.75rem;font-size:14px">Connection</h2>
+    <h2 style="margin:0 0 0.75rem;font-size:14px">General</h2>
     <dl class="detail-list">
       <div><dt>ID</dt><dd><code>{{ repository.id }}</code></dd></div>
       <div><dt>Type</dt><dd>{{ type_badge(repository.type) }}</dd></div>
@@ -36,6 +36,8 @@
       {% if repository.capabilities %}<a class="btn" href="{{ url_for('jobs') }}">Submit job</a>{% endif %}
       {% if workspace.available %}
         <a class="btn" href="{{ url_for('repository_files', repo_id=repository.id) }}">Open Files</a>
+        <a class="btn" href="{{ url_for('repository_run', repo_id=repository.id) }}">Run</a>
+        <a class="btn" href="{{ url_for('repository_intelligence', repo_id=repository.id) }}">Intelligence</a>
       {% else %}
         <a class="btn btn-primary" href="{{ url_for('repository_connect', repo_id=repository.id) }}">Configure Local Path</a>
         <a class="btn" href="{{ url_for('repository_connect', repo_id=repository.id) }}">Scan Workspace</a>

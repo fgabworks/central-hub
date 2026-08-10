@@ -231,6 +231,91 @@ _MIGRATIONS: list[tuple[str, str]] = [
         ALTER TABLE airix_routing_events ADD COLUMN telemetry_json TEXT NOT NULL DEFAULT '{}';
         """,
     ),
+    (
+        "010_repository_intelligence",
+        """
+        CREATE TABLE IF NOT EXISTS repository_intelligence_profiles (
+            repository_id TEXT PRIMARY KEY,
+            status TEXT NOT NULL DEFAULT 'not_learned',
+            root_path TEXT NOT NULL DEFAULT '',
+            indexed_commit TEXT NOT NULL DEFAULT '',
+            guidance_hash TEXT NOT NULL DEFAULT '',
+            profile_json TEXT NOT NULL DEFAULT '{}',
+            categories_json TEXT NOT NULL DEFAULT '[]',
+            changed_files_json TEXT NOT NULL DEFAULT '[]',
+            last_scan TEXT,
+            last_error TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_repository_intelligence_status
+            ON repository_intelligence_profiles(status, updated_at DESC);
+
+        CREATE TABLE IF NOT EXISTS repository_intelligence_entries (
+            id TEXT PRIMARY KEY,
+            repository_id TEXT NOT NULL,
+            path TEXT NOT NULL,
+            category TEXT NOT NULL,
+            title TEXT NOT NULL DEFAULT '',
+            summary TEXT NOT NULL DEFAULT '',
+            keywords_json TEXT NOT NULL DEFAULT '[]',
+            content_hash TEXT NOT NULL DEFAULT '',
+            indexed_commit TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL,
+            UNIQUE(repository_id, path),
+            FOREIGN KEY(repository_id) REFERENCES repository_intelligence_profiles(repository_id)
+                ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_repository_intelligence_entries_repo_category
+            ON repository_intelligence_entries(repository_id, category, path);
+
+        CREATE TABLE IF NOT EXISTS repository_intelligence_files (
+            repository_id TEXT NOT NULL,
+            path TEXT NOT NULL,
+            content_hash TEXT NOT NULL DEFAULT '',
+            category TEXT NOT NULL DEFAULT '',
+            indexed_commit TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY(repository_id, path),
+            FOREIGN KEY(repository_id) REFERENCES repository_intelligence_profiles(repository_id)
+                ON DELETE CASCADE
+        );
+        """,
+    ),
+    (
+        "011_repository_intelligence_scan_telemetry",
+        """
+        ALTER TABLE repository_intelligence_profiles
+            ADD COLUMN last_scan_telemetry_json TEXT NOT NULL DEFAULT '{}';
+
+        CREATE TABLE IF NOT EXISTS repository_intelligence_scans (
+            id TEXT PRIMARY KEY,
+            repository_id TEXT NOT NULL,
+            trigger TEXT NOT NULL DEFAULT 'manual_scan',
+            analysis_mode TEXT NOT NULL DEFAULT 'standard',
+            status TEXT NOT NULL,
+            execution_type TEXT NOT NULL DEFAULT 'Deterministic',
+            llm_invoked INTEGER NOT NULL DEFAULT 0,
+            provider TEXT,
+            model TEXT,
+            input_tokens INTEGER NOT NULL DEFAULT 0,
+            output_tokens INTEGER NOT NULL DEFAULT 0,
+            cached_tokens INTEGER NOT NULL DEFAULT 0,
+            total_ai_tokens INTEGER NOT NULL DEFAULT 0,
+            files_scanned INTEGER NOT NULL DEFAULT 0,
+            files_indexed INTEGER NOT NULL DEFAULT 0,
+            files_changed INTEGER NOT NULL DEFAULT 0,
+            runtime_ms INTEGER NOT NULL DEFAULT 0,
+            indexed_commit TEXT NOT NULL DEFAULT '',
+            error TEXT NOT NULL DEFAULT '',
+            started_at TEXT NOT NULL,
+            finished_at TEXT NOT NULL,
+            FOREIGN KEY(repository_id) REFERENCES repository_intelligence_profiles(repository_id)
+                ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_repository_intelligence_scans_repo_finished
+            ON repository_intelligence_scans(repository_id, finished_at DESC);
+        """,
+    ),
 ]
 
 

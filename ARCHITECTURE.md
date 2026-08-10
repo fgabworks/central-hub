@@ -151,6 +151,16 @@ Browser ──HTTP──> Flask app (app.py, create_app)
 
 ## Adapter design
 
+Repository Intelligence is a read-only extension of the existing registry and Agent Center
+context pipeline, not a second assistant. `RepositoryIntelligenceService` resolves only
+enabled local command repositories from `config/repositories.yaml`, stores compact profiles
+and per-file summaries in Agent Center SQLite, and exposes bounded retrieval to routing,
+planning, and execution context. Git uses fixed argv, `shell=False`, and a timeout. The
+index is contextual only; live RO database and DHIS2 results remain authoritative.
+Scan events are stored separately from profiles, and AiriX telemetry carries only a compact
+diagnostic projection. Standard scanning has no provider seam; Deep AI Analysis remains a
+disabled future capability.
+
 `AgentConnectionRegistry` owns installation, authentication, account-label, capability,
 health-check, disconnect, and model-refresh state. Routes and templates call this interface;
 provider-specific commands and HTTP behavior remain in `hub/agent_center/adapters/`.

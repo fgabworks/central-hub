@@ -477,12 +477,65 @@ def register_agent_center_routes(app: Flask) -> None:
                         "path": r.get("local_path") or r.get("path") or "",
                         "selectable": bool(r.get("selectable")),
                         "connected": bool(r.get("selectable")),
+                        "intelligence": r.get("intelligence") or {},
                     }
                     for r in repos
                     if r.get("id") and r.get("selectable")
                 ]
             }
         )
+
+    @app.get("/api/repositories/<repo_id>/intelligence")
+    def api_repository_intelligence(repo_id: str):
+        try:
+            return jsonify({"ok": True, **_svc().repository_intelligence.knowledge(repo_id)})
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 404
+
+    @app.post("/api/repositories/<repo_id>/intelligence/scan")
+    @require_owner
+    def api_repository_intelligence_scan(repo_id: str):
+        try:
+            result = _svc().repository_intelligence.scan(
+                repo_id, incremental=False, trigger="manual_scan"
+            )
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 404
+        _audit(
+            "REPOSITORY_INTELLIGENCE_SCAN",
+            detail={
+                "repository_id": repo_id,
+                "status": result.get("status"),
+                "indexed_commit": result.get("indexed_commit"),
+                "telemetry": result.get("last_scan_telemetry") or {},
+            },
+        )
+        return jsonify({"ok": result.get("status") == "current", "status": result})
+
+    @app.post("/api/repositories/<repo_id>/intelligence/refresh")
+    @require_owner
+    def api_repository_intelligence_refresh(repo_id: str):
+        try:
+            before = _svc().repository_intelligence.get_status(repo_id)
+            changed = list(before.get("changed_files") or [])
+            result = _svc().repository_intelligence.scan(
+                repo_id,
+                incremental=bool(before.get("last_scan")),
+                changed_files=changed or None,
+                trigger="manual_refresh",
+            )
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 404
+        _audit(
+            "REPOSITORY_INTELLIGENCE_REFRESH",
+            detail={
+                "repository_id": repo_id,
+                "status": result.get("status"),
+                "changed_files": len(changed),
+                "telemetry": result.get("last_scan_telemetry") or {},
+            },
+        )
+        return jsonify({"ok": result.get("status") == "current", "status": result})
 
     @app.get("/api/agents/<agent_id>/models")
     @app.get("/api/assistants/<profile_id>/agents/<agent_id>/models")

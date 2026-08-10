@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, Callable
 
@@ -23,6 +24,8 @@ from hub.agent_center.openai_runner import OpenAIRunner
 from hub.agent_center.openai_settings import OpenAISettings, load_openai_settings
 from hub.agent_center.openai_tools import AgentToolsContext
 from hub.agent_center.profiles import PROFILES, get_profile, normalize_tools
+from hub.agent_center.repository_context import agent_requires_repository
+from hub.agent_center.repository_intelligence import RepositoryIntelligenceService
 from hub.agent_center.runner import AgentRunner
 from hub.agent_center.store import AgentCenterStore
 from hub.registry.models import Registry
@@ -76,6 +79,7 @@ class AgentCenterService:
         self.audit_store = audit_store
         self.notepad_factory = notepad_factory
         self.dhis2_reports = dhis2_reports
+        self.repository_intelligence = RepositoryIntelligenceService(self.store.db, registry)
         self.runner = AgentRunner(self.store, audit=audit)
         self.openai_runner = OpenAIRunner(
             self.store,
@@ -201,7 +205,13 @@ class AgentCenterService:
 
     def repositories(self, profile_id: str = "okarun") -> list[dict[str, Any]]:
         profile = get_profile(profile_id)
-        return selectable_repositories(self.registry) if profile.repositories_allowed else []
+        if not profile.repositories_allowed:
+            return []
+        rows = selectable_repositories(self.registry)
+        for row in rows:
+            if row.get("selectable"):
+                row["intelligence"] = self.repository_intelligence.get_status(str(row.get("id") or ""))
+        return rows
 
     def resolve_repository_ids(
         self,
@@ -365,6 +375,26 @@ class AgentCenterService:
             if isinstance(payload.get("evidence_packet"), dict)
             else None,
         )
+        repository_knowledge = (
+            payload.get("repository_intelligence")
+            if isinstance(payload.get("repository_intelligence"), dict)
+            else None
+        )
+        if repository_knowledge is None:
+            repository_knowledge = self.repository_intelligence.retrieve(
+                repos,
+                str(payload.get("prompt") or ""),
+            ) if repos else {
+                "profiles": [], "items": [], "item_count": 0,
+                "include_full_index": False,
+                "diagnostics": {"used": False, "knowledge_entries_used": 0},
+            }
+        grounding = self._grounding_with_repository_intelligence(
+            grounding,
+            repository_knowledge,
+            prompt=str(payload.get("prompt") or ""),
+            repository_ids=repos,
+        )
         preview = build_context_preview(
             self.registry,
             repository_ids=repos,
@@ -377,6 +407,7 @@ class AgentCenterService:
             grounding_rules=str(grounding.get("grounding_rules") or ""),
             evidence_packet_text=str(grounding.get("evidence_packet_text") or ""),
             evidence_packet=grounding.get("evidence_packet") or {},
+            repository_knowledge=repository_knowledge,
         )
         preview["tools"] = {
             "enabled": selected_tools,
@@ -396,6 +427,77 @@ class AgentCenterService:
             "usable": grounding.get("usable"),
         }
         return preview
+
+    def _grounding_with_repository_intelligence(
+        self,
+        grounding: dict[str, Any],
+        repository_knowledge: dict[str, Any],
+        *,
+        prompt: str,
+        repository_ids: list[str],
+    ) -> dict[str, Any]:
+        """Add repo-code evidence without treating cache as runtime data authority."""
+        items = list(repository_knowledge.get("items") or [])[:6]
+        if not items:
+            return grounding
+        from hub.agent_center.grounding import format_evidence_for_prompt
+        from hub.agent_center.completion import derive_completion_contract
+        from hub.agent_center.routing.classifier import classify_prompt
+
+        classification = classify_prompt(prompt, repository_ids=repository_ids)
+        signals = set(classification.signals or [])
+        contract = derive_completion_contract(prompt)
+        data_subject = bool(re.search(
+            r"\b(database|sql|dhis2|beneficiar|household|live|stage|count|total|how many)\b",
+            prompt,
+            re.I,
+        ))
+        explicit_code_work = bool(re.search(
+            r"\b(implement|refactor|edit|change|fix|debug|write|generate)\b.*\b(code|sql|query|file|function|class)\b",
+            prompt,
+            re.I,
+        ))
+        authoritative_data = (bool(
+            {"authoritative_data_query", "data_query", "structured_data_lookup"} & signals
+        ) or (contract.intent == "count" and data_subject)) and not explicit_code_work
+        if authoritative_data:
+            # It remains prompt context, but cannot make a missing runtime result usable.
+            return grounding
+
+        packet = dict(grounding.get("evidence_packet") or {})
+        hits = list(packet.get("hits") or [])
+        sources = list(packet.get("sources") or [])
+        existing = {
+            (str(hit.get("repository_id") or ""), str(hit.get("path") or ""))
+            for hit in hits if isinstance(hit, dict)
+        }
+        for item in items:
+            rid = str(item.get("repository_id") or "")
+            path = str(item.get("path") or "")
+            if (rid, path) in existing:
+                continue
+            hits.append({
+                "source": f"repository_intelligence:{rid}",
+                "repository_id": rid,
+                "path": path,
+                "name": item.get("title") or path,
+                "summary": item.get("summary") or "",
+                "authority": "cached_repository_context",
+            })
+            existing.add((rid, path))
+            sources.append(f"repository_intelligence:{rid}:{path}")
+        packet["hits"] = hits
+        packet["sources"] = list(dict.fromkeys(sources))
+        packet["usable"] = bool(hits)
+        packet["summary"] = (
+            str(packet.get("summary") or "Repository evidence collected")
+            + "; cached repository intelligence included; runtime DB/DHIS2 overrides it"
+        )[:500]
+        out = dict(grounding)
+        out["evidence_packet"] = packet
+        out["evidence_packet_text"] = format_evidence_for_prompt(packet)
+        out["usable"] = True
+        return out
 
     def start_run(self, payload: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -430,14 +532,20 @@ class AgentCenterService:
             selected_repository_id=str(payload.get("selected_repository_id") or "").strip() or None,
         )
         payload = {**payload, "repository_ids": resolved_repos}
+        repository_knowledge = self.repository_intelligence.retrieve(
+            resolved_repos, prompt
+        ) if resolved_repos else {
+            "profiles": [], "items": [], "item_count": 0,
+            "include_full_index": False,
+            "diagnostics": {"used": False, "knowledge_entries_used": 0},
+        }
+        payload["repository_intelligence"] = repository_knowledge
 
         from hub.agent_center.grounding import (
             apply_grounding_to_answer,
             evaluate_answer_grounding,
             format_cannot_verify,
         )
-        from hub.agent_center.repository_context import agent_requires_repository
-
         grounding = self.prepare_grounding(
             prompt,
             profile_id=profile.id,
@@ -446,6 +554,12 @@ class AgentCenterService:
             evidence_packet=payload.get("evidence_packet")
             if isinstance(payload.get("evidence_packet"), dict)
             else None,
+        )
+        grounding = self._grounding_with_repository_intelligence(
+            grounding,
+            repository_knowledge,
+            prompt=prompt,
+            repository_ids=resolved_repos,
         )
         payload["evidence_packet"] = grounding.get("evidence_packet")
         payload["grounding_rules"] = grounding.get("grounding_rules")
@@ -489,6 +603,7 @@ class AgentCenterService:
                     "answer": answer,
                     "context": {
                         "grounding": status,
+                        "repository_intelligence": repository_knowledge,
                         "evidence_packet": {
                             "summary": packet.get("summary"),
                             "usable": False,
@@ -662,6 +777,7 @@ class AgentCenterService:
                     "excluded_secrets": preview.get("excluded_secrets") or [],
                     "included_sources": preview.get("included_sources") or [],
                     "excluded_sources": preview.get("excluded_sources") or [],
+                    "repository_intelligence": preview.get("repository_intelligence") or {},
                     "packed_prompt_chars": preview.get("packed_prompt_chars"),
                     "tools": preview.get("tools"),
                     "grounding": preview.get("grounding") or {},

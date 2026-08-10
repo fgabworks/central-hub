@@ -64,6 +64,7 @@ def build_context_preview(
     grounding_rules: str = "",
     evidence_packet_text: str = "",
     evidence_packet: dict[str, Any] | None = None,
+    repository_knowledge: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     mode = normalize_mode(mode)
     prompt = (prompt or "")[:MAX_PROMPT_CHARS]
@@ -116,6 +117,14 @@ def build_context_preview(
             )
         )
 
+    repository_knowledge = dict(repository_knowledge or {})
+    repository_knowledge["profiles"] = list(repository_knowledge.get("profiles") or [])[:3]
+    repository_knowledge["items"] = list(repository_knowledge.get("items") or [])[:6]
+    knowledge_text = _repository_knowledge_text(repository_knowledge)
+    diagnostics = dict(repository_knowledge.get("diagnostics") or {})
+    diagnostics["context_chars_contributed"] = len(knowledge_text)
+    diagnostics["full_index_included"] = False
+    repository_knowledge["diagnostics"] = diagnostics
     packed_prompt = _pack_prompt(
         mode=mode,
         user_prompt=prompt,
@@ -126,12 +135,18 @@ def build_context_preview(
         selected_tools=selected_tools or [],
         grounding_rules=grounding_rules,
         evidence_packet_text=evidence_packet_text,
+        repository_knowledge=repository_knowledge,
     )
     included = _included_sources(profile, roots, selected_tools or [])
     if evidence_packet and isinstance(evidence_packet, dict):
         for src in evidence_packet.get("sources") or []:
             if src and src not in included:
                 included.append(str(src))
+    for item in repository_knowledge.get("items") or []:
+        rid = str(item.get("repository_id") or "").strip()
+        path = str(item.get("path") or "").strip()
+        if rid and path:
+            included.append(f"repository_intelligence:{rid}:{path}")
     return {
         "mode": mode,
         "mode_label": mode_label(mode),
@@ -167,6 +182,7 @@ def build_context_preview(
         "included_sources": included,
         "excluded_sources": _excluded_sources(profile, selected_tools or []),
         "evidence_packet": evidence_packet or {},
+        "repository_intelligence": repository_knowledge,
         "grounding_rules": grounding_rules,
         "notes": (
             []
@@ -190,6 +206,7 @@ def _pack_prompt(
     selected_tools: list[str] | None = None,
     grounding_rules: str = "",
     evidence_packet_text: str = "",
+    repository_knowledge: dict[str, Any] | None = None,
 ) -> str:
     parts = [
         f"Mode: {mode_label(mode)} (read-only).",
@@ -206,6 +223,9 @@ def _pack_prompt(
         parts.append("\n" + grounding_rules.strip())
     if evidence_packet_text:
         parts.append("\n" + evidence_packet_text.strip())
+    knowledge_text = _repository_knowledge_text(repository_knowledge or {})
+    if knowledge_text:
+        parts.append(knowledge_text)
     if roots:
         parts.append("Repository roots:")
     for root in roots:
@@ -220,6 +240,29 @@ def _pack_prompt(
             parts.append(f"\n## {item['repo_id']}/{item['path']}\n{item['content']}")
     parts.append("\n# User prompt\n" + user_prompt)
     return "\n".join(parts)
+
+
+def _repository_knowledge_text(repository_knowledge: dict[str, Any]) -> str:
+    profiles = list(repository_knowledge.get("profiles") or [])[:3]
+    items = list(repository_knowledge.get("items") or [])[:6]
+    if not profiles and not items:
+        return ""
+    lines = [
+        "\n# Repository Intelligence (compact cached context, not runtime authority)",
+        "Runtime database and DHIS2 results override this cached repository knowledge.",
+    ]
+    for profile in profiles:
+        summary = str(profile.get("compact_summary") or "")[:1200]
+        if summary:
+            lines.append(
+                f"- Profile {profile.get('repository_id')} @ {profile.get('indexed_commit')}: {summary}"
+            )
+    for item in items:
+        lines.append(
+            f"- [{item.get('category')}] {item.get('repository_id')}:{item.get('path')}: "
+            f"{str(item.get('summary') or '')[:700]}"
+        )
+    return "\n".join(lines)
 
 
 def _included_sources(

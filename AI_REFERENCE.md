@@ -1,9 +1,22 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-10 (AiriX five-mode agent architecture).
+Last verified: 2026-08-10 (Repository Intelligence nested UI).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
+
+Repository Intelligence UI lives under Repositories nested navigation
+(`/repositories/sections/intelligence` + `/repositories/<id>/intelligence`):
+compact status table, per-repo detail, and the same manual scan / persistent compact
+profiles / searchable per-file summaries / indexed Git commit / incremental refresh /
+bounded AiriX retrieval backend. The full index is never prompt-packed; runtime
+database and DHIS2 evidence remains authoritative.
+
+Every standard scan/refresh now persists deterministic telemetry: no LLM, provider, or
+model; zero AI tokens; files scanned/indexed/changed; runtime; and indexed commit. The
+disabled `Deep AI Analysis` control is future-only. AiriX run diagnostics report whether
+Repository Intelligence was used, commit freshness, entries used, and contributed context
+size alongside the existing token, Task Solved, and Grounded fields.
 
 **Phases 1–6 MVP + connected Live Processing + DHIS2 enrichment + Repository Notebook
 + Personal/Work workspace switcher + registry Add/Edit/Disable + SQL Workspace (read-only)
@@ -24,7 +37,7 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Registry + health | `config/repositories.yaml`, `${VAR:-default}` expansion, `hub/adapters/` |
 | Registry grouping | Optional `repository_group_id` merges adapters into one UI row (`hub/registry/grouping.py`); Workspace / Application / API statuses independent |
 | Registry management | Add / Edit / Enable / Disable via UI → YAML (`hub/registry/store.py`); no auto-clone |
-| Repository Workspace | Phases 1–2 + Connect + Run Profile Builder + Active Application status card: Overview / Files / Changes / Run / Logs / Settings; process vs HTTP health reconciled (`hub/repository_workspace/run_status.py`); YAML templates + SQLite repo profiles |
+| Repository Workspace | Phases 1–2 + Connect + Run Profile Builder + Active Application + Repository Intelligence: General / Connection / Repository Intelligence / Files & Changes / Settings / Logs & History; process vs HTTP health reconciled (`hub/repository_workspace/run_status.py`); YAML templates + SQLite repo profiles |
 | DHIS2 Reports | `/dhis2/reports` — Phase 1 Standard Report Manager: sync Stage/Live `/api/reports` metadata cache, filters, View / Open in DHIS2 / HTML source / Download / Refresh; period+OU controls; iframe embed with Open-in-DHIS2 fallback. Catalog shortcuts remain for repository/static HTML (`hub/dhis2_reports/`) |
 | Central Hub HCSC–RF | `/dhis2/hcsc-indicators` — Phase 0–3 registry + batched Overview/report/category + Compare Sources (`hub/hcsc_indicators/`); quarters **2025Q3–2026Q4**; National (DHIS2 level-1 `Philippines`) plus Region → Province → Municipality/City → Barangay via env-isolated SQLite cache + DHIS2 GET refresh; National passes the root UID through the unchanged batched analytics/registry path without child enumeration; generated reports have server-side CSV download with result/N/D/source/scope/timestamp lineage; optional **Geographic Breakdown** remains batched below the selected level; Population Filter = All Households; no formula engine |
 | Report Output Comparison | `/dhis2/hcsc-indicators/compare/progress-npmo` — Progress NPMO DHIS2 report `IKlKwg7ZS07` vs Central Hub HCSC–RF via structured analytics; compact comparison setup UI (`hub/hcsc_indicators/progress_compare.py`, `config/hcsc_progress_comparison.yaml`) |

@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_badge, type_badge %}
+{% block title %}Repository Intelligence · {{ repository.name }} · {{ app_name }}{% endblock %}
+{% block content %}
+{% set sh_title = repository.name %}
+{% set sh_info = "Compact learned profile for AiriX. Runtime database and DHIS2 results remain authoritative." %}
+{% set inline_section_tabs = true %}
+{% set sh_tabs %}{% include "partials/repository_tabs.html" %}{% endset %}
+{% set item = intelligence or {} %}
+{% set sh_meta %}
+  {{ type_badge(repository.type) }}
+  {{ status_badge(status) }}
+  <span class="badge ri-status ri-status-{{ item.status|default('not_learned') }}">{{ item.status_label|default('Not Learned') }}</span>
+{% endset %}
+{% include "partials/section_header.html" %}
+
+{% if workspace and not workspace.available and active_tab not in ['general', 'connection', 'settings'] %}
+  {% include "partials/repository_connect_cta.html" %}
+{% endif %}
+
+<section class="panel ri-detail" style="margin-top:0.85rem"
+         id="ri-detail"
+         data-ri-repo="{{ repository.id }}">
+  <div class="panel-header">
+    <div>
+      <h2>Repository Intelligence</h2>
+      <span class="quiet">Manual scan · incremental refresh · bounded retrieval</span>
+    </div>
+    <div class="ri-detail-actions">
+      {% if item.status == 'not_learned' or not item.status %}
+      <button type="button" class="btn btn-sm" data-ri-action="scan">Scan &amp; Learn</button>
+      {% else %}
+      <button type="button" class="btn btn-sm" data-ri-action="view">View Knowledge</button>
+      <button type="button" class="btn btn-sm" data-ri-action="refresh">Refresh Intelligence</button>
+      {% endif %}
+      <button type="button" class="btn btn-sm" disabled title="Future capability; not implemented">Deep AI Analysis</button>
+      <a class="btn btn-sm" href="{{ url_for('repositories_intelligence') }}">All repositories</a>
+    </div>
+  </div>
+
+  <div class="panel-body">
+    {% if item.last_error %}
+    <p class="banner banner-error ri-error" data-ri-error>{{ item.last_error }}</p>
+    {% else %}
+    <p class="ri-error" data-ri-error hidden></p>
+    {% endif %}
+
+    <dl class="ri-detail-grid">
+      <div>
+        <dt>Status</dt>
+        <dd><span class="badge ri-status ri-status-{{ item.status|default('not_learned') }}" data-ri-status-badge>{{ item.status_label|default('Not Learned') }}</span></dd>
+      </div>
+      <div>
+        <dt>Last learned</dt>
+        <dd data-ri-last-scan>{{ item.last_scan or 'Never' }}</dd>
+      </div>
+      <div>
+        <dt>Indexed commit</dt>
+        <dd class="mono" data-ri-commit>{{ (item.indexed_commit or '—')[:12] }}</dd>
+      </div>
+      <div>
+        <dt>Changed files</dt>
+        <dd data-ri-changed>{{ (item.changed_files or [])|length }}</dd>
+      </div>
+      <div>
+        <dt>Files indexed</dt>
+        <dd data-ri-files>{{ (item.profile or {}).get('file_count') or (knowledge.entry_count if knowledge else 0) or 0 }}</dd>
+      </div>
+      <div>
+        <dt>Last updated</dt>
+        <dd data-ri-updated>{{ item.updated_at or item.last_scan or '—' }}</dd>
+      </div>
+    </dl>
+
+    {% set scan_telemetry = item.last_scan_telemetry or {} %}
+    <div class="ri-detail-block" data-ri-scan-telemetry>
+      <h3>Latest scan telemetry</h3>
+      {% if scan_telemetry %}
+      <dl class="ri-detail-grid ri-scan-metrics">
+        <div><dt>Execution</dt><dd>{{ scan_telemetry.execution_type or 'Deterministic' }}</dd></div>
+        <div><dt>LLM Invoked</dt><dd>{{ 'Yes' if scan_telemetry.llm_invoked else 'No' }}</dd></div>
+        <div><dt>Provider / Model</dt><dd>{{ scan_telemetry.provider or 'None' }} / {{ scan_telemetry.model or 'None' }}</dd></div>
+        <div><dt>AI tokens in/out/cached/total</dt><dd>{{ scan_telemetry.input_tokens or 0 }}/{{ scan_telemetry.output_tokens or 0 }}/{{ scan_telemetry.cached_tokens or 0 }}/{{ scan_telemetry.total_ai_tokens or 0 }}</dd></div>
+        <div><dt>Files scanned/indexed/changed</dt><dd>{{ scan_telemetry.files_scanned or 0 }}/{{ scan_telemetry.files_indexed or 0 }}/{{ scan_telemetry.files_changed or 0 }}</dd></div>
+        <div><dt>Runtime</dt><dd>{{ scan_telemetry.runtime_ms or 0 }} ms</dd></div>
+        <div><dt>Indexed commit</dt><dd class="mono">{{ (scan_telemetry.indexed_commit or '-')[:12] }}</dd></div>
+        <div><dt>Analysis</dt><dd>Standard deterministic</dd></div>
+      </dl>
+      {% else %}
+      <p class="muted">No scan telemetry yet.</p>
+      {% endif %}
+    </div>
+
+    <div class="ri-detail-block">
+      <h3>Learned categories</h3>
+      <div class="ri-categories" data-ri-categories>
+        {% for category in item.categories|default([]) %}
+        <span class="badge">{{ category|replace('_', ' ') }}</span>
+        {% else %}
+        <span class="muted">None yet</span>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="ri-detail-block">
+      <h3>Recent activity</h3>
+      <ul class="ri-activity" data-ri-activity>
+        {% for scan in (knowledge.scan_history if knowledge else [])[:10] %}
+        <li>{{ scan.trigger|replace('_', ' ')|title }} | {{ scan.execution_type }} | LLM {{ 'Yes' if scan.llm_invoked else 'No' }} | files {{ scan.files_scanned }}/{{ scan.files_indexed }}/{{ scan.files_changed }} | {{ scan.runtime_ms }} ms | <span class="mono">{{ (scan.indexed_commit or '-')[:12] }}</span></li>
+        {% endfor %}
+        {% if item.last_scan %}
+        <li>Last scan completed · {{ item.last_scan }}</li>
+        {% endif %}
+        {% if item.changed_files %}
+        <li>Pending changes · {{ item.changed_files[:12]|join(', ') }}{% if item.changed_files|length > 12 %}…{% endif %}</li>
+        {% endif %}
+        {% if item.last_error %}
+        <li class="ri-activity-error">Last error · {{ item.last_error }}</li>
+        {% endif %}
+        {% if not item.last_scan and not item.changed_files and not item.last_error %}
+        <li class="muted">No intelligence activity yet. Run Scan &amp; Learn to build a profile.</li>
+        {% endif %}
+      </ul>
+    </div>
+
+    <div class="ri-knowledge" data-ri-knowledge {% if not knowledge or not knowledge.entries %}hidden{% endif %}>
+      {% if knowledge and knowledge.entries %}
+      <h3>Knowledge entries</h3>
+      <div class="ri-entry-list">
+        {% for entry in knowledge.entries[:80] %}
+        <div class="ri-entry">
+          <span class="badge">{{ entry.category }}</span>
+          <strong class="mono">{{ entry.path }}</strong>
+          <p>{{ entry.summary }}</p>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+<script src="{{ url_for('static', filename='js/repository_intelligence.js') }}?v=ri-2"></script>
+{% endblock %}

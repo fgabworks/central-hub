@@ -1,0 +1,7 @@
+{# Repositories section tabs (DHIS2-style nested navigation under /repositories) #}
+<nav class="rw-tabs" aria-label="Repositories sections">
+  {% for tab in section_tabs %}
+    <a class="rw-tab{% if active_section == tab.id %} is-active{% endif %}"
+       href="{{ url_for(tab.endpoint) }}">{{ tab.label }}</a>
+  {% endfor %}
+</nav>

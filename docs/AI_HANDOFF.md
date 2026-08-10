@@ -4,7 +4,50 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**AiriX five-mode Cursor/VS Code-style agent architecture (2026-08-10)**
+**Repository Intelligence testing and telemetry finalization (2026-08-10)**
+
+Standard Scan & Learn, manual refresh, automatic Git refresh, and instruction refresh now
+persist deterministic scan events with `LLM Invoked: No`, no provider/model, zero AI tokens,
+file counts, runtime, and indexed commit. Deep AI Analysis is present but disabled and not
+implemented. Learned selected repositories feed the existing classification, grounding,
+tool, routing, planning, and bounded prompt paths. Per-run diagnostics expose repository,
+indexed/current commit, freshness, entries, and contributed context. Cached intelligence
+cannot satisfy authoritative runtime DB/DHIS2 value queries.
+
+Tests: `tests/test_repository_intelligence.py` and
+`tests/test_repository_intelligence_ui.py`.
+
+Prior: **Repository Intelligence UI nested navigation (2026-08-10)**
+
+Moved Repository Intelligence out of the oversized card grid into DHIS2-style nested
+navigation under Repositories:
+
+- Section tabs: General · Connection · Repository Intelligence · Files & Changes ·
+  Settings · Logs & History (`/repositories/sections/*`)
+- Compact status table (Repository | Connection | Intelligence Status | Last Updated |
+  Indexed Commit | Actions) with Scan & Learn / View Knowledge / Refresh / More
+- Per-repo detail at `/repositories/<id>/intelligence` (status, last learned, commit,
+  changed files, files indexed, categories, recent activity)
+- Backend scan/refresh/knowledge APIs unchanged
+- Tests: `tests/test_repository_intelligence_ui.py`
+
+Prior: **AiriX Repository Intelligence (2026-08-10)**
+
+Connected local repositories now have Repository Intelligence for AiriX. The first scan
+is manual. It stores a compact profile plus per-file searchable summaries in the existing
+Agent Center SQLite database, records the Git commit, reports changes, incrementally
+refreshes affected files, and immediately refreshes changed `AGENTS.md`/`SKILLS.md`/AI/security
+instructions. Secret paths are excluded and stored summaries are redacted.
+
+Selecting a learned repository in AiriX automatically retrieves at most six task-relevant
+knowledge entries for classification, read-only tool selection, plans, and prompt context.
+The full index is never prompt-packed. Git changes are refreshed before retrieval, deleted
+entries cannot remain stale, and runtime DB/DHIS2 evidence explicitly overrides cached
+repository knowledge. Existing five modes, RBAC, budgets, grounding, Stage/Live isolation,
+and read-only execution remain unchanged. Focused tests:
+`tests/test_repository_intelligence.py`.
+
+Prior: **AiriX five-mode Cursor/VS Code-style agent architecture (2026-08-10)**
 
 The existing Smart Routing/provider/context engine now exposes one composer:
 `[Mode] [Agent] [Model] [Repository] [+ Context]`.

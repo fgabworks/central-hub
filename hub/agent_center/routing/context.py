@@ -59,6 +59,23 @@ def select_minimal_tools(classification: PromptClassification) -> list[str]:
     return list(dict.fromkeys(tools))[:6]
 
 
+def tools_for_repository_knowledge(
+    tools: list[str], repository_knowledge: dict[str, Any] | None
+) -> list[str]:
+    """Add only category-relevant read-only tools from retrieved repo knowledge."""
+    categories: set[str] = set()
+    for profile in (repository_knowledge or {}).get("profiles") or []:
+        categories.update(str(x) for x in (profile.get("categories") or []))
+    for item in (repository_knowledge or {}).get("items") or []:
+        categories.add(str(item.get("category") or ""))
+    additions: list[str] = []
+    if categories & {"data_sources"}:
+        additions.extend(["sql_lookup", "dhis2_reports_lookup", "uid_lookup"])
+    if categories & {"architecture", "business_logic", "configuration", "integrations", "guidance"}:
+        additions.extend(["repo_search", "read_file"])
+    return list(dict.fromkeys(list(tools) + additions))[:6]
+
+
 def select_repository_ids(
     classification: PromptClassification,
     requested: list[str] | None,

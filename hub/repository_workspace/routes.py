@@ -122,19 +122,27 @@ def register_repository_workspace_routes(app: Flask) -> None:
             "workspace": avail,
             "active_tab": tab,
             "tabs": [
-                {"id": "overview", "label": "Overview", "endpoint": "repository_detail"},
-                {"id": "files", "label": "Files", "endpoint": "repository_files"},
-                {"id": "changes", "label": "Changes", "endpoint": "repository_changes"},
-                {"id": "run", "label": "Run", "endpoint": "repository_run"},
-                {"id": "logs", "label": "Logs", "endpoint": "repository_logs"},
+                {"id": "general", "label": "General", "endpoint": "repository_detail"},
+                {"id": "connection", "label": "Connection", "endpoint": "repository_connect"},
+                {
+                    "id": "intelligence",
+                    "label": "Repository Intelligence",
+                    "endpoint": "repository_intelligence",
+                },
+                {
+                    "id": "files_changes",
+                    "label": "Files & Changes",
+                    "endpoint": "repository_files",
+                },
                 {"id": "settings", "label": "Settings", "endpoint": "repository_settings"},
+                {"id": "logs", "label": "Logs & History", "endpoint": "repository_logs"},
             ],
         }
 
     @app.get("/repositories/<repo_id>")
     def repository_detail(repo_id: str):
         repo = _repo(repo_id)
-        ctx = _tab_context(repo, "overview")
+        ctx = _tab_context(repo, "general")
         _audit(
             audit_actions.REPO_WS_VIEW,
             target=repo_id,
@@ -145,7 +153,7 @@ def register_repository_workspace_routes(app: Flask) -> None:
     @app.get("/repositories/<repo_id>/files")
     def repository_files(repo_id: str):
         repo = _repo(repo_id)
-        ctx = _tab_context(repo, "files")
+        ctx = _tab_context(repo, "files_changes")
         path = (request.args.get("path") or "").strip()
         _audit(
             audit_actions.REPO_WS_VIEW,
@@ -155,13 +163,14 @@ def register_repository_workspace_routes(app: Flask) -> None:
         return render_template(
             "repository_workspace_files.html",
             initial_path=path,
+            files_changes_view="files",
             **ctx,
         )
 
     @app.get("/repositories/<repo_id>/changes")
     def repository_changes(repo_id: str):
         repo = _repo(repo_id)
-        ctx = _tab_context(repo, "changes")
+        ctx = _tab_context(repo, "files_changes")
         changes = None
         error = None
         if ctx["workspace"]["available"]:
@@ -178,6 +187,7 @@ def register_repository_workspace_routes(app: Flask) -> None:
             "repository_workspace_changes.html",
             changes=changes,
             error=error,
+            files_changes_view="changes",
             **ctx,
         )
 
@@ -288,7 +298,7 @@ def register_repository_workspace_routes(app: Flask) -> None:
     @app.get("/repositories/<repo_id>/connect")
     def repository_connect(repo_id: str):
         repo = _repo(repo_id)
-        ctx = _tab_context(repo, "overview")
+        ctx = _tab_context(repo, "connection")
         _audit(
             audit_actions.REPO_WS_VIEW,
             target=repo_id,
@@ -297,6 +307,39 @@ def register_repository_workspace_routes(app: Flask) -> None:
         return render_template(
             "repository_workspace_connect.html",
             edit_url=url_for("repository_edit", repo_id=repo_id),
+            **ctx,
+        )
+
+    @app.get("/repositories/<repo_id>/intelligence")
+    def repository_intelligence(repo_id: str):
+        repo = _repo(repo_id)
+        ctx = _tab_context(repo, "intelligence")
+        agent_center = app.config.get("AGENT_CENTER")
+        intelligence = None
+        knowledge = None
+        if agent_center is not None:
+            try:
+                intelligence = agent_center.repository_intelligence.get_status(repo_id)
+                if intelligence.get("status") not in {"not_learned", None, ""}:
+                    knowledge = agent_center.repository_intelligence.knowledge(repo_id)
+            except ValueError:
+                intelligence = {
+                    "repository_id": repo_id,
+                    "status": "failed",
+                    "status_label": "Failed",
+                    "last_error": "Repository is not available for local intelligence.",
+                    "categories": [],
+                    "changed_files": [],
+                }
+        _audit(
+            audit_actions.REPO_WS_VIEW,
+            target=repo_id,
+            detail="Opened repository intelligence",
+        )
+        return render_template(
+            "repository_intelligence.html",
+            intelligence=intelligence,
+            knowledge=knowledge,
             **ctx,
         )
 

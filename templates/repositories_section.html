@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}{{ section_title }} · Repositories · {{ app_name }}{% endblock %}
+{% block content %}
+{% set sh_title = "Repositories" %}
+{% set sh_info = "Connected repositories from config/repositories.yaml. Hub never auto-clones or pulls." %}
+{% set sh_tabs %}{% include "partials/repositories_section_tabs.html" %}{% endset %}
+{% set sh_meta %}
+  <span>{{ rows|length }} shown</span>
+  <a class="btn btn-sm" href="{{ url_for('health') }}">Check health</a>
+  <a class="btn btn-sm btn-primary" href="{{ url_for('repository_new') }}">+ Add Repository</a>
+{% endset %}
+{% include "partials/section_header.html" %}
+
+{% if flash %}<div class="banner" style="background:var(--success-soft);border-color:rgba(34,197,94,.35)">{{ flash }}</div>{% endif %}
+{% if error %}<div class="banner banner-error">{{ error }}</div>{% endif %}
+
+<section class="panel" style="margin-top:0.85rem">
+  <div class="panel-header">
+    <div>
+      <h2>{{ section_title }}</h2>
+      <span class="quiet">{{ section_blurb }}</span>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Repository</th>
+          <th>Connection</th>
+          <th>Workspace</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>
+            <div class="cell-title">
+              <span class="cell-ico">▣</span>
+              <a href="{{ row.href }}">{{ row.name }}</a>
+            </div>
+            <div class="cell-sub mono">{{ row.id }}</div>
+          </td>
+          <td class="mono muted">{{ row.connection }}</td>
+          <td>
+            {% if row.workspace_ready %}
+              <span class="badge badge-healthy">Ready</span>
+            {% else %}
+              <span class="badge badge-warning">Not Connected</span>
+            {% endif %}
+          </td>
+          <td class="repo-actions">
+            {% for action in row.actions %}
+              <a class="btn btn-sm" href="{{ action.href }}">{{ action.label }}</a>
+            {% endfor %}
+          </td>
+        </tr>
+        {% else %}
+        <tr class="empty-row"><td colspan="4">No repositories available.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

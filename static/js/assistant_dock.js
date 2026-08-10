@@ -1235,6 +1235,20 @@
         : t.model != null && t.model !== ""
           ? t.model
           : "None";
+      var ri =
+        (t.repository_intelligence && typeof t.repository_intelligence === "object"
+          ? t.repository_intelligence
+          : execution && execution.repository_intelligence_diagnostics) || null;
+      var riRepos = ri && Array.isArray(ri.repositories) ? ri.repositories : [];
+      var riDetails = riRepos.map(function (item) {
+        return (
+          String(item.repository_id || "") +
+          " @ " +
+          String(item.indexed_commit || "-").slice(0, 12) +
+          " / HEAD " +
+          String(item.current_commit || "-").slice(0, 12)
+        );
+      }).join(", ");
       return (
         '<div class="ad-telemetry muted">' +
         "<div>Tier: " +
@@ -1352,6 +1366,19 @@
                   )
                 )
               : "") +
+            "</div>"
+          : "") +
+        (ri
+          ? "<div>Repository Intelligence used: " +
+            escapeHtml(ri.used ? "Yes" : "No") +
+            " Â· Repository: " +
+            escapeHtml(riDetails || (ri.repository_ids || []).join(", ") || "None") +
+            " Â· Entries: " +
+            escapeHtml(String(ri.knowledge_entries_used || 0)) +
+            " Â· Status: " +
+            escapeHtml(String(ri.freshness || "not_learned")) +
+            " Â· Context chars: " +
+            escapeHtml(String(ri.context_chars_contributed || 0)) +
             "</div>"
           : "") +
         "</div>"
