@@ -53,6 +53,7 @@ class AgentToolsContext:
     uid_index: Any | None = None
     profile_id: str = "okarun"
     workspace: str = "work"
+    dhis2_environment: str = ""
     allowed_tools: set[str] = field(default_factory=set)
     email: Any | None = None
     calendar: Any | None = None
@@ -406,7 +407,7 @@ def _tool_org_unit_lookup(args: dict[str, Any], ctx: AgentToolsContext) -> dict[
     if ctx.dhis2_reports is None:
         return {"error": "DHIS2 Reports / org-unit service is not available"}
     query = str(args.get("query") or "").strip()
-    environment = str(args.get("environment") or "stage").strip().lower() or "stage"
+    environment = str(ctx.dhis2_environment or args.get("environment") or "stage").strip().lower() or "stage"
     parent_id = str(args.get("parent_id") or "").strip()
     limit = max(1, min(int(args.get("limit") or 25), 50))
     level = args.get("level")
@@ -643,7 +644,7 @@ def _tool_dhis2_reports_lookup(
     if ctx.dhis2_reports is None:
         return {"error": "DHIS2 Reports service is not available"}
     query = str(args.get("query") or "").strip()
-    environment = str(args.get("environment") or "").strip().lower()
+    environment = str(ctx.dhis2_environment or args.get("environment") or "").strip().lower()
     limit = max(1, min(int(args.get("limit") or 20), 50))
     standard = ctx.dhis2_reports.list_standard_library(
         q=query, environment=environment

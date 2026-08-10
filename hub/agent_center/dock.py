@@ -8,6 +8,11 @@ from typing import Any
 from hub.agent_center.profiles import get_profile, profile_for_workspace
 from hub.notebook.models import normalize_workspace
 from hub.notebook.workspace import get_pref, set_pref
+from hub.agent_center.routing.context import (
+    INTERACTION_MODES,
+    normalize_context_sources,
+    normalize_interaction_mode,
+)
 
 DEFAULT_WIDTH = 400
 MIN_WIDTH = 300
@@ -43,7 +48,13 @@ def default_dock_state(workspace: str) -> dict[str, Any]:
         "max_width": MAX_WIDTH,
         "selected_repository_id": "",
         "routing_mode": "smart",
+        "interaction_mode": "smart",
+        "selected_agent_id": "",
+        "selected_model_id": "",
+        "context_sources": [],
+        "dhis2_environment": "",
         "direct_conversation_id": "",
+        "direct_session_fingerprint": "",
     }
 
 
@@ -71,8 +82,23 @@ def load_dock_prefs(db: Any, workspace: str) -> dict[str, Any]:
     if "routing_mode" in data:
         mode = str(data.get("routing_mode") or "smart").strip().lower()
         state["routing_mode"] = "direct" if mode in {"direct", "direct_agent", "efficient"} else "smart"
+    raw_interaction_mode = data.get("interaction_mode", data.get("routing_mode"))
+    if raw_interaction_mode is not None:
+        state["interaction_mode"] = normalize_interaction_mode(str(raw_interaction_mode))
+        state["routing_mode"] = "direct" if state["interaction_mode"] == "agent" else "smart"
+    if "selected_agent_id" in data:
+        state["selected_agent_id"] = str(data.get("selected_agent_id") or "")[:128]
+    if "selected_model_id" in data:
+        state["selected_model_id"] = str(data.get("selected_model_id") or "")[:256]
+    if "context_sources" in data:
+        state["context_sources"] = normalize_context_sources(data.get("context_sources"))
+    if "dhis2_environment" in data:
+        env = str(data.get("dhis2_environment") or "").strip().lower()
+        state["dhis2_environment"] = env if env in {"stage", "live"} else ""
     if "direct_conversation_id" in data:
         state["direct_conversation_id"] = str(data.get("direct_conversation_id") or "")[:64]
+    if "direct_session_fingerprint" in data:
+        state["direct_session_fingerprint"] = str(data.get("direct_session_fingerprint") or "")[:128]
     return state
 
 
@@ -94,8 +120,24 @@ def save_dock_prefs(db: Any, workspace: str, payload: dict[str, Any] | None) -> 
         current["routing_mode"] = (
             "direct" if mode in {"direct", "direct_agent", "efficient"} else "smart"
         )
+        if "interaction_mode" not in data:
+            current["interaction_mode"] = "agent" if current["routing_mode"] == "direct" else "smart"
+    if "interaction_mode" in data:
+        current["interaction_mode"] = normalize_interaction_mode(str(data.get("interaction_mode")))
+        current["routing_mode"] = "direct" if current["interaction_mode"] == "agent" else "smart"
+    if "selected_agent_id" in data:
+        current["selected_agent_id"] = str(data.get("selected_agent_id") or "")[:128]
+    if "selected_model_id" in data:
+        current["selected_model_id"] = str(data.get("selected_model_id") or "")[:256]
+    if "context_sources" in data:
+        current["context_sources"] = normalize_context_sources(data.get("context_sources"))
+    if "dhis2_environment" in data:
+        env = str(data.get("dhis2_environment") or "").strip().lower()
+        current["dhis2_environment"] = env if env in {"stage", "live"} else ""
     if "direct_conversation_id" in data:
         current["direct_conversation_id"] = str(data.get("direct_conversation_id") or "")[:64]
+    if "direct_session_fingerprint" in data:
+        current["direct_session_fingerprint"] = str(data.get("direct_session_fingerprint") or "")[:128]
     # Minimized implies closed chrome but host stays mounted; keep open flag for restore.
     set_pref(
         db,
@@ -108,7 +150,13 @@ def save_dock_prefs(db: Any, workspace: str, payload: dict[str, Any] | None) -> 
                 "width": current["width"],
                 "selected_repository_id": current["selected_repository_id"],
                 "routing_mode": current.get("routing_mode") or "smart",
+                "interaction_mode": current.get("interaction_mode") or "smart",
+                "selected_agent_id": current.get("selected_agent_id") or "",
+                "selected_model_id": current.get("selected_model_id") or "",
+                "context_sources": current.get("context_sources") or [],
+                "dhis2_environment": current.get("dhis2_environment") or "",
                 "direct_conversation_id": current.get("direct_conversation_id") or "",
+                "direct_session_fingerprint": current.get("direct_session_fingerprint") or "",
             }
         ),
     )
@@ -203,7 +251,13 @@ def dock_shell_bootstrap(
             "max_width": prefs["max_width"],
             "selected_repository_id": prefs.get("selected_repository_id") or "",
             "routing_mode": prefs.get("routing_mode") or "smart",
+            "interaction_mode": prefs.get("interaction_mode") or "smart",
+            "selected_agent_id": prefs.get("selected_agent_id") or "",
+            "selected_model_id": prefs.get("selected_model_id") or "",
+            "context_sources": prefs.get("context_sources") or [],
+            "dhis2_environment": prefs.get("dhis2_environment") or "",
             "direct_conversation_id": prefs.get("direct_conversation_id") or "",
+            "direct_session_fingerprint": prefs.get("direct_session_fingerprint") or "",
         },
         "suggestions": page_aware_suggestions(profile.id, endpoint),
         "safety": {
@@ -230,5 +284,6 @@ def dock_shell_bootstrap(
             "roles_url": "/api/assistants/airix/routing/roles",
             "permissions_url": "/api/assistants/airix/routing/permissions",
             "execute": True,
+            "interaction_modes": list(INTERACTION_MODES),
         },
     }

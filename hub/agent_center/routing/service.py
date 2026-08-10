@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any, Callable
 
 from hub.agent_center.db import AgentCenterDb
@@ -539,6 +540,7 @@ class AgentRouterService:
         repository_ids: list[str] | None = None,
         agent_override: str | None = None,
         session_id: str | None = None,
+        context_sources: list[str] | None = None,
     ) -> ExecutionPlan:
         cfg = settings or self.get_settings(workspace)
         rec = recommendation or self.recommend_route(
@@ -556,6 +558,7 @@ class AgentRouterService:
             repository_ids=repository_ids,
             agent_override=agent_override,
             candidate_findings=findings,
+            context_sources=context_sources,
         )
         # Enforce tool permission filter on packed context.
         perms = self.permissions_for(actor, workspace=workspace)
@@ -624,18 +627,35 @@ class AgentRouterService:
         routing_mode: str | None = None,
         conversation_id: str | None = None,
         context_fingerprint: str | None = None,
+        interaction_mode: str | None = None,
+        context_sources: list[str] | None = None,
+        dhis2_environment: str | None = None,
     ) -> dict[str, Any]:
         if self.executor is None:
             raise RuntimeError("RouteExecutor requires AgentCenterService")
         from hub.agent_center.routing.context import (
             build_direct_agent_recommendation,
+            normalize_context_sources,
+            normalize_interaction_mode,
             normalize_routing_mode,
             provider_to_adapter_id,
         )
 
         cfg = self.get_settings(workspace)
-        mode = normalize_routing_mode(routing_mode)
-        if mode == "direct":
+        interaction = normalize_interaction_mode(interaction_mode or routing_mode)
+        mode = normalize_routing_mode(interaction)
+        sources = normalize_context_sources(context_sources)
+        env = str(dhis2_environment or "").strip().lower()
+        if env not in {"stage", "live"}:
+            env = ""
+        if interaction in {"inspect", "plan"}:
+            cfg = replace(cfg, prefer_deterministic=True, enable_orchestration=True)
+        # Smart owns provider/model resolution. Persisted manual selections are UI
+        # state only and must never accidentally become a Smart override.
+        if interaction == "smart" and interaction_mode is not None:
+            agent_override = None
+            model = None
+        if interaction == "agent":
             provider = (agent_override or "").strip()
             if not provider:
                 raise AgentCenterError(
@@ -675,6 +695,9 @@ class AgentRouterService:
                     recommendation=recommendation,
                     session_id=session_id,
                     model=model,
+                    interaction_mode=interaction,
+                    context_sources=sources,
+                    dhis2_environment=env,
                 )
             rec = recommendation or self.recommend_route(
                 prompt, workspace=workspace, actor=actor, settings=cfg, session_id=session_id
@@ -729,6 +752,7 @@ class AgentRouterService:
             repository_ids=repository_ids,
             agent_override=agent_override,
             session_id=session_id,
+            context_sources=sources,
         )
         findings: list[dict[str, Any]] = []
         if self.history is not None:
@@ -756,6 +780,9 @@ class AgentRouterService:
             routing_mode=mode,
             conversation_id=conversation_id,
             context_fingerprint=context_fingerprint,
+            interaction_mode=interaction,
+            context_sources=sources,
+            dhis2_environment=env,
         )
         return {
             "ok": True,
@@ -767,6 +794,7 @@ class AgentRouterService:
             "permissions": plan.permissions,
             "prior_findings_reused": list((result.get("prior_findings") or plan.prior_findings)[:3]),
             "routing_mode": mode,
+            "interaction_mode": interaction,
             "cost": {
                 "estimated_tokens": est,
                 "estimated_cost_usd": estimate_cost_usd(est, provider_id=provider, settings=cfg),
@@ -788,6 +816,9 @@ class AgentRouterService:
         recommendation: RouteRecommendation | None,
         session_id: str | None,
         model: str | None = None,
+        interaction_mode: str = "smart",
+        context_sources: list[str] | None = None,
+        dhis2_environment: str | None = None,
     ) -> dict[str, Any]:
         assert self.executor is not None
         cfg = self.get_settings(workspace)
@@ -981,6 +1012,9 @@ class AgentRouterService:
                         if model and override == rec.recommended_agent
                         else None
                     ),
+                    interaction_mode=interaction_mode,
+                    context_sources=context_sources,
+                    dhis2_environment=dhis2_environment,
                 )
             except AgentCenterError as exc:
                 if exc.code == "approval_required":
@@ -1141,6 +1175,7 @@ class AgentRouterService:
                 "answer": final_answer,
                 "provider_id": rec.recommended_agent,
                 "mode": "orchestrated",
+                "interaction_mode": interaction_mode,
                 "partial_summary": partial,
                 "error": stopped_reason if status not in {"completed", "paused_for_approval"} else "",
                 "error_code": (
@@ -1171,6 +1206,7 @@ class AgentRouterService:
                 "actual_tokens": actual_tokens,
             },
             "execution": execution_payload,
+            "interaction_mode": interaction_mode,
             "budget": self._budget_for(
                 workspace=workspace,
                 actor=actor,

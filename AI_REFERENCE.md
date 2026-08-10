@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-10 (AiriX Routing Mode: Smart vs Direct Agent).
+Last verified: 2026-08-10 (AiriX five-mode agent architecture).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -141,17 +141,23 @@ Manual provider selection (`agent_override` / Choose Agent) is authoritative: ne
 swap Codex/Claude/Cursor/Grok to Hub Simulator; unavailable providers fail with the real
 error; Smart Routing recommendations require Use Recommended acceptance. Executions log
 selected/recommended/resolved provider+model, `manual_override`, and `fallback_reason`.
-**Routing Mode** (persisted per workspace beside the repository selector): **Smart Routing**
-keeps recommend → T0/DB/capability escalation; **Direct Agent — Efficient** skips Smart
-Routing/T0/recommendations/auto-escalation and always runs the selected provider+model
-(no silent swap; Simulator only when explicitly selected). Direct still packs lightweight
-context (repo, filters, hints, prior findings, rules, cheap evidence) without whole-repo
-dumps or context-prep termination; follow-ups reuse provider sessions when supported.
+**Interaction Mode** is a single policy layer over the existing router: **Smart** owns
+provider/model/tier and keeps cheapest-capable T0 → AI escalation; **Ask** is read-only
+Q&A; **Inspect** is deterministic/tools-first; **Plan** investigates and uses the existing
+read-only provider plan mode; **Agent** skips T0/recommendations/auto-escalation and runs
+the selected provider+model exactly (no silent swap; Simulator only when explicitly
+selected). Composer state (mode/provider/model/repository/context) persists per workspace.
+First-class context sources are DHIS2 environment, RO database/Data Explorer, relevant
+files, workspace, and prior findings. They add only scoped read-only tools/files; whole-repo
+packing remains off. A selected DHIS2 Stage/Live environment is forced server-side in Hub
+tools. Provider sessions/context fingerprints are reused when supplied and supported.
 Every Smart Routing execution records event-sourced AI usage telemetry
 (`hub/agent_center/routing/telemetry.py`): tier, Deterministic/AI/Hybrid, LLM Yes/No,
 provider/model, tokens (actual when provider-reported, else marked estimate), tools,
 runtime, child AI run id, T0 failure reason, next capability, DB query attempted, AI escalate,
-plus routing mode / session reused / context items when present.
+plus actual interaction mode / session reused / context items when present. Public execution
+summaries always include resolved provider/model, T0/LLM use, tokens, tools, Task Solved,
+and Grounded (unknown values remain explicit rather than inferred).
 Pure T0 forces zero AI tokens and null provider/model/run id.
 Codex models are discovered via `codex debug models` / CLI models cache
 (`hub/agent_center/codex_models.py`); Smart Routing recommends Provider + Model;

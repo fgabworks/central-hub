@@ -32,7 +32,13 @@
         max_width: 560,
         selected_repository_id: "",
         routing_mode: "smart",
+        interaction_mode: "smart",
+        selected_agent_id: "",
+        selected_model_id: "",
+        context_sources: [],
+        dhis2_environment: "",
         direct_conversation_id: "",
+        direct_session_fingerprint: "",
       },
       boot.prefs || {}
     );
@@ -41,8 +47,8 @@
     var prefsUrl = boot.prefs_url || "/api/assistant-dock/prefs";
     var agentsLoaded = false;
     var agentsLoading = false;
-    var selectedAgent = "";
-    var selectedModel = "";
+    var selectedAgent = String(prefs.selected_agent_id || "");
+    var selectedModel = String(prefs.selected_model_id || "");
     var selectedRepoIds = [];
     var reposLoaded = false;
     var reposLoading = false;
@@ -68,6 +74,8 @@
     var contextBody = $("ad-context-body");
     var contextDrawer = $("ad-context-drawer");
     var contextBtn = $("ad-context-btn");
+    var contextChoices = $("ad-context-choices");
+    var contextDhis2Env = $("ad-context-dhis2-env");
     var saveTimer = null;
     var pollTimer = null;
     var agentPollDeadlineTimer = null;
@@ -136,8 +144,14 @@
         minimized: !!prefs.minimized,
         width: prefs.width,
         selected_repository_id: prefs.selected_repository_id || "",
-        routing_mode: prefs.routing_mode === "direct" ? "direct" : "smart",
+        routing_mode: currentInteractionMode() === "agent" ? "direct" : "smart",
+        interaction_mode: currentInteractionMode(),
+        selected_agent_id: selectedAgent || prefs.selected_agent_id || "",
+        selected_model_id: selectedModel || prefs.selected_model_id || "",
+        context_sources: currentContextSources(),
+        dhis2_environment: (contextDhis2Env && contextDhis2Env.value) || prefs.dhis2_environment || "",
         direct_conversation_id: prefs.direct_conversation_id || "",
+        direct_session_fingerprint: prefs.direct_session_fingerprint || "",
       };
       function send() {
         fetch(prefsUrl, {
@@ -186,36 +200,64 @@
       return selectedRepoIds.slice();
     }
 
-    function currentRoutingMode() {
+    function currentInteractionMode() {
       if (routingModeSel && routingModeSel.value) {
-        return routingModeSel.value === "direct" ? "direct" : "smart";
+        return routingModeSel.value === "direct" ? "agent" : routingModeSel.value;
       }
-      return prefs.routing_mode === "direct" ? "direct" : "smart";
+      return prefs.interaction_mode || (prefs.routing_mode === "direct" ? "agent" : "smart");
+    }
+
+    function currentRoutingMode() {
+      return currentInteractionMode() === "agent" ? "direct" : "smart";
+    }
+
+    function currentContextSources() {
+      if (!contextChoices) return Array.isArray(prefs.context_sources) ? prefs.context_sources.slice() : [];
+      return Array.prototype.filter.call(contextChoices.querySelectorAll('input[type="checkbox"]'), function (box) {
+        return box.checked;
+      }).map(function (box) { return box.value; });
     }
 
     function applyRoutingModeChrome() {
-      var mode = currentRoutingMode();
-      prefs.routing_mode = mode;
+      var mode = currentInteractionMode();
+      prefs.interaction_mode = mode;
+      prefs.routing_mode = mode === "agent" ? "direct" : "smart";
       if (routingModeSel && routingModeSel.value !== mode) {
         routingModeSel.value = mode;
       }
-      if (directHint) directHint.hidden = mode !== "direct";
+      if (directHint) directHint.hidden = mode !== "agent";
       var hint = document.querySelector(".ad-routing-hint");
       if (hint) {
-        hint.hidden = mode === "direct";
+        hint.hidden = mode !== "smart";
       }
-      if (routingCard && mode === "direct") {
+      if (routingCard && mode !== "smart") {
         routingCard.hidden = true;
         pendingRoute = null;
         pendingPlan = null;
       }
+      if (agentSel) {
+        if (mode === "smart") {
+          agentSel.value = "";
+          agentSel.disabled = true;
+        } else {
+          agentSel.disabled = false;
+          agentSel.value = selectedAgent || "";
+        }
+      }
+      if (modelSel) {
+        modelSel.disabled = mode === "smart";
+        if (mode === "smart") modelSel.value = "";
+        else if (selectedModel) modelSel.value = selectedModel;
+      }
     }
 
     function setRoutingMode(mode) {
-      prefs.routing_mode = mode === "direct" ? "direct" : "smart";
-      if (prefs.routing_mode === "smart") {
+      prefs.interaction_mode = mode === "direct" ? "agent" : mode;
+      prefs.routing_mode = prefs.interaction_mode === "agent" ? "direct" : "smart";
+      if (prefs.interaction_mode !== "agent") {
         // Switching back to Smart clears Direct session resume handle.
         prefs.direct_conversation_id = "";
+        prefs.direct_session_fingerprint = "";
       }
       applyRoutingModeChrome();
       persistPrefs();
@@ -225,12 +267,47 @@
       var repoFields = repositoryPayloadFields();
       var bits = [
         currentRoutingMode(),
+        currentInteractionMode(),
         selectedAgent || "",
         currentSelectedModel() || "",
         (repoFields.selected_repository_id || "") + "",
-        String(prompt || "").trim().slice(0, 80),
+        currentContextSources().join(","),
+        (contextDhis2Env && contextDhis2Env.value) || prefs.dhis2_environment || "",
       ];
       return bits.join("|").slice(0, 120);
+    }
+
+    function contextPayloadFields() {
+      return {
+        context_sources: currentContextSources(),
+        dhis2_environment: (contextDhis2Env && contextDhis2Env.value) || prefs.dhis2_environment || null,
+      };
+    }
+
+    function initializeContextControls() {
+      var selected = Array.isArray(prefs.context_sources) ? prefs.context_sources : [];
+      if (contextChoices) {
+        contextChoices.querySelectorAll('input[type="checkbox"]').forEach(function (box) {
+          box.checked = selected.indexOf(box.value) >= 0;
+          box.addEventListener("change", function () {
+            prefs.context_sources = currentContextSources();
+            persistPrefs();
+            if (promptEl && promptEl.value.trim()) previewContext(promptEl.value);
+          });
+        });
+      }
+      if (contextDhis2Env) {
+        contextDhis2Env.value = prefs.dhis2_environment || "";
+        contextDhis2Env.addEventListener("change", function () {
+          prefs.dhis2_environment = contextDhis2Env.value;
+          if (contextDhis2Env.value && contextChoices) {
+            var box = contextChoices.querySelector('input[value="dhis2_environment"]');
+            if (box) box.checked = true;
+          }
+          prefs.context_sources = currentContextSources();
+          persistPrefs(true);
+        });
+      }
     }
 
     function repositoryPayloadFields() {
@@ -445,9 +522,13 @@
         .then(function (data) {
           var agents = data.agents || [];
           agentSel.innerHTML = "";
-          selectedAgent = "";
+          var autoOpt = document.createElement("option");
+          autoOpt.value = "";
+          autoOpt.textContent = "Auto";
+          autoOpt.setAttribute("data-runnable", "1");
+          agentSel.appendChild(autoOpt);
           if (!agents.length) {
-            agentSel.innerHTML = '<option value="">No providers configured</option>';
+            autoOpt.textContent = "Auto (no providers configured)";
             return;
           }
           agents.forEach(function (agent) {
@@ -465,13 +546,18 @@
             agentSel.appendChild(opt);
           });
           var firstOk = Array.prototype.find.call(agentSel.options || [], function (o) {
-            return o.getAttribute("data-runnable") === "1";
+            return !!o.value && o.getAttribute("data-runnable") === "1";
           });
-          selectedAgent = firstOk ? firstOk.value : "";
-          agentSel.value = selectedAgent;
+          var persistedAgent = String(prefs.selected_agent_id || selectedAgent || "");
+          var persistedOption = Array.prototype.find.call(agentSel.options || [], function (o) {
+            return o.value === persistedAgent && o.getAttribute("data-runnable") !== "0";
+          });
+          selectedAgent = persistedOption ? persistedAgent : "";
+          agentSel.value = currentInteractionMode() === "smart" ? "" : selectedAgent;
           agentsLoaded = true;
-          if (selectedAgent) loadModels(selectedAgent);
+          if (selectedAgent) loadModels(selectedAgent, prefs.selected_model_id || "");
           ensureRepositories();
+          applyRoutingModeChrome();
         })
         .catch(function () {
           agentSel.innerHTML = '<option value="">Providers unavailable</option>';
@@ -482,6 +568,7 @@
     }
 
     function currentSelectedModel() {
+      if (currentInteractionMode() === "smart") return "";
       if (modelSel && !modelSel.hidden && modelSel.value) {
         selectedModel = modelSel.value;
         return modelSel.value;
@@ -507,6 +594,10 @@
             return;
           }
           var ids = [];
+          var autoModel = document.createElement("option");
+          autoModel.value = "";
+          autoModel.textContent = "Auto";
+          modelSel.appendChild(autoModel);
           models.forEach(function (model) {
             var id = typeof model === "string" ? model : model.id || model.name;
             var label =
@@ -538,7 +629,8 @@
             pick = ids[0] || "";
           }
           selectedModel = pick;
-          modelSel.value = pick;
+          prefs.selected_model_id = pick;
+          modelSel.value = currentInteractionMode() === "smart" ? "" : pick;
           modelSel.hidden = false;
         })
         .catch(function () {
@@ -553,12 +645,14 @@
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         body: JSON.stringify({
-          mode: profile.default_mode || "ask",
+          mode: currentInteractionMode() === "plan" ? "plan" : (currentInteractionMode() === "inspect" ? "find" : "ask"),
           prompt: prompt,
           agent_id: selectedAgent,
           model: currentSelectedModel(),
           tools: profile.default_tools || [],
           repository_ids: repoFields.repository_ids,
+          context_sources: currentContextSources(),
+          dhis2_environment: (contextDhis2Env && contextDhis2Env.value) || prefs.dhis2_environment || null,
         }),
       })
         .then(function (r) {
@@ -572,6 +666,9 @@
               {
                 repository_ids: repoIds,
                 repository: repoIds.map(repositoryLabel).filter(Boolean),
+                interaction_mode: currentInteractionMode(),
+                context_sources: currentContextSources(),
+                dhis2_environment: (contextDhis2Env && contextDhis2Env.value) || prefs.dhis2_environment || null,
                 included_sources: preview.included_sources || [],
                 excluded_sources: preview.excluded_sources || [],
                 excluded_secrets: preview.excluded_secrets || [],
@@ -1179,7 +1276,9 @@
             escapeHtml(t.ai_escalation_occurred ? "Yes" : "No") +
             "</div>"
           : "") +
-        (t.routing_mode ||
+        (t.interaction_mode ||
+        (execution && execution.interaction_mode) ||
+        t.routing_mode ||
         (execution && execution.routing_mode) ||
         t.session_reused != null ||
         (execution && execution.session_reused) ||
@@ -1190,7 +1289,7 @@
         t.context_chars != null ||
         (execution && execution.context_chars != null)
           ? "<div>Mode: " +
-            escapeHtml(String(t.routing_mode || (execution && execution.routing_mode) || "smart")) +
+            escapeHtml(String(t.interaction_mode || (execution && execution.interaction_mode) || t.routing_mode || (execution && execution.routing_mode) || "smart")) +
             " · Selected: " +
             escapeHtml(
               String(
@@ -1267,10 +1366,10 @@
         (execution.fallback_from
           ? " (fallback from " + escapeHtml(execution.fallback_from) + ")"
           : "");
-      if (status === "completed" || (status === "failed" && execution.grounding)) {
+      if (status === "completed" || status === "failed") {
         var g = execution.grounding || {};
         var gLine = "";
-        if (g.grounded_label || g.source || g.evidence_found_label || g.task_solved_label) {
+        {
           var sources =
             (Array.isArray(g.sources_used) && g.sources_used.length
               ? g.sources_used.join(", ")
@@ -1280,11 +1379,11 @@
           gLine =
             '<div class="ad-source">' +
             "Evidence Found: " +
-            escapeHtml(String(g.evidence_found_label || (g.evidence_found ? "Yes" : "No"))) +
+            escapeHtml(String(g.evidence_found_label || (g.evidence_found == null ? "Unknown" : g.evidence_found ? "Yes" : "No"))) +
             " · Task Solved: " +
-            escapeHtml(String(g.task_solved_label || (g.task_solved ? "Yes" : "No"))) +
+            escapeHtml(String(g.task_solved_label || (g.task_solved == null ? "Unknown" : g.task_solved ? "Yes" : "No"))) +
             " · Grounded: " +
-            escapeHtml(String(g.grounded_label || (g.grounded ? "Yes" : "No"))) +
+            escapeHtml(String(g.grounded_label || (g.grounded == null ? "Unknown" : g.grounded ? "Yes" : "No"))) +
             "<br>Sources used: " +
             escapeHtml(String(sources)) +
             (g.grounded || !g.reason
@@ -1421,7 +1520,7 @@
         return;
       }
       if (!selectedAgent) {
-        appendMessage("assistant", "Select a provider for Direct Agent mode.");
+        appendMessage("assistant", "Select a provider for Agent mode.");
         return;
       }
       if (
@@ -1462,7 +1561,9 @@
         repoFields = repositoryPayloadFields();
       }
       var fp = contextFingerprint(prompt);
-      var reused = !!(prefs.direct_conversation_id || "");
+      var reusableConversation =
+        prefs.direct_session_fingerprint === fp ? prefs.direct_conversation_id || null : null;
+      var reused = !!reusableConversation;
       fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -1477,8 +1578,11 @@
           active_repository_id: repoFields.active_repository_id,
           model: currentSelectedModel() || null,
           routing_mode: "direct",
-          conversation_id: prefs.direct_conversation_id || null,
+          interaction_mode: "agent",
+          conversation_id: reusableConversation,
           context_fingerprint: fp,
+          context_sources: currentContextSources(),
+          dhis2_environment: (contextDhis2Env && contextDhis2Env.value) || prefs.dhis2_environment || null,
         }),
       })
         .then(function (r) {
@@ -1499,6 +1603,7 @@
           var exec = (res.data && res.data.execution) || {};
           if (exec.conversation_id) {
             prefs.direct_conversation_id = exec.conversation_id;
+            prefs.direct_session_fingerprint = fp;
             persistPrefs();
           }
           if (exec.id) {
@@ -1580,6 +1685,7 @@
         modelForRoute = rec.recommended_model;
       }
       var repoFields = repositoryPayloadFields();
+      var interactionMode = opts.interactionMode || currentInteractionMode();
       var routeNeedsRepo =
         agentRequiresRepository(overrideAgent || routeAgent || mapRoutingAgent((rec && rec.recommended_agent) || ""));
       if (routeNeedsRepo && !(repoFields.repository_ids || []).length) {
@@ -1602,6 +1708,12 @@
           selected_repository_id: repoFields.selected_repository_id,
           active_repository_id: repoFields.active_repository_id,
           model: modelForRoute || null,
+          routing_mode: interactionMode === "agent" ? "direct" : "smart",
+          interaction_mode: interactionMode,
+          context_sources: currentContextSources(),
+          dhis2_environment: (contextDhis2Env && contextDhis2Env.value) || prefs.dhis2_environment || null,
+          conversation_id: prefs.direct_conversation_id || null,
+          context_fingerprint: contextFingerprint(prompt),
         }),
       })
         .then(function (r) {
@@ -1831,6 +1943,16 @@
             var rec = data.recommendation || {};
             pendingRoute = rec;
             pendingPlan = data.plan || null;
+            var interactionMode = currentInteractionMode();
+            if (interactionMode !== "smart") {
+              setRunControls("idle");
+              executeRecommendedRoute(rec, {
+                interactionMode: interactionMode,
+                agentOverride: selectedAgent || null,
+                model: currentSelectedModel() || null,
+              });
+              return;
+            }
             if (isT0DeterministicRecommendation(rec)) {
               setRunControls("idle");
               appendMessage(
@@ -1960,7 +2082,7 @@
       if (toggleBtn) toggleBtn.addEventListener("click", toggle);
       if (topbarBtn) topbarBtn.addEventListener("click", toggle);
       if (routingModeSel) {
-        routingModeSel.value = prefs.routing_mode === "direct" ? "direct" : "smart";
+        routingModeSel.value = prefs.interaction_mode || (prefs.routing_mode === "direct" ? "agent" : "smart");
         routingModeSel.addEventListener("change", function () {
           setRoutingMode(routingModeSel.value);
         });
@@ -2023,13 +2145,22 @@
       if (agentSel) {
         agentSel.addEventListener("change", function () {
           selectedAgent = agentSel.value;
-          loadModels(selectedAgent);
+          prefs.selected_agent_id = selectedAgent;
+          if (selectedAgent) loadModels(selectedAgent);
+          else {
+            selectedModel = "";
+            prefs.selected_model_id = "";
+            if (modelSel) modelSel.hidden = true;
+          }
           ensureRepositories();
+          persistPrefs();
         });
       }
       if (modelSel) {
         modelSel.addEventListener("change", function () {
           selectedModel = modelSel.value;
+          prefs.selected_model_id = selectedModel;
+          persistPrefs();
         });
       }
       if (repoSel) {
@@ -2242,6 +2373,7 @@
       });
     }
 
+    initializeContextControls();
     bind();
     applyChrome();
     applyRoutingModeChrome();

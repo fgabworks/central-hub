@@ -133,10 +133,46 @@ def provider_to_adapter_id(provider_id: str) -> str | None:
 ROUTING_MODE_SMART = "smart"
 ROUTING_MODE_DIRECT = "direct"
 
+INTERACTION_MODES = ("smart", "ask", "inspect", "plan", "agent")
+INTERACTION_MODE_SMART = "smart"
+INTERACTION_MODE_AGENT = "agent"
+CONTEXT_SOURCES = (
+    "dhis2_environment",
+    "ro_database",
+    "data_explorer",
+    "files",
+    "workspace",
+    "prior_findings",
+)
+
+
+def normalize_interaction_mode(value: str | None) -> str:
+    """Normalize the Cursor/VS Code-style AiriX interaction mode."""
+    key = str(value or INTERACTION_MODE_SMART).strip().lower().replace("-", "_")
+    aliases = {
+        "direct": "agent",
+        "direct_agent": "agent",
+        "efficient": "agent",
+        "find": "inspect",
+    }
+    key = aliases.get(key, key)
+    return key if key in INTERACTION_MODES else INTERACTION_MODE_SMART
+
+
+def normalize_context_sources(values: list[str] | tuple[str, ...] | None) -> list[str]:
+    allowed = set(CONTEXT_SOURCES)
+    return list(
+        dict.fromkeys(
+            str(value or "").strip().lower()
+            for value in (values or [])
+            if str(value or "").strip().lower() in allowed
+        )
+    )
+
 
 def normalize_routing_mode(value: str | None) -> str:
-    key = str(value or ROUTING_MODE_SMART).strip().lower()
-    if key in {ROUTING_MODE_DIRECT, "direct_agent", "efficient"}:
+    key = normalize_interaction_mode(value)
+    if key == INTERACTION_MODE_AGENT:
         return ROUTING_MODE_DIRECT
     return ROUTING_MODE_SMART
 
@@ -200,17 +236,29 @@ def build_minimal_context_preview(
     repository_ids: list[str] | None = None,
     agent_override: str | None = None,
     candidate_findings: list[dict[str, Any]] | None = None,
+    context_sources: list[str] | None = None,
 ) -> dict[str, Any]:
     """Describe the minimal context packed for execution (no whole-repo send)."""
     provider = (agent_override or recommendation.recommended_agent or "").strip()
     adapter_id = provider_to_adapter_id(provider)
+    sources = normalize_context_sources(context_sources)
     tools = select_minimal_tools(classification)
+    source_tools = {
+        "dhis2_environment": ["org_unit_lookup", "uid_lookup", "dhis2_reports_lookup"],
+        "ro_database": ["sql_lookup"],
+        "data_explorer": ["sql_lookup", "repo_search"],
+        "files": ["repo_search", "read_file"],
+        "workspace": ["notebook_lookup", "jobs_lookup", "audit_lookup"],
+    }
+    for source in sources:
+        tools.extend(source_tools.get(source, []))
+    tools = list(dict.fromkeys(tools))[:6]
     repos = select_repository_ids(classification, repository_ids)
     max_files = 6 if classification.context_size == "large" else (4 if classification.context_size == "medium" else 2)
     if classification.needs_architecture:
         max_files = min(12, max(6, classification.estimated_scope_files))
     prior = select_relevant_findings(
-        list(candidate_findings or []),
+        list(candidate_findings or []) if not sources or "prior_findings" in sources else [],
         prompt=prompt,
         classification=classification,
         max_items=3,
@@ -221,6 +269,7 @@ def build_minimal_context_preview(
         "adapter_id": adapter_id,
         "provider_id": provider,
         "tool_ids": tools,
+        "context_sources": sources,
         "repository_ids": repos,
         "max_context_files": max_files,
         "hints": list(classification.signals)[:8],

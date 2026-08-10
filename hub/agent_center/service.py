@@ -267,6 +267,7 @@ class AgentCenterService:
         profile_id: str = "okarun",
         tool_ids: list[str] | None = None,
         repository_ids: list[str] | None = None,
+        dhis2_environment: str = "",
     ) -> AgentToolsContext:
         profile = get_profile(profile_id)
         tools = normalize_tools(profile, tool_ids)
@@ -284,6 +285,11 @@ class AgentCenterService:
             notepad_factory=self.notepad_factory,
             profile_id=profile.id,
             workspace=profile.workspace,
+            dhis2_environment=(
+                str(dhis2_environment or "").strip().lower()
+                if str(dhis2_environment or "").strip().lower() in {"stage", "live"}
+                else ""
+            ),
             allowed_tools=set(tools),
         )
 
@@ -713,6 +719,11 @@ class AgentCenterService:
                 uid_index=self.uid_index,
                 profile_id=profile.id,
                 workspace=profile.workspace,
+                dhis2_environment=(
+                    str(payload.get("dhis2_environment") or "").strip().lower()
+                    if str(payload.get("dhis2_environment") or "").strip().lower() in {"stage", "live"}
+                    else ""
+                ),
                 allowed_tools=set(preview["tools"]["enabled"]),
                 email=self.email,
                 calendar=self.calendar,

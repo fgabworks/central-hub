@@ -336,8 +336,16 @@ def register_agent_center_routes(app: Flask) -> None:
         orchestrate = payload.get("orchestrate")
         model = str(payload.get("model") or "").strip() or None
         routing_mode = str(payload.get("routing_mode") or "smart").strip() or "smart"
+        interaction_mode_raw = payload.get("interaction_mode")
+        interaction_mode = (
+            str(interaction_mode_raw).strip() or None
+            if interaction_mode_raw is not None
+            else None
+        )
         conversation_id = str(payload.get("conversation_id") or "").strip() or None
         context_fingerprint = str(payload.get("context_fingerprint") or "").strip() or None
+        context_sources = list(payload.get("context_sources") or [])
+        dhis2_environment = str(payload.get("dhis2_environment") or "").strip() or None
         try:
             attempt = int(payload.get("attempt") or 0)
         except (TypeError, ValueError):
@@ -363,6 +371,9 @@ def register_agent_center_routes(app: Flask) -> None:
                 routing_mode=routing_mode,
                 conversation_id=conversation_id,
                 context_fingerprint=context_fingerprint,
+                interaction_mode=interaction_mode,
+                context_sources=context_sources,
+                dhis2_environment=dhis2_environment,
             )
         except AgentCenterError as exc:
             return _routing_http_error(exc)

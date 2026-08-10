@@ -21,6 +21,8 @@ from hub.agent_center.routing.context import (
     provider_to_adapter_id,
     select_minimal_tools,
     select_repository_ids,
+    normalize_context_sources,
+    normalize_interaction_mode,
 )
 from hub.agent_center.routing.history import RoutingHistoryStore
 from hub.agent_center.routing.lifecycle import (
@@ -212,6 +214,9 @@ class RouteExecutor:
         routing_mode: str | None = None,
         conversation_id: str | None = None,
         context_fingerprint: str | None = None,
+        interaction_mode: str | None = None,
+        context_sources: list[str] | None = None,
+        dhis2_environment: str | None = None,
     ) -> dict[str, Any]:
         prompt_n = (prompt or "").strip()
         if not prompt_n:
@@ -219,7 +224,8 @@ class RouteExecutor:
 
         from hub.agent_center.routing.context import normalize_routing_mode
 
-        mode_key = normalize_routing_mode(routing_mode)
+        interaction = normalize_interaction_mode(interaction_mode or routing_mode)
+        mode_key = normalize_routing_mode(interaction)
         # Explicit UI/API selection is authoritative; never silently swap providers.
         is_manual = bool(manual_override) or mode_key == "direct"
         recommended_provider = (recommendation.recommended_agent or "").strip()
@@ -273,6 +279,7 @@ class RouteExecutor:
             repository_ids=repository_ids,
             agent_override=provider_id,
             candidate_findings=candidate_findings,
+            context_sources=context_sources,
         )
         if active_repository_id:
             context_preview = {
@@ -308,7 +315,17 @@ class RouteExecutor:
                 **context_preview,
                 "context_fingerprint": str(context_fingerprint).strip()[:128],
             }
-        context_preview = {**context_preview, "routing_mode": mode_key}
+        context_preview = {
+            **context_preview,
+            "routing_mode": mode_key,
+            "interaction_mode": interaction,
+            "context_sources": normalize_context_sources(context_sources),
+            "dhis2_environment": (
+                str(dhis2_environment or "").strip().lower()
+                if str(dhis2_environment or "").strip().lower() in {"stage", "live"}
+                else ""
+            ),
+        }
 
         with self._lock:
             existing_id = self._fingerprints.get(fingerprint)
@@ -336,6 +353,7 @@ class RouteExecutor:
                 "approved": bool(approve_codex),
                 "manual_override": is_manual,
                 "routing_mode": mode_key,
+                "interaction_mode": interaction,
                 "selected_provider": (agent_override or "").strip() or provider_id,
                 "recommended_provider": recommended_provider if mode_key != "direct" else provider_id,
                 "resolved_provider": provider_id,
@@ -411,11 +429,17 @@ class RouteExecutor:
                 )
             else:
                 # Prefer T0 + connected DB before any selected AI for deterministic-capable work.
-                try_t0_first = adapter_id is None or (
-                    recommendation.classification.deterministic_capable
+                try_t0_first = interaction in {"inspect", "plan"} or (
+                    not is_manual
                     and (
-                        authoritative_data
-                        or recommendation.recommended_agent == "deterministic"
+                        adapter_id is None
+                        or (
+                            recommendation.classification.deterministic_capable
+                            and (
+                                authoritative_data
+                                or recommendation.recommended_agent == "deterministic"
+                            )
+                        )
                     )
                 )
 
@@ -815,7 +839,12 @@ class RouteExecutor:
                     self._fingerprints.pop(fp, None)
             return dict(row)
 
-    def _tools_context(self, tool_ids: list[str], repository_ids: list[str]) -> AgentToolsContext:
+    def _tools_context(
+        self,
+        tool_ids: list[str],
+        repository_ids: list[str],
+        dhis2_environment: str = "",
+    ) -> AgentToolsContext:
         svc = self.agent_center
         profile = get_profile(INTERNAL_WORK_PROFILE)
         tools = normalize_tools(profile, tool_ids)
@@ -835,6 +864,11 @@ class RouteExecutor:
             notepad_factory=svc.notepad_factory,
             profile_id=profile.id,
             workspace=profile.workspace,
+            dhis2_environment=(
+                str(dhis2_environment or "").strip().lower()
+                if str(dhis2_environment or "").strip().lower() in {"stage", "live"}
+                else ""
+            ),
             allowed_tools=set(tools),
         )
 
@@ -863,7 +897,9 @@ class RouteExecutor:
         tools = list(context_preview.get("tool_ids") or select_minimal_tools(recommendation.classification))
         repos = list(context_preview.get("repository_ids") or [])
         try:
-            ctx = self._tools_context(tools, repos)
+            ctx = self._tools_context(
+                tools, repos, str(context_preview.get("dhis2_environment") or "")
+            )
             scope = resolve_prompt_scope(prompt, repository_ids=repos)
             requires = scope.requires_project_evidence
             # Broader scope: do not force selected-repo evidence collection as authoritative.
@@ -1342,13 +1378,18 @@ class RouteExecutor:
         requires = scope.requires_project_evidence
         allow_gk = bool(context_preview.get("allow_general_knowledge")) or scope.allow_general_knowledge
         direct_mode = str(context_preview.get("routing_mode") or "").strip().lower() == "direct"
+        interaction_mode = normalize_interaction_mode(
+            str(context_preview.get("interaction_mode") or context_preview.get("routing_mode") or "smart")
+        )
         packet = context_preview.get("evidence_packet")
         if not isinstance(packet, dict):
             packet = {}
         # Cheap evidence for context packing — never answers/terminates the task in Direct mode.
         if requires or (scope.try_deterministic_tools and not packet.get("usable")) or direct_mode:
             try:
-                ctx = self._tools_context(tools, repos)
+                ctx = self._tools_context(
+                    tools, repos, str(context_preview.get("dhis2_environment") or "")
+                )
                 # Cap tools for Direct so packing stays lightweight.
                 pack_tools = tools[:4] if direct_mode else tools
                 packet = collect_evidence_packet(prompt, ctx, repository_ids=repos)
@@ -1447,7 +1488,7 @@ class RouteExecutor:
         prior_fp = str(context_preview.get("context_fingerprint") or "").strip()
         payload = {
             "profile_id": INTERNAL_WORK_PROFILE,
-            "mode": "ask",
+            "mode": "plan" if interaction_mode == "plan" else ("find" if interaction_mode == "inspect" else "ask"),
             "prompt": prompt,
             "agent_id": chosen,
             "model": "" if provider_changed else selected_model,
@@ -1465,6 +1506,9 @@ class RouteExecutor:
             "allow_general_knowledge": allow_gk,
             "conversation_id": conv_id or None,
             "routing_mode": "direct" if direct_mode else "smart",
+            "interaction_mode": interaction_mode,
+            "context_sources": list(context_preview.get("context_sources") or []),
+            "dhis2_environment": context_preview.get("dhis2_environment") or "",
             "reuse_context": bool(prior_fp),
             "context_fingerprint": prior_fp,
         }
@@ -1519,6 +1563,7 @@ class RouteExecutor:
             context_items=context_items,
             context_chars=int(packed_chars or 0),
             routing_mode="direct" if direct_mode else "smart",
+            interaction_mode=interaction_mode,
         )
 
         if status == "unavailable":

@@ -56,6 +56,19 @@
       <strong>Context preview</strong>
       <button type="button" class="btn btn-sm ad-icon-btn" id="ad-context-close" title="Close context preview">×</button>
     </div>
+    <div class="ad-context-choices" id="ad-context-choices">
+      <label><input type="checkbox" value="dhis2_environment"> DHIS2 environment</label>
+      <select id="ad-context-dhis2-env" aria-label="DHIS2 environment">
+        <option value="">Choose environment…</option>
+        <option value="stage">Stage</option>
+        <option value="live">Live (read-only)</option>
+      </select>
+      <label><input type="checkbox" value="ro_database"> RO database</label>
+      <label><input type="checkbox" value="data_explorer"> Data Explorer</label>
+      <label><input type="checkbox" value="files"> Relevant files</label>
+      <label><input type="checkbox" value="workspace"> Workspace</label>
+      <label><input type="checkbox" value="prior_findings"> Prior findings</label>
+    </div>
     <pre class="ad-context-body muted" id="ad-context-body">No context packed yet.</pre>
   </div>
 
@@ -118,11 +131,19 @@
         <button type="button" class="btn btn-primary ad-send" id="ad-send" title="Send" aria-label="Send">➤</button>
       </div>
     </div>
-    <div class="ad-composer-row ad-composer-tools">
-      <button type="button" class="btn btn-sm ad-icon-btn" id="ad-attach" title="Add context source" disabled aria-disabled="true">+</button>
-      <button type="button" class="btn btn-sm ad-icon-btn" id="ad-context-btn" title="Context preview" aria-expanded="false" aria-controls="ad-context-drawer">⧉</button>
-    </div>
     <div class="ad-composer-row ad-composer-selects">
+      {% if assistant_dock.smart_routing and assistant_dock.smart_routing.enabled %}
+      <label class="ad-select-wrap">
+        <span class="sr-only">Mode</span>
+        <select id="ad-routing-mode-select" aria-label="Interaction mode" title="AiriX interaction mode">
+          <option value="smart">Smart</option>
+          <option value="ask">Ask</option>
+          <option value="inspect">Inspect</option>
+          <option value="plan">Plan</option>
+          <option value="agent">Agent</option>
+        </select>
+      </label>
+      {% endif %}
       <label class="ad-select-wrap">
         <span class="sr-only">Agent</span>
         <select id="ad-agent" aria-label="Agent provider">
@@ -141,19 +162,11 @@
         </select>
       </label>
       {% endif %}
-      {% if assistant_dock.smart_routing and assistant_dock.smart_routing.enabled %}
-      <label class="ad-select-wrap">
-        <span class="sr-only">Routing Mode</span>
-        <select id="ad-routing-mode-select" aria-label="Routing mode" title="Smart Routing or Direct Agent">
-          <option value="smart">⚡ Smart Routing</option>
-          <option value="direct">🎯 Direct Agent — Efficient</option>
-        </select>
-      </label>
-      {% endif %}
+      <button type="button" class="btn btn-sm ad-context-add" id="ad-context-btn" title="Choose and preview context" aria-expanded="false" aria-controls="ad-context-drawer">+ Context</button>
     </div>
     {% if assistant_dock.smart_routing and assistant_dock.smart_routing.enabled %}
     <p class="ad-direct-hint muted" id="ad-direct-hint" hidden style="margin:0 0 0.35rem;font-size:11px;line-height:1.35">
-      Direct Agent — routing bypassed; lightweight context optimization remains enabled.
+      Agent mode bypasses T0 and Smart Routing. The selected provider and model are authoritative.
     </p>
     {% endif %}
     <p class="ad-safety muted">🔒 {{ assistant_dock.safety.message }}</p>

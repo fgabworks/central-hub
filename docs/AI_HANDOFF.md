@@ -4,23 +4,26 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**AiriX Routing Mode: Smart vs Direct Agent — Efficient (2026-08-10)**
+**AiriX five-mode Cursor/VS Code-style agent architecture (2026-08-10)**
 
-Add a Routing Mode selector beside the repository selector in the AiriX dock.
+The existing Smart Routing/provider/context engine now exposes one composer:
+`[Mode] [Agent] [Model] [Repository] [+ Context]`.
 
-- **Smart Routing** — existing recommend → T0/DB/capability escalation → AI path.
-- **Direct Agent — Efficient** — skip Smart Routing, tier assessment, T0 attempts,
-  provider recommendation, and automatic escalation. Always execute the manually
-  selected provider + model; never silently change them. Unavailable providers fail
-  clearly (no auto-fallback). Simulator only when explicitly selected.
+- **Smart** — Agent/Model are Auto; existing cheapest-capable T0/DB → AI path.
+- **Ask** — read-only Q&A through selected or dynamically resolved provider/model.
+- **Inspect** — deterministic/tools-first investigation.
+- **Plan** — investigate, then use read-only provider plan mode; no writes.
+- **Agent** — bypass T0/routing and execute exact provider/model with no fallback.
 
-Direct still applies lightweight context prep (selected repo, filters, search hints,
-prior findings, rules, cheap grounding evidence) and never sends the whole repo by
-default. Context prep must not answer/terminate the task. Follow-ups reuse
-`direct_conversation_id` when supported; mode persists per workspace. Dock shows
-selected/resolved provider+model, context items/chars, cached/total tokens, and
-session reused. Security/grounding/read-only remain active. Dock `shell-dock-25`.
-Tests: `tests/test_airix_routing_mode.py`.
+Mode/provider/model/repository/context persist per workspace. Context sources are DHIS2
+environment, RO database/Data Explorer, relevant files, workspace, and prior findings;
+they select scoped tools and never pack the whole repo. Stage/Live is forced in tool context.
+Existing grounding/completion/telemetry/budgets/RBAC/RO controls and dynamic model discovery
+remain authoritative. Executions expose mode, resolved provider/model, T0/LLM usage,
+tokens, tools, Task Solved, Grounded, context size/items, and session reuse.
+Tests: `tests/test_airix_routing_mode.py` plus existing provider/model/grounding/security suites.
+
+Prior: **AiriX Routing Mode: Smart vs Direct Agent — Efficient (2026-08-10)**
 
 Prior: **AiriX capability-aware escalation after T0 (2026-08-10)**
 

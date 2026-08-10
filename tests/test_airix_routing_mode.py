@@ -9,10 +9,13 @@ from unittest.mock import MagicMock, patch
 
 from hub.agent_center.dock import default_dock_state, load_dock_prefs, save_dock_prefs
 from hub.agent_center.routing.context import (
+    INTERACTION_MODES,
     ROUTING_MODE_DIRECT,
     ROUTING_MODE_SMART,
     build_direct_agent_recommendation,
     build_minimal_context_preview,
+    normalize_context_sources,
+    normalize_interaction_mode,
     normalize_routing_mode,
     provider_to_adapter_id,
 )
@@ -26,6 +29,39 @@ class RoutingModeNormalizeTests(unittest.TestCase):
         self.assertEqual(normalize_routing_mode("direct"), ROUTING_MODE_DIRECT)
         self.assertEqual(normalize_routing_mode("direct_agent"), ROUTING_MODE_DIRECT)
         self.assertEqual(normalize_routing_mode(None), ROUTING_MODE_SMART)
+
+    def test_five_interaction_modes_and_legacy_aliases(self) -> None:
+        self.assertEqual(
+            tuple(normalize_interaction_mode(mode) for mode in INTERACTION_MODES),
+            INTERACTION_MODES,
+        )
+        self.assertEqual(normalize_interaction_mode("direct"), "agent")
+        self.assertEqual(normalize_interaction_mode("find"), "inspect")
+        self.assertEqual(normalize_interaction_mode("unknown"), "smart")
+
+    def test_selected_dhis2_environment_overrides_tool_argument(self) -> None:
+        import json
+
+        from hub.agent_center.openai_tools import AgentToolsContext, execute_tool
+
+        reports = MagicMock()
+        reports.search_org_units.return_value = {"org_units": []}
+        ctx = AgentToolsContext(
+            registry=MagicMock(),
+            repository_ids=[],
+            allowed_tools={"org_unit_lookup"},
+            dhis2_reports=reports,
+            dhis2_environment="stage",
+        )
+        result = json.loads(
+            execute_tool(
+                "org_unit_lookup",
+                {"query": "Sample", "environment": "live"},
+                ctx,
+            )
+        )
+        self.assertNotIn("error", result)
+        self.assertEqual(reports.search_org_units.call_args[0][0], "stage")
 
 
 class DockPrefsRoutingModeTests(unittest.TestCase):
@@ -42,6 +78,32 @@ class DockPrefsRoutingModeTests(unittest.TestCase):
             personal = load_dock_prefs(db, "personal")
             self.assertEqual(personal.get("routing_mode") or "smart", "smart")
             self.assertEqual(default_dock_state("work")["routing_mode"], "smart")
+
+    def test_persist_full_composer_state_per_workspace(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = NotebookDatabase(Path(tmp) / "n.db")
+            save_dock_prefs(
+                db,
+                "work",
+                {
+                    "interaction_mode": "plan",
+                    "selected_agent_id": "grok",
+                    "selected_model_id": "grok-exact",
+                    "selected_repository_id": "repo-a",
+                    "context_sources": ["data_explorer", "files", "unknown"],
+                    "dhis2_environment": "stage",
+                },
+            )
+            prefs = load_dock_prefs(db, "work")
+            self.assertEqual(prefs["interaction_mode"], "plan")
+            self.assertEqual(prefs["selected_agent_id"], "grok")
+            self.assertEqual(prefs["selected_model_id"], "grok-exact")
+            self.assertEqual(prefs["context_sources"], ["data_explorer", "files"])
+            self.assertEqual(prefs["dhis2_environment"], "stage")
+            self.assertEqual(load_dock_prefs(db, "personal")["interaction_mode"], "smart")
 
 
 class DirectRecommendationTests(unittest.TestCase):
@@ -76,6 +138,22 @@ class DirectRecommendationTests(unittest.TestCase):
         self.assertEqual(preview.get("strategy"), "minimal")
         self.assertTrue(preview.get("tool_ids"))
         self.assertLessEqual(len(preview.get("tool_ids") or []), 6)
+
+    def test_first_class_context_is_normalized_and_minimal(self) -> None:
+        rec = build_direct_agent_recommendation("Inspect saved data", provider_id="grok")
+        preview = build_minimal_context_preview(
+            prompt="Inspect saved data",
+            classification=rec.classification,
+            recommendation=rec,
+            context_sources=["ro_database", "data_explorer", "files", "bad"],
+        )
+        self.assertEqual(
+            preview["context_sources"], ["ro_database", "data_explorer", "files"]
+        )
+        self.assertFalse(preview["include_whole_repo"])
+        self.assertIn("sql_lookup", preview["tool_ids"])
+        self.assertLessEqual(len(preview["tool_ids"]), 6)
+        self.assertEqual(normalize_context_sources(["workspace", "workspace"]), ["workspace"])
 
 
 class DirectExecutePathTests(unittest.TestCase):
@@ -391,6 +469,127 @@ class DirectExecutePathTests(unittest.TestCase):
         payload = fake.start_run.call_args[0][0]
         self.assertTrue(payload.get("grounding_rules"))
         self.assertFalse(payload.get("allow_general_knowledge"))
+
+    def test_inspect_is_tools_first(self) -> None:
+        from hub.agent_center.routing.execution import RouteExecutor
+
+        fake = self._fake_center()
+        fake.start_run = MagicMock(side_effect=AssertionError("Inspect was solved by tools"))
+        ex = RouteExecutor(fake)
+        rec = build_direct_agent_recommendation("Inspect repository evidence", provider_id="grok")
+        calls: list[str] = []
+
+        def solved_t0(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            calls.append("t0")
+            return {
+                "id": "inspect-1",
+                "status": "completed",
+                "answer": "Grounded inspection result",
+                "interaction_mode": "inspect",
+                "grounding": {"task_solved": True, "answer_grounded": True, "grounded": True},
+            }
+
+        ex._execute_t0 = solved_t0  # type: ignore[method-assign]
+        out = ex.execute(
+            prompt="Inspect repository evidence",
+            recommendation=rec,
+            settings=RoutingSettings(require_approval_before_codex=False),
+            agent_override="grok",
+            interaction_mode="inspect",
+            manual_override=True,
+        )
+        self.assertEqual(calls, ["t0"])
+        self.assertEqual(out.get("interaction_mode"), "inspect")
+        fake.start_run.assert_not_called()
+
+    def test_plan_investigates_then_uses_read_only_plan_adapter_mode(self) -> None:
+        from hub.agent_center.routing.execution import RouteExecutor
+
+        fake = self._fake_center()
+        fake.start_run = MagicMock(
+            return_value={
+                "id": "plan-run",
+                "status": "completed",
+                "answer": "Read-only plan",
+                "model": "grok-exact",
+                "context": {"grounding": {"task_solved": True, "grounded": True}},
+            }
+        )
+        ex = RouteExecutor(
+            fake,
+            availability_loader=lambda: {"grok": {"status": "available", "runnable": True}},
+        )
+        rec = build_direct_agent_recommendation("Plan a safe investigation", provider_id="grok")
+        ex._execute_t0 = MagicMock(  # type: ignore[method-assign]
+            return_value={
+                "id": "plan-parent",
+                "status": "completed",
+                "answer": "",
+                "t0_fallthrough": True,
+                "t0_unsolved": True,
+                "grounding": {"task_solved": False, "answer_grounded": False},
+            }
+        )
+        out = ex.execute(
+            prompt="Plan a safe investigation",
+            recommendation=rec,
+            settings=RoutingSettings(require_approval_before_codex=False),
+            agent_override="grok",
+            model="grok-exact",
+            interaction_mode="plan",
+            manual_override=True,
+            context_sources=["ro_database", "files"],
+        )
+        ex._execute_t0.assert_called_once()  # type: ignore[union-attr]
+        payload = fake.start_run.call_args[0][0]
+        self.assertEqual(payload["mode"], "plan")
+        self.assertEqual(payload["agent_id"], "grok")
+        self.assertEqual(payload["model"], "grok-exact")
+        self.assertEqual(payload["context_sources"], ["ro_database", "files"])
+        self.assertFalse(set(payload["tool_ids"]) & {"edit", "terminal", "sql_execute", "dhis2_write"})
+        self.assertEqual(out.get("interaction_mode"), "plan")
+
+    def test_smart_t0_miss_escalates_to_connected_ai(self) -> None:
+        from hub.agent_center.routing.execution import RouteExecutor
+
+        fake = self._fake_center()
+        fake.start_run = MagicMock(
+            return_value={
+                "id": "ai-run",
+                "status": "completed",
+                "answer": "AI completed the grounded answer",
+                "model": "grok-auto",
+                "context": {"grounding": {"task_solved": True, "grounded": True}},
+            }
+        )
+        ex = RouteExecutor(
+            fake,
+            availability_loader=lambda: {"grok": {"status": "available", "runnable": True}},
+        )
+        rec = build_direct_agent_recommendation("Answer after lookup", provider_id="grok")
+        rec.recommended_agent = "deterministic"
+        rec.alternative_agent = "grok"
+        rec.classification.deterministic_capable = True
+        ex._execute_t0 = MagicMock(  # type: ignore[method-assign]
+            return_value={
+                "id": "smart-parent",
+                "status": "completed",
+                "answer": "",
+                "t0_fallthrough": True,
+                "t0_unsolved": True,
+                "grounding": {"task_solved": False, "answer_grounded": False},
+            }
+        )
+        out = ex.execute(
+            prompt="Answer after lookup",
+            recommendation=rec,
+            settings=RoutingSettings(require_approval_before_codex=False),
+            interaction_mode="smart",
+        )
+        ex._execute_t0.assert_called_once()  # type: ignore[union-attr]
+        self.assertEqual(fake.start_run.call_args[0][0]["agent_id"], "grok")
+        self.assertTrue(out.get("ai_escalation_occurred"))
+        self.assertEqual(out.get("interaction_mode"), "smart")
 
 
 class DirectServiceExecuteTests(unittest.TestCase):

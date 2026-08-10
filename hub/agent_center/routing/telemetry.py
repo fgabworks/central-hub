@@ -491,4 +491,20 @@ def attach_execution_telemetry(row: dict[str, Any]) -> dict[str, Any]:
         }
     )
     row["usage"] = usage
+    execution_type = str(tel.get("execution_type") or "")
+    row["execution_summary"] = {
+        "interaction_mode": str(
+            row.get("interaction_mode")
+            or (row.get("context") or {}).get("interaction_mode")
+            or ("agent" if row.get("routing_mode") == "direct" else "smart")
+        ),
+        "resolved_provider": row.get("resolved_provider") or row.get("adapter_id") or row.get("provider_id"),
+        "resolved_model": row.get("resolved_model") or row.get("model"),
+        "t0_used": execution_type in {EXEC_DETERMINISTIC, EXEC_HYBRID},
+        "llm_used": bool(tel.get("llm_invoked")),
+        "tokens": int(tel.get("total_ai_tokens") or 0),
+        "tools": list(tel.get("tools_used") or []),
+        "task_solved": (row.get("grounding") or {}).get("task_solved"),
+        "grounded": (row.get("grounding") or {}).get("grounded"),
+    }
     return row
