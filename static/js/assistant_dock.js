@@ -1220,9 +1220,14 @@
         : t.total_ai_tokens != null
           ? t.total_ai_tokens
           : t.total_tokens;
+      var usageUnavailable =
+        !isDeterministic &&
+        (src === "unavailable" || (total == null && (src === "estimate" || src === "")));
       var totalLabel = total == null ? "—" : String(total);
-      if (!isDeterministic && src === "estimate") {
-        totalLabel = total == null ? "est. unavailable" : totalLabel + " (est.)";
+      if (usageUnavailable) {
+        totalLabel = "usage unavailable";
+      } else if (!isDeterministic && src === "estimate") {
+        totalLabel = total == null ? "usage unavailable" : totalLabel + " (est.)";
       }
       var tools = Array.isArray(t.tools_used) ? t.tools_used.join(", ") : "";
       var provider = isDeterministic
@@ -1235,7 +1240,21 @@
         : t.model != null && t.model !== ""
           ? t.model
           : "None";
-      var ri =
+      var routePath =
+        t.route_path ||
+        (execution && execution.route_path) ||
+        (execType === "Hybrid" && provider !== "None"
+          ? "T0 → " + provider + (model !== "None" ? "/" + model : "")
+          : "");
+      var inTok = usageUnavailable
+        ? "—"
+        : String(isDeterministic ? 0 : t.input_tokens != null ? t.input_tokens : 0);
+      var outTok = usageUnavailable
+        ? "—"
+        : String(isDeterministic ? 0 : t.output_tokens != null ? t.output_tokens : 0);
+      var cachedTok = usageUnavailable
+        ? "—"
+        : String(isDeterministic ? 0 : t.cached_tokens != null ? t.cached_tokens : 0);      var ri =
         (t.repository_intelligence && typeof t.repository_intelligence === "object"
           ? t.repository_intelligence
           : execution && execution.repository_intelligence_diagnostics) || null;
@@ -1249,6 +1268,17 @@
           String(item.current_commit || "-").slice(0, 12)
         );
       }).join(", ");
+      var riFreshness = ri ? ri.freshness : "";
+      if (ri && ri.used && (!riFreshness || riFreshness === "not_learned")) {
+        riFreshness = "current";
+      }
+      if (ri && !riFreshness) {
+        riFreshness =
+          (ri.repository_ids && ri.repository_ids.length) ||
+          (ri.requested_repository_ids && ri.requested_repository_ids.length)
+            ? "not_learned"
+            : "none";
+      }
       return (
         '<div class="ad-telemetry muted">' +
         "<div>Tier: " +
@@ -1257,6 +1287,9 @@
         escapeHtml(String(execType)) +
         " · LLM: " +
         escapeHtml(llm) +
+        (routePath
+          ? " · Route: " + escapeHtml(String(routePath))
+          : "") +
         "</div>" +
         "<div>Provider: " +
         escapeHtml(String(provider)) +
@@ -1264,11 +1297,11 @@
         escapeHtml(String(model)) +
         "</div>" +
         "<div>Tokens in/out/cached/total: " +
-        escapeHtml(String(isDeterministic ? 0 : t.input_tokens != null ? t.input_tokens : 0)) +
+        escapeHtml(inTok) +
         "/" +
-        escapeHtml(String(isDeterministic ? 0 : t.output_tokens != null ? t.output_tokens : 0)) +
+        escapeHtml(outTok) +
         "/" +
-        escapeHtml(String(isDeterministic ? 0 : t.cached_tokens != null ? t.cached_tokens : 0)) +
+        escapeHtml(cachedTok) +
         "/" +
         escapeHtml(totalLabel) +
         "</div>" +
@@ -1371,16 +1404,67 @@
         (ri
           ? "<div>Repository Intelligence used: " +
             escapeHtml(ri.used ? "Yes" : "No") +
-            " Â· Repository: " +
+            " · Repository: " +
             escapeHtml(riDetails || (ri.repository_ids || []).join(", ") || "None") +
-            " Â· Entries: " +
+            " · Entries: " +
             escapeHtml(String(ri.knowledge_entries_used || 0)) +
-            " Â· Status: " +
-            escapeHtml(String(ri.freshness || "not_learned")) +
-            " Â· Context chars: " +
+            " · Status: " +
+            escapeHtml(String(riFreshness || "none")) +
+            " · Context chars: " +
             escapeHtml(String(ri.context_chars_contributed || 0)) +
             "</div>"
           : "") +
+        "</div>"
+      );
+    }
+
+    function formatGroundingLine(execution) {
+      var g = (execution && execution.grounding) || {};
+      // Prefer the execution grounding object as the single source of truth.
+      var evidence =
+        g.evidence_found_label != null
+          ? g.evidence_found_label
+          : g.evidence_found == null
+            ? null
+            : g.evidence_found
+              ? "Yes"
+              : "No";
+      var solved =
+        g.task_solved_label != null
+          ? g.task_solved_label
+          : g.task_solved == null
+            ? null
+            : g.task_solved
+              ? "Yes"
+              : "No";
+      var grounded =
+        g.grounded_label != null
+          ? g.grounded_label
+          : g.grounded == null
+            ? null
+            : g.grounded
+              ? "Yes"
+              : "No";
+      if (evidence == null && solved == null && grounded == null) {
+        return "";
+      }
+      var sources =
+        (Array.isArray(g.sources_used) && g.sources_used.length
+          ? g.sources_used.join(", ")
+          : "") ||
+        g.source ||
+        "selected context";
+      return (
+        '<div class="ad-source">' +
+        "Evidence Found: " +
+        escapeHtml(String(evidence != null ? evidence : "No")) +
+        " · Task Solved: " +
+        escapeHtml(String(solved != null ? solved : "No")) +
+        " · Grounded: " +
+        escapeHtml(String(grounded != null ? grounded : "No")) +
+        "<br>Sources used: " +
+        escapeHtml(String(sources)) +
+        (g.grounded || !g.reason ? "" : " — " + escapeHtml(String(g.reason))) +
         "</div>"
       );
     }
@@ -1394,29 +1478,14 @@
           ? " (fallback from " + escapeHtml(execution.fallback_from) + ")"
           : "");
       if (status === "completed" || status === "failed") {
-        var g = execution.grounding || {};
-        var gLine = "";
-        {
-          var sources =
-            (Array.isArray(g.sources_used) && g.sources_used.length
-              ? g.sources_used.join(", ")
-              : "") ||
-            g.source ||
-            "selected context";
-          gLine =
-            '<div class="ad-source">' +
-            "Evidence Found: " +
-            escapeHtml(String(g.evidence_found_label || (g.evidence_found == null ? "Unknown" : g.evidence_found ? "Yes" : "No"))) +
-            " · Task Solved: " +
-            escapeHtml(String(g.task_solved_label || (g.task_solved == null ? "Unknown" : g.task_solved ? "Yes" : "No"))) +
-            " · Grounded: " +
-            escapeHtml(String(g.grounded_label || (g.grounded == null ? "Unknown" : g.grounded ? "Yes" : "No"))) +
-            "<br>Sources used: " +
-            escapeHtml(String(sources)) +
-            (g.grounded || !g.reason
-              ? ""
-              : " — " + escapeHtml(String(g.reason))) +
-            "</div>";
+        var gLine = formatGroundingLine(execution);
+        var answerText = String(execution.answer || execution.partial_summary || "(no answer)");
+        // Prefer the structured grounding object — strip duplicated footer from answer body.
+        if (gLine && /Evidence Found:/i.test(answerText)) {
+          answerText = answerText.replace(
+            /\n?—?\n?Evidence Found:[\s\S]*$/i,
+            ""
+          ).trim();
         }
         appendMessage(
           "assistant",
@@ -1425,7 +1494,7 @@
             "</strong> · " +
             label +
             '<pre class="ad-run-answer">' +
-            escapeHtml(execution.answer || execution.partial_summary || "(no answer)") +
+            escapeHtml(answerText || "(no answer)") +
             "</pre>" +
             gLine +
             formatUsageTelemetryHtml(execution)

@@ -52,6 +52,8 @@ def _tools_from_row(row: dict[str, Any]) -> list[str]:
             return
         if text.startswith("tool:"):
             text = text.split(":", 1)[1].strip()
+        if text.startswith("repository_intelligence:"):
+            text = "repository_intelligence"
         if text and text not in {"selected context", "none", "hub tools"}:
             tools.append(text)
 
@@ -65,13 +67,13 @@ def _tools_from_row(row: dict[str, Any]) -> list[str]:
             _add(item.get("tool"))
     for src in packet.get("sources") or []:
         text = str(src or "").strip()
-        if text.startswith("tool:"):
+        if text.startswith("tool:") or text.startswith("repository_intelligence"):
             _add(text)
 
     grounding = row.get("grounding") if isinstance(row.get("grounding"), dict) else {}
     for part in str(grounding.get("source") or "").split(","):
         part = part.strip()
-        if part.startswith("tool:") or part.endswith("_lookup") or part in {
+        if part.startswith("tool:") or part.startswith("repository_intelligence") or part.endswith("_lookup") or part in {
             "repo_search",
             "read_file",
             "uid_lookup",
@@ -82,18 +84,15 @@ def _tools_from_row(row: dict[str, Any]) -> list[str]:
             "jobs_lookup",
             "audit_lookup",
             "dhis2_reports_lookup",
+            "repository_intelligence",
         }:
             _add(part)
 
-    ctx = row.get("context") if isinstance(row.get("context"), dict) else {}
-    # Only include packed tool_ids when we already have executed tool evidence —
-    # otherwise planned-but-not-run tools would look like they executed.
-    if tools:
-        pass
-    else:
-        for tid in ctx.get("tool_ids") or []:
-            _add(tid)
+    ri = _repository_intelligence_diagnostics(row)
+    if ri.get("used"):
+        _add("repository_intelligence")
 
+    # Never invent planned-but-unrun tools from context.tool_ids.
     return list(dict.fromkeys(t for t in tools if t.strip()))
 
 
@@ -102,6 +101,33 @@ def _int0(value: Any) -> int:
         return max(0, int(value))
     except (TypeError, ValueError):
         return 0
+
+
+def _repository_intelligence_diagnostics(row: dict[str, Any]) -> dict[str, Any]:
+    """Resolve RI telemetry from the context actually attached to this run.
+
+    A placeholder/default row diagnostic must not mask a populated execution
+    context produced after repository resolution.
+    """
+    row_diag = row.get("repository_intelligence_diagnostics")
+    row_diag = row_diag if isinstance(row_diag, dict) else {}
+    ctx = row.get("context") if isinstance(row.get("context"), dict) else {}
+    knowledge = (
+        ctx.get("repository_intelligence")
+        if isinstance(ctx.get("repository_intelligence"), dict)
+        else {}
+    )
+    context_diag = knowledge.get("diagnostics")
+    context_diag = context_diag if isinstance(context_diag, dict) else {}
+    candidates = [context_diag, row_diag]
+    return dict(max(
+        candidates,
+        key=lambda value: (
+            bool(value.get("used")),
+            _int0(value.get("knowledge_entries_used")),
+            _int0(value.get("context_chars_contributed")),
+        ),
+    ))
 
 
 def _runtime_ms_from_iso(started_at: Any, finished_at: Any) -> int:
@@ -249,11 +275,7 @@ def build_execution_telemetry(row: dict[str, Any] | None) -> dict[str, Any]:
         "session_reused": bool(row.get("session_reused")),
         "context_items": list(row.get("context_items") or []),
         "context_chars": row.get("context_chars"),
-        "repository_intelligence": dict(
-            row.get("repository_intelligence_diagnostics")
-            or ((row.get("context") or {}).get("repository_intelligence") or {}).get("diagnostics")
-            or {}
-        ),
+        "repository_intelligence": _repository_intelligence_diagnostics(row),
     }
 
     # No child AI run ⇒ never claim LLM invocation.
@@ -299,8 +321,11 @@ def build_execution_telemetry(row: dict[str, Any] | None) -> dict[str, Any]:
         cached = 0 if parsed.get("usage_source") == "actual" else None
 
     usage_source = str(parsed.get("usage_source") or "estimate")
-    if parsed.get("total_tokens") is None:
-        usage_source = "estimate"
+    if not usage or parsed.get("total_tokens") is None:
+        # Child AI ran but provider did not report tokens — never invent zeros.
+        usage_source = "unavailable" if not usage else (
+            "estimate" if parsed.get("total_tokens") is None else usage_source
+        )
 
     display_provider = adapter_id or provider_id or None
     if display_provider in {"deterministic", ""}:
@@ -308,21 +333,27 @@ def build_execution_telemetry(row: dict[str, Any] | None) -> dict[str, Any]:
     if not display_provider and agent_run.get("agent_id"):
         display_provider = str(agent_run.get("agent_id"))
 
+    route_path = str(row.get("route_path") or "").strip()
+    if not route_path and hybrid and display_provider:
+        model_bit = model or ""
+        route_path = f"T0 → {display_provider}/{model_bit}".rstrip("/")
+
     return {
         "routing_tier": _resolve_tier(row, pure_t0=False),
         "execution_type": EXEC_HYBRID if hybrid else EXEC_AI,
         "llm_invoked": True,
         "provider": display_provider,
         "model": model,
-        "input_tokens": parsed.get("input_tokens"),
-        "output_tokens": parsed.get("output_tokens"),
-        "cached_tokens": cached,
-        "total_ai_tokens": parsed.get("total_tokens"),
+        "input_tokens": parsed.get("input_tokens") if usage_source != "unavailable" else None,
+        "output_tokens": parsed.get("output_tokens") if usage_source != "unavailable" else None,
+        "cached_tokens": cached if usage_source != "unavailable" else None,
+        "total_ai_tokens": parsed.get("total_tokens") if usage_source != "unavailable" else None,
         "usage_source": usage_source,
         "tools_used": tools,
         "runtime_ms": runtime_ms,
         "child_ai_run_id": child_id,
         "t0_pure": False,
+        "route_path": route_path or None,
         "t0_failure_reason": row.get("t0_failure_reason") or None,
         "next_capability": row.get("next_capability") or None,
         "db_query_attempted": bool(row.get("db_query_attempted")),
@@ -333,11 +364,7 @@ def build_execution_telemetry(row: dict[str, Any] | None) -> dict[str, Any]:
         "session_reused": bool(row.get("session_reused")),
         "context_items": list(row.get("context_items") or []),
         "context_chars": row.get("context_chars"),
-        "repository_intelligence": dict(
-            row.get("repository_intelligence_diagnostics")
-            or ((row.get("context") or {}).get("repository_intelligence") or {}).get("diagnostics")
-            or {}
-        ),
+        "repository_intelligence": _repository_intelligence_diagnostics(row),
     }
 
 
@@ -393,24 +420,30 @@ def format_telemetry_block(telemetry: dict[str, Any] | None) -> str:
         return ""
     t = telemetry
     src = str(t.get("usage_source") or "")
-    src_note = f" ({src})" if src and src != "actual" else ""
+    src_note = f" ({src})" if src and src not in {"actual", "unavailable"} else ""
     total = t.get("total_ai_tokens")
-    total_s = "—" if total is None else str(total)
-    if total is None and src == "estimate":
-        total_s = "est. unavailable"
-    elif src == "estimate" and total is not None:
-        total_s = f"{total} (est.)"
+    if src == "unavailable" or (total is None and src == "estimate" and t.get("llm_invoked")):
+        token_line = "Tokens: usage unavailable"
+    else:
+        total_s = "—" if total is None else str(total)
+        if src == "estimate" and total is not None:
+            total_s = f"{total} (est.)"
+        token_line = (
+            f"Tokens in/out/cached/total: "
+            f"{t.get('input_tokens') if t.get('input_tokens') is not None else 0}/"
+            f"{t.get('output_tokens') if t.get('output_tokens') is not None else 0}/"
+            f"{t.get('cached_tokens') if t.get('cached_tokens') is not None else 0}/"
+            f"{total_s}{src_note}"
+        )
     tier = t.get("routing_tier") or "T0"
+    route = str(t.get("route_path") or "").strip()
     lines = [
         f"Tier: {tier} · "
         f"Type: {t.get('execution_type') or EXEC_DETERMINISTIC} · "
-        f"LLM: {'Yes' if t.get('llm_invoked') else 'No'}",
+        f"LLM: {'Yes' if t.get('llm_invoked') else 'No'}"
+        + (f" · Route: {route}" if route else ""),
         f"Provider: {t.get('provider') or 'None'} · Model: {t.get('model') or 'None'}",
-        f"Tokens in/out/cached/total: "
-        f"{t.get('input_tokens') if t.get('input_tokens') is not None else 0}/"
-        f"{t.get('output_tokens') if t.get('output_tokens') is not None else 0}/"
-        f"{t.get('cached_tokens') if t.get('cached_tokens') is not None else 0}/"
-        f"{total_s}{src_note}",
+        token_line,
         f"Tools: {', '.join(t.get('tools_used') or []) or 'None'} · "
         f"Runtime: {t.get('runtime_ms') or 0} ms · "
         f"Child run: {t.get('child_ai_run_id') or 'None'}",
@@ -436,10 +469,15 @@ def format_telemetry_block(telemetry: dict[str, Any] | None) -> str:
     ri = t.get("repository_intelligence") if isinstance(t.get("repository_intelligence"), dict) else {}
     if ri:
         repos = ", ".join(str(value) for value in (ri.get("repository_ids") or [])) or "None"
+        freshness = ri.get("freshness")
+        if ri.get("used") and freshness in {None, "", "not_learned"}:
+            freshness = "current"
+        if not freshness:
+            freshness = "none" if not (ri.get("repository_ids") or ri.get("requested_repository_ids")) else "not_learned"
         lines.append(
-            f"Repository Intelligence used: {'Yes' if ri.get('used') else 'No'} Â· "
-            f"Repository: {repos} Â· Entries: {ri.get('knowledge_entries_used') or 0} Â· "
-            f"Freshness: {ri.get('freshness') or 'not_learned'} Â· "
+            f"Repository Intelligence used: {'Yes' if ri.get('used') else 'No'} · "
+            f"Repository: {repos} · Entries: {ri.get('knowledge_entries_used') or 0} · "
+            f"Freshness: {freshness} · "
             f"Context chars: {ri.get('context_chars_contributed') or 0}"
         )
     return "\n".join(lines)
@@ -472,6 +510,7 @@ def public_telemetry(telemetry: dict[str, Any] | None) -> dict[str, Any]:
         "context_items": list(telemetry.get("context_items") or []),
         "context_chars": telemetry.get("context_chars"),
         "repository_intelligence": dict(telemetry.get("repository_intelligence") or {}),
+        "route_path": telemetry.get("route_path"),
     }
 
 
@@ -483,12 +522,23 @@ def attach_execution_telemetry(row: dict[str, Any]) -> dict[str, Any]:
 
     # Hybrid only when deterministic tools ran first AND an AI child run started.
     if (
-        str(row.get("fallback_from") or "").lower() in {"deterministic", "t0"}
+        (
+            str(row.get("fallback_from") or "").lower() in {"deterministic", "t0"}
+            or bool(row.get("ai_escalation_occurred"))
+            or str(row.get("t0_failure_reason") or "") == "t0_explanation_synthesis"
+            or str(row.get("route_path") or "").startswith("T0 →")
+        )
         and tel.get("llm_invoked")
         and tel.get("child_ai_run_id")
     ):
         tel["execution_type"] = EXEC_HYBRID
         tel["t0_pure"] = False
+        tel["ai_escalation_occurred"] = True
+        if not tel.get("route_path"):
+            provider = tel.get("provider") or row.get("resolved_provider") or row.get("adapter_id")
+            model = tel.get("model") or row.get("resolved_model") or row.get("model") or ""
+            if provider:
+                tel["route_path"] = f"T0 → {provider}/{model}".rstrip("/")
 
     row["telemetry"] = public_telemetry(tel)
     usage = dict(row.get("usage") or {})

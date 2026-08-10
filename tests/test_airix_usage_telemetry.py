@@ -67,7 +67,7 @@ class TelemetryUnitTests(unittest.TestCase):
         self.assertIsNone(tel["model"])
         self.assertIsNone(tel["child_ai_run_id"])
 
-    def test_ai_run_marks_estimated_when_usage_missing(self) -> None:
+    def test_ai_run_marks_unavailable_when_usage_missing(self) -> None:
         tel = build_execution_telemetry(
             {
                 "mode": "ask",
@@ -83,7 +83,7 @@ class TelemetryUnitTests(unittest.TestCase):
         )
         self.assertTrue(tel["llm_invoked"])
         self.assertEqual(tel["execution_type"], "AI")
-        self.assertEqual(tel["usage_source"], "estimate")
+        self.assertEqual(tel["usage_source"], "unavailable")
         self.assertIsNone(tel["total_ai_tokens"])
         self.assertEqual(tel["child_ai_run_id"], "run-abc")
         self.assertEqual(tel["provider"], "grok")

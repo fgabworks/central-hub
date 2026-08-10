@@ -801,12 +801,17 @@ def answer_from_evidence(
             body = "\n".join(f"- {n}" for n in names[:30])
             candidate = f"{label}:\n{body}"
 
-    repo_hits = [h for h in hits if h.get("source") == "repository"]
+    repo_hits = [
+        h
+        for h in hits
+        if h.get("source") == "repository"
+        or str(h.get("source") or "").startswith("repository_intelligence")
+    ]
     if candidate is None and repo_hits:
         paths = []
         for h in repo_hits[:15]:
             path = str(h.get("path") or "").strip()
-            rid = str(h.get("repo_id") or "").strip()
+            rid = str(h.get("repo_id") or h.get("repository_id") or "").strip()
             if path:
                 paths.append(f"{rid}:{path}" if rid else path)
         if paths and contract.intent in {INTENT_FILE_SEARCH, INTENT_TRACE}:

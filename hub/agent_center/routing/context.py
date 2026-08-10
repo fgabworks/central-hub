@@ -122,11 +122,14 @@ def select_repository_ids(
         or "project_lookup" in signals
         or "authoritative_data_query" in signals
         or "structured_data_lookup" in signals
+        or "selected_repo" in signals
+        or any(str(s).startswith("scope_signal:selected_repo") for s in signals)
     ):
         return ids[: max(1, min(int(max_repos), 3))]
     if "dhis2_or_ou_topic" in signals and "national_or_general_lookup" not in signals:
         return ids[:1]
-    return []
+    # Explicit user selection remains sticky for Inspect/Ask/Plan/Agent packing.
+    return ids[: max(1, min(int(max_repos), 3))]
 
 
 def provider_to_adapter_id(provider_id: str) -> str | None:

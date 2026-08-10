@@ -162,6 +162,56 @@ class AirixPhase4Tests(unittest.TestCase):
         self.assertEqual(self.fake.started, [])
         self.assertIn("Solved by deterministic", orch.get("stopped_reason") or "")
 
+    def test_parent_execution_preserves_child_repository_intelligence(self) -> None:
+        assert self.router.executor is not None
+        child = {
+            "id": "child-ri",
+            "status": "completed",
+            "answer": "The selected repository evidence resolves the requested lookup.",
+            "provider_id": "deterministic",
+            "mode": "deterministic",
+            "context": {
+                "repository_intelligence": {
+                    "diagnostics": {
+                        "used": True,
+                        "repository_ids": ["live-processing-local"],
+                        "knowledge_entries_used": 2,
+                        "context_chars_contributed": 240,
+                        "freshness": "current",
+                    }
+                }
+            },
+            "repository_intelligence_diagnostics": {
+                "used": True,
+                "repository_ids": ["live-processing-local"],
+                "knowledge_entries_used": 2,
+                "context_chars_contributed": 240,
+                "freshness": "current",
+            },
+            "context_items": [
+                "repository:live-processing-local",
+                "tool:repository_intelligence",
+            ],
+            "grounding": {
+                "task_solved": True,
+                "answer_grounded": True,
+                "task_solved_label": "Yes",
+                "grounded_label": "Yes",
+            },
+        }
+        self.router.executor.execute = MagicMock(return_value=child)  # type: ignore[method-assign]
+        result = self.router.execute_route(
+            "Look up the validation path in the selected repository",
+            repository_ids=["live-processing-local"],
+            orchestrate=True,
+        )
+        execution = result["execution"]
+        ri = (execution.get("telemetry") or {}).get("repository_intelligence") or {}
+        self.assertTrue(ri.get("used"), msg=execution)
+        self.assertEqual(ri.get("repository_ids"), ["live-processing-local"])
+        self.assertGreater(int(ri.get("knowledge_entries_used") or 0), 0)
+        self.assertIn("tool:repository_intelligence", execution.get("context_items") or [])
+
     def test_role_routing(self) -> None:
         dhis = detect_role(
             "Investigate DHIS2 org unit UID mapping",

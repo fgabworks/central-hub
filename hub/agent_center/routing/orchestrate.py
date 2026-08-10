@@ -175,16 +175,18 @@ def is_task_solved(step_result: dict[str, Any], *, step: OrchestrationStep) -> b
         return False
     if step_result.get("t0_fallthrough"):
         return False
-    answer = str(step_result.get("answer") or "").strip()
+    from hub.agent_center.routing.execution import extract_provider_answer
+
+    answer = extract_provider_answer(step_result)
     grounding = step_result.get("grounding") or {}
     if step.kind == "tool" and step.id == "step_tool_lookup":
-        # Fully solved + grounded → stop.
-        if grounding.get("task_solved") and grounding.get("answer_grounded"):
+        # Fully solved + grounded → stop (includes successful T0→AI synthesis).
+        if grounding.get("task_solved") and grounding.get("answer_grounded") and answer:
             return True
         # Evidence ≠ completion — continue to next capable route when the plan allows it.
         if grounding.get("evidence_found") and not grounding.get("task_solved"):
             return False
-        if step_result.get("t0_unsolved"):
+        if step_result.get("t0_unsolved") and not answer:
             return False
         if not answer:
             return False

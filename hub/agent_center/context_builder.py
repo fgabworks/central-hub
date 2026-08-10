@@ -35,6 +35,7 @@ def selectable_repositories(registry: Registry) -> list[dict[str, Any]]:
                 "id": repo.id,
                 "name": repo.name,
                 "type": repo.type,
+                "repository_group_id": repo.repository_group_id,
                 "selectable": repo.type == "command" and path is not None,
                 "local_path": str(path) if path else (repo.local_path or ""),
                 "reason": (
@@ -65,6 +66,7 @@ def build_context_preview(
     evidence_packet_text: str = "",
     evidence_packet: dict[str, Any] | None = None,
     repository_knowledge: dict[str, Any] | None = None,
+    bounded_evidence_only: bool = False,
 ) -> dict[str, Any]:
     mode = normalize_mode(mode)
     prompt = (prompt or "")[:MAX_PROMPT_CHARS]
@@ -95,6 +97,8 @@ def build_context_preview(
             scope_errors.append(f"{repo.id}: local path unavailable")
             continue
         roots.append({"repo_id": repo.id, "path": str(root)})
+        if bounded_evidence_only:
+            continue
         instructions.extend(load_repo_instructions(root, repo_id=repo.id))
 
         requested = list((explicit_files or {}).get(repo.id) or [])
@@ -130,7 +134,7 @@ def build_context_preview(
         user_prompt=prompt,
         instructions=instructions,
         files=files,
-        roots=roots,
+        roots=[] if bounded_evidence_only else roots,
         profile=profile,
         selected_tools=selected_tools or [],
         grounding_rules=grounding_rules,
@@ -183,6 +187,7 @@ def build_context_preview(
         "excluded_sources": _excluded_sources(profile, selected_tools or []),
         "evidence_packet": evidence_packet or {},
         "repository_intelligence": repository_knowledge,
+        "bounded_evidence_only": bool(bounded_evidence_only),
         "grounding_rules": grounding_rules,
         "notes": (
             []

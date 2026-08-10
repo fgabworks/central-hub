@@ -96,6 +96,30 @@ class ResolveRepositoryContextTests(unittest.TestCase):
         self.assertEqual(resolved["repository_ids"], ["second"])
         self.assertEqual(resolved["source"], "explicit")
 
+    def test_grouped_api_selection_resolves_to_local_member(self) -> None:
+        repos = [
+            {
+                "id": "live-processing",
+                "name": "PMNP Live Processing",
+                "selectable": False,
+                "repository_group_id": "pmnp-live-processing",
+            },
+            {
+                "id": "live-processing-local",
+                "name": "PMNP Live Processing Local",
+                "selectable": True,
+                "repository_group_id": "pmnp-live-processing",
+            },
+        ]
+        resolved = resolve_repository_context(
+            agent_id="deterministic",
+            repository_ids=["live-processing"],
+            selected_repository_id="live-processing",
+            repositories=repos,
+        )
+        self.assertTrue(resolved["ok"])
+        self.assertEqual(resolved["repository_ids"], ["live-processing-local"])
+
     def test_persisted_selection_before_active_workspace(self) -> None:
         resolved = resolve_repository_context(
             agent_id="codex",
@@ -212,7 +236,7 @@ class DockPrefsPersistenceTests(unittest.TestCase):
 
 
 class SmartRoutingRepoContextTests(unittest.TestCase):
-    def test_non_coding_task_strips_repos_from_preview(self) -> None:
+    def test_explicit_selection_stays_sticky_for_non_coding_inspect(self) -> None:
         classification = _classification(
             task_type="lookup",
             complexity=1,
@@ -244,7 +268,8 @@ class SmartRoutingRepoContextTests(unittest.TestCase):
             recommendation=rec,
             repository_ids=["central-hub"],
         )
-        self.assertEqual(preview["repository_ids"], [])
+        # Explicit dock selection remains attached for Inspect/RI packing.
+        self.assertEqual(preview["repository_ids"], ["central-hub"])
 
     def test_coding_task_keeps_requested_repos(self) -> None:
         ids = select_repository_ids(
@@ -252,6 +277,17 @@ class SmartRoutingRepoContextTests(unittest.TestCase):
             ["repo-a", "repo-b"],
         )
         self.assertEqual(ids, ["repo-a", "repo-b"])
+
+    def test_optional_agent_honors_persisted_selection(self) -> None:
+        resolved = resolve_repository_context(
+            agent_id="deterministic",
+            repository_ids=[],
+            selected_repository_id="live-processing-local",
+            repositories=_repos("live-processing-local", "other"),
+        )
+        self.assertTrue(resolved["ok"])
+        self.assertEqual(resolved["repository_ids"], ["live-processing-local"])
+        self.assertEqual(resolved["source"], "persisted_selection")
 
 
 if __name__ == "__main__":

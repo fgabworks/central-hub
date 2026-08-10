@@ -1106,7 +1106,9 @@ class AgentRouterService:
             if child_status == "completed":
                 step.status = "completed"
                 completed.append(step.id)
-                ans = str(result.get("answer") or "")
+                from hub.agent_center.routing.execution import extract_provider_answer
+
+                ans = extract_provider_answer(result)
                 if ans:
                     final_answer = ans
                     partial = (partial + "\n" + ans[:200]).strip()[:240]
@@ -1212,25 +1214,79 @@ class AgentRouterService:
             session_id=str((session or {}).get("id") or ""),
         )
 
+        terminal_execution: dict[str, Any] = {}
+        best_ri: dict[str, Any] = {}
+        best_grounding: dict[str, Any] = {}
+        best_evidence: dict[str, Any] = {}
+        for step_result in reversed(step_results):
+            candidate = step_result.get("execution")
+            if not isinstance(candidate, dict):
+                continue
+            if not terminal_execution:
+                terminal_execution = candidate
+            ri = candidate.get("repository_intelligence_diagnostics")
+            if isinstance(ri, dict) and ri.get("used") and not best_ri.get("used"):
+                best_ri = ri
+            g = candidate.get("grounding")
+            if isinstance(g, dict) and (g.get("evidence_found") or g.get("task_solved")):
+                if not best_grounding or (
+                    g.get("task_solved") and g.get("answer_grounded")
+                ):
+                    best_grounding = g
+            packet = candidate.get("evidence_packet")
+            if isinstance(packet, dict) and packet.get("usable") and not best_evidence.get("usable"):
+                best_evidence = packet
+        from hub.agent_center.routing.execution import extract_provider_answer
+
+        propagated_answer = (
+            final_answer
+            or extract_provider_answer(terminal_execution)
+            or str(terminal_execution.get("partial_summary") or "")
+        ).strip()
         execution_payload = public_execution_fields(
             {
+                **terminal_execution,
                 "id": (session or {}).get("id"),
                 "status": status,
-                "answer": final_answer,
-                "provider_id": rec.recommended_agent,
+                # Never wipe a child terminal answer with an empty orchestration final_answer.
+                "answer": propagated_answer,
                 "mode": "orchestrated",
                 "interaction_mode": interaction_mode,
-                "partial_summary": partial,
-                "error": stopped_reason if status not in {"completed", "paused_for_approval"} else "",
+                "partial_summary": partial or propagated_answer[:240],
+                "error": stopped_reason if status not in {"completed", "paused_for_approval"} else (
+                    terminal_execution.get("error") or ""
+                ),
                 "error_code": (
                     "approval_required"
                     if status == "paused_for_approval"
-                    else ("timed_out" if status == "timed_out" else "")
+                    else (
+                        "timed_out"
+                        if status == "timed_out"
+                        else str(terminal_execution.get("error_code") or "")
+                    )
                 ),
                 "finished_at": finished_at,
                 "current_step": (completed[-1] if completed else ""),
                 "stopped_reason": stopped_reason,
                 "session_id": (session or {}).get("id"),
+                "repository_intelligence_diagnostics": best_ri
+                or terminal_execution.get("repository_intelligence_diagnostics")
+                or {},
+                "grounding": best_grounding or terminal_execution.get("grounding") or {},
+                "evidence_packet": best_evidence
+                or terminal_execution.get("evidence_packet")
+                or {},
+                "fallback_from": terminal_execution.get("fallback_from") or (
+                    "deterministic"
+                    if terminal_execution.get("ai_escalation_occurred")
+                    or str(terminal_execution.get("t0_failure_reason") or "")
+                    == "t0_explanation_synthesis"
+                    else ""
+                ),
+                "route_path": terminal_execution.get("route_path") or "",
+                "agent_run_id": terminal_execution.get("agent_run_id"),
+                "agent_run": terminal_execution.get("agent_run"),
+                "usage": terminal_execution.get("usage"),
             }
         )
 
@@ -1246,7 +1302,7 @@ class AgentRouterService:
                 "session_id": (session or {}).get("id"),
                 "completed_steps": completed,
                 "intermediate_findings": intermediate[-8:],
-                "answer": final_answer,
+                "answer": propagated_answer,
                 "actual_tokens": actual_tokens,
             },
             "execution": execution_payload,

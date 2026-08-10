@@ -4,7 +4,39 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**Repository Intelligence testing and telemetry finalization (2026-08-10)**
+**Inspect explanation synthesis answer propagation (2026-08-10)**
+
+When T0 gathers grounded RI evidence and escalates for explanation synthesis
+(`t0_explanation_synthesis` → AI), the child provider's terminal answer is now
+propagated to the parent execution/orchestration result. Empty child content
+becomes `synthesis_failed` with an explicit reason. Telemetry marks these runs
+Hybrid with route `T0 → <provider/model>`, LLM Yes only when the child ran, and
+`usage unavailable` instead of fake zero token totals. Successful evidence-backed
+synthesis scores Evidence/Task Solved/Grounded Yes. RI diagnostics and T0 evidence
+sources are preserved. RI retrieval, routing policy, and context packing unchanged.
+
+Tests: `tests/test_airix_explanation_synthesis.py`.
+
+Prior: **Inspect-mode Repository Intelligence attachment (2026-08-10)**
+
+Root cause: the grouped composer could submit the API member (`live-processing`) while RI is
+indexed under the selectable command member (`live-processing-local`). That ID was not
+canonicalized before RI lookup. The orchestration wrapper then rebuilt a parent execution
+without the child context/RI diagnostics, so real repo-search evidence coexisted with default
+`Repository: None` / `Entries: 0` telemetry.
+
+Fix: the shared resolver translates group siblings to their one selectable local member using
+`repository_group_id`; RI is attached before T0; Relevant Files contributes context items; T0
+merges bounded RI hits and emits `tool:repository_intelligence`; the parent preserves the actual
+terminal child context and telemetry derives RI from that context. Explanation contracts with
+usable grounded evidence now escalate to the cheapest available appropriate model using only
+the bounded evidence/RI entries. T0-complete tasks remain deterministic.
+
+Tests: `tests/test_airix_inspect_repository_intelligence.py` (+ updated
+`tests/test_airix_repository_context.py`); 83 focused AiriX/RI tests pass across the
+runtime, telemetry, persistence, capability-escalation, and orchestration suites.
+
+Prior: **Repository Intelligence testing and telemetry finalization (2026-08-10)**
 
 Standard Scan & Learn, manual refresh, automatic Git refresh, and instruction refresh now
 persist deterministic scan events with `LLM Invoked: No`, no provider/model, zero AI tokens,

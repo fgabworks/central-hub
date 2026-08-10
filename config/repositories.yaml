@@ -117,6 +117,22 @@ repositories:
     executable: python
     timeout_seconds: 3
   capabilities: []
+- id: ar-task-generator
+  name: ar-task-generator
+  type: command
+  enabled: true
+  git_url: https://github.com/xdeelord24/ar-task-generator.git
+  local_path: C:\PMNP\ar-task-generator
+  working_directory: C:\PMNP\ar-task-generator
+  tags:
+  - connected
+  - command
+  health_check:
+    type: path
+    local_path: C:\PMNP\ar-task-generator
+    executable: python
+    timeout_seconds: 3
+  capabilities: []
 defaults:
   job_timeout_seconds: 3600
   max_concurrent_jobs: 2

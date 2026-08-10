@@ -408,6 +408,7 @@ class AgentCenterService:
             evidence_packet_text=str(grounding.get("evidence_packet_text") or ""),
             evidence_packet=grounding.get("evidence_packet") or {},
             repository_knowledge=repository_knowledge,
+            bounded_evidence_only=bool(payload.get("bounded_evidence_only")),
         )
         preview["tools"] = {
             "enabled": selected_tools,
@@ -532,6 +533,8 @@ class AgentCenterService:
             selected_repository_id=str(payload.get("selected_repository_id") or "").strip() or None,
         )
         payload = {**payload, "repository_ids": resolved_repos}
+        # Always load server-owned RI. Never accept cached knowledge supplied by a
+        # run caller as authoritative evidence.
         repository_knowledge = self.repository_intelligence.retrieve(
             resolved_repos, prompt
         ) if resolved_repos else {
@@ -539,6 +542,47 @@ class AgentCenterService:
             "include_full_index": False,
             "diagnostics": {"used": False, "knowledge_entries_used": 0},
         }
+        if bool(payload.get("bounded_evidence_only")):
+            packet = payload.get("evidence_packet")
+            packet = packet if isinstance(packet, dict) else {}
+            allowed = {
+                (str(hit.get("repository_id") or ""), str(hit.get("path") or ""))
+                for hit in (packet.get("hits") or [])
+                if isinstance(hit, dict) and str(hit.get("path") or "").strip()
+            }
+            for source in packet.get("sources") or []:
+                parts = str(source or "").split(":", 2)
+                if len(parts) == 3 and parts[0] == "repository_intelligence":
+                    allowed.add((parts[1], parts[2]))
+            bounded_items = [
+                item for item in (repository_knowledge.get("items") or [])
+                if (str(item.get("repository_id") or ""), str(item.get("path") or ""))
+                in allowed
+            ][:6]
+            bounded_diag = dict(repository_knowledge.get("diagnostics") or {})
+            # Preserve Current-profile "used" even when item filters trim the slice.
+            bounded_diag["used"] = bool(bounded_items) or bool(
+                repository_knowledge.get("profiles")
+            )
+            bounded_diag["knowledge_entries_used"] = len(bounded_items)
+            if not bounded_items and repository_knowledge.get("profiles"):
+                bounded_diag["knowledge_entries_used"] = int(
+                    (repository_knowledge.get("diagnostics") or {}).get(
+                        "knowledge_entries_used"
+                    )
+                    or 0
+                )
+            bounded_diag["context_chars_contributed"] = sum(
+                len(str(item.get("summary") or "")) for item in bounded_items
+            ) or int(bounded_diag.get("context_chars_contributed") or 0)
+            repository_knowledge = {
+                **repository_knowledge,
+                "profiles": [],
+                "items": bounded_items,
+                "item_count": len(bounded_items),
+                "include_full_index": False,
+                "diagnostics": bounded_diag,
+            }
         payload["repository_intelligence"] = repository_knowledge
 
         from hub.agent_center.grounding import (

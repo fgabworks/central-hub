@@ -47,6 +47,24 @@ def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def extract_provider_answer(run: dict[str, Any] | None) -> str:
+    """Pull the terminal provider answer from a child run / public execution row."""
+    if not isinstance(run, dict):
+        return ""
+    for key in ("answer", "content", "output_text", "final_answer"):
+        text = str(run.get(key) or "").strip()
+        if text:
+            return text
+    agent_run = run.get("agent_run") if isinstance(run.get("agent_run"), dict) else {}
+    for key in ("answer", "content", "output_text", "final_answer"):
+        text = str(agent_run.get(key) or "").strip()
+        if text:
+            return text
+    context = run.get("context") if isinstance(run.get("context"), dict) else {}
+    text = str(context.get("answer") or "").strip()
+    return text
+
+
 def _prompt_fingerprint(prompt: str, agent: str = "") -> str:
     base = (prompt or "").strip().lower()
     raw = f"{base}::{(agent or '').strip().lower()}" if agent else base
@@ -273,33 +291,100 @@ class RouteExecutor:
 
         adapter_id = provider_to_adapter_id(provider_id)
         fingerprint = _prompt_fingerprint(prompt_n, provider_id)
+        from hub.agent_center.repository_context import (
+            normalize_repository_ids,
+            resolve_repository_context,
+        )
+
+        try:
+            selectable = self.agent_center.repositories(profile_id=INTERNAL_WORK_PROFILE)
+        except Exception:  # noqa: BLE001
+            selectable = []
+        # One resolver for Smart/Ask/Inspect/Plan/Agent — never drop a selected learned repo.
+        resolved_scope = resolve_repository_context(
+            agent_id=adapter_id or provider_id or "deterministic",
+            repository_ids=repository_ids,
+            active_repository_id=active_repository_id,
+            selected_repository_id=selected_repository_id,
+            repositories=selectable,
+        )
+        resolved_repo_ids = list(resolved_scope.get("repository_ids") or [])
+        if not resolved_repo_ids:
+            # Soft fallback: keep raw explicit IDs when resolver had nothing selectable yet.
+            resolved_repo_ids = normalize_repository_ids(repository_ids) or normalize_repository_ids(
+                [selected_repository_id]
+            )
         context_preview = build_minimal_context_preview(
             prompt=prompt_n,
             classification=recommendation.classification,
             recommendation=recommendation,
-            repository_ids=repository_ids,
+            repository_ids=resolved_repo_ids,
             agent_override=provider_id,
             candidate_findings=candidate_findings,
             context_sources=context_sources,
         )
-        repository_knowledge: dict[str, Any] = {}
-        if repository_ids:
+        # Ensure packed repository_ids stay aligned with the canonical resolver.
+        if resolved_repo_ids and not context_preview.get("repository_ids"):
+            context_preview["repository_ids"] = resolved_repo_ids[:2]
+        repository_knowledge: dict[str, Any] = {
+            "profiles": [],
+            "items": [],
+            "item_count": 0,
+            "include_full_index": False,
+            "diagnostics": {
+                "used": False,
+                "knowledge_entries_used": 0,
+                "freshness": "none",
+                "repository_ids": [],
+                "requested_repository_ids": resolved_repo_ids,
+            },
+        }
+        if resolved_repo_ids:
             try:
                 repository_knowledge = self.agent_center.repository_intelligence.retrieve(
-                    list(repository_ids), prompt_n
+                    list(resolved_repo_ids), prompt_n
                 )
             except Exception:  # noqa: BLE001
-                repository_knowledge = {}
+                repository_knowledge = {
+                    **repository_knowledge,
+                    "diagnostics": {
+                        **(repository_knowledge.get("diagnostics") or {}),
+                        "used": False,
+                        "freshness": "failed",
+                        "requested_repository_ids": resolved_repo_ids,
+                    },
+                }
         context_preview["repository_intelligence"] = repository_knowledge
         context_preview["tool_ids"] = tools_for_repository_knowledge(
             list(context_preview.get("tool_ids") or []), repository_knowledge
         )
+        # Relevant files / data explorer context sources add search tools — they must
+        # never disable Repository Intelligence attachment.
+        sources = normalize_context_sources(context_sources)
+        if "files" in sources or "data_explorer" in sources:
+            context_preview["tool_ids"] = list(
+                dict.fromkeys(
+                    list(context_preview.get("tool_ids") or []) + ["repo_search", "read_file"]
+                )
+            )[:6]
         for item in (repository_knowledge.get("items") or [])[:4]:
             summary = str(item.get("summary") or "").strip()
             if summary:
                 context_preview.setdefault("hints", []).append(
                     f"repo_knowledge:{item.get('category')}:{item.get('path')}:{summary[:180]}"
                 )
+        repository_ids = resolved_repo_ids
+        ri_diag = dict(repository_knowledge.get("diagnostics") or {})
+        initial_context_items = [f"repository:{rid}" for rid in resolved_repo_ids]
+        initial_context_items.extend(
+            f"context_source:{source}" for source in normalize_context_sources(context_sources)
+        )
+        for item in (repository_knowledge.get("items") or [])[:6]:
+            rid = str(item.get("repository_id") or "").strip()
+            path = str(item.get("path") or "").strip()
+            if path:
+                initial_context_items.append(f"repository_intelligence:{rid}:{path}")
+        initial_context_items = list(dict.fromkeys(initial_context_items))
         if active_repository_id:
             context_preview = {
                 **context_preview,
@@ -389,6 +474,8 @@ class RouteExecutor:
                 "repository_intelligence_diagnostics": dict(
                     repository_knowledge.get("diagnostics") or {}
                 ),
+                "context_items": initial_context_items,
+                "context_chars": int(ri_diag.get("context_chars_contributed") or 0),
                 "prior_findings": list(context_preview.get("prior_findings") or []),
                 "rbac_role": (rbac_role or "").strip(),
                 "_routing_settings": settings,
@@ -488,6 +575,7 @@ class RouteExecutor:
                         t0_failure_reason=prior.get("t0_failure_reason") or reason,
                         next_capability=prior.get("next_capability") or "ai_escalate",
                         db_query_attempted=bool(prior.get("db_query_attempted")),
+                        synthesis_escalation=reason == "t0_explanation_synthesis",
                     )
                     esc_context = {
                         **context_preview,
@@ -499,7 +587,42 @@ class RouteExecutor:
                         or context_preview.get("completion_contract"),
                         "t0_failure_reason": prior.get("t0_failure_reason") or reason,
                         "allow_general_knowledge": reason == "t0_miss_general_knowledge",
+                        "tool_results": prior.get("tool_results")
+                        or context_preview.get("tool_results"),
+                        "repository_intelligence_diagnostics": prior.get(
+                            "repository_intelligence_diagnostics"
+                        )
+                        or (
+                            (context_preview.get("repository_intelligence") or {}).get(
+                                "diagnostics"
+                            )
+                            if isinstance(context_preview.get("repository_intelligence"), dict)
+                            else {}
+                        ),
                     }
+                    if reason == "t0_explanation_synthesis":
+                        # The model receives only the bounded, already-grounded packet
+                        # and its retrieved RI entries; it does not reread the repo.
+                        current_knowledge = context_preview.get("repository_intelligence")
+                        current_knowledge = (
+                            current_knowledge if isinstance(current_knowledge, dict) else {}
+                        )
+                        prior_knowledge = (
+                            prior.get("repository_intelligence")
+                            if isinstance(prior.get("repository_intelligence"), dict)
+                            else {}
+                        )
+                        if not current_knowledge.get("items") and prior_knowledge.get("items"):
+                            current_knowledge = prior_knowledge
+                        esc_context["bounded_evidence_only"] = True
+                        esc_context["synthesis_escalation"] = True
+                        esc_context["repository_intelligence"] = {
+                            **current_knowledge,
+                            # Keep bounded items only for synthesis packing; diagnostics stay on the row.
+                            "profiles": list(current_knowledge.get("profiles") or [])[:1],
+                            "items": list(current_knowledge.get("items") or [])[:6],
+                            "include_full_index": False,
+                        }
                     if preserve_model and selected_model:
                         esc_context["model"] = selected_model
                     return self._execute_agent(
@@ -537,15 +660,32 @@ class RouteExecutor:
                             )
                         )
                         candidates: list[str] = []
-                        for cand in (
-                            preferred,
-                            provider_to_adapter_id(str(recommendation.alternative_agent or "")),
-                            "openai-api",
-                            "grok",
-                        ):
+                        candidate_order = (
+                            ("openai-api", "grok", preferred)
+                            if str(result.get("t0_failure_reason") or "")
+                            == "t0_explanation_synthesis"
+                            else (
+                                preferred,
+                                provider_to_adapter_id(str(recommendation.alternative_agent or "")),
+                                "openai-api",
+                                "grok",
+                            )
+                        )
+                        for cand in candidate_order:
                             if not cand or cand == "hub-simulator" or cand in candidates:
                                 continue
                             candidates.append(cand)
+                        if str(result.get("t0_failure_reason") or "") == "t0_explanation_synthesis":
+                            from hub.agent_center.routing.cost import price_per_mtok
+
+                            candidates.sort(
+                                key=lambda candidate: (
+                                    price_per_mtok(settings, candidate) <= 0,
+                                    price_per_mtok(settings, candidate)
+                                    if price_per_mtok(settings, candidate) > 0
+                                    else float("inf"),
+                                )
+                            )
                         chosen_alt = None
                         for candidate in candidates:
                             ok, _detail = self._provider_available(candidate)
@@ -918,6 +1058,11 @@ class RouteExecutor:
         self._update(execution_id, status="running", started_at=_utcnow(), mode="deterministic")
         tools = list(context_preview.get("tool_ids") or select_minimal_tools(recommendation.classification))
         repos = list(context_preview.get("repository_ids") or [])
+        repository_knowledge = (
+            context_preview.get("repository_intelligence")
+            if isinstance(context_preview.get("repository_intelligence"), dict)
+            else {}
+        )
         try:
             ctx = self._tools_context(
                 tools, repos, str(context_preview.get("dhis2_environment") or "")
@@ -925,12 +1070,71 @@ class RouteExecutor:
             scope = resolve_prompt_scope(prompt, repository_ids=repos)
             requires = scope.requires_project_evidence
             # Broader scope: do not force selected-repo evidence collection as authoritative.
-            if not scope.use_selected_repo:
+            # Keep explicitly selected repos for Inspect/project packing unless broader override.
+            if not scope.use_selected_repo and not repos:
+                repos = []
+            elif not scope.use_selected_repo and scope.allow_general_knowledge:
+                # National/GK/web: drop repo tools, but leave RI diagnostics alone.
                 repos = []
             packet = context_preview.get("evidence_packet")
-            if not isinstance(packet, dict) or (requires or scope.try_deterministic_tools):
+            if not isinstance(packet, dict) or (requires or scope.try_deterministic_tools or repos):
                 packet = collect_evidence_packet(prompt, ctx, repository_ids=repos)
+            # Attach bounded Repository Intelligence as project evidence for Inspect/code asks.
+            if repository_knowledge.get("items") or repository_knowledge.get("profiles"):
+                packet = self.agent_center._grounding_with_repository_intelligence(
+                    {"evidence_packet": packet, "required": requires},
+                    repository_knowledge,
+                    prompt=prompt,
+                    repository_ids=repos,
+                ).get("evidence_packet") or packet
+                ri_tool = {
+                    "tool": "repository_intelligence",
+                    "ok": bool(repository_knowledge.get("profiles")),
+                    "args": {
+                        "repository_ids": list(
+                            (repository_knowledge.get("diagnostics") or {}).get("repository_ids")
+                            or repos
+                        ),
+                        "entries": int(
+                            (repository_knowledge.get("diagnostics") or {}).get(
+                                "knowledge_entries_used"
+                            )
+                            or len(repository_knowledge.get("items") or [])
+                        ),
+                    },
+                    "result": {
+                        "used": bool((repository_knowledge.get("diagnostics") or {}).get("used")),
+                        "freshness": (repository_knowledge.get("diagnostics") or {}).get("freshness"),
+                        "item_count": repository_knowledge.get("item_count") or 0,
+                    },
+                }
+                tool_results = list(packet.get("tool_results") or [])
+                tool_results.append(ri_tool)
+                sources = list(packet.get("sources") or [])
+                sources.append("tool:repository_intelligence")
+                for item in (repository_knowledge.get("items") or [])[:6]:
+                    rid = str(item.get("repository_id") or "")
+                    path = str(item.get("path") or "")
+                    if path:
+                        sources.append(f"repository_intelligence:{rid}:{path}")
+                packet = {
+                    **packet,
+                    "tool_results": tool_results,
+                    "sources": list(dict.fromkeys(sources)),
+                    "usable": bool(packet.get("usable") or repository_knowledge.get("items")),
+                }
             results = list(packet.get("tool_results") or [])
+            # Keep RI diagnostics on the execution row for Inspect T0 completions.
+            self._update(
+                execution_id,
+                repository_intelligence_diagnostics=dict(
+                    repository_knowledge.get("diagnostics") or {}
+                ),
+                context_items=list(dict.fromkeys(
+                    list((self.get_status(execution_id) or {}).get("context_items") or [])
+                    + [str(src) for src in (packet.get("sources") or []) if str(src).strip()]
+                )),
+            )
 
             contract = derive_completion_contract(
                 prompt,
@@ -1086,7 +1290,15 @@ class RouteExecutor:
             elif packet.get("usable") and not deterministic_answer:
                 # Supporting evidence found but completion contract unsatisfied.
                 completion = _completion_for("")
-                if (
+                if contract.intent == "explanation" and not authoritative_data:
+                    t0_capability_escalate = True
+                    answer = ""
+                    self._update(
+                        execution_id,
+                        t0_failure_reason="t0_explanation_synthesis",
+                        next_capability="ai_escalate",
+                    )
+                elif (
                     scope.allow_general_knowledge
                     and scope.kind in fallthrough_kinds
                     and not authoritative_data
@@ -1176,7 +1388,11 @@ class RouteExecutor:
                             (failure and failure.db_query_attempted)
                             or (sql_attempt and sql_attempt.attempted)
                         ),
-                        t0_failure_reason=(failure.reason if failure else "") or "",
+                        t0_failure_reason=(
+                            "t0_explanation_synthesis"
+                            if contract.intent == "explanation" and packet.get("usable")
+                            else (failure.reason if failure else "")
+                        ) or "",
                         next_capability=(
                             (failure.next_capability if failure else None)
                             or ("ai_escalate" if t0_capability_escalate else "")
@@ -1327,15 +1543,54 @@ class RouteExecutor:
                     code="simulator_not_allowed",
                 )
 
+        # Preserve T0 → AI escalation markers already stamped by _escalate_to_ai.
+        with self._lock:
+            prior_row = dict(self._active.get(execution_id) or {})
+        prior_fallback = str(prior_row.get("fallback_from") or "").strip() or None
+        prior_fallback_reason = str(prior_row.get("fallback_reason") or "").strip()
+        prior_ri_diag = (
+            prior_row.get("repository_intelligence_diagnostics")
+            if isinstance(prior_row.get("repository_intelligence_diagnostics"), dict)
+            else {}
+        )
+        if not prior_ri_diag:
+            prior_ri_diag = (
+                context_preview.get("repository_intelligence_diagnostics")
+                if isinstance(context_preview.get("repository_intelligence_diagnostics"), dict)
+                else {}
+            )
+        synthesis_escalation = bool(
+            context_preview.get("synthesis_escalation")
+            or context_preview.get("bounded_evidence_only")
+            or str(prior_row.get("t0_failure_reason") or "") == "t0_explanation_synthesis"
+            or str(context_preview.get("t0_failure_reason") or "") == "t0_explanation_synthesis"
+        )
+        if prior_fallback:
+            fallback_from = prior_fallback
+            fallback_reason = prior_fallback_reason or fallback_reason
+
         self._update(
             execution_id,
             status="running",
-            started_at=_utcnow(),
+            started_at=prior_row.get("started_at") or _utcnow(),
             adapter_id=chosen,
             resolved_provider=chosen,
+            provider_id=chosen if synthesis_escalation or prior_fallback else prior_row.get("provider_id") or chosen,
             fallback_from=fallback_from,
             fallback_reason=fallback_reason,
             manual_override=bool(manual_override),
+            t0_unsolved=False if synthesis_escalation else prior_row.get("t0_unsolved"),
+            ai_escalation_occurred=bool(
+                prior_row.get("ai_escalation_occurred") or synthesis_escalation or prior_fallback
+            ),
+            repository_intelligence_diagnostics=dict(
+                prior_ri_diag
+                or (
+                    (context_preview.get("repository_intelligence") or {}).get("diagnostics")
+                    if isinstance(context_preview.get("repository_intelligence"), dict)
+                    else {}
+                )
+            ),
         )
 
         classification = recommendation.classification
@@ -1407,7 +1662,10 @@ class RouteExecutor:
         if not isinstance(packet, dict):
             packet = {}
         # Cheap evidence for context packing — never answers/terminates the task in Direct mode.
-        if requires or (scope.try_deterministic_tools and not packet.get("usable")) or direct_mode:
+        if (
+            not bool(context_preview.get("bounded_evidence_only"))
+            and (requires or (scope.try_deterministic_tools and not packet.get("usable")) or direct_mode)
+        ):
             try:
                 ctx = self._tools_context(
                     tools, repos, str(context_preview.get("dhis2_environment") or "")
@@ -1508,17 +1766,19 @@ class RouteExecutor:
         conv_id = str(context_preview.get("conversation_id") or "").strip()
         session_reused = bool(conv_id)
         prior_fp = str(context_preview.get("context_fingerprint") or "").strip()
+        # Explicit escalate/preserve model must not be wiped by provider_changed.
+        model_for_run = selected_model
         payload = {
             "profile_id": INTERNAL_WORK_PROFILE,
             "mode": "plan" if interaction_mode == "plan" else ("find" if interaction_mode == "inspect" else "ask"),
             "prompt": prompt,
             "agent_id": chosen,
-            "model": "" if provider_changed else selected_model,
+            "model": model_for_run,
             "tool_ids": tools,
             "repository_ids": repos,
             "hints": hints[:10],
             "files": {},
-            "provider_changed": provider_changed,
+            "provider_changed": bool(provider_changed and not model_for_run),
             "previous_provider": fallback_from or "",
             "evidence_packet": packet,
             "grounding_rules": grounding_rules_text(
@@ -1533,6 +1793,8 @@ class RouteExecutor:
             "dhis2_environment": context_preview.get("dhis2_environment") or "",
             "reuse_context": bool(prior_fp),
             "context_fingerprint": prior_fp,
+            "repository_intelligence": context_preview.get("repository_intelligence"),
+            "bounded_evidence_only": bool(context_preview.get("bounded_evidence_only")),
         }
         # Also inject evidence text into hints so adapters without pack hooks still see it.
         evidence_text = format_evidence_for_prompt(packet)
@@ -1555,6 +1817,12 @@ class RouteExecutor:
             if isinstance(run_ctx.get("repository_intelligence"), dict)
             else {}
         )
+        if not run_knowledge:
+            run_knowledge = (
+                context_preview.get("repository_intelligence")
+                if isinstance(context_preview.get("repository_intelligence"), dict)
+                else {}
+            )
         context_items: list[str] = []
         for src in (packet.get("sources") or [])[:8]:
             if str(src).strip():
@@ -1576,6 +1844,19 @@ class RouteExecutor:
         packed_chars = run_ctx.get("packed_prompt_chars")
         if packed_chars is None:
             packed_chars = len(str(run.get("packed_prompt") or ""))
+        # Prefer T0 RI diagnostics when synthesis packing emptied profiles.
+        run_diag = (
+            run_knowledge.get("diagnostics")
+            if isinstance(run_knowledge.get("diagnostics"), dict)
+            else {}
+        )
+        ri_diag = dict(run_diag or {})
+        if prior_ri_diag and (
+            not ri_diag.get("used")
+            or int(ri_diag.get("knowledge_entries_used") or 0)
+            < int(prior_ri_diag.get("knowledge_entries_used") or 0)
+        ):
+            ri_diag = {**ri_diag, **prior_ri_diag, "used": True if prior_ri_diag.get("used") else ri_diag.get("used")}
         self._update(
             execution_id,
             agent_run_id=run_id,
@@ -1589,16 +1870,21 @@ class RouteExecutor:
                 "sources": packet.get("sources") or [],
                 "hit_count": len(packet.get("hits") or []),
                 "errors": packet.get("errors") or [],
+                "hits": packet.get("hits") or [],
             },
             conversation_id=str(run.get("conversation_id") or conv_id or ""),
             session_reused=session_reused,
             context_items=context_items,
             context_chars=int(packed_chars or 0),
-            repository_intelligence_diagnostics=dict(
-                run_knowledge.get("diagnostics") or {}
-            ),
+            repository_intelligence_diagnostics=ri_diag,
             routing_mode="direct" if direct_mode else "smart",
             interaction_mode=interaction_mode,
+            fallback_from=fallback_from,
+            route_path=(
+                f"T0 → {chosen}/{str(run.get('model') or selected_model or '').strip()}".rstrip("/")
+                if (synthesis_escalation or prior_fallback)
+                else ""
+            ),
         )
 
         if status == "unavailable":
@@ -1609,34 +1895,16 @@ class RouteExecutor:
             )
 
         if status in {"succeeded", "completed"} or (
-            run.get("answer") and status not in {"queued", "running"}
+            extract_provider_answer(run) and status not in {"queued", "running"}
         ):
-            answer = str(run.get("answer") or "")
-            g_status = (run.get("context") or {}).get("grounding")
-            if not isinstance(g_status, dict):
-                g_status = evaluate_answer_grounding(
-                    prompt, answer, repository_ids=repos, evidence=packet
-                )
-                answer = apply_grounding_to_answer(answer, g_status)
-            final = "failed" if g_status.get("policy_violation") else "completed"
-            return public_execution_fields(
-                self._update(
-                    execution_id,
-                    status=final,
-                    answer=answer,
-                    finished_at=_utcnow(),
-                    agent_run=run,
-                    grounding=g_status,
-                    evidence_packet={
-                        "summary": packet.get("summary"),
-                        "usable": packet.get("usable"),
-                        "sources": packet.get("sources") or [],
-                        "hit_count": len(packet.get("hits") or []),
-                        "errors": packet.get("errors") or [],
-                    },
-                    error=g_status.get("reason") if g_status.get("policy_violation") else "",
-                    error_code="ungrounded_answer" if g_status.get("policy_violation") else "",
-                )
+            return self._finalize_synthesis_or_agent_answer(
+                execution_id,
+                prompt=prompt,
+                run=run,
+                repository_ids=repos,
+                evidence_packet=packet,
+                synthesis_escalation=synthesis_escalation,
+                chosen=chosen,
             )
 
         # Provider started async — wait until terminal (or timeout/cancel).
@@ -1650,6 +1918,120 @@ class RouteExecutor:
             prompt=prompt,
             repository_ids=repos,
             evidence_packet=packet,
+            synthesis_escalation=synthesis_escalation,
+            chosen=chosen,
+        )
+
+    def _finalize_synthesis_or_agent_answer(
+        self,
+        execution_id: str,
+        *,
+        prompt: str,
+        run: dict[str, Any],
+        repository_ids: list[str] | None,
+        evidence_packet: dict[str, Any] | None,
+        synthesis_escalation: bool = False,
+        chosen: str = "",
+        reevaluate_grounding: bool | None = None,
+    ) -> dict[str, Any]:
+        """Propagate a terminal child answer onto the parent execution row."""
+        from hub.agent_center.grounding import apply_grounding_to_answer, evaluate_answer_grounding
+
+        packet = evidence_packet if isinstance(evidence_packet, dict) else {}
+        answer = extract_provider_answer(run)
+        usage = run.get("usage") if isinstance(run.get("usage"), dict) else {}
+        model = str(run.get("model") or "").strip()
+        provider = str(run.get("agent_id") or chosen or "").strip()
+
+        if synthesis_escalation and not answer:
+            reason = str(
+                run.get("error")
+                or "Child provider returned empty content after explanation synthesis."
+            )
+            return public_execution_fields(
+                self._update(
+                    execution_id,
+                    status="failed",
+                    answer="",
+                    finished_at=str(run.get("finished_at") or _utcnow()),
+                    agent_run=run,
+                    usage=usage,
+                    error=f"synthesis_failed: {reason}",
+                    error_code="synthesis_failed",
+                    t0_unsolved=False,
+                    ai_escalation_occurred=True,
+                    next_capability="synthesis_failed",
+                    route_path=f"T0 → {provider}/{model}".rstrip("/") if provider else "T0 → AI",
+                    evidence_packet={
+                        "summary": packet.get("summary"),
+                        "usable": packet.get("usable"),
+                        "sources": packet.get("sources") or [],
+                        "hit_count": len(packet.get("hits") or []),
+                        "errors": list(packet.get("errors") or []) + [reason],
+                        "hits": packet.get("hits") or [],
+                    },
+                )
+            )
+
+        context_grounding = (run.get("context") or {}).get("grounding")
+        if reevaluate_grounding is None:
+            # Sync completions: keep adapter-provided grounding when present (Direct/Ask).
+            # Synthesis and async waits force a fresh score against the evidence packet.
+            reevaluate_grounding = synthesis_escalation or not isinstance(context_grounding, dict)
+        if not reevaluate_grounding and isinstance(context_grounding, dict):
+            g_status = context_grounding
+        else:
+            g_status = evaluate_answer_grounding(
+                prompt,
+                answer,
+                repository_ids=repository_ids or [],
+                evidence=packet,
+            )
+            if g_status.get("policy_violation"):
+                from hub.agent_center.grounding import format_cannot_verify
+
+                answer = format_cannot_verify(
+                    repository_ids=repository_ids or [],
+                    reason=str(
+                        g_status.get("reason")
+                        or "Ungrounded general-knowledge substitution blocked."
+                    ),
+                )
+            answer = apply_grounding_to_answer(answer, g_status)
+        final = "failed" if g_status.get("policy_violation") else "completed"
+        route = ""
+        if synthesis_escalation or str(
+            (self.get_status(execution_id) or {}).get("fallback_from") or ""
+        ).lower() in {"deterministic", "t0"}:
+            route = f"T0 → {provider}/{model}".rstrip("/") if provider else "T0 → AI"
+        return public_execution_fields(
+            self._update(
+                execution_id,
+                status=final,
+                answer=answer,
+                finished_at=str(run.get("finished_at") or _utcnow()),
+                agent_run=run,
+                usage=usage,
+                grounding=g_status,
+                evidence_packet={
+                    "summary": packet.get("summary"),
+                    "usable": packet.get("usable"),
+                    "sources": packet.get("sources") or [],
+                    "hit_count": len(packet.get("hits") or []),
+                    "errors": packet.get("errors") or [],
+                    "hits": packet.get("hits") or [],
+                },
+                error=g_status.get("reason") if g_status.get("policy_violation") else "",
+                error_code="ungrounded_answer" if g_status.get("policy_violation") else "",
+                t0_unsolved=False,
+                ai_escalation_occurred=bool(
+                    synthesis_escalation
+                    or (self.get_status(execution_id) or {}).get("ai_escalation_occurred")
+                ),
+                route_path=route,
+                resolved_provider=provider or None,
+                resolved_model=model or None,
+            )
         )
 
     def _wait_for_agent_run(
@@ -1662,9 +2044,9 @@ class RouteExecutor:
         prompt: str = "",
         repository_ids: list[str] | None = None,
         evidence_packet: dict[str, Any] | None = None,
+        synthesis_escalation: bool = False,
+        chosen: str = "",
     ) -> dict[str, Any]:
-        from hub.agent_center.grounding import apply_grounding_to_answer, evaluate_answer_grounding
-
         deadline = time.monotonic() + max(1.0, float(timeout_seconds))
         last_run: dict[str, Any] = {}
         while time.monotonic() < deadline:
@@ -1691,46 +2073,43 @@ class RouteExecutor:
             last_run = run if isinstance(run, dict) else {}
             status = str(last_run.get("status") or "")
             if status in {"succeeded", "completed"} or (
-                last_run.get("answer") and status not in {"queued", "running"}
+                extract_provider_answer(last_run) and status not in {"queued", "running"}
             ):
-                answer = str(last_run.get("answer") or "")
-                g_status = evaluate_answer_grounding(
-                    prompt or str(last_run.get("prompt") or ""),
-                    answer,
+                return self._finalize_synthesis_or_agent_answer(
+                    execution_id,
+                    prompt=prompt or str(last_run.get("prompt") or ""),
+                    run=last_run,
                     repository_ids=repository_ids or list(last_run.get("repository_ids") or []),
-                    evidence=evidence_packet,
-                )
-                if g_status.get("policy_violation"):
-                    from hub.agent_center.grounding import format_cannot_verify
-
-                    answer = format_cannot_verify(
-                        repository_ids=repository_ids or list(last_run.get("repository_ids") or []),
-                        reason=str(g_status.get("reason") or "Ungrounded general-knowledge substitution blocked."),
-                    )
-                    answer = apply_grounding_to_answer(answer, g_status)
-                else:
-                    answer = apply_grounding_to_answer(answer, g_status)
-                final = "failed" if g_status.get("policy_violation") else "completed"
-                return public_execution_fields(
-                    self._update(
-                        execution_id,
-                        status=final,
-                        answer=answer,
-                        finished_at=str(last_run.get("finished_at") or _utcnow()),
-                        agent_run=last_run,
-                        grounding=g_status,
-                        evidence_packet=evidence_packet or {},
-                        error=g_status.get("reason") if g_status.get("policy_violation") else "",
-                        error_code="ungrounded_answer" if g_status.get("policy_violation") else "",
-                    )
+                    evidence_packet=evidence_packet,
+                    synthesis_escalation=synthesis_escalation,
+                    chosen=chosen or str(last_run.get("agent_id") or ""),
+                    reevaluate_grounding=True,
                 )
             if status in {"failed", "cancelled", "timed_out", "unavailable", "timeout"}:
                 mapped = normalize_status(status)
+                if synthesis_escalation:
+                    return public_execution_fields(
+                        self._update(
+                            execution_id,
+                            status="failed",
+                            answer=extract_provider_answer(last_run),
+                            error=(
+                                "synthesis_failed: "
+                                + str(last_run.get("error") or status)
+                            ),
+                            error_code="synthesis_failed",
+                            finished_at=str(last_run.get("finished_at") or _utcnow()),
+                            agent_run=last_run,
+                            usage=last_run.get("usage")
+                            if isinstance(last_run.get("usage"), dict)
+                            else {},
+                        )
+                    )
                 return public_execution_fields(
                     self._update(
                         execution_id,
                         status=mapped,
-                        answer=str(last_run.get("answer") or ""),
+                        answer=extract_provider_answer(last_run),
                         error=str(last_run.get("error") or status),
                         error_code=str(last_run.get("error_code") or status),
                         finished_at=str(last_run.get("finished_at") or _utcnow()),
@@ -1744,6 +2123,17 @@ class RouteExecutor:
             self.agent_center.cancel_run(str(run_id), profile_id=INTERNAL_WORK_PROFILE)
         except Exception:  # noqa: BLE001
             pass
+        if synthesis_escalation:
+            return public_execution_fields(
+                self._update(
+                    execution_id,
+                    status="failed",
+                    error=f"synthesis_failed: Timed out after {int(timeout_seconds)}s waiting for provider",
+                    error_code="synthesis_failed",
+                    finished_at=_utcnow(),
+                    agent_run=last_run,
+                )
+            )
         return self._fail(
             execution_id,
             f"Timed out after {int(timeout_seconds)}s waiting for provider",
@@ -1789,14 +2179,22 @@ class RouteExecutor:
             return public_execution_fields(cur) if cur else None
         status = str(run.get("status") or "")
         if status in {"succeeded", "completed"}:
-            result = public_execution_fields(
-                self._update(
-                    execution_id,
-                    status="completed",
-                    answer=str(run.get("answer") or ""),
-                    finished_at=str(run.get("finished_at") or _utcnow()),
-                    agent_run=run,
-                )
+            synthesis = (
+                str(row.get("t0_failure_reason") or "") == "t0_explanation_synthesis"
+                or bool(row.get("synthesis_escalation"))
+                or bool((row.get("context") or {}).get("synthesis_escalation"))
+                or bool((row.get("context") or {}).get("bounded_evidence_only"))
+            )
+            packet = row.get("evidence_packet") if isinstance(row.get("evidence_packet"), dict) else {}
+            result = self._finalize_synthesis_or_agent_answer(
+                execution_id,
+                prompt=str(row.get("prompt") or ""),
+                run=run,
+                repository_ids=list(row.get("repository_ids") or [])
+                or list((row.get("context") or {}).get("repository_ids") or []),
+                evidence_packet=packet,
+                synthesis_escalation=synthesis,
+                chosen=str(row.get("adapter_id") or row.get("resolved_provider") or ""),
             )
             self._record_history(result)
             return result
@@ -1810,11 +2208,17 @@ class RouteExecutor:
                     error_code=str(run.get("error_code") or status),
                     finished_at=str(run.get("finished_at") or _utcnow()),
                     agent_run=run,
-                    answer=str(run.get("answer") or ""),
+                    answer=extract_provider_answer(run),
+                    usage=run.get("usage") if isinstance(run.get("usage"), dict) else {},
                 )
             )
             self._record_history(result)
             return result
         return public_execution_fields(
-            self._update(execution_id, agent_run=run, answer=str(run.get("answer") or ""))
+            self._update(
+                execution_id,
+                agent_run=run,
+                answer=extract_provider_answer(run) or str(row.get("answer") or ""),
+                usage=run.get("usage") if isinstance(run.get("usage"), dict) else row.get("usage"),
+            )
         )

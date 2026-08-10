@@ -588,7 +588,9 @@ class RepositoryIntelligenceService:
         tokens = {t.lower() for t in _TOKEN.findall(prompt or "")}
         items: list[dict[str, Any]] = []
         profiles: list[dict[str, Any]] = []
-        for repository_id in repository_ids[:3]:
+        requested = [str(rid).strip() for rid in (repository_ids or []) if str(rid).strip()][:3]
+        skipped: list[dict[str, Any]] = []
+        for repository_id in requested:
             prior = self._row(repository_id)
             pending: list[str] = []
             current_commit = ""
@@ -600,7 +602,18 @@ class RepositoryIntelligenceService:
                 except (OSError, ValueError):
                     pending = []
             state = self.get_status(repository_id, auto_refresh=True)
-            if state.get("status") != STATUS_CURRENT:
+            status = str(state.get("status") or STATUS_NOT_LEARNED)
+            if status != STATUS_CURRENT:
+                skipped.append({
+                    "repository_id": repository_id,
+                    "indexed_commit": state.get("indexed_commit") or "",
+                    "current_commit": current_commit or state.get("indexed_commit") or "",
+                    "freshness": status,
+                    "stale_before_use": False,
+                    "knowledge_entries_used": 0,
+                    "status": status,
+                    "status_label": state.get("status_label") or STATUS_LABELS.get(status, status),
+                })
                 continue
             if not current_commit:
                 current_commit = str(state.get("indexed_commit") or "")
@@ -613,6 +626,8 @@ class RepositoryIntelligenceService:
                 "changed_files_refreshed": pending,
                 "categories": state.get("categories") or [],
                 "compact_summary": (state.get("profile") or {}).get("compact_summary") or "",
+                "status": STATUS_CURRENT,
+                "status_label": STATUS_LABELS[STATUS_CURRENT],
             })
             with self.db.connect() as conn:
                 rows = [dict(r) for r in conn.execute(
@@ -644,7 +659,36 @@ class RepositoryIntelligenceService:
                     "authority": "cached_repository_context",
                 })
         items.sort(key=lambda row: (-int(row.get("score") or 0), str(row.get("path") or "")))
-        chosen = items[: max(1, min(limit, MAX_RETRIEVAL_ITEMS))]
+        chosen = items[: max(1, min(limit, MAX_RETRIEVAL_ITEMS))] if items else []
+        # When tokens match nothing but the profile is Current, still surface a
+        # bounded guidance/architecture slice so Inspect never drops a learned repo.
+        if profiles and not chosen:
+            for profile in profiles:
+                rid = str(profile.get("repository_id") or "")
+                with self.db.connect() as conn:
+                    fallback_rows = [dict(r) for r in conn.execute(
+                        """
+                        SELECT path,category,title,summary,keywords_json,indexed_commit
+                        FROM repository_intelligence_entries
+                        WHERE repository_id=? AND category IN ('guidance','architecture','business_logic')
+                        ORDER BY category,path LIMIT ?
+                        """,
+                        (rid, max(1, min(limit, MAX_RETRIEVAL_ITEMS))),
+                    ).fetchall()]
+                for row in fallback_rows:
+                    chosen.append({
+                        "repository_id": rid,
+                        "path": row.get("path"),
+                        "category": row.get("category"),
+                        "title": row.get("title"),
+                        "summary": str(row.get("summary") or "")[:700],
+                        "score": 1,
+                        "indexed_commit": row.get("indexed_commit") or profile.get("indexed_commit") or "",
+                        "authority": "cached_repository_context",
+                    })
+                if chosen:
+                    break
+            chosen = chosen[: max(1, min(limit, MAX_RETRIEVAL_ITEMS))]
         by_repo: dict[str, int] = {}
         for item in chosen:
             rid = str(item.get("repository_id") or "")
@@ -652,6 +696,33 @@ class RepositoryIntelligenceService:
         context_chars = sum(
             len(str(profile.get("compact_summary") or "")) for profile in profiles
         ) + sum(len(str(item.get("summary") or "")) for item in chosen)
+        if profiles:
+            freshness = "refreshed" if any(p.get("stale_before_use") for p in profiles) else "current"
+            diag_repos = [
+                {
+                    "repository_id": profile.get("repository_id"),
+                    "indexed_commit": profile.get("indexed_commit"),
+                    "current_commit": profile.get("current_commit"),
+                    "freshness": profile.get("freshness"),
+                    "stale_before_use": bool(profile.get("stale_before_use")),
+                    "knowledge_entries_used": by_repo.get(str(profile.get("repository_id") or ""), 0),
+                    "status": STATUS_CURRENT,
+                    "status_label": STATUS_LABELS[STATUS_CURRENT],
+                }
+                for profile in profiles
+            ]
+            diag_ids = [str(profile.get("repository_id") or "") for profile in profiles]
+        elif skipped:
+            freshness = str(skipped[0].get("freshness") or STATUS_NOT_LEARNED)
+            diag_repos = skipped
+            diag_ids = [str(row.get("repository_id") or "") for row in skipped]
+        else:
+            freshness = "none"
+            diag_repos = []
+            diag_ids = []
+        # Current profiles must never be reported as not_learned.
+        if profiles and freshness == STATUS_NOT_LEARNED:
+            freshness = "current"
         return {
             "profiles": profiles,
             "items": chosen,
@@ -661,23 +732,14 @@ class RepositoryIntelligenceService:
             "note": "Cached repository knowledge is contextual; runtime DB/DHIS2 results remain authoritative.",
             "diagnostics": {
                 "used": bool(profiles),
-                "repository_ids": [str(profile.get("repository_id") or "") for profile in profiles],
-                "repositories": [
-                    {
-                        "repository_id": profile.get("repository_id"),
-                        "indexed_commit": profile.get("indexed_commit"),
-                        "current_commit": profile.get("current_commit"),
-                        "freshness": profile.get("freshness"),
-                        "stale_before_use": bool(profile.get("stale_before_use")),
-                        "knowledge_entries_used": by_repo.get(str(profile.get("repository_id") or ""), 0),
-                    }
-                    for profile in profiles
-                ],
+                "repository_ids": diag_ids,
+                "repositories": diag_repos,
                 "knowledge_entries_used": len(chosen),
-                "freshness": "refreshed" if any(p.get("stale_before_use") for p in profiles) else "current",
+                "freshness": freshness,
                 "context_chars_contributed": context_chars,
                 "full_index_included": False,
                 "max_entries": MAX_RETRIEVAL_ITEMS,
+                "requested_repository_ids": requested,
             },
         }
 

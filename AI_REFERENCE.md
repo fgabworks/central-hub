@@ -1,9 +1,24 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-10 (Repository Intelligence nested UI).
+Last verified: 2026-08-10 (Inspect explanation synthesis propagation).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
+
+Inspect/Ask/Plan/Smart/Agent share one repository-context resolver (explicit → persisted
+dock selection → active workspace). Grouped API/local selections resolve through configured
+`repository_group_id` to the one selectable local member before RI lookup. AiriX retrieves
+bounded Repository Intelligence before T0/AI execution; Current profiles never report
+`not_learned`. Files/context sources add search tools and context items without disabling RI.
+T0 emits a real `repository_intelligence` tool event. Parent orchestration preserves the
+terminal execution context, and diagnostics derive RI from that attached context.
+
+For explanation contracts, grounded deterministic evidence that is insufficient for prose
+completion escalates to the cheapest available appropriate LLM with only the bounded evidence
+packet and retrieved RI entries. The child terminal answer propagates to the parent
+(Hybrid / `T0 → provider/model`); empty child content is `synthesis_failed`. Tasks whose
+completion contract is satisfied by T0 do not escalate. Evidence/Task Solved/Grounded are
+Yes when the synthesized explanation is supported by the bounded T0/RI evidence.
 
 Repository Intelligence UI lives under Repositories nested navigation
 (`/repositories/sections/intelligence` + `/repositories/<id>/intelligence`):

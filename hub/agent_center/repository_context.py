@@ -56,6 +56,42 @@ def list_selectable_ids(repositories: list[dict[str, Any]] | None) -> list[str]:
     return list(selectable_repository_map(repositories).keys())
 
 
+def _selectable_aliases(
+    repositories: list[dict[str, Any]] | None,
+) -> dict[str, str]:
+    """Map grouped adapter IDs to their selectable local repository ID.
+
+    The composer may retain the API member ID of a grouped project while the
+    filesystem/T0 path resolves its command member.  Keep that translation
+    config-driven through ``repository_group_id``.
+    """
+    selectable = selectable_repository_map(repositories)
+    groups: dict[str, list[str]] = {}
+    for row in repositories or []:
+        if not isinstance(row, dict):
+            continue
+        rid = str(row.get("id") or "").strip()
+        gid = str(row.get("repository_group_id") or "").strip()
+        if rid and gid and rid in selectable:
+            groups.setdefault(gid, []).append(rid)
+
+    aliases = {rid: rid for rid in selectable}
+    for row in repositories or []:
+        if not isinstance(row, dict):
+            continue
+        rid = str(row.get("id") or "").strip()
+        gid = str(row.get("repository_group_id") or "").strip()
+        candidates = groups.get(gid, []) if gid else []
+        # A group must identify one unambiguous local execution repository.
+        if rid and len(candidates) == 1:
+            aliases[rid] = candidates[0]
+    return aliases
+
+
+def _resolve_alias_ids(raw: Any, aliases: dict[str, str]) -> list[str]:
+    return list(dict.fromkeys(aliases.get(rid, rid) for rid in normalize_repository_ids(raw)))
+
+
 def validate_repository_access(
     repository_ids: list[str],
     *,
@@ -101,10 +137,13 @@ def resolve_repository_context(
     required = agent_requires_repository(agent_id)
     selectable = list_selectable_ids(repositories)
     selectable_set = set(selectable)
+    aliases = _selectable_aliases(repositories)
     raw_explicit = normalize_repository_ids(repository_ids)
-    explicit = [rid for rid in raw_explicit if rid in selectable_set]
-    persisted = str(selected_repository_id or "").strip()
-    active = str(active_repository_id or "").strip()
+    explicit = [rid for rid in _resolve_alias_ids(raw_explicit, aliases) if rid in selectable_set]
+    persisted_raw = str(selected_repository_id or "").strip()
+    active_raw = str(active_repository_id or "").strip()
+    persisted = aliases.get(persisted_raw, persisted_raw)
+    active = aliases.get(active_raw, active_raw)
 
     result: dict[str, Any] = {
         "required": required,
@@ -129,11 +168,30 @@ def resolve_repository_context(
         return result
 
     if not required:
-        # Non-repo agents may still accept optional repos, but never require them.
+        # Optional attachment still honors explicit / persisted / active selection so
+        # Inspect/Ask/Plan/Smart T0 and Repository Intelligence share one resolver.
         if explicit:
             ok, err, code = validate_repository_access(explicit, repositories=repositories)
             result["repository_ids"] = explicit if ok else []
             result["source"] = "explicit" if ok else "none"
+            if not ok:
+                result["ok"] = False
+                result["error"] = err
+                result["code"] = code
+            return result
+        if persisted and persisted in selectable_set:
+            ok, err, code = validate_repository_access([persisted], repositories=repositories)
+            result["repository_ids"] = [persisted] if ok else []
+            result["source"] = "persisted_selection" if ok else "none"
+            if not ok:
+                result["ok"] = False
+                result["error"] = err
+                result["code"] = code
+            return result
+        if active and active in selectable_set:
+            ok, err, code = validate_repository_access([active], repositories=repositories)
+            result["repository_ids"] = [active] if ok else []
+            result["source"] = "active_workspace" if ok else "none"
             if not ok:
                 result["ok"] = False
                 result["error"] = err
