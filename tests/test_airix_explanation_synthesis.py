@@ -322,7 +322,9 @@ class ExplanationSynthesisPropagationTests(unittest.TestCase):
         self.assertEqual(result.get("status"), "failed")
         self.assertEqual(result.get("error_code"), "synthesis_failed")
         self.assertIn("synthesis_failed", str(result.get("error") or ""))
-        self.assertFalse(str(result.get("answer") or "").strip())
+        # Explicit failure text is required — never a blank "(no answer)" body.
+        self.assertIn("failed", str(result.get("answer") or "").lower())
+        self.assertTrue(str(result.get("answer") or "").strip())
 
     def test_hybrid_telemetry_and_usage_unavailable(self) -> None:
         row = attach_execution_telemetry(

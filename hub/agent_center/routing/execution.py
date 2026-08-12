@@ -65,6 +65,83 @@ def extract_provider_answer(run: dict[str, Any] | None) -> str:
     return text
 
 
+def child_runtime_failure_reason(run: dict[str, Any] | None) -> str:
+    """Human-readable reason when a Tool Runtime child ends without a usable answer."""
+    if not isinstance(run, dict):
+        return "Child Tool Runtime returned no answer."
+    err = str(run.get("error") or "").strip()
+    if err:
+        return err
+    status = str(run.get("status") or "").strip() or "unknown"
+    usage = run.get("usage") if isinstance(run.get("usage"), dict) else {}
+    steps = usage.get("tool_runtime_steps") if isinstance(usage.get("tool_runtime_steps"), list) else []
+    if steps:
+        tools = ", ".join(
+            str(s.get("tool") or "") for s in steps if isinstance(s, dict) and s.get("tool")
+        )
+        return (
+            f"Child Tool Runtime ended with status={status} and empty answer "
+            f"after tools: {tools or '(none)'}."
+        )
+    return (
+        f"Child Tool Runtime ended with status={status} and empty answer "
+        "(no tool steps recorded)."
+    )
+
+
+def merge_child_tools_into_packet(
+    packet: dict[str, Any] | None,
+    run: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Attach child Tool Runtime steps onto the evidence packet for grounding/telemetry."""
+    out = dict(packet or {})
+    usage = run.get("usage") if isinstance(run, dict) and isinstance(run.get("usage"), dict) else {}
+    steps = usage.get("tool_runtime_steps") if isinstance(usage.get("tool_runtime_steps"), list) else []
+    activity = run.get("tool_activity") if isinstance(run, dict) else None
+    if not isinstance(activity, list):
+        activity = []
+    results = list(out.get("tool_results") or [])
+    sources = list(out.get("sources") or [])
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        tool = str(step.get("tool") or "").strip()
+        if not tool or tool in {"(final_answer)",}:
+            continue
+        results.append(
+            {
+                "tool": tool,
+                "ok": bool(step.get("ok")),
+                "summary": str(step.get("summary") or "")[:200],
+                "source": "tool_runtime",
+                "duration_ms": step.get("duration_ms"),
+                "error": step.get("error"),
+            }
+        )
+        sources.append(f"tool:{tool}")
+        if tool == "sql_query_execute" and step.get("ok"):
+            out["usable"] = True
+    for act in activity:
+        if not isinstance(act, dict):
+            continue
+        tool = str(act.get("name") or act.get("tool") or "").strip()
+        if not tool:
+            continue
+        if not any(str(r.get("tool") or "") == tool for r in results if isinstance(r, dict)):
+            results.append(
+                {
+                    "tool": tool,
+                    "ok": bool(act.get("ok")),
+                    "summary": str(act.get("detail") or "")[:200],
+                    "source": "tool_runtime",
+                }
+            )
+            sources.append(f"tool:{tool}")
+    out["tool_results"] = results
+    out["sources"] = list(dict.fromkeys(sources))
+    return out
+
+
 def _prompt_fingerprint(prompt: str, agent: str = "") -> str:
     base = (prompt or "").strip().lower()
     raw = f"{base}::{(agent or '').strip().lower()}" if agent else base
@@ -281,13 +358,9 @@ class RouteExecutor:
                     code="identical_retry_blocked",
                 )
 
-        advanced = provider_id in {"codex", "claude-code", "cursor-agent"}
-        requires_approval = bool(recommendation.approval_required) or advanced
-        if settings.require_approval_before_codex and advanced and not approve_codex:
-            raise AgentCenterError(
-                "Codex/advanced agent requires explicit approval before execution",
-                code="approval_required",
-            )
+        # Approval belongs to the ACTION (tool/write policy), not the provider.
+        # Provider identity alone (including Codex) never blocks Send / RO Tool Runtime.
+        requires_approval = False
 
         adapter_id = provider_to_adapter_id(provider_id)
         fingerprint = _prompt_fingerprint(prompt_n, provider_id)
@@ -479,6 +552,10 @@ class RouteExecutor:
                 "prior_findings": list(context_preview.get("prior_findings") or []),
                 "rbac_role": (rbac_role or "").strip(),
                 "_routing_settings": settings,
+                "_recommendation": recommendation,
+                "provider_tried": [],
+                "provider_retry_count": 0,
+                "provider_failure_telemetry": {},
                 "agent_run_id": None,
                 "answer": "",
                 "tool_results": [],
@@ -686,6 +763,17 @@ class RouteExecutor:
                             if not cand or cand == "hub-simulator" or cand in candidates:
                                 continue
                             candidates.append(cand)
+                        # Smart/Auto: skip providers that just hard-failed in this process.
+                        if not is_manual:
+                            from hub.agent_center.tool_runtime.provider_failures import (
+                                GLOBAL_PROVIDER_HEALTH,
+                            )
+
+                            healthy = [
+                                c for c in candidates if GLOBAL_PROVIDER_HEALTH.is_healthy(c)
+                            ]
+                            if healthy:
+                                candidates = healthy
                         if str(result.get("t0_failure_reason") or "") in {
                             "t0_explanation_synthesis",
                             "source_available_needs_query_construction",
@@ -1543,6 +1631,263 @@ class RouteExecutor:
         runnable = bool(info.get("runnable")) or status in {"available", "degraded"}
         return runnable, str(info.get("detail") or status or "unavailable")
 
+    def _configured_tool_runtime_providers(self) -> list[str]:
+        """API providers that implement the Unified Tool Runtime contract."""
+        from hub.agent_center.tool_runtime.provider_failures import TOOL_RUNTIME_API_PROVIDERS
+
+        out: list[str] = []
+        runners = getattr(self.agent_center, "api_runners", None) or {}
+        for pid in TOOL_RUNTIME_API_PROVIDERS:
+            if pid in runners:
+                out.append(pid)
+                continue
+            try:
+                ok, _ = self._provider_available(pid)
+            except Exception:  # noqa: BLE001
+                ok = False
+            if ok:
+                out.append(pid)
+        return out
+
+    def _maybe_recover_provider_failure(
+        self,
+        execution_id: str,
+        *,
+        prompt: str,
+        run: dict[str, Any],
+        repository_ids: list[str] | None,
+        evidence_packet: dict[str, Any] | None,
+        synthesis_escalation: bool,
+        chosen: str,
+    ) -> dict[str, Any] | None:
+        """Retry transient failures or continue Smart/Auto on another Tool Runtime provider.
+
+        Returns a new public execution result when recovery was attempted, else None
+        so the caller can surface the exact provider error.
+        """
+        from hub.agent_center.tool_runtime.provider_failures import (
+            GLOBAL_PROVIDER_HEALTH,
+            build_provider_failure_telemetry,
+            classify_from_run,
+            is_tool_runtime_api_provider,
+            next_action_for_failure,
+            pick_fallback_tool_runtime_provider,
+        )
+
+        failure = classify_from_run(run)
+        if failure is None:
+            return None
+
+        child_status = str(run.get("status") or "").strip().lower()
+        if child_status in {"cancelled"}:
+            return None
+
+        with self._lock:
+            row = dict(self._active.get(execution_id) or {})
+        # Cap total provider switches in one execution (compatible API set size + retries).
+        switches = int(row.get("provider_switch_count") or 0)
+        if switches >= 4:
+            return None
+        manual_override = bool(row.get("manual_override"))
+        settings = row.get("_routing_settings")
+        recommendation = row.get("_recommendation")
+        context_preview = row.get("context") if isinstance(row.get("context"), dict) else {}
+        if not isinstance(settings, RoutingSettings) or recommendation is None:
+            return None
+
+        failed_provider = str(
+            failure.provider or run.get("agent_id") or chosen or row.get("resolved_provider") or ""
+        ).strip()
+        failed_model = str(failure.model or run.get("model") or row.get("resolved_model") or "").strip()
+        failure = (
+            classify_from_run(
+                {
+                    **run,
+                    "agent_id": failed_provider,
+                    "model": failed_model,
+                    "error": failure.message,
+                    "error_code": failure.code,
+                }
+            )
+            or failure
+        )
+
+        GLOBAL_PROVIDER_HEALTH.mark_failure(
+            failed_provider,
+            model=failed_model,
+            category=failure.category,
+            message=failure.message,
+        )
+
+        tried = [str(p).strip() for p in (row.get("provider_tried") or []) if str(p).strip()]
+        if failed_provider and failed_provider not in tried:
+            tried.append(failed_provider)
+        retry_count = int(row.get("provider_retry_count") or 0)
+        max_retries = max(0, int(getattr(settings, "max_retries", 2) or 0))
+
+        # Preserve T0 / RI / contract / filters / observations already on the row.
+        preserved_context = {
+            **context_preview,
+            "evidence_packet": evidence_packet
+            or context_preview.get("evidence_packet")
+            or row.get("evidence_packet"),
+            "tool_results": list(
+                (evidence_packet or {}).get("tool_results")
+                or row.get("tool_results")
+                or context_preview.get("tool_results")
+                or []
+            ),
+            "detected_filters": context_preview.get("detected_filters") or row.get("detected_filters"),
+            "completion_contract": context_preview.get("completion_contract")
+            or row.get("completion_contract"),
+            "t0_continuation": context_preview.get("t0_continuation"),
+            "tool_runtime": True,
+            "tool_runtime_lean_context": bool(
+                context_preview.get("tool_runtime_lean_context") or context_preview.get("t0_continuation")
+            ),
+            "provider_failure_continue": True,
+        }
+        # Do not rebuild unchanged context — keep existing packed fields as-is.
+        for key in (
+            "repository_intelligence",
+            "repository_intelligence_diagnostics",
+            "bounded_evidence_only",
+            "synthesis_escalation",
+            "t0_capability_escalate",
+            "t0_failure_reason",
+            "next_capability",
+            "conversation_id",
+            "context_fingerprint",
+            "interaction_mode",
+            "routing_mode",
+            "context_sources",
+            "dhis2_environment",
+            "model",
+        ):
+            if key in context_preview and key not in preserved_context:
+                preserved_context[key] = context_preview[key]
+            elif key in row and key not in preserved_context and row.get(key) not in (None, "", [], {}):
+                preserved_context[key] = row.get(key)
+
+        selected_provider = str(row.get("selected_provider") or failed_provider).strip()
+        selected_model = str(row.get("selected_model") or failed_model).strip()
+
+        def _stamp_telemetry(**extra: Any) -> dict[str, Any]:
+            telem = build_provider_failure_telemetry(
+                selected_provider=selected_provider,
+                selected_model=selected_model,
+                resolved_provider=failed_provider,
+                resolved_model=failed_model,
+                failure=failure,
+                manual_override=manual_override,
+                context_preserved=True,
+                **extra,
+            )
+            self._update(
+                execution_id,
+                provider_tried=list(tried),
+                provider_retry_count=retry_count,
+                provider_failure_telemetry=telem,
+                error=failure.message,
+                error_code=failure.code or failure.category,
+            )
+            return telem
+
+        # Manual provider/model is authoritative — never silently substitute.
+        if manual_override:
+            next_action = next_action_for_failure(failure, manual_override=True)
+            _stamp_telemetry(retry_attempted=False, fallback_attempted=False)
+            self._update(
+                execution_id,
+                next_action=next_action,
+                fallback_reason="manual_no_silent_fallback",
+            )
+            return None
+
+        # Transient: bounded retry on the same Tool Runtime provider.
+        if (
+            failure.retryable
+            and not failure.hard
+            and retry_count < max_retries
+            and is_tool_runtime_api_provider(failed_provider)
+        ):
+            retry_count += 1
+            _stamp_telemetry(retry_attempted=True, fallback_attempted=False)
+            self._update(
+                execution_id,
+                status="running",
+                finished_at=None,
+                answer="",
+                error="",
+                error_code="",
+                provider_retry_count=retry_count,
+                provider_tried=list(tried),
+                fallback_reason=f"provider_retry:{failure.category}",
+            )
+            return self._execute_agent(
+                execution_id,
+                prompt,
+                recommendation,
+                preserved_context,
+                adapter_id=failed_provider,
+                repository_ids=repository_ids
+                or list(preserved_context.get("repository_ids") or []),
+                settings=settings,
+                manual_override=False,
+            )
+
+        # Hard / exhausted transient: continue same execution on another compatible provider.
+        if is_tool_runtime_api_provider(failed_provider) or failure.hard:
+            alt = pick_fallback_tool_runtime_provider(
+                failed_provider=failed_provider,
+                tried=tried,
+                configured=self._configured_tool_runtime_providers(),
+                health=GLOBAL_PROVIDER_HEALTH,
+                availability=self._provider_available,
+            )
+            if alt:
+                _stamp_telemetry(
+                    retry_attempted=bool(retry_count),
+                    fallback_attempted=True,
+                    fallback_provider=alt,
+                    fallback_model="",
+                )
+                self._update(
+                    execution_id,
+                    status="running",
+                    finished_at=None,
+                    answer="",
+                    error="",
+                    error_code="",
+                    fallback_from=failed_provider,
+                    fallback_reason=f"provider_hard_failure:{failure.category}",
+                    escalated_to=alt,
+                    resolved_provider=alt,
+                    provider_tried=list(tried) + ([alt] if alt not in tried else []),
+                    provider_switch_count=switches + 1,
+                )
+                alt_context = {**preserved_context}
+                alt_context.pop("model", None)
+                return self._execute_agent(
+                    execution_id,
+                    prompt,
+                    recommendation,
+                    alt_context,
+                    adapter_id=alt,
+                    repository_ids=repository_ids
+                    or list(preserved_context.get("repository_ids") or []),
+                    settings=settings,
+                    manual_override=False,
+                )
+
+        _stamp_telemetry(retry_attempted=bool(retry_count), fallback_attempted=False)
+        self._update(
+            execution_id,
+            next_action=next_action_for_failure(failure, manual_override=False),
+            fallback_reason=f"no_compatible_provider:{failure.category}",
+        )
+        return None
+
     def _execute_agent(
         self,
         execution_id: str,
@@ -1561,7 +1906,13 @@ class RouteExecutor:
         fallback_reason = ""
         if not available:
             # Never silently substitute another provider (esp. Hub Simulator).
-            # Surface the real availability / auth / connection error instead.
+            # Smart/Auto may continue on another compatible Tool Runtime API provider.
+            from hub.agent_center.tool_runtime.provider_failures import (
+                GLOBAL_PROVIDER_HEALTH,
+                is_tool_runtime_api_provider,
+                pick_fallback_tool_runtime_provider,
+            )
+
             msg = detail or f"Provider {adapter_id} unavailable"
             if manual_override:
                 msg = (
@@ -1569,12 +1920,70 @@ class RouteExecutor:
                     f"{detail or 'Connect or re-authenticate it, then retry.'} "
                     "No automatic fallback was used."
                 )
-            else:
-                msg = (
-                    f"Recommended provider {adapter_id} is unavailable. "
-                    f"{detail or ''} "
-                    "Choose another agent explicitly — Hub Simulator is not used as a fallback."
-                ).strip()
+                self._update(
+                    execution_id,
+                    fallback_reason="provider_unavailable_no_auto_fallback",
+                    resolved_provider=adapter_id,
+                    next_action=msg,
+                )
+                return self._fail(execution_id, msg.strip(), code="unavailable")
+
+            GLOBAL_PROVIDER_HEALTH.mark_failure(
+                adapter_id,
+                category="unavailable",
+                message=msg,
+            )
+            if is_tool_runtime_api_provider(adapter_id):
+                with self._lock:
+                    tried = [
+                        str(p).strip()
+                        for p in (self._active.get(execution_id) or {}).get("provider_tried") or []
+                        if str(p).strip()
+                    ]
+                if adapter_id not in tried:
+                    tried.append(adapter_id)
+                alt = pick_fallback_tool_runtime_provider(
+                    failed_provider=adapter_id,
+                    tried=tried,
+                    configured=self._configured_tool_runtime_providers(),
+                    health=GLOBAL_PROVIDER_HEALTH,
+                    availability=self._provider_available,
+                )
+                if alt:
+                    self._update(
+                        execution_id,
+                        fallback_from=adapter_id,
+                        fallback_reason="provider_unavailable_continue",
+                        escalated_to=alt,
+                        resolved_provider=alt,
+                        provider_tried=tried,
+                        provider_failure_telemetry={
+                            "failure_category": "unavailable",
+                            "failed_provider": adapter_id,
+                            "fallback_attempted": True,
+                            "fallback_provider": alt,
+                            "context_preserved": True,
+                            "manual_override": False,
+                        },
+                    )
+                    alt_context = {**context_preview}
+                    alt_context.pop("model", None)
+                    return self._execute_agent(
+                        execution_id,
+                        prompt,
+                        recommendation,
+                        alt_context,
+                        adapter_id=alt,
+                        repository_ids=repository_ids,
+                        settings=settings,
+                        manual_override=False,
+                    )
+
+            msg = (
+                f"Recommended provider {adapter_id} is unavailable. "
+                f"{detail or ''} "
+                "Choose another agent explicitly — Hub Simulator is not used as a fallback."
+            ).strip()
             self._update(
                 execution_id,
                 fallback_reason="provider_unavailable_no_auto_fallback",
@@ -1584,14 +1993,14 @@ class RouteExecutor:
                 "airix_provider_resolution selected=%s recommended=%s resolved=%s "
                 "selected_model=%s recommended_model=%s resolved_model=%s "
                 "fallback_reason=%s manual_override=%s",
-                adapter_id if manual_override else "-",
+                "-",
                 recommendation.recommended_agent or "-",
                 adapter_id,
                 str(context_preview.get("model") or "-"),
                 str(getattr(recommendation, "recommended_model", None) or "-"),
                 "-",
                 "provider_unavailable_no_auto_fallback",
-                str(bool(manual_override)).lower(),
+                "false",
             )
             return self._fail(execution_id, msg.strip(), code="unavailable")
 
@@ -1632,6 +2041,12 @@ class RouteExecutor:
             fallback_from = prior_fallback
             fallback_reason = prior_fallback_reason or fallback_reason
 
+        tried_now = [
+            str(p).strip() for p in (prior_row.get("provider_tried") or []) if str(p).strip()
+        ]
+        if chosen and chosen not in tried_now:
+            tried_now.append(chosen)
+
         self._update(
             execution_id,
             status="running",
@@ -1642,6 +2057,7 @@ class RouteExecutor:
             fallback_from=fallback_from,
             fallback_reason=fallback_reason,
             manual_override=bool(manual_override),
+            provider_tried=tried_now,
             t0_unsolved=False if synthesis_escalation else prior_row.get("t0_unsolved"),
             ai_escalation_occurred=bool(
                 prior_row.get("ai_escalation_occurred") or synthesis_escalation or prior_fallback
@@ -2112,29 +2528,70 @@ class RouteExecutor:
         from hub.agent_center.grounding import apply_grounding_to_answer, evaluate_answer_grounding
 
         packet = evidence_packet if isinstance(evidence_packet, dict) else {}
+        packet = merge_child_tools_into_packet(packet, run)
         answer = extract_provider_answer(run)
         usage = run.get("usage") if isinstance(run.get("usage"), dict) else {}
         model = str(run.get("model") or "").strip()
         provider = str(run.get("agent_id") or chosen or "").strip()
+        child_status = str(run.get("status") or "").strip().lower()
+        child_failed = child_status in {
+            "failed",
+            "cancelled",
+            "timed_out",
+            "unavailable",
+            "timeout",
+            "error",
+        }
 
-        if synthesis_escalation and not answer:
-            reason = str(
-                run.get("error")
-                or "Child provider returned empty content after explanation synthesis."
+        # Empty terminal child answer is an explicit runtime failure — never blank UI.
+        if child_failed or not answer:
+            recovered = self._maybe_recover_provider_failure(
+                execution_id,
+                prompt=prompt,
+                run=run,
+                repository_ids=repository_ids,
+                evidence_packet=packet,
+                synthesis_escalation=synthesis_escalation,
+                chosen=provider or chosen,
+            )
+            if recovered is not None:
+                return recovered
+
+            reason = child_runtime_failure_reason(run)
+            with self._lock:
+                row_now = dict(self._active.get(execution_id) or {})
+            telem = (
+                row_now.get("provider_failure_telemetry")
+                if isinstance(row_now.get("provider_failure_telemetry"), dict)
+                else {}
+            )
+            next_action = str(row_now.get("next_action") or "").strip()
+            if next_action and next_action not in reason:
+                reason = f"{reason}\n{next_action}"
+            code = (
+                "synthesis_failed"
+                if synthesis_escalation
+                else str(run.get("error_code") or ("empty_answer" if not answer else child_status or "failed"))
+            )
+            fail_answer = (
+                f"{'Synthesis' if synthesis_escalation else 'Tool Runtime'} failed: {reason}"
             )
             return public_execution_fields(
                 self._update(
                     execution_id,
                     status="failed",
-                    answer="",
+                    answer=fail_answer,
                     finished_at=str(run.get("finished_at") or _utcnow()),
                     agent_run=run,
-                    usage=usage,
-                    error=f"synthesis_failed: {reason}",
-                    error_code="synthesis_failed",
+                    usage={
+                        **usage,
+                        "provider_failure_telemetry": telem,
+                    },
+                    error=f"{code}: {reason}" if synthesis_escalation else reason,
+                    error_code=code if synthesis_escalation else str(run.get("error_code") or code),
                     t0_unsolved=False,
                     ai_escalation_occurred=True,
-                    next_capability="synthesis_failed",
+                    next_capability="synthesis_failed" if synthesis_escalation else "runtime_failed",
                     route_path=f"T0 → {provider}/{model}".rstrip("/") if provider else "T0 → AI",
                     evidence_packet={
                         "summary": packet.get("summary"),
@@ -2143,7 +2600,12 @@ class RouteExecutor:
                         "hit_count": len(packet.get("hits") or []),
                         "errors": list(packet.get("errors") or []) + [reason],
                         "hits": packet.get("hits") or [],
+                        "tool_results": packet.get("tool_results") or [],
                     },
+                    tool_results=list(packet.get("tool_results") or []),
+                    resolved_provider=provider or None,
+                    resolved_model=model or None,
+                    provider_failure_telemetry=telem,
                 )
             )
 
@@ -2195,7 +2657,9 @@ class RouteExecutor:
                     "hit_count": len(packet.get("hits") or []),
                     "errors": packet.get("errors") or [],
                     "hits": packet.get("hits") or [],
+                    "tool_results": packet.get("tool_results") or [],
                 },
+                tool_results=list(packet.get("tool_results") or []),
                 error=g_status.get("reason") if g_status.get("policy_violation") else "",
                 error_code="ungrounded_answer" if g_status.get("policy_violation") else "",
                 t0_unsolved=False,
@@ -2263,35 +2727,17 @@ class RouteExecutor:
                     reevaluate_grounding=True,
                 )
             if status in {"failed", "cancelled", "timed_out", "unavailable", "timeout"}:
-                mapped = normalize_status(status)
-                if synthesis_escalation:
-                    return public_execution_fields(
-                        self._update(
-                            execution_id,
-                            status="failed",
-                            answer=extract_provider_answer(last_run),
-                            error=(
-                                "synthesis_failed: "
-                                + str(last_run.get("error") or status)
-                            ),
-                            error_code="synthesis_failed",
-                            finished_at=str(last_run.get("finished_at") or _utcnow()),
-                            agent_run=last_run,
-                            usage=last_run.get("usage")
-                            if isinstance(last_run.get("usage"), dict)
-                            else {},
-                        )
-                    )
-                return public_execution_fields(
-                    self._update(
-                        execution_id,
-                        status=mapped,
-                        answer=extract_provider_answer(last_run),
-                        error=str(last_run.get("error") or status),
-                        error_code=str(last_run.get("error_code") or status),
-                        finished_at=str(last_run.get("finished_at") or _utcnow()),
-                        agent_run=last_run,
-                    )
+                # Always finalize through the shared empty/failure seam so the parent
+                # surfaces an explicit reason (never blank "(no answer)").
+                return self._finalize_synthesis_or_agent_answer(
+                    execution_id,
+                    prompt=prompt or str(last_run.get("prompt") or ""),
+                    run=last_run,
+                    repository_ids=repository_ids or list(last_run.get("repository_ids") or []),
+                    evidence_packet=evidence_packet,
+                    synthesis_escalation=synthesis_escalation,
+                    chosen=chosen or str(last_run.get("agent_id") or ""),
+                    reevaluate_grounding=True,
                 )
             time.sleep(max(0.05, float(poll_interval)))
 

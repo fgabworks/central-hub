@@ -116,7 +116,7 @@ class AirixRoutingUnitTests(unittest.TestCase):
         self.assertEqual(rec.recommended_agent, "grok")
         self.assertEqual(rec.recommended_tier, "T2")
 
-    def test_large_architecture_refactor_routes_codex_with_approval(self) -> None:
+    def test_large_architecture_refactor_routes_codex_without_provider_approval(self) -> None:
         prompt = (
             "Redesign the architecture and perform a large refactor across 12 modules "
             "in the entire codebase, including cross-module ownership boundaries and "
@@ -124,7 +124,7 @@ class AirixRoutingUnitTests(unittest.TestCase):
         )
         rec = self.router.recommend_route(prompt)
         self.assertEqual(rec.recommended_agent, "codex")
-        self.assertTrue(rec.approval_required)
+        self.assertFalse(rec.approval_required)
         self.assertIn("explanation", rec.public())
 
     def test_build_execution_plan_phase3(self) -> None:
@@ -270,17 +270,21 @@ class AirixRoutingPhase3HistoryTests(unittest.TestCase):
         self.assertTrue(rec.history_influenced)
         self.assertIsNotNone(rec.escalation_reason)
         self.assertEqual(rec.recommended_agent, "codex")
-        self.assertTrue(rec.approval_required)
+        self.assertFalse(rec.approval_required)
 
-    def test_codex_still_requires_approval(self) -> None:
+    def test_codex_no_longer_blocked_by_provider_approval(self) -> None:
         prompt = (
             "Redesign the architecture and perform a large refactor across 12 modules "
             "in the entire codebase, including cross-module ownership boundaries and "
             "a breaking change migration plan"
         )
-        with self.assertRaises(AgentCenterError) as ctx:
+        # Provider identity alone must not raise approval_required.
+        try:
             self.router.execute_route(prompt, approve_codex=False, orchestrate=False)
-        self.assertEqual(ctx.exception.code, "approval_required")
+        except AgentCenterError as exc:
+            self.assertNotEqual(exc.code, "approval_required")
+            return
+        # If execute proceeds (fake/unavailable), that is also fine for this gate.
 
     def test_retry_limit_enforced(self) -> None:
         prompt = "Investigate why the DHIS2 analytics SQL query returns empty rows"
@@ -407,7 +411,7 @@ class AirixRoutingRouteTests(unittest.TestCase):
         self.assertGreaterEqual(analytics["executions_total"], 1)
         self.assertGreaterEqual(analytics["t0_llm_avoided"], 1)
 
-    def test_execute_codex_requires_approval_api(self) -> None:
+    def test_execute_codex_no_provider_approval_api(self) -> None:
         prompt = (
             "Redesign the architecture and perform a large refactor across 12 modules "
             "in the entire codebase, including cross-module ownership boundaries and "
@@ -423,8 +427,14 @@ class AirixRoutingRouteTests(unittest.TestCase):
                 "repository_ids": ["sample-cli"],
             },
         )
-        self.assertEqual(resp.status_code, 403)
-        self.assertEqual(resp.get_json()["code"], "approval_required")
+        # Must not be blocked solely because Codex was selected.
+        if resp.status_code >= 400:
+            self.assertNotEqual(resp.get_json().get("code"), "approval_required")
+        else:
+            body = resp.get_json() or {}
+            exec_row = body.get("execution") or {}
+            self.assertNotEqual(exec_row.get("status"), "paused_for_approval")
+            self.assertNotEqual(exec_row.get("error_code"), "approval_required")
 
     def test_work_dock_includes_phase3(self) -> None:
         html = self.client.get("/work").get_data(as_text=True)

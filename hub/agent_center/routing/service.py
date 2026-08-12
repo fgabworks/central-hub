@@ -773,15 +773,8 @@ class AgentRouterService:
             workspace=workspace, actor=actor, settings=cfg, task_estimated_tokens=est
         )
         assert_budget_allows(snap, additional_tokens=est if provider != "deterministic" else 0)
-        if (
-            provider in {"codex", "claude-code", "cursor-agent"}
-            and cfg.require_approval_before_codex
-            and not approve_codex
-        ):
-            raise AgentCenterError(
-                "Codex/advanced agent requires explicit approval before execution",
-                code="approval_required",
-            )
+        # Codex/advanced provider identity alone never requires interactive approval.
+        # Budget policy may still block; tool/action policy gates risky writes.
         plan = self.build_execution_plan(
             prompt,
             workspace=workspace,
@@ -971,27 +964,16 @@ class AgentRouterService:
                 stopped_reason = reason
                 break
 
-            if step.approval_required and cfg.require_approval_before_codex and not approve_codex:
-                step.status = "blocked"
-                step.skip_reason = "Codex approval required"
-                step_results.append(
-                    {
-                        "step": step.public(),
-                        "status": "paused_for_approval",
-                        "error": "approval_required",
-                        "expensive_warning": step.expensive_warning,
-                    }
-                )
-                status = "paused_for_approval"
-                stopped_reason = "Codex escalation requires explicit approval"
-                break
+            # Capacity/cost warning may be attached on expensive steps; never pause for
+            # provider-identity approval. Action-level approval remains in Tool Runtime policy.
+            # (expensive_warning stays on step.public() for UI/telemetry.)
 
             step_tools = filter_tools_for_permissions(list(step.tools or []), perms)
             ok_perm, perm_reason = check_execution_allowed(
                 perms=perms,
                 provider_id=step.provider_id,
                 tool_ids=step_tools,
-                approve_codex=approve_codex if step.approval_required else False,
+                approve_codex=False,
                 live_requested=live_req,
             )
             if not ok_perm:

@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}ARCTIC Files · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="dash-workspace arctic-shell">
+<div class="dash-workspace-main">
+{% set sh_title = "ARCTIC" %}
+{% set sh_info = "Personal Document Registry — Local + Google Drive references. Smart collections/tags instead of duplicated folder trees." %}
+{% set sh_tabs %}{{ arctic_section_tabs('arctic_files')|safe }}{% endset %}
+{% set sh_meta %}
+  <span class="badge">{{ documents|length }} entries</span>
+{% endset %}
+{% include "partials/section_header.html" %}
+
+<div class="arctic-files-layout">
+  <div class="arctic-files-main">
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Registry</h2>
+        <form method="get" class="arctic-inline-filter" action="{{ url_for('arctic_files') }}">
+          <select name="collection" onchange="this.form.submit()">
+            <option value="">All</option>
+            {% for c in collections %}
+            <option value="{{ c.id }}" {% if collection == c.id %}selected{% endif %}>{{ c.label }}</option>
+            {% endfor %}
+          </select>
+          <input type="search" name="q" value="{{ q }}" placeholder="Search…">
+          <button class="btn btn-sm" type="submit">Filter</button>
+        </form>
+      </div>
+      {% if career_pack %}
+      <p class="muted arctic-callout">Career Pack is a logical view over registry entries — not another folder. {{ career_pack.count }} item(s).</p>
+      {% endif %}
+      <div class="table-wrap">
+        <table class="data">
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Role</th>
+              <th>Source</th>
+              <th>Tags</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for doc in documents %}
+            <tr class="{% if selected and selected.id == doc.id %}is-selected{% endif %}">
+              <td>
+                {% if doc.is_favorite %}★ {% endif %}
+                <a href="{{ url_for('arctic_files', doc=doc.id, collection=collection, q=q) }}">{{ doc.title }}</a>
+              </td>
+              <td>{{ doc.primary_role_label or "—" }}</td>
+              <td>{{ doc.source_type }}</td>
+              <td class="muted">{{ doc.tags|join(', ') or "—" }}</td>
+              <td><a class="btn btn-sm" href="{{ url_for('arctic_files', doc=doc.id, collection=collection, q=q) }}">Open</a></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="muted">No documents registered yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" style="margin-top:1rem">
+      <div class="panel-header"><h2>Register reference</h2></div>
+      <form method="post" class="arctic-form">
+        <input type="hidden" name="action" value="register">
+        <div class="arctic-form-grid">
+          <label>Title
+            <input name="title" maxlength="200" placeholder="Optional — defaults to filename">
+          </label>
+          <label>Source
+            <select name="source_type">
+              <option value="local">Local</option>
+              <option value="google_drive">Google Drive (deferred sync)</option>
+            </select>
+          </label>
+          <label class="arctic-span-2">Path or Drive file id
+            <input name="source_ref" required maxlength="1000" placeholder="C:\path\to\cv.pdf or Drive file id">
+          </label>
+          <label>Primary role
+            <select name="primary_role">
+              <option value="">None</option>
+              {% for role in primary_roles %}
+              <option value="{{ role }}">{{ role_labels[role] }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Tags
+            <input name="tags" placeholder="cv, 2026, application">
+          </label>
+          <label class="arctic-span-2">Notes
+            <input name="notes" maxlength="500">
+          </label>
+          <label><input type="checkbox" name="is_favorite" value="1"> Favorite</label>
+        </div>
+        <div class="arctic-form-actions">
+          <button class="btn btn-primary" type="submit">Add to registry</button>
+          <span class="muted">Does not copy the file. Duplicate source refs are blocked.</span>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <aside class="panel arctic-detail-pane">
+    <div class="panel-header"><h2>Detail</h2></div>
+    {% if selected %}
+      <h3>{{ selected.title }}</h3>
+      <dl class="arctic-dl">
+        <dt>Role</dt><dd>{{ selected.primary_role_label or "—" }}</dd>
+        <dt>Source</dt><dd>{{ selected.source_type }}</dd>
+        <dt>Reference</dt><dd class="mono">{{ selected.source_ref }}</dd>
+        <dt>Tags</dt><dd>{{ selected.tags|join(', ') or "—" }}</dd>
+        <dt>Favorite</dt><dd>{{ "Yes" if selected.is_favorite else "No" }}</dd>
+        <dt>Notes</dt><dd>{{ selected.notes or "—" }}</dd>
+      </dl>
+      <form method="post" class="arctic-form" style="margin-top:0.75rem">
+        <input type="hidden" name="action" value="update">
+        <input type="hidden" name="doc_id" value="{{ selected.id }}">
+        <label>Title <input name="title" value="{{ selected.title }}"></label>
+        <label>Primary role
+          <select name="primary_role">
+            <option value="">None</option>
+            {% for role in primary_roles %}
+            <option value="{{ role }}" {% if selected.primary_role == role %}selected{% endif %}>{{ role_labels[role] }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Tags <input name="tags" value="{{ selected.tags|join(', ') }}"></label>
+        <label>Notes <input name="notes" value="{{ selected.notes }}"></label>
+        <label><input type="checkbox" name="is_favorite" value="1" {% if selected.is_favorite %}checked{% endif %}> Favorite</label>
+        <div class="arctic-form-actions">
+          <button class="btn btn-primary btn-sm" type="submit">Save</button>
+        </div>
+      </form>
+      <form method="post" style="margin-top:0.5rem" onsubmit="return confirm('Remove registry entry? The file stays in place.');">
+        <input type="hidden" name="action" value="delete">
+        <input type="hidden" name="doc_id" value="{{ selected.id }}">
+        <button class="btn btn-sm" type="submit">Remove from registry</button>
+      </form>
+    {% else %}
+      <p class="muted">Select a document to view and edit metadata.</p>
+      <div class="arctic-source-list" style="margin-top:1rem">
+        {% for src in sources %}
+        <div><strong>{{ src.label }}</strong> <span class="badge">{{ src.status }}</span>
+          <div class="muted">{{ src.detail }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </aside>
+</div>
+</div>
+</div>
+{% endblock %}

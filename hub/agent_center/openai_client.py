@@ -138,8 +138,38 @@ class OpenAIClient:
                 status=403,
             )
         if resp.status_code == 429:
+            text = redact_text(resp.text[:500])
             resp.close()
-            raise OpenAIClientError("OpenAI rate limit", code="rate_limit", status=429)
+            lowered = text.lower()
+            # Quota/billing exhaustion often arrives as HTTP 429 with quota wording.
+            if any(
+                token in lowered
+                for token in (
+                    "insufficient_quota",
+                    "credit_balance_exhausted",
+                    "billing_hard_limit",
+                    "exceeded your current quota",
+                    "quota",
+                )
+            ):
+                raise OpenAIClientError(
+                    f"OpenAI quota exhausted: {text}" if text else "OpenAI quota exhausted",
+                    code="quota",
+                    status=429,
+                )
+            raise OpenAIClientError(
+                f"OpenAI rate limit: {text}" if text else "OpenAI rate limit",
+                code="rate_limit",
+                status=429,
+            )
+        if resp.status_code == 402:
+            text = redact_text(resp.text[:500])
+            resp.close()
+            raise OpenAIClientError(
+                f"OpenAI payment required: {text}" if text else "OpenAI payment required",
+                code="quota",
+                status=402,
+            )
         if resp.status_code == 404:
             resp.close()
             raise OpenAIClientError(
@@ -157,15 +187,27 @@ class OpenAIClient:
                 code = "model_invalid"
             elif "model" in lowered:
                 code = "model_unavailable"
+            elif any(
+                token in lowered
+                for token in ("insufficient_quota", "credit_balance_exhausted", "quota")
+            ):
+                code = "quota"
             else:
                 code = "invalid_request"
             raise OpenAIClientError(f"OpenAI request rejected: {text}", code=code, status=400)
         if resp.status_code >= 400:
             text = redact_text(resp.text[:500])
             resp.close()
+            lowered = text.lower()
+            code = "http_error"
+            if any(
+                token in lowered
+                for token in ("insufficient_quota", "credit_balance_exhausted", "quota")
+            ):
+                code = "quota"
             raise OpenAIClientError(
                 f"OpenAI Responses HTTP {resp.status_code}: {text}",
-                code="http_error",
+                code=code,
                 status=resp.status_code,
             )
 

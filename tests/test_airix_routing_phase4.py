@@ -145,10 +145,10 @@ class AirixPhase4Tests(unittest.TestCase):
         self.assertEqual(steps[0].id, "step_tool_lookup")
         kinds = [s.kind for s in steps]
         self.assertIn("tool", kinds)
-        # Codex never first and never without approval flag when present.
+        # Codex may appear later; provider identity alone never sets approval_required.
         for s in steps:
             if s.provider_id == "codex":
-                self.assertTrue(s.approval_required)
+                self.assertFalse(s.approval_required)
                 self.assertNotEqual(steps[0].provider_id, "codex")
 
     def test_stop_when_lookup_solves_task(self) -> None:
@@ -259,24 +259,23 @@ class AirixPhase4Tests(unittest.TestCase):
         self.assertTrue(all(s["id"] != "step_ai_analysis" or s["status"] == "skipped" for s in rec.orchestration))
         # Resume execute should not re-run Grok for skipped analysis.
         result = self.router.execute_route(prompt, orchestrate=True, approve_codex=False)
-        # Should pause at Codex without re-running prior AI if skipped.
-        self.assertIn(result["orchestration"]["status"], {"paused_for_approval", "completed", "failed", "paused", "blocked"})
+        # Should continue past Codex without pausing for provider approval.
+        self.assertNotEqual(result["orchestration"]["status"], "paused_for_approval")
         # No duplicate grok starts from skipped analysis step.
         grok_starts = [s for s in self.fake.started if s.get("agent_id") == "grok"]
         self.assertEqual(len(grok_starts), 0)
 
-    def test_codex_still_requires_approval(self) -> None:
+    def test_codex_runs_without_provider_approval(self) -> None:
         prompt = (
             "Redesign the architecture and perform a large refactor across 12 modules "
             "in the entire codebase, including cross-module ownership boundaries and "
             "a breaking change migration plan"
         )
         result = self.router.execute_route(prompt, orchestrate=True, approve_codex=False)
-        self.assertEqual(result["orchestration"]["status"], "paused_for_approval")
-        self.assertIn("approval", (result["orchestration"].get("stopped_reason") or "").lower())
-        codex_starts = [s for s in self.fake.started if s.get("agent_id") == "codex"]
-        self.assertEqual(codex_starts, [])
-        self.assertEqual(result["execution"]["status"], "paused_for_approval")
+        self.assertNotEqual(result["orchestration"]["status"], "paused_for_approval")
+        self.assertNotEqual(result["execution"]["status"], "paused_for_approval")
+        # Codex step may start when orchestration reaches it (fake adapter).
+        # Budget or other blockers are allowed; provider approval is not.
         self.assertTrue(result["execution"].get("terminal"))
 
     def test_isolation_by_actor(self) -> None:

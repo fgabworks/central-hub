@@ -153,6 +153,21 @@ class OpenAIRunner:
             "Use repository_intelligence and skill_recall on demand instead of assuming "
             "packed instruction files."
         )
+        t0_reason = ""
+        if isinstance(t0_continuation, dict):
+            t0_reason = str(t0_continuation.get("t0_failure_reason") or "").strip()
+        if t0_reason in {
+            "source_available_needs_query_construction",
+            "filters_or_entity_resolution_incomplete",
+            "source_available_query_not_executed",
+        } or "sql_query_execute" in set(tools_ctx.allowed_tools or []):
+            system += (
+                "\nFor structured count/lookup database tasks: reuse T0 evidence, "
+                "call sql_lookup to identify a saved query id, then call sql_query_execute "
+                "with that query_id and bound params. Do not invent write SQL. "
+                "Return a final numeric/status answer only after a successful "
+                "sql_query_execute observation."
+            )
         if instructions:
             system += "\n\n# Repository AI instructions\n"
             for item in instructions:
@@ -163,7 +178,8 @@ class OpenAIRunner:
         if isinstance(t0_continuation, dict) and t0_continuation.get("unchanged_context"):
             continuation_note = (
                 "\n\n(T0 continuation: reuse prior tool evidence already gathered; "
-                "do not re-run identical lookups unless needed.)\n"
+                "do not re-run identical lookups unless needed. "
+                "If a count/lookup remains unsolved, proceed to sql_query_execute.)\n"
             )
 
         input_messages: list[dict[str, Any]] = [
@@ -329,14 +345,18 @@ class OpenAIRunner:
                                     "arguments": item.get("arguments") or "",
                                 }
                     elif etype == "error" or etype.endswith(".error"):
+                        err_payload = event.get("error") or event.get("message") or event
                         raise OpenAIClientError(
-                            str(event.get("error") or event.get("message") or event),
-                            code="stream_error",
+                            str(err_payload),
+                            code=_classify_stream_error_code(err_payload, default="stream_error"),
                         )
                     elif etype == "response.failed":
                         resp = event.get("response") or {}
                         err = resp.get("error") or event.get("error") or "response.failed"
-                        raise OpenAIClientError(str(err), code="failed")
+                        raise OpenAIClientError(
+                            str(err),
+                            code=_classify_stream_error_code(err, default="failed"),
+                        )
 
                 if text_buf:
                     answer_parts.extend(text_buf)
@@ -483,10 +503,12 @@ class OpenAIRunner:
                 continue
 
             finished = datetime.now(timezone.utc).isoformat()
-            answer = redact_text("".join(answer_parts))
+            answer = redact_text("".join(answer_parts)).strip()
             if use_tool_runtime:
-                GLOBAL_TOOL_RUNTIME_FEED.finish(run_id, status="completed")
-            if previous_response_id_state and conversation_id:
+                GLOBAL_TOOL_RUNTIME_FEED.finish(
+                    run_id, status="completed" if answer else "failed"
+                )
+            if previous_response_id_state and conversation_id and answer:
                 from hub.agent_center.tool_runtime.session import GLOBAL_PROVIDER_SESSION_CACHE
 
                 GLOBAL_PROVIDER_SESSION_CACHE.put(
@@ -516,7 +538,7 @@ class OpenAIRunner:
                 retries=int(usage.get("retries") or 0),
                 provider=agent_id,
                 model=model,
-                stop_reason="completed",
+                stop_reason="completed" if answer else "empty_answer",
                 active_tools=sorted(active_names),
                 continuation_used=bool(
                     isinstance(t0_continuation, dict) and t0_continuation.get("unchanged_context")
@@ -530,6 +552,22 @@ class OpenAIRunner:
                 "retries": int(usage.get("retries") or 0),
                 "continuation_used": bool(trt.get("continuation_used")),
             }
+            if use_tool_runtime and not answer:
+                # Never complete a Tool Runtime child with a blank answer.
+                self._fail(
+                    run_id,
+                    answer_parts,
+                    tools_ctx,
+                    usage,
+                    (
+                        "Tool Runtime completed without a final answer after "
+                        f"{len(step_records)} step(s). "
+                        "Completion contract remains unsolved."
+                    ),
+                    code="empty_answer",
+                    step_records=step_records,
+                )
+                return
             self.store.update_run(
                 run_id,
                 status="completed",
@@ -554,13 +592,29 @@ class OpenAIRunner:
                 GLOBAL_TOOL_RUNTIME_FEED.finish(
                     run_id, status="timed_out" if exc.code == "timeout" else "failed"
                 )
+            from hub.agent_center.tool_runtime.provider_failures import (
+                classify_provider_failure,
+            )
+
+            failure = classify_provider_failure(
+                error=str(exc),
+                error_code=exc.code,
+                status="timed_out" if exc.code == "timeout" else "failed",
+                http_status=getattr(exc, "status", None),
+                provider=str((self.store.get_run(run_id) or {}).get("agent_id") or ""),
+                model=str((self.store.get_run(run_id) or {}).get("model") or ""),
+            )
+            usage = {
+                **(usage or {}),
+                "provider_failure": failure.public(),
+            }
             self._fail(
                 run_id,
                 answer_parts,
                 tools_ctx,
                 usage,
                 str(exc),
-                code=exc.code,
+                code=failure.code if failure.category == "quota" else exc.code,
                 step_records=step_records,
             )
         except Exception as exc:  # noqa: BLE001
@@ -637,6 +691,36 @@ class OpenAIRunner:
                 action="AGENT_RUN_FAILED",
                 detail={"run_id": run_id, "code": code, "error": error[:300]},
             )
+
+
+def _classify_stream_error_code(err: Any, *, default: str = "failed") -> str:
+    """Map stream/SSE error payloads onto OpenAIClientError codes (quota vs runtime)."""
+    text = str(err or "").lower()
+    if isinstance(err, dict):
+        text = " ".join(
+            str(err.get(k) or "")
+            for k in ("code", "type", "message", "error", "param")
+        ).lower()
+        nested = err.get("error")
+        if isinstance(nested, dict):
+            text = f"{text} {' '.join(str(nested.get(k) or '') for k in ('code', 'type', 'message'))}"
+    if any(
+        token in text
+        for token in (
+            "insufficient_quota",
+            "credit_balance_exhausted",
+            "billing_hard_limit",
+            "exceeded your current quota",
+        )
+    ):
+        return "quota"
+    if "rate_limit" in text or "rate limit" in text:
+        return "rate_limit"
+    if "auth" in text or "unauthorized" in text or "invalid_api_key" in text:
+        return "auth"
+    if "timeout" in text or "timed out" in text:
+        return "timeout"
+    return default
 
 
 def _extract_usage(raw: Any) -> dict[str, Any]:

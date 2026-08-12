@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}ARCTIC Profile · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="dash-workspace arctic-shell">
+<div class="dash-workspace-main">
+{% set sh_title = "ARCTIC" %}
+{% set sh_info = "One structured Personal Profile. No passwords, OTPs, or banking credentials." %}
+{% set sh_tabs %}{{ arctic_section_tabs('arctic_profile')|safe }}{% endset %}
+{% set sh_meta %}<span class="badge">Profile</span>{% endset %}
+{% include "partials/section_header.html" %}
+
+<section class="panel">
+  <div class="panel-header"><h2>Personal Profile</h2>
+    {% if latest_cv %}
+    <span class="muted">Primary CV: <a href="{{ url_for('arctic_files', doc=latest_cv.id) }}">{{ latest_cv.title }}</a></span>
+    {% endif %}
+  </div>
+  <form method="post" class="arctic-form" action="{{ url_for('arctic_profile') }}">
+    <div class="arctic-form-grid">
+      <label>Display name
+        <input name="display_name" value="{{ profile.display_name }}" maxlength="120">
+      </label>
+      <label>Headline
+        <input name="headline" value="{{ profile.headline }}" maxlength="200">
+      </label>
+      <label>Email
+        <input name="email" type="email" value="{{ profile.email }}" maxlength="200">
+      </label>
+      <label>Phone
+        <input name="phone" value="{{ profile.phone }}" maxlength="80">
+      </label>
+      <label class="arctic-span-2">Location
+        <input name="location" value="{{ profile.location }}" maxlength="160">
+      </label>
+      <label class="arctic-span-2">Summary
+        <textarea name="summary" rows="4" maxlength="4000">{{ profile.summary }}</textarea>
+      </label>
+      <label class="arctic-span-2">Skills <span class="muted">(comma-separated)</span>
+        <input name="skills" value="{{ skills_text }}" maxlength="1000">
+      </label>
+      <label class="arctic-span-2">Links <span class="muted">(one per line: Label|https://…)</span>
+        <textarea name="links" rows="4">{{ links_text }}</textarea>
+      </label>
+    </div>
+    <div class="arctic-form-actions">
+      <button class="btn btn-primary" type="submit">Save profile</button>
+      <span class="muted">Never store passwords, OTPs, or banking credentials here.</span>
+    </div>
+  </form>
+</section>
+</div>
+</div>
+{% endblock %}

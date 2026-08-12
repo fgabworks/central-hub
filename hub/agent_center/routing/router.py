@@ -386,11 +386,8 @@ def recommend_route(
 
     alt_spec = registry.get(alternative) if alternative else None
 
-    approval = bool(spec.requires_approval)
-    if chosen == "codex" and settings.require_approval_before_codex:
-        approval = True
-    if chosen in {"codex", "claude-code", "cursor-agent"}:
-        approval = True if settings.require_approval_before_codex else approval
+    # Approval belongs to the ACTION (tool/write policy), never to provider identity.
+    approval = False
 
     rate, samples = _success_rate(stats_map, chosen)
     confidence = 0.55

@@ -8284,3 +8284,151 @@ body.qn-maximized .qn-history[open] {
   }
   .mc-command-meta { justify-content: flex-start; }
 }
+
+/* ——— ARCTIC (CLIMATE / Personal) — charcoal + crimson control center ——— */
+.arctic-shell {
+  --crimson: #8b0000;
+  --burgundy: #5c060c;
+  --accent-ring: rgba(139, 0, 0, 0.35);
+  --accent-border: rgba(139, 0, 0, 0.45);
+  --accent-soft: rgba(139, 0, 0, 0.22);
+  --accent-text: #fecaca;
+  --accent-metallic: linear-gradient(180deg, #8b0000, #5c060c);
+}
+.arctic-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+.arctic-card .panel-header h2 { font-size: 0.95rem; }
+.arctic-span-2 { grid-column: span 2; }
+.arctic-profile-card {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+.arctic-avatar {
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+  color: var(--accent-text);
+  font-size: 1.1rem;
+}
+.arctic-summary { margin: 0.65rem 0 0; color: var(--muted); font-size: 0.92rem; }
+.arctic-meta-line { margin-top: 0.2rem; font-size: 0.85rem; }
+.arctic-quick-list,
+.arctic-source-list,
+.arctic-doc-list,
+.arctic-attention {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+.arctic-quick-list li,
+.arctic-attention li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.arctic-missing { color: var(--warning); font-size: 0.86rem; }
+.arctic-collections { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.arctic-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.28rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--accent-border);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  text-decoration: none;
+  font-size: 0.82rem;
+}
+.arctic-chip:hover { border-color: var(--accent-border-strong, var(--crimson)); }
+.arctic-dl {
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr);
+  gap: 0.35rem 0.75rem;
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+}
+.arctic-dl dt { color: var(--muted); }
+.arctic-dl dd { margin: 0; word-break: break-word; }
+.arctic-dl .mono,
+.arctic-detail .mono { font-family: var(--mono); font-size: 0.8rem; }
+.arctic-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.arctic-form label {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+.arctic-form input,
+.arctic-form select,
+.arctic-form textarea {
+  width: 100%;
+  background: var(--charcoal);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.45rem 0.55rem;
+}
+.arctic-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 0.85rem;
+}
+.arctic-files-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+  gap: 0.85rem;
+  align-items: start;
+}
+.arctic-inline-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+.arctic-inline-filter input,
+.arctic-inline-filter select {
+  background: var(--charcoal);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.3rem 0.45rem;
+}
+.arctic-callout {
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.65rem;
+  border-left: 3px solid var(--crimson);
+  background: var(--accent-soft);
+}
+.arctic-detail-pane { position: sticky; top: calc(var(--topbar-h) + 0.75rem); }
+table.data tr.is-selected td { background: var(--accent-soft); }
+.badge-status-ready { background: var(--success-soft); color: #86efac; }
+.badge-status-deferred { background: var(--warning-soft); color: #fcd34d; }
+.badge-status-unavailable,
+.badge-status-error { background: var(--danger-soft); color: #fca5a5; }
+@media (max-width: 960px) {
+  .arctic-grid,
+  .arctic-files-layout,
+  .arctic-form-grid { grid-template-columns: 1fr; }
+  .arctic-span-2 { grid-column: auto; }
+  .arctic-detail-pane { position: static; }
+}

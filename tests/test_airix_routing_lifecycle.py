@@ -249,7 +249,7 @@ class AirixLifecycleTests(unittest.TestCase):
         assert refreshed is not None
         self.assertEqual(normalize_status(str(refreshed.get("status"))), "cancelled")
 
-    def test_codex_approval_pause_not_running(self) -> None:
+    def test_codex_no_provider_approval_pause(self) -> None:
         fake = _AsyncFakeAgentCenter(mode="succeed")
         router = self._router(fake)
         prompt = (
@@ -258,10 +258,9 @@ class AirixLifecycleTests(unittest.TestCase):
             "a breaking change migration plan"
         )
         result = router.execute_route(prompt, orchestrate=True, approve_codex=False)
-        self.assertEqual(result["execution"]["status"], "paused_for_approval")
-        self.assertTrue(result["execution"].get("terminal"))
+        self.assertNotEqual(result["execution"]["status"], "paused_for_approval")
+        self.assertNotEqual(result["orchestration"]["status"], "paused_for_approval")
         self.assertNotEqual(result["execution"]["status"], "running")
-        self.assertEqual(result["orchestration"]["status"], "paused_for_approval")
 
     def test_stale_session_recovery(self) -> None:
         fake = _AsyncFakeAgentCenter()

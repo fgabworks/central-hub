@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}ARCTIC · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="dash-workspace arctic-shell">
+<div class="dash-workspace-main">
+{% set sh_title = "ARCTIC" %}
+{% set sh_info = "Personal profile + document control center (CLIMATE / Personal). Files stay in Local or Google Drive — ARCTIC stores references only." %}
+{% set sh_tabs %}{{ arctic_section_tabs('arctic_dashboard')|safe }}{% endset %}
+{% set sh_meta %}
+  <span class="badge">CLIMATE · Personal</span>
+  <span class="badge badge-soft">{{ dash.document_count }} docs</span>
+{% endset %}
+{% include "partials/section_header.html" %}
+
+<div class="arctic-grid">
+  <section class="panel arctic-card">
+    <div class="panel-header"><h2>Profile</h2>
+      <a class="quiet" href="{{ url_for('arctic_profile') }}">Edit</a>
+    </div>
+    <div class="arctic-profile-card">
+      <div class="arctic-avatar" aria-hidden="true">
+        {% if dash.quick_access.profile_photo %}◈{% else %}·{% endif %}
+      </div>
+      <div>
+        <strong>{{ dash.profile.display_name or "Add your name" }}</strong>
+        <div class="muted">{{ dash.profile.headline or "Headline not set" }}</div>
+        <div class="muted arctic-meta-line">
+          {{ dash.profile.location or "—" }}
+          {% if dash.profile.email %} · {{ dash.profile.email }}{% endif %}
+        </div>
+      </div>
+    </div>
+    {% if dash.profile.summary %}
+    <p class="arctic-summary">{{ dash.profile.summary }}</p>
+    {% endif %}
+  </section>
+
+  <section class="panel arctic-card">
+    <div class="panel-header"><h2>Quick Access</h2>
+      <a class="quiet" href="{{ url_for('arctic_files', collection='career_pack') }}">Career Pack</a>
+    </div>
+    <ul class="arctic-quick-list">
+      {% for role, label in role_labels.items() %}
+        {% if role in ['cv','profile_photo','signature','cover_letter','portfolio'] %}
+        <li>
+          <span class="muted">{{ label }}</span>
+          {% set doc = dash.quick_access.get(role) %}
+          {% if doc %}
+            <a href="{{ url_for('arctic_dashboard', doc=doc.id) }}">{{ doc.title }}</a>
+          {% else %}
+            <span class="arctic-missing">Not set</span>
+          {% endif %}
+        </li>
+        {% endif %}
+      {% endfor %}
+      <li>
+        <span class="muted">Latest CV</span>
+        {% if dash.latest_cv %}
+          <a href="{{ url_for('arctic_dashboard', doc=dash.latest_cv.id) }}">{{ dash.latest_cv.title }}</a>
+          <span class="badge badge-sm">Primary</span>
+        {% else %}
+          <span class="arctic-missing">No Primary CV</span>
+        {% endif %}
+      </li>
+    </ul>
+  </section>
+
+  <section class="panel arctic-card">
+    <div class="panel-header"><h2>Sources</h2></div>
+    <ul class="arctic-source-list">
+      {% for src in dash.sources %}
+      <li>
+        <strong>{{ src.label }}</strong>
+        <span class="badge badge-status-{{ src.status }}">{{ src.status }}</span>
+        <div class="muted">{{ src.detail }}</div>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="panel arctic-card">
+    <div class="panel-header"><h2>Smart Collections</h2></div>
+    <div class="arctic-collections">
+      {% for c in dash.collections %}
+      <a class="arctic-chip" href="{{ url_for('arctic_files', collection=c.id) }}">{{ c.label }}</a>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="panel arctic-card">
+    <div class="panel-header"><h2>Recent</h2></div>
+    <ul class="arctic-doc-list">
+      {% for doc in dash.recent %}
+      <li><a href="{{ url_for('arctic_dashboard', doc=doc.id) }}">{{ doc.title }}</a>
+        <span class="muted">{{ doc.primary_role_label or doc.source_type }}</span></li>
+      {% else %}
+      <li class="muted">No recent documents yet.</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="panel arctic-card">
+    <div class="panel-header"><h2>Favorites</h2></div>
+    <ul class="arctic-doc-list">
+      {% for doc in dash.favorites %}
+      <li><a href="{{ url_for('arctic_dashboard', doc=doc.id) }}">{{ doc.title }}</a></li>
+      {% else %}
+      <li class="muted">No favorites yet.</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="panel arctic-card arctic-span-2">
+    <div class="panel-header"><h2>Needs Attention</h2></div>
+    <ul class="arctic-attention">
+      {% for item in dash.needs_attention %}
+      <li>
+        <strong>{{ item.label }}</strong>
+        <span class="muted">{{ item.detail }}</span>
+        {% if item.document_id %}
+          <a class="btn btn-sm" href="{{ url_for('arctic_files', doc=item.document_id) }}">Open</a>
+        {% endif %}
+      </li>
+      {% else %}
+      <li class="muted">All clear.</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="panel arctic-card arctic-span-2 arctic-detail">
+    <div class="panel-header"><h2>Document detail</h2>
+      {% if selected %}<a class="quiet" href="{{ url_for('arctic_files', doc=selected.id) }}">Manage</a>{% endif %}
+    </div>
+    {% if selected %}
+      <h3>{{ selected.title }}</h3>
+      <dl class="arctic-dl">
+        <dt>Role</dt><dd>{{ selected.primary_role_label or "—" }}</dd>
+        <dt>Source</dt><dd>{{ selected.source_label }} · {{ selected.source_type }}</dd>
+        <dt>Reference</dt><dd class="mono">{{ selected.source_ref }}</dd>
+        <dt>Tags</dt><dd>{{ selected.tags|join(', ') or "—" }}</dd>
+        <dt>Notes</dt><dd>{{ selected.notes or "—" }}</dd>
+      </dl>
+      <p class="muted">Metadata only — file content is not stored in ARCTIC.</p>
+    {% else %}
+      <p class="muted">Select a document from Quick Access, Recent, or Files to preview metadata here.</p>
+    {% endif %}
+  </section>
+</div>
+</div>
+</div>
+{% endblock %}

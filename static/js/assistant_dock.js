@@ -1511,7 +1511,12 @@
           : "");
       if (status === "completed" || status === "failed") {
         var gLine = formatGroundingLine(execution);
-        var answerText = String(execution.answer || execution.partial_summary || "(no answer)");
+        var answerText = String(
+          execution.answer ||
+            execution.partial_summary ||
+            execution.error ||
+            "(no answer)"
+        );
         // Prefer the structured grounding object — strip duplicated footer from answer body.
         if (gLine && /Evidence Found:/i.test(answerText)) {
           answerText = answerText.replace(
@@ -1546,7 +1551,12 @@
       if (status === "paused_for_approval" || status === "paused") {
         appendMessage(
           "assistant",
-          "Paused for Codex approval. Press Use Recommended again and confirm to continue."
+          "Paused for action approval: " +
+            escapeHtml(
+              execution.error ||
+                execution.stopped_reason ||
+                "A requested tool/action requires confirmation (not the provider)."
+            )
         );
         setRunControls("idle");
         activeRouteExecutionId = null;
@@ -1777,10 +1787,10 @@
       }
       if (rec && rec.approval_required && !opts.approveCodex) {
         var ok = window.confirm(
-          "This route requires Codex/advanced approval. Execute with approval?"
+          "This route includes an action that requires confirmation. Continue?"
         );
         if (!ok) {
-          appendMessage("assistant", "Codex approval declined — choose another agent or cancel.");
+          appendMessage("assistant", "Action approval declined — adjust the request or cancel.");
           return;
         }
         opts.approveCodex = true;
@@ -1864,7 +1874,10 @@
             if (code === "approval_required" || exec.status === "paused_for_approval") {
               appendMessage(
                 "assistant",
-                "Codex approval required. Press Use Recommended again and confirm, or Choose Agent."
+                escapeHtml(
+                  detail ||
+                    "Action approval required for a requested tool/write (not the selected provider)."
+                )
               );
               setRunControls("idle");
               return;

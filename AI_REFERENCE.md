@@ -1,9 +1,13 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-10 (AiriX Unified Tool Runtime Phase 2).
+Last verified: 2026-08-12 (ARCTIC Personal profile + document registry).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
+
+**ARCTIC (CLIMATE / Personal)** is implemented as `/personal/arctic` with Dashboard |
+Profile | Files. Metadata/references only in `data/arctic.db`. Google Drive sync
+deferred. VANTA/ECLIPSE unchanged. AiriX Tool Runtime unchanged.
 
 **AiriX Unified Tool Runtime Phase 2** — same `hub/agent_center/tool_runtime/` package
 as Phase 1 (no parallel runtime). Adds dynamic scored tool selection (intent /
@@ -16,7 +20,12 @@ selection with exact manual override preservation, and richer per-run telemetry
 provider/model, AI tokens, runtime, task solved, grounded). Phase 1 registry,
 unified RO executor, iterative API adapter loop, RBAC, Stage/Live, timeout/cancel,
 audit, budgets, and completion/grounding stop conditions remain authoritative.
-MCP / browser / shell / writes / CLI native loops deferred.
+Provider failures are classified (quota/auth hard; rate_limit/timeout bounded retry);
+Smart/Auto may continue the same execution on another compatible Tool Runtime API
+provider while preserving context; manual selection never silently substitutes.
+Approval belongs to the action/tool policy — provider identity (including Codex)
+does not require interactive approval for RO execution. MCP / browser / shell /
+writes / CLI native loops deferred.
 
 Inspect/Ask/Plan/Smart/Agent share one repository-context resolver (explicit → persisted
 dock selection → active workspace). Grouped API/local selections resolve through configured

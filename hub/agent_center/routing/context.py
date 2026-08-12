@@ -253,7 +253,7 @@ def build_direct_agent_recommendation(
         confidence=1.0,
         reason="Direct Agent — Efficient (Smart Routing bypassed)",
         estimated_usage="Medium",
-        approval_required=provider in {"codex", "claude-code", "cursor-agent"},
+        approval_required=False,
         classification=c,
         providers_considered=[provider],
         escalation_reason=None,

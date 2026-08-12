@@ -144,13 +144,14 @@ def build_orchestration_plan(
             OrchestrationStep(
                 id="step_codex_escalation",
                 kind="agent",
-                label="Codex escalation (approval required)",
+                label="Codex escalation",
                 provider_id="codex",
                 role_id=role.id,
                 tools=role_tools[:6],
                 estimated_usage=usage,
                 estimated_tokens=band_to_tokens(usage),
-                approval_required=True,
+                # Provider identity never requires interactive approval; budget may still block.
+                approval_required=False,
                 expensive_warning=warn,
             )
         )

@@ -4,7 +4,23 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**AiriX Unified Tool Runtime — Phase 2: Runtime Intelligence & Efficiency (2026-08-10)**
+**ARCTIC — Personal profile + document control center (2026-08-12)**
+
+CLIMATE naming: CLIMATE = system · VANTA = Work · ARCTIC = Personal · AiriX = shared AI ·
+ECLIPSE = reserved. ARCTIC (`hub/arctic/`, `data/arctic.db`) is a compact Personal
+control center with nav tabs **Dashboard | Profile | Files**. One structured Personal
+Profile + one Document Registry for Local + Google Drive **references only** (no file
+copies, no duplicate folder trees). Smart collections/tags; primary roles (CV, photo,
+signature, cover letter, portfolio, diploma, transcript, employment certificate);
+“latest CV” resolves the Primary CV. Career Pack is a logical view. Google Drive is a
+clean source abstraction with sync **deferred**. AiriX/Aira isolation: ARCTIC context
+only via explicit selection (`/api/arctic/ai-context`); never auto-inject into RI/logs/
+Work (VANTA). Passwords/OTPs/banking blocked. UI reuses charcoal + crimson inside
+`.arctic-shell`. Does **not** modify AiriX Tool Runtime, VANTA Work stack, or ECLIPSE.
+
+Tests: `tests/test_arctic.py`.
+
+Prior: **AiriX Unified Tool Runtime — Phase 2: Runtime Intelligence & Efficiency (2026-08-10)**
 
 Extends Phase 1 (same `hub/agent_center/tool_runtime/` package — no parallel runtime).
 Dynamic task-relevant tool selection scores intent, selected context, Repository
@@ -27,13 +43,37 @@ escalate preserves T0 packet/RI/filters, resolves a real configured API model, e
 `sql_query_execute`, and enters Unified Tool Runtime. Regression:
 `tests/test_airix_capability_escalation.py::QueryConstructionEscalationRuntimeTests`.
 
+**Fix (same day, child finalize seam):** Empty/failed Tool Runtime child answers no longer
+become UI `(no answer)`. Parent finalization surfaces the child error (e.g. provider
+quota/stream failure), merges child `sql_query_execute` steps into evidence/telemetry,
+and openai_runner marks blank terminal answers as `empty_answer` failures. E2E:
+`tests/test_airix_query_construction_sql_e2e.py`.
+
+**Fix (same day, provider failure + approval):** Provider failures are classified
+(`quota`/`auth`/`rate_limit`/`unavailable`/`timeout`/`runtime`) in
+`tool_runtime/provider_failures.py`. Quota/auth are hard (no retry loop); transient
+rate-limit/timeout use bounded `max_retries`. Short-lived health cache steers Smart/Auto
+away from just-hard-failed providers; when another compatible Tool Runtime API provider
+(`openai-api`/`grok`) is configured+healthy, the **same** execution continues with
+preserved prompt/repo/RI/T0 evidence/contract/filters (no context rebuild). Manual
+provider/model never silently substitutes. Provider identity (including Codex) no longer
+triggers interactive approval — **approval belongs to the action/tool policy**; Send
+authorizes the selected provider/model for RO Ask/Inspect/Plan/Agent. Budget may still
+block expensive Codex escalation; capacity warnings remain. Tests:
+`tests/test_airix_provider_failure_and_approval.py`.
+
 Preserved: RBAC, RO SQL/DHIS2, Stage/Live isolation, exact provider/model, timeout/
 cancel, audit, budgets. CLI adapters still packed-context only.
+
+**Live-provider limitation:** If OpenAI quota is exhausted and no alternate Tool Runtime
+API provider (e.g. Grok) is configured/healthy, Smart/Auto still stops with the exact
+quota error. Manual OpenAI selection never auto-switches.
 
 Deferred Phase 3+: MCP, browser, scheduler, shell/`run_command`, write tools,
 workflow editor, CLI native tool loops.
 
-Tests: `tests/test_airix_tool_runtime_phase2.py` (+ Phase 1 suite).
+Tests: `tests/test_airix_tool_runtime_phase2.py` (+ Phase 1 suite),
+`tests/test_airix_provider_failure_and_approval.py`.
 
 Prior: **AiriX Unified Tool Runtime — Phase 1 (2026-08-10)**
 

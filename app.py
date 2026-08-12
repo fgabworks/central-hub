@@ -107,13 +107,17 @@ from hub.sql_workspace import (
 )
 from hub.sql_workspace.demo import ensure_demo_database
 from hub.sql_workspace.safety import SqlSafetyError, extract_named_params, format_sql
+from hub.arctic.db import ArcticDatabase
+from hub.arctic.routes import register_arctic_routes
+from hub.arctic.service import ArcticService
+from hub.arctic.store import ArcticStore
+from hub.calendar.service import CalendarService
 from hub.email.db import EmailDatabase
 from hub.email.routes import register_email_routes
 from hub.email.service import EmailService
 from hub.email.settings_gmail import load_gmail_oauth_settings
 from hub.email.store import EmailStore
 from hub.calendar.routes import register_calendar_routes
-from hub.calendar.service import CalendarService
 from hub.agent_center.db import AgentCenterDb
 from hub.agent_center.dock import dock_shell_bootstrap
 from hub.agent_center.openai_settings import load_openai_settings
@@ -275,6 +279,13 @@ def create_app() -> Flask:
         email_store,
         email_service=app.config["EMAIL"],
     )
+    arctic_db_path = os.environ.get("CENTRAL_HUB_ARCTIC_DATABASE") or str(
+        ROOT_DIR / "data" / "arctic.db"
+    )
+    app.config["ARCTIC"] = ArcticService(
+        ArcticStore(ArcticDatabase(Path(arctic_db_path)))
+    )
+    register_arctic_routes(app)
 
     def _apply_dhis2_client(client: Dhis2Client, *, instance: str | None) -> None:
         previous = app.config.get("DHIS2")
@@ -507,7 +518,10 @@ def create_app() -> Flask:
             "personal_email",
             "personal_calendar",
             "personal_aira",
-        }:
+            "arctic_dashboard",
+            "arctic_profile",
+            "arctic_files",
+        } or (ep.startswith("api_arctic") if ep else False) or (ep.startswith("arctic_") if ep else False):
             workspace = "personal"
 
         personal_nav = [
@@ -516,6 +530,12 @@ def create_app() -> Flask:
                 "label": "Personal Dashboard",
                 "icon": "⌂",
                 "active_prefix": None,
+            },
+            {
+                "endpoint": "arctic_dashboard",
+                "label": "ARCTIC",
+                "icon": "◈",
+                "active_prefix": "arctic_",
             },
             {
                 "endpoint": "personal_notebook",
@@ -703,6 +723,7 @@ def create_app() -> Flask:
             {"label": "View Logs", "endpoint": "audit", "available": True},
         ]
         personal_actions = [
+            {"label": "ARCTIC", "endpoint": "arctic_dashboard", "available": True},
             {"label": "New Personal Note", "endpoint": "personal_notebook", "available": True},
             {"label": "Personal Tasks", "endpoint": "personal_tasks", "available": True},
             {"label": "Email Center", "endpoint": "personal_email", "available": True},

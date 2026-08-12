@@ -279,7 +279,9 @@ def check_execution_allowed(
         return False, f"Provider '{provider_id}' requires permission {need}"
 
     if approve_codex and "codex.approve" not in perms:
-        return False, "Codex approval requires permission codex.approve"
+        # Optional explicit approve flag (legacy callers). Provider identity alone
+        # never requires this — Tool Runtime policy gates risky actions.
+        return False, "Explicit action approval requires permission codex.approve"
 
     if live_requested and "live.access" not in perms:
         return False, "Live access requires permission live.access"
