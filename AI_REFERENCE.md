@@ -1,9 +1,22 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-10 (Inspect explanation synthesis propagation).
+Last verified: 2026-08-10 (AiriX Unified Tool Runtime Phase 2).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
+
+**AiriX Unified Tool Runtime Phase 2** — same `hub/agent_center/tool_runtime/` package
+as Phase 1 (no parallel runtime). Adds dynamic scored tool selection (intent /
+context / RI / mode), on-demand `repository_intelligence` + `skill_recall`,
+grounded-fact-preserving observation prune, T0→runtime continuation without
+rebuilding unchanged context, provider session reuse (`previous_response_id` +
+fingerprint), soft stuck recovery before hard stop, cheapest-capable synthesis
+selection with exact manual override preservation, and richer per-run telemetry
+(steps, tool calls, context chars/tokens, RI entries, session reused, retries,
+provider/model, AI tokens, runtime, task solved, grounded). Phase 1 registry,
+unified RO executor, iterative API adapter loop, RBAC, Stage/Live, timeout/cancel,
+audit, budgets, and completion/grounding stop conditions remain authoritative.
+MCP / browser / shell / writes / CLI native loops deferred.
 
 Inspect/Ask/Plan/Smart/Agent share one repository-context resolver (explicit → persisted
 dock selection → active workspace). Grouped API/local selections resolve through configured
@@ -378,8 +391,12 @@ No LP apply/write proxies. No import of LP Python packages for business logic.
 
 ## Next
 
+**AiriX Unified Tool Runtime Phase 2 is implemented.** See [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
+Phase 3+ (MCP, browser, scheduler, shell/`run_command`, write tools, workflow editor,
+CLI native tool loops) stays deferred.
+
 **Interactive repository terminal is implemented** (PTY + WebSocket + xterm.js).
-See [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md) and [SECURITY.md](SECURITY.md).
+See [SECURITY.md](SECURITY.md).
 
 Next development target: **DHIS2 Standard Reports** (credentialed HTML viewer / library polish).
 DHIS2 Standard Report Manager Phase 2+ (replacement / design write-back) is **not** started.

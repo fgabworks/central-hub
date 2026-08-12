@@ -543,5 +543,235 @@ class SelectedCodexEscalationTests(unittest.TestCase):
         self.assertTrue(out.get("ai_escalation_occurred") or captured.get("adapter_id") == "codex")
 
 
+class QueryConstructionEscalationRuntimeTests(unittest.TestCase):
+    """Regression: Baloy-style count → T0 needs query construction → Tool Runtime."""
+
+    def test_t0_query_construction_enters_tool_runtime_not_grounding_gate(self) -> None:
+        from hub.agent_center.routing.execution import RouteExecutor
+        from hub.agent_center.tool_runtime.continuation import build_continuation_from_t0
+
+        prompt = "Count number of pregnant women in Baloy Q2 2026"
+        c = classify_prompt(prompt, repository_ids=["live-processing-local"])
+        rec = recommend_route(
+            c,
+            settings=RoutingSettings(prefer_deterministic=True),
+            registry=ProviderRegistry(),
+            available_provider_ids={"deterministic", "openai-api", "grok"},
+        )
+        store = _FakeSqlStore(
+            [
+                {
+                    "id": "q-pregnant",
+                    "title": "Pregnant women count",
+                    "sql_text": "SELECT COUNT(*) FROM pregnant WHERE TODO",
+                    "connection_id": "demo-ro",
+                }
+            ]
+        )
+
+        class _Adapter:
+            is_api_adapter = True
+            descriptor = type("D", (), {"id": "openai-api", "provider": "openai"})()
+
+            def resolve_run_model(self, **_kwargs: Any) -> dict[str, Any]:
+                return {"ok": True, "model": "gpt-4.1-mini", "reason": "provider_default"}
+
+            def list_models(self) -> tuple[list[str], str]:
+                return (["gpt-4.1-mini"], "test")
+
+        fake = MagicMock()
+        fake.registry = MagicMock()
+        fake.notebook = None
+        fake.sql_store = store
+        fake.sql_executor = _FakeExecutor(
+            _FakeExecResult(ok=True, columns=["count"], rows=[[17]])
+        )
+        fake.sql_connections = _FakeConnections()
+        fake.uid_index = None
+        fake.email = None
+        fake.calendar = None
+        fake.job_store = None
+        fake.audit_store = None
+        fake.dhis2_reports = None
+        fake.notepad_factory = None
+        fake.adapters = [_Adapter()]
+        fake.repositories = MagicMock(return_value=[])
+        fake.repository_intelligence = MagicMock()
+
+        captured_payload: dict[str, Any] = {}
+
+        def _start_run(payload: dict[str, Any]) -> dict[str, Any]:
+            captured_payload.update(payload)
+            return {
+                "id": "run-baloy-1",
+                "status": "completed",
+                "agent_id": "openai-api",
+                "model": payload.get("model") or "gpt-4.1-mini",
+                "answer": (
+                    "Count: 17\nSource: read-only SQL (Pregnant women count) via demo-ro"
+                ),
+                "finished_at": "2026-08-10T00:00:00+00:00",
+                "usage": {
+                    "input_tokens": 20,
+                    "output_tokens": 10,
+                    "total_tokens": 30,
+                    "tool_runtime_steps": [
+                        {"tool": "sql_query_execute", "ok": True, "summary": "n=17"}
+                    ],
+                },
+                "context": {
+                    "evidence_packet": payload.get("evidence_packet"),
+                    "repository_intelligence": payload.get("repository_intelligence"),
+                    "packed_prompt_chars": 400,
+                    "files": [],
+                    "grounding": {
+                        "task_solved": True,
+                        "answer_grounded": True,
+                        "grounded": True,
+                        "evidence_found": True,
+                        "source": "tool:sql_query_execute",
+                    },
+                },
+                "conversation_id": payload.get("conversation_id") or "",
+            }
+
+        fake.start_run = _start_run
+
+        ex = RouteExecutor(
+            fake,
+            availability_loader=lambda: {
+                "openai-api": {"status": "available", "runnable": True},
+                "grok": {"status": "available", "runnable": True},
+            },
+        )
+        ex._provider_available = lambda aid: (aid in {"openai-api", "grok"}, "ok")  # type: ignore[method-assign]
+
+        packet = {
+            "usable": True,
+            "hits": [
+                {
+                    "source": "repository_intelligence",
+                    "path": "docs/pregnant.sql",
+                    "summary": "pregnant cohort SQL",
+                },
+                {"source": "sql:saved_query", "query_id": "q-pregnant"},
+            ],
+            "sources": [
+                "tool:repo_search",
+                "tool:sql_lookup",
+                "tool:repository_intelligence",
+            ],
+            "tool_results": [
+                {"tool": "repo_search", "ok": True},
+                {"tool": "sql_lookup", "ok": True},
+                {"tool": "repository_intelligence", "ok": True},
+            ],
+            "errors": [],
+            "summary": "source available; query construction needed",
+        }
+        contract = derive_completion_contract(
+            prompt, classification_signals=list(c.signals or [])
+        )
+        prior = {
+            "evidence_packet": packet,
+            "tool_results": packet["tool_results"],
+            "completion_contract": contract.public(),
+            "detected_filters": dict(contract.filters),
+            "t0_failure_reason": FAILURE_NEEDS_REASONING,
+            "next_capability": NEXT_AI,
+            "repository_intelligence": {
+                "profiles": [{"repository_id": "live-processing-local"}],
+                "items": [{"path": "docs/pregnant.sql", "summary": "cohort"}],
+                "diagnostics": {
+                    "used": True,
+                    "knowledge_entries_used": 6,
+                    "repository_ids": ["live-processing-local"],
+                    "freshness": "current",
+                },
+            },
+        }
+        continuation = build_continuation_from_t0(prior)
+        esc_context = {
+            "tool_ids": ["repo_search", "sql_lookup", "repository_intelligence"],
+            "repository_ids": ["live-processing-local"],
+            "evidence_packet": packet,
+            "repository_intelligence": prior["repository_intelligence"],
+            "completion_contract": contract.public(),
+            "detected_filters": dict(contract.filters),
+            "t0_failure_reason": FAILURE_NEEDS_REASONING,
+            "next_capability": NEXT_AI,
+            "t0_capability_escalate": True,
+            "t0_continuation": continuation.public(),
+            "tool_runtime_lean_context": True,
+            "interaction_mode": "inspect",
+            "context_sources": ["ro_database", "files"],
+        }
+        ex._active["e-baloy"] = {
+            "id": "e-baloy",
+            "status": "running",
+            "fallback_from": "deterministic",
+            "fallback_reason": FAILURE_NEEDS_REASONING,
+            "t0_failure_reason": FAILURE_NEEDS_REASONING,
+            "next_capability": NEXT_AI,
+            "ai_escalation_occurred": True,
+            "completion_contract": contract.public(),
+            "detected_filters": dict(contract.filters),
+            "adapter_id": "openai-api",
+        }
+
+        with patch(
+            "hub.agent_center.grounding.collect_evidence_packet",
+            return_value={
+                "usable": False,
+                "hits": [],
+                "sources": [],
+                "tool_results": [],
+                "errors": ["rebuild would wipe T0"],
+                "summary": "empty rebuild",
+            },
+        ) as rebuild:
+            out = ex._execute_agent(
+                "e-baloy",
+                prompt,
+                rec,
+                esc_context,
+                adapter_id="openai-api",
+                repository_ids=["live-processing-local"],
+                settings=RoutingSettings(prefer_deterministic=True),
+            )
+
+        # Must not stop at grounding_gate with Model None / Cannot verify.
+        self.assertNotEqual(out.get("mode"), "grounding_gate")
+        self.assertTrue(captured_payload, "start_run must be called (Tool Runtime entry)")
+        # Rebuild must not replace prior usable T0 evidence.
+        rebuild.assert_not_called()
+        self.assertTrue(captured_payload.get("tool_runtime"))
+        self.assertIn("sql_query_execute", captured_payload.get("tool_ids") or [])
+        self.assertTrue(captured_payload.get("model"))
+        self.assertEqual(captured_payload.get("agent_id"), "openai-api")
+        esc_packet = captured_payload.get("evidence_packet") or {}
+        self.assertTrue(esc_packet.get("usable"))
+        self.assertIn("tool:repository_intelligence", esc_packet.get("sources") or [])
+        self.assertTrue(
+            captured_payload.get("t0_continuation") or captured_payload.get("reuse_context")
+        )
+        self.assertEqual(
+            (captured_payload.get("completion_contract") or {}).get("intent"),
+            "count",
+        )
+        self.assertIn("17", out.get("answer") or "")
+        g = out.get("grounding") or {}
+        self.assertTrue(
+            g.get("task_solved")
+            or g.get("answer_grounded")
+            or "17" in (out.get("answer") or "")
+        )
+        self.assertTrue(out.get("ai_escalation_occurred"))
+        self.assertEqual(
+            out.get("resolved_model") or out.get("model") or captured_payload.get("model"),
+            "gpt-4.1-mini",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

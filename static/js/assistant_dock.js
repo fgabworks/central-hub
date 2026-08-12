@@ -1184,6 +1184,37 @@
       return status === "queued" || status === "running" || status === "active";
     }
 
+    function formatToolRuntimeFeedHtml(execution) {
+      var feed = (execution && execution.tool_runtime_feed) || null;
+      if (!feed || !Array.isArray(feed.steps) || !feed.steps.length) {
+        return "";
+      }
+      var lines = feed.steps.slice(-8).map(function (s) {
+        var tool = String((s && s.tool) || "");
+        if (!tool || tool === "(final_answer)") return "";
+        var mark = s && s.ok ? "ok" : String((s && s.result) || "err");
+        var ms = s && s.duration_ms != null ? Math.round(Number(s.duration_ms)) : "—";
+        return (
+          "#" +
+          String((s && s.step) || "?") +
+          " " +
+          tool +
+          " [" +
+          mark +
+          " · " +
+          ms +
+          "ms]"
+        );
+      }).filter(Boolean);
+      if (!lines.length) return "";
+      return (
+        "<div>Tool steps: " +
+        escapeHtml(lines.join(" → ")) +
+        (feed.step_count > lines.length ? " …" : "") +
+        "</div>"
+      );
+    }
+
     function formatUsageTelemetryHtml(execution) {
       var t = (execution && execution.telemetry) || null;
       if (!t) {
@@ -1312,6 +1343,7 @@
         " ms · Child run: " +
         escapeHtml(String(isDeterministic ? "None" : t.child_ai_run_id || "None")) +
         "</div>" +
+        formatToolRuntimeFeedHtml(execution) +
         (t.t0_failure_reason || t.next_capability || t.db_query_attempted || t.ai_escalation_occurred
           ? "<div>T0 failure: " +
             escapeHtml(String(t.t0_failure_reason || "None")) +

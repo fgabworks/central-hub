@@ -67,6 +67,7 @@ def build_context_preview(
     evidence_packet: dict[str, Any] | None = None,
     repository_knowledge: dict[str, Any] | None = None,
     bounded_evidence_only: bool = False,
+    lean_tool_runtime: bool = False,
 ) -> dict[str, Any]:
     mode = normalize_mode(mode)
     prompt = (prompt or "")[:MAX_PROMPT_CHARS]
@@ -99,7 +100,9 @@ def build_context_preview(
         roots.append({"repo_id": repo.id, "path": str(root)})
         if bounded_evidence_only:
             continue
-        instructions.extend(load_repo_instructions(root, repo_id=repo.id))
+        # Phase 2: on-demand skill_recall — do not overpack instruction files.
+        if not lean_tool_runtime:
+            instructions.extend(load_repo_instructions(root, repo_id=repo.id))
 
         requested = list((explicit_files or {}).get(repo.id) or [])
         for rel in requested:
@@ -111,6 +114,9 @@ def build_context_preview(
             if not is_secret_path(rel, repo_root=root)
             and not is_secret_path(root / rel, repo_root=root)
         ]
+        if lean_tool_runtime and not safe_requested:
+            # Skip automatic file packing; repo_search/read_file available mid-run.
+            continue
         files.extend(
             select_relevant_files(
                 root,
@@ -123,11 +129,18 @@ def build_context_preview(
 
     repository_knowledge = dict(repository_knowledge or {})
     repository_knowledge["profiles"] = list(repository_knowledge.get("profiles") or [])[:3]
-    repository_knowledge["items"] = list(repository_knowledge.get("items") or [])[:6]
+    # Phase 2 lean: keep compact profile summaries; recall RI entries mid-run via tool.
+    if lean_tool_runtime and not bounded_evidence_only:
+        repository_knowledge["items"] = []
+        repository_knowledge["include_full_index"] = False
+        repository_knowledge["on_demand_recall"] = True
+    else:
+        repository_knowledge["items"] = list(repository_knowledge.get("items") or [])[:6]
     knowledge_text = _repository_knowledge_text(repository_knowledge)
     diagnostics = dict(repository_knowledge.get("diagnostics") or {})
     diagnostics["context_chars_contributed"] = len(knowledge_text)
     diagnostics["full_index_included"] = False
+    diagnostics["lean_tool_runtime"] = bool(lean_tool_runtime)
     repository_knowledge["diagnostics"] = diagnostics
     packed_prompt = _pack_prompt(
         mode=mode,

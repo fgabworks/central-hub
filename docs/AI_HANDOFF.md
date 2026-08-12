@@ -4,7 +4,58 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**Inspect explanation synthesis answer propagation (2026-08-10)**
+**AiriX Unified Tool Runtime — Phase 2: Runtime Intelligence & Efficiency (2026-08-10)**
+
+Extends Phase 1 (same `hub/agent_center/tool_runtime/` package — no parallel runtime).
+Dynamic task-relevant tool selection scores intent, selected context, Repository
+Intelligence categories, and mode (`intelligence.py`). Mid-loop on-demand
+`repository_intelligence` + `skill_recall` replace overpacked initial instructions
+when lean context is enabled. Observation prune preserves grounded facts and
+completion-required tools. T0 → Tool Runtime continuation seeds prior observations
+without rebuilding unchanged context (`continuation.py`). Process-local provider
+session cache reuses `previous_response_id` when conversation+provider+model+fingerprint
+match. Stuck guard soft-recovers with alternate-tool nudges before hard stop.
+Cheapest-capable provider selection for synthesis/reasoning; explicit manual
+provider/model choices are preserved with no silent fallback. Completion contract +
+grounding remain the final stop condition. Per-run telemetry records steps, tool
+calls, context chars/tokens, RI entries, session reused, retries, provider/model,
+AI tokens, runtime, task solved, grounded.
+
+**Fix (same day):** T0 `source_available_needs_query_construction` escalate no longer
+rebuilds evidence and grounding-gates with Model None / Cannot verify. Capability
+escalate preserves T0 packet/RI/filters, resolves a real configured API model, exposes
+`sql_query_execute`, and enters Unified Tool Runtime. Regression:
+`tests/test_airix_capability_escalation.py::QueryConstructionEscalationRuntimeTests`.
+
+Preserved: RBAC, RO SQL/DHIS2, Stage/Live isolation, exact provider/model, timeout/
+cancel, audit, budgets. CLI adapters still packed-context only.
+
+Deferred Phase 3+: MCP, browser, scheduler, shell/`run_command`, write tools,
+workflow editor, CLI native tool loops.
+
+Tests: `tests/test_airix_tool_runtime_phase2.py` (+ Phase 1 suite).
+
+Prior: **AiriX Unified Tool Runtime — Phase 1 (2026-08-10)**
+
+Provider-neutral iterative **read-only** Tool Runtime so AiriX agents actively use Hub
+tools instead of only packed context. Central `ToolSpec` registry + unified
+`execute(tool, args, context) → {ok, summary, observation, source, duration, error}`
+wrap existing handlers (`openai_tools` + RI / saved SQL RO / Data Explorer RO). API
+adapters (OpenAI/Grok) run model → policy gate → execute → observation with active-tool
+filtering, observation prune, max-step + hard runaway cap, duplicate/stuck guard,
+timeout/cancel, and exact provider/model preservation (no silent fallback). T0 remains
+first; completion contract still stops when solved+grounded. Transient live step feed
+attaches to execution status (`tool_runtime_feed`); dock shows compact Tool steps.
+
+Modes: Inspect RO auto; Ask minimal RO; Plan RO only; Agent fixed provider/model + RO;
+Smart uses routing signals for when Tool Runtime is needed. CLI adapters unchanged
+(packed context only in Phase 1).
+
+Deferred: MCP, browser, scheduler, shell/`run_command`, write tools, workflow editor.
+
+Tests: `tests/test_airix_tool_runtime_phase1.py`.
+
+Prior: **Inspect explanation synthesis answer propagation (2026-08-10)**
 
 When T0 gathers grounded RI evidence and escalates for explanation synthesis
 (`t0_explanation_synthesis` → AI), the child provider's terminal answer is now

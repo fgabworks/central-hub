@@ -61,6 +61,7 @@ class AgentCenterService:
         dhis2_reports: Any | None = None,
         sql_executor: Any | None = None,
         sql_connections: Any | None = None,
+        data_explorer: Any | None = None,
     ) -> None:
         self.registry = registry
         self.store = store or AgentCenterStore()
@@ -79,6 +80,7 @@ class AgentCenterService:
         self.audit_store = audit_store
         self.notepad_factory = notepad_factory
         self.dhis2_reports = dhis2_reports
+        self.data_explorer = data_explorer
         self.repository_intelligence = RepositoryIntelligenceService(self.store.db, registry)
         self.runner = AgentRunner(self.store, audit=audit)
         self.openai_runner = OpenAIRunner(
@@ -286,6 +288,8 @@ class AgentCenterService:
             repository_ids=list(repository_ids or []),
             notebook=self.notebook,
             sql_store=self.sql_store,
+            sql_executor=self.sql_executor,
+            sql_connections=self.sql_connections,
             uid_index=self.uid_index,
             email=self.email,
             calendar=self.calendar,
@@ -293,6 +297,8 @@ class AgentCenterService:
             audit_store=self.audit_store,
             dhis2_reports=self.dhis2_reports,
             notepad_factory=self.notepad_factory,
+            repository_intelligence=self.repository_intelligence,
+            data_explorer=self.data_explorer,
             profile_id=profile.id,
             workspace=profile.workspace,
             dhis2_environment=(
@@ -409,6 +415,11 @@ class AgentCenterService:
             evidence_packet=grounding.get("evidence_packet") or {},
             repository_knowledge=repository_knowledge,
             bounded_evidence_only=bool(payload.get("bounded_evidence_only")),
+            lean_tool_runtime=bool(
+                payload.get("tool_runtime_lean_context")
+                or payload.get("on_demand_skills")
+                or payload.get("tool_runtime")
+            ),
         )
         preview["tools"] = {
             "enabled": selected_tools,
@@ -871,11 +882,42 @@ class AgentCenterService:
             )
 
         if getattr(adapter, "is_api_adapter", False):
+            from hub.agent_center.tool_runtime.policy import select_active_tools, tool_runtime_needed
+            from hub.agent_center.routing.context import normalize_interaction_mode
+
+            interaction_mode = normalize_interaction_mode(
+                str(payload.get("interaction_mode") or payload.get("routing_mode") or mode)
+            )
+            use_tool_runtime = bool(payload.get("tool_runtime")) or tool_runtime_needed(
+                interaction_mode=interaction_mode,
+                classification=None,
+                t0_solved=False,
+                adapter_is_api=True,
+                force=bool(payload.get("tool_runtime")),
+            )
+            enabled_tools = set(preview["tools"]["enabled"])
+            if use_tool_runtime:
+                active = select_active_tools(
+                    interaction_mode=interaction_mode,
+                    context_sources=list(payload.get("context_sources") or []),
+                    profile_allowed=set(profile.allowed_tools),
+                    requested=enabled_tools,
+                    max_tools=10,
+                    prompt=prompt,
+                    repository_intelligence=(
+                        payload.get("repository_intelligence")
+                        if isinstance(payload.get("repository_intelligence"), dict)
+                        else preview.get("repository_intelligence")
+                    ),
+                )
+                enabled_tools = {s.name for s in active} | enabled_tools
             tools_ctx = AgentToolsContext(
                 registry=self.registry,
                 repository_ids=list(preview["repository_ids"]),
                 notebook=self.notebook,
                 sql_store=self.sql_store,
+                sql_executor=self.sql_executor,
+                sql_connections=self.sql_connections,
                 uid_index=self.uid_index,
                 profile_id=profile.id,
                 workspace=profile.workspace,
@@ -884,19 +926,35 @@ class AgentCenterService:
                     if str(payload.get("dhis2_environment") or "").strip().lower() in {"stage", "live"}
                     else ""
                 ),
-                allowed_tools=set(preview["tools"]["enabled"]),
+                allowed_tools=enabled_tools,
                 email=self.email,
                 calendar=self.calendar,
                 job_store=self.job_store,
                 audit_store=self.audit_store,
                 notepad_factory=self.notepad_factory,
                 dhis2_reports=self.dhis2_reports,
+                repository_intelligence=self.repository_intelligence,
+                data_explorer=self.data_explorer,
                 max_result_chars=self.openai_settings.max_tool_result_chars,
+                prompt_hint=prompt,
             )
             tools_ctx.referenced_files.extend(referenced)
             api_runner = self.api_runners.get(agent_id)
             if api_runner is None:
                 raise AgentCenterError("API runner unavailable", code="runner_unavailable")
+            from hub.agent_center.tool_runtime.continuation import continuation_from_payload
+            from hub.agent_center.tool_runtime.session import GLOBAL_PROVIDER_SESSION_CACHE
+
+            continuation = continuation_from_payload(payload)
+            conv_id = str(payload.get("conversation_id") or conversation_id or "").strip()
+            fp = str(payload.get("context_fingerprint") or "").strip()
+            session = GLOBAL_PROVIDER_SESSION_CACHE.get(
+                conversation_id=conv_id,
+                provider=agent_id,
+                model=model,
+                context_fingerprint=fp,
+            )
+            session_reused = bool(session and session.get("previous_response_id"))
             api_runner.start(
                 run_id=run["id"],
                 model=model,
@@ -913,6 +971,18 @@ class AgentCenterService:
                 reasoning_effort=run_opts.get("reasoning_effort"),
                 background=bool(run_opts.get("background")),
                 agent_id=agent_id,
+                interaction_mode=interaction_mode,
+                use_tool_runtime=use_tool_runtime,
+                conversation_id=conv_id,
+                context_fingerprint=fp,
+                previous_response_id=str((session or {}).get("previous_response_id") or ""),
+                session_reused=session_reused,
+                t0_continuation=(continuation.public() if continuation else None),
+                repository_intelligence=(
+                    payload.get("repository_intelligence")
+                    if isinstance(payload.get("repository_intelligence"), dict)
+                    else preview.get("repository_intelligence")
+                ),
             )
             return self.store.get_run(run["id"]) or run
 

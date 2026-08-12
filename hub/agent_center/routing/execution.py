@@ -577,6 +577,11 @@ class RouteExecutor:
                         db_query_attempted=bool(prior.get("db_query_attempted")),
                         synthesis_escalation=reason == "t0_explanation_synthesis",
                     )
+                    from hub.agent_center.tool_runtime.continuation import (
+                        build_continuation_from_t0,
+                    )
+
+                    continuation = build_continuation_from_t0(prior, context_preview=context_preview)
                     esc_context = {
                         **context_preview,
                         "evidence_packet": prior.get("evidence_packet")
@@ -586,6 +591,8 @@ class RouteExecutor:
                         "completion_contract": prior.get("completion_contract")
                         or context_preview.get("completion_contract"),
                         "t0_failure_reason": prior.get("t0_failure_reason") or reason,
+                        "next_capability": prior.get("next_capability") or "ai_escalate",
+                        "t0_capability_escalate": True,
                         "allow_general_knowledge": reason == "t0_miss_general_knowledge",
                         "tool_results": prior.get("tool_results")
                         or context_preview.get("tool_results"),
@@ -599,6 +606,10 @@ class RouteExecutor:
                             if isinstance(context_preview.get("repository_intelligence"), dict)
                             else {}
                         ),
+                        # Continue T0 → Tool Runtime without rebuilding unchanged context.
+                        "t0_continuation": continuation.public(),
+                        "tool_runtime_lean_context": True,
+                        "tool_runtime": True,
                     }
                     if reason == "t0_explanation_synthesis":
                         # The model receives only the bounded, already-grounded packet
@@ -675,24 +686,74 @@ class RouteExecutor:
                             if not cand or cand == "hub-simulator" or cand in candidates:
                                 continue
                             candidates.append(cand)
-                        if str(result.get("t0_failure_reason") or "") == "t0_explanation_synthesis":
+                        if str(result.get("t0_failure_reason") or "") in {
+                            "t0_explanation_synthesis",
+                            "source_available_needs_query_construction",
+                            "filters_or_entity_resolution_incomplete",
+                        }:
                             from hub.agent_center.routing.cost import price_per_mtok
-
-                            candidates.sort(
-                                key=lambda candidate: (
-                                    price_per_mtok(settings, candidate) <= 0,
-                                    price_per_mtok(settings, candidate)
-                                    if price_per_mtok(settings, candidate) > 0
-                                    else float("inf"),
-                                )
+                            from hub.agent_center.tool_runtime.model_policy import (
+                                select_runtime_provider_model,
                             )
+
+                            # Prefer cheapest capable available model for synthesis /
+                            # query-construction escalate, but preserve explicit manual choices.
+                            selection = select_runtime_provider_model(
+                                manual_override=bool(is_manual and (adapter_id or selected_model)),
+                                selected_provider=adapter_id if is_manual else None,
+                                selected_model=selected_model if (is_manual and selected_model) else None,
+                                candidates=list(candidates),
+                                availability=self._provider_available,
+                                price_fn=lambda p: price_per_mtok(settings, p),
+                                purpose=(
+                                    "synthesis"
+                                    if str(result.get("t0_failure_reason") or "")
+                                    == "t0_explanation_synthesis"
+                                    else "query_construction"
+                                ),
+                            )
+                            if selection.get("ok") and selection.get("provider"):
+                                # Re-order so chosen cheapest is tried first.
+                                preferred_cheap = str(selection["provider"])
+                                candidates = [preferred_cheap] + [
+                                    c for c in candidates if c != preferred_cheap
+                                ]
+                            elif is_manual and not selection.get("ok"):
+                                # Manual override unavailable — surface error, no silent fallback.
+                                result = self._fail(
+                                    execution_id,
+                                    str(selection.get("error") or "Selected provider unavailable"),
+                                    code="unavailable",
+                                )
+                                chosen_alt = None
+                                # Skip candidate loop below by leaving candidates empty after fail.
+                                candidates = []
+                            else:
+                                candidates.sort(
+                                    key=lambda candidate: (
+                                        price_per_mtok(settings, candidate) <= 0,
+                                        price_per_mtok(settings, candidate)
+                                        if price_per_mtok(settings, candidate) > 0
+                                        else float("inf"),
+                                    )
+                                )
                         chosen_alt = None
                         for candidate in candidates:
                             ok, _detail = self._provider_available(candidate)
                             if ok:
                                 chosen_alt = candidate
                                 break
-                        if chosen_alt is None:
+                        if (
+                            str(result.get("status") or "") in {"failed", "unavailable"}
+                            and result.get("error")
+                            and not chosen_alt
+                            and is_manual
+                        ):
+                            pass  # already failed for manual override
+                        elif chosen_alt is None and str(result.get("status") or "") not in {
+                            "failed",
+                            "unavailable",
+                        }:
                             # No capable AI — surface Cannot verify rather than inventing values.
                             from hub.agent_center.grounding import format_cannot_verify
 
@@ -1024,6 +1085,8 @@ class RouteExecutor:
             audit_store=svc.audit_store,
             dhis2_reports=svc.dhis2_reports,
             notepad_factory=svc.notepad_factory,
+            repository_intelligence=getattr(svc, "repository_intelligence", None),
+            data_explorer=getattr(svc, "data_explorer", None),
             profile_id=profile.id,
             workspace=profile.workspace,
             dhis2_environment=(
@@ -1609,6 +1672,50 @@ class RouteExecutor:
             resolve_repository_context,
         )
 
+        # T0 → AI capability escalate (e.g. query construction): keep prior evidence,
+        # do not rebuild, and do not grounding-gate before Tool Runtime starts.
+        t0_failure_reason = str(
+            context_preview.get("t0_failure_reason")
+            or prior_row.get("t0_failure_reason")
+            or ""
+        ).strip()
+        capability_escalate = bool(
+            prior_fallback == "deterministic"
+            or context_preview.get("t0_continuation")
+            or context_preview.get("t0_capability_escalate")
+            or prior_row.get("t0_capability_escalate")
+            or str(context_preview.get("next_capability") or prior_row.get("next_capability") or "")
+            == "ai_escalate"
+            or t0_failure_reason
+            in {
+                "source_available_needs_query_construction",
+                "filters_or_entity_resolution_incomplete",
+                "source_available_query_not_executed",
+                "t0_capability_escalate",
+                "t0_explanation_synthesis",
+            }
+        )
+        if capability_escalate and t0_failure_reason in {
+            "source_available_needs_query_construction",
+            "filters_or_entity_resolution_incomplete",
+            "source_available_query_not_executed",
+            "t0_capability_escalate",
+            "",
+        }:
+            # Expose RO tools the runtime needs to construct/execute a safe count query.
+            for name in (
+                "sql_lookup",
+                "sql_query_execute",
+                "org_unit_lookup",
+                "uid_lookup",
+                "repository_intelligence",
+                "repo_search",
+                "data_explorer_lookup",
+            ):
+                if name not in tools:
+                    tools.append(name)
+            tools = list(dict.fromkeys(tools))[:12]
+
         requested_repos = list(repository_ids or []) or list(
             context_preview.get("repository_ids") or []
         )
@@ -1661,9 +1768,18 @@ class RouteExecutor:
         packet = context_preview.get("evidence_packet")
         if not isinstance(packet, dict):
             packet = {}
+        prior_packet = dict(packet)
+        has_prior_evidence = bool(
+            prior_packet.get("usable")
+            or prior_packet.get("hits")
+            or prior_packet.get("tool_results")
+            or prior_packet.get("sources")
+        )
         # Cheap evidence for context packing — never answers/terminates the task in Direct mode.
+        # Capability escalate must not rebuild/drop T0 evidence (duplicate context rebuild).
         if (
             not bool(context_preview.get("bounded_evidence_only"))
+            and not (capability_escalate and has_prior_evidence)
             and (requires or (scope.try_deterministic_tools and not packet.get("usable")) or direct_mode)
         ):
             try:
@@ -1691,16 +1807,20 @@ class RouteExecutor:
                     "tool_results": [],
                     "context_only": bool(direct_mode),
                 }
+        elif capability_escalate and has_prior_evidence:
+            packet = prior_packet
 
         # Do not send selected-repo project tasks to agents without usable evidence.
         # General/national/web scope falls through to model knowledge instead.
         # Direct mode never terminates here — context prep only; grounding still applies after.
+        # Capability escalate (query construction) must enter Tool Runtime, not Cannot verify.
         if (
             not direct_mode
             and requires
             and repos
             and not packet.get("usable")
             and not allow_gk
+            and not capability_escalate
         ):
             answer = format_cannot_verify(
                 repository_ids=repos,
@@ -1739,6 +1859,7 @@ class RouteExecutor:
             and not packet.get("usable")
             and agent_requires_repository(chosen)
             and not allow_gk
+            and not capability_escalate
         ):
             answer = format_cannot_verify(
                 repository_ids=repos,
@@ -1762,12 +1883,51 @@ class RouteExecutor:
             )
 
         selected_model = str(context_preview.get("model") or "").strip()
-        provider_changed = bool(fallback_from)
+        if not selected_model:
+            selected_model = str(getattr(recommendation, "recommended_model", "") or "").strip()
+        provider_changed = bool(fallback_from) and not selected_model
         conv_id = str(context_preview.get("conversation_id") or "").strip()
-        session_reused = bool(conv_id)
         prior_fp = str(context_preview.get("context_fingerprint") or "").strip()
         # Explicit escalate/preserve model must not be wiped by provider_changed.
         model_for_run = selected_model
+        # Resolve a real configured provider model before start when Auto/empty.
+        if not model_for_run and capability_escalate:
+            try:
+                adapter = None
+                for candidate in getattr(self.agent_center, "adapters", None) or []:
+                    if str(getattr(getattr(candidate, "descriptor", None), "id", "") or "") == chosen:
+                        adapter = candidate
+                        break
+                if adapter is not None:
+                    from hub.agent_center.model_selection import resolve_model_for_run
+
+                    resolution = resolve_model_for_run(
+                        adapter,
+                        agent_id=chosen,
+                        mode="ask",
+                        selected_model=None,
+                        force_refresh=False,
+                        provider_changed=False,
+                    )
+                    if resolution.ok and resolution.resolved_model:
+                        model_for_run = resolution.resolved_model
+            except Exception:  # noqa: BLE001
+                model_for_run = model_for_run
+        # Phase 2: session reuse only when provider session cache matches fingerprint.
+        session_reused = False
+        if conv_id and chosen:
+            try:
+                from hub.agent_center.tool_runtime.session import GLOBAL_PROVIDER_SESSION_CACHE
+
+                cached = GLOBAL_PROVIDER_SESSION_CACHE.get(
+                    conversation_id=conv_id,
+                    provider=str(chosen),
+                    model=str(model_for_run or selected_model or "").strip(),
+                    context_fingerprint=prior_fp,
+                )
+                session_reused = bool(cached and cached.get("previous_response_id"))
+            except Exception:  # noqa: BLE001
+                session_reused = False
         payload = {
             "profile_id": INTERNAL_WORK_PROFILE,
             "mode": "plan" if interaction_mode == "plan" else ("find" if interaction_mode == "inspect" else "ask"),
@@ -1788,13 +1948,27 @@ class RouteExecutor:
             "allow_general_knowledge": allow_gk,
             "conversation_id": conv_id or None,
             "routing_mode": "direct" if direct_mode else "smart",
-            "interaction_mode": interaction_mode,
-            "context_sources": list(context_preview.get("context_sources") or []),
+            "interaction_mode": interaction_mode if interaction_mode != "smart" else "inspect",
+            "context_sources": list(context_preview.get("context_sources") or [])
+            or (["ro_database", "files"] if capability_escalate else []),
             "dhis2_environment": context_preview.get("dhis2_environment") or "",
-            "reuse_context": bool(prior_fp),
+            "reuse_context": bool(prior_fp) or capability_escalate,
             "context_fingerprint": prior_fp,
             "repository_intelligence": context_preview.get("repository_intelligence"),
             "bounded_evidence_only": bool(context_preview.get("bounded_evidence_only")),
+            "tool_runtime": True,
+            "tool_runtime_lean_context": bool(
+                context_preview.get("tool_runtime_lean_context")
+                or context_preview.get("t0_continuation")
+                or capability_escalate
+            ),
+            "t0_continuation": context_preview.get("t0_continuation"),
+            "t0_failure_reason": t0_failure_reason,
+            "completion_contract": context_preview.get("completion_contract")
+            or prior_row.get("completion_contract"),
+            "detected_filters": context_preview.get("detected_filters")
+            or prior_row.get("detected_filters"),
+            "on_demand_skills": True,
         }
         # Also inject evidence text into hints so adapters without pack hooks still see it.
         evidence_text = format_evidence_for_prompt(packet)
@@ -2004,6 +2178,7 @@ class RouteExecutor:
             (self.get_status(execution_id) or {}).get("fallback_from") or ""
         ).lower() in {"deterministic", "t0"}:
             route = f"T0 → {provider}/{model}".rstrip("/") if provider else "T0 → AI"
+        session_reused = bool(usage.get("session_reused"))
         return public_execution_fields(
             self._update(
                 execution_id,
@@ -2031,6 +2206,8 @@ class RouteExecutor:
                 route_path=route,
                 resolved_provider=provider or None,
                 resolved_model=model or None,
+                session_reused=session_reused
+                or bool((self.get_status(execution_id) or {}).get("session_reused")),
             )
         )
 

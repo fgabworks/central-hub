@@ -10,9 +10,22 @@ from hub.agent_center.routing.models import PromptClassification, RouteRecommend
 
 # Keep AI context lean: task-scoped tools only, no whole-repo dumps.
 _TASK_TOOLS: dict[str, tuple[str, ...]] = {
-    "lookup": ("notebook_lookup", "uid_lookup", "org_unit_lookup", "jobs_lookup", "audit_lookup"),
-    "css_ui": ("repo_search", "read_file"),
-    "sql_investigation": ("sql_lookup", "notebook_lookup", "repo_search", "read_file"),
+    "lookup": (
+        "notebook_lookup",
+        "uid_lookup",
+        "org_unit_lookup",
+        "jobs_lookup",
+        "audit_lookup",
+        "repository_intelligence",
+    ),
+    "css_ui": ("repo_search", "read_file", "repository_intelligence"),
+    "sql_investigation": (
+        "sql_lookup",
+        "sql_query_execute",
+        "notebook_lookup",
+        "repo_search",
+        "read_file",
+    ),
     "dhis2_investigation": (
         "uid_lookup",
         "org_unit_lookup",
@@ -21,11 +34,11 @@ _TASK_TOOLS: dict[str, tuple[str, ...]] = {
         "repo_search",
         "read_file",
     ),
-    "coding": ("repo_search", "read_file", "notebook_lookup"),
+    "coding": ("repo_search", "read_file", "notebook_lookup", "repository_intelligence"),
     "testing": ("repo_search", "read_file", "notebook_lookup"),
-    "architecture": ("repo_search", "read_file", "notebook_lookup"),
+    "architecture": ("repo_search", "read_file", "notebook_lookup", "repository_intelligence"),
     "refactor": ("repo_search", "read_file", "notebook_lookup"),
-    "general": ("notebook_lookup", "repo_search", "read_file"),
+    "general": ("notebook_lookup", "repo_search", "read_file", "repository_intelligence"),
 }
 
 
@@ -266,7 +279,7 @@ def build_minimal_context_preview(
     source_tools = {
         "dhis2_environment": ["org_unit_lookup", "uid_lookup", "dhis2_reports_lookup"],
         "ro_database": ["sql_lookup"],
-        "data_explorer": ["sql_lookup", "repo_search"],
+        "data_explorer": ["sql_lookup", "sql_query_execute", "data_explorer_lookup", "repo_search"],
         "files": ["repo_search", "read_file"],
         "workspace": ["notebook_lookup", "jobs_lookup", "audit_lookup"],
     }

@@ -159,6 +159,26 @@ def public_execution_fields(row: dict[str, Any]) -> dict[str, Any]:
     out["terminal"] = status in TERMINAL_STATUSES
     if "finished_at" not in out and status in TERMINAL_STATUSES:
         out["finished_at"] = out.get("finished_at") or _utcnow()
+    # Attach compact Tool Runtime step feed when a child run exists.
+    run_id = str(out.get("agent_run_id") or "").strip()
+    if run_id:
+        try:
+            from hub.agent_center.tool_runtime.feed import GLOBAL_TOOL_RUNTIME_FEED
+
+            feed = GLOBAL_TOOL_RUNTIME_FEED.snapshot(run_id)
+            if feed.get("steps"):
+                out["tool_runtime_feed"] = feed
+            usage = out.get("usage") if isinstance(out.get("usage"), dict) else {}
+            steps = usage.get("tool_runtime_steps")
+            if isinstance(steps, list) and steps and not out.get("tool_runtime_feed"):
+                out["tool_runtime_feed"] = {
+                    "run_id": run_id,
+                    "status": status,
+                    "steps": steps,
+                    "step_count": len(steps),
+                }
+        except Exception:  # noqa: BLE001
+            pass
     # Always attach usage telemetry from actual execution events (not UI labels).
     try:
         from hub.agent_center.routing.telemetry import attach_execution_telemetry

@@ -334,6 +334,8 @@ def create_app() -> Flask:
         notepad_factory=lambda scope: QuickNotepadStore(
             app.config["NOTEBOOK"].db, scope=scope
         ),
+        dhis2_reports=app.config.get("DHIS2_REPORTS"),
+        data_explorer=app.config.get("DATA_EXPLORER"),
     )
 
     def _routing_availability() -> dict:

@@ -29,6 +29,12 @@ ALLOWED_TOOLS = frozenset(
         "jobs_lookup",
         "audit_lookup",
         "dhis2_reports_lookup",
+        # Phase-1 Tool Runtime extras (handled via tool_runtime.handlers when executed
+        # through UnifiedToolExecutor; listed here for allowlist/profile consistency).
+        "repository_intelligence",
+        "sql_query_execute",
+        "data_explorer_lookup",
+        "skill_recall",
     }
 )
 
@@ -61,9 +67,12 @@ class AgentToolsContext:
     audit_store: Any | None = None
     dhis2_reports: Any | None = None
     notepad_factory: Callable[[str], Any] | None = None
+    repository_intelligence: Any | None = None
+    data_explorer: Any | None = None
     max_result_chars: int = 12_000
     activity: list[ToolActivity] = field(default_factory=list)
     referenced_files: list[dict[str, str]] = field(default_factory=list)
+    prompt_hint: str = ""
 
     def scoped_repos(self) -> list[tuple[Repository, Path]]:
         out: list[tuple[Repository, Path]] = []
@@ -79,7 +88,19 @@ class AgentToolsContext:
 
 
 def tool_definitions(allowed_tools: set[str] | None = None) -> list[dict[str, Any]]:
-    """OpenAI Responses API function tool schemas (read-only)."""
+    """OpenAI Responses API function tool schemas (read-only).
+
+    Prefer ToolSpec registry definitions when available so Tool Runtime and the
+    OpenAI adapter share one schema source.
+    """
+    from hub.agent_center.tool_runtime.specs import openai_tool_definitions
+
+    allowed = set(allowed_tools or ALLOWED_TOOLS)
+    # Keep legacy schemas for tools not yet in the registry (none expected).
+    registry_defs = openai_tool_definitions(allowed)
+    if registry_defs:
+        return registry_defs
+    # Fallback: original inline definitions below (kept for safety).
     definitions = [
         {
             "type": "function",
@@ -276,7 +297,13 @@ def execute_tool(name: str, arguments: dict[str, Any] | str, ctx: AgentToolsCont
         "dhis2_reports_lookup": _tool_dhis2_reports_lookup,
     }
     try:
-        result = handlers[name](arguments, ctx)
+        if name in handlers:
+            result = handlers[name](arguments, ctx)
+        else:
+            from hub.agent_center.tool_runtime.handlers import handle_extra_tool
+
+            extra = handle_extra_tool(name, arguments, ctx)
+            result = extra if isinstance(extra, dict) else {"error": "Tool handler not found"}
         ok = "error" not in result
         payload = json.dumps(result, ensure_ascii=False)
         payload = redact_text(payload, limit=ctx.max_result_chars)

@@ -61,6 +61,11 @@ def _tools_from_row(row: dict[str, Any]) -> list[str]:
         if isinstance(item, dict):
             _add(item.get("tool"))
 
+    feed = row.get("tool_runtime_feed") if isinstance(row.get("tool_runtime_feed"), dict) else {}
+    for item in feed.get("steps") or []:
+        if isinstance(item, dict):
+            _add(item.get("tool"))
+
     packet = row.get("evidence_packet") if isinstance(row.get("evidence_packet"), dict) else {}
     for item in packet.get("tool_results") or []:
         if isinstance(item, dict):
@@ -84,6 +89,7 @@ def _tools_from_row(row: dict[str, Any]) -> list[str]:
             "jobs_lookup",
             "audit_lookup",
             "dhis2_reports_lookup",
+            "data_explorer_lookup",
             "repository_intelligence",
         }:
             _add(part)
@@ -101,6 +107,54 @@ def _int0(value: Any) -> int:
         return max(0, int(value))
     except (TypeError, ValueError):
         return 0
+
+
+def _tool_runtime_telemetry(row: dict[str, Any], usage: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Compact Phase 2 Tool Runtime rollup from child usage / feed."""
+    usage = usage if isinstance(usage, dict) else {}
+    raw = usage.get("tool_runtime_telemetry")
+    if isinstance(raw, dict) and raw:
+        return {
+            "steps": _int0(raw.get("steps")),
+            "tool_calls": _int0(raw.get("tool_calls")),
+            "context_chars": raw.get("context_chars"),
+            "ri_entries_used": _int0(raw.get("ri_entries_used")),
+            "session_reused": bool(raw.get("session_reused")),
+            "retries": _int0(raw.get("retries")),
+            "provider": raw.get("provider"),
+            "model": raw.get("model"),
+            "runtime_ms": raw.get("runtime_ms"),
+            "task_solved": bool(raw.get("task_solved")),
+            "grounded": bool(raw.get("grounded")),
+            "continuation_used": bool(raw.get("continuation_used")),
+            "active_tools": list(raw.get("active_tools") or [])[:16],
+            "stop_reason": str(raw.get("stop_reason") or ""),
+        }
+    feed = row.get("tool_runtime_feed") if isinstance(row.get("tool_runtime_feed"), dict) else {}
+    steps = list(feed.get("steps") or usage.get("tool_runtime_steps") or [])
+    if not steps and not usage.get("session_reused") and not usage.get("retries"):
+        return {}
+    tool_calls = sum(
+        1
+        for s in steps
+        if isinstance(s, dict) and str(s.get("tool") or "") not in {"", "(final_answer)"}
+    )
+    return {
+        "steps": len(steps),
+        "tool_calls": tool_calls,
+        "context_chars": usage.get("context_chars") or row.get("context_chars"),
+        "ri_entries_used": 0,
+        "session_reused": bool(usage.get("session_reused") or row.get("session_reused")),
+        "retries": _int0(usage.get("retries")),
+        "provider": usage.get("provider") or row.get("adapter_id"),
+        "model": usage.get("model") or row.get("model"),
+        "runtime_ms": usage.get("runtime_ms") or row.get("runtime_ms"),
+        "task_solved": bool((row.get("grounding") or {}).get("task_solved")),
+        "grounded": bool((row.get("grounding") or {}).get("answer_grounded") or (row.get("grounding") or {}).get("grounded")),
+        "continuation_used": bool(usage.get("continuation_used")),
+        "active_tools": [],
+        "stop_reason": str(usage.get("stop_reason") or ""),
+    }
 
 
 def _repository_intelligence_diagnostics(row: dict[str, Any]) -> dict[str, Any]:
@@ -338,6 +392,16 @@ def build_execution_telemetry(row: dict[str, Any] | None) -> dict[str, Any]:
         model_bit = model or ""
         route_path = f"T0 → {display_provider}/{model_bit}".rstrip("/")
 
+    trt = _tool_runtime_telemetry(row, usage)
+    session_reused = bool(row.get("session_reused"))
+    if isinstance(usage, dict) and usage.get("session_reused") is not None:
+        session_reused = bool(usage.get("session_reused"))
+    retries = 0
+    if isinstance(trt, dict) and trt.get("retries") is not None:
+        retries = int(trt.get("retries") or 0)
+    elif isinstance(usage, dict) and usage.get("retries") is not None:
+        retries = int(usage.get("retries") or 0)
+
     return {
         "routing_tier": _resolve_tier(row, pure_t0=False),
         "execution_type": EXEC_HYBRID if hybrid else EXEC_AI,
@@ -361,10 +425,12 @@ def build_execution_telemetry(row: dict[str, Any] | None) -> dict[str, Any]:
         if hybrid or row.get("ai_escalation_occurred")
         else bool(row.get("ai_escalation_occurred")),
         "routing_mode": row.get("routing_mode") or (row.get("context") or {}).get("routing_mode"),
-        "session_reused": bool(row.get("session_reused")),
+        "session_reused": session_reused,
         "context_items": list(row.get("context_items") or []),
         "context_chars": row.get("context_chars"),
         "repository_intelligence": _repository_intelligence_diagnostics(row),
+        "tool_runtime": trt,
+        "retries": retries,
     }
 
 
@@ -466,6 +532,15 @@ def format_telemetry_block(telemetry: dict[str, Any] | None) -> str:
             f"Context items: {items}"
             + (f" · Context chars: {chars}" if chars is not None else "")
         )
+    trt = t.get("tool_runtime") if isinstance(t.get("tool_runtime"), dict) else {}
+    if trt:
+        lines.append(
+            f"Tool Runtime steps: {trt.get('steps') or 0} · "
+            f"Tool calls: {trt.get('tool_calls') or 0} · "
+            f"Retries: {trt.get('retries') if t.get('retries') is None else t.get('retries')} · "
+            f"Continuation: {'Yes' if trt.get('continuation_used') else 'No'} · "
+            f"RI entries: {trt.get('ri_entries_used') or 0}"
+        )
     ri = t.get("repository_intelligence") if isinstance(t.get("repository_intelligence"), dict) else {}
     if ri:
         repos = ", ".join(str(value) for value in (ri.get("repository_ids") or [])) or "None"
@@ -511,6 +586,8 @@ def public_telemetry(telemetry: dict[str, Any] | None) -> dict[str, Any]:
         "context_chars": telemetry.get("context_chars"),
         "repository_intelligence": dict(telemetry.get("repository_intelligence") or {}),
         "route_path": telemetry.get("route_path"),
+        "tool_runtime": dict(telemetry.get("tool_runtime") or {}),
+        "retries": int(telemetry.get("retries") or 0),
     }
 
 

@@ -70,10 +70,15 @@ _PROVIDER_PERM = {
 
 _TOOL_PERMS = {
     "sql_lookup": "tools.sql",
+    "sql_query_execute": "tools.sql",
+    "data_explorer_lookup": "tools.sql",
     "dhis2_reports_lookup": "tools.dhis2",
     "uid_lookup": "tools.dhis2",
+    "org_unit_lookup": "tools.dhis2",
     "repo_search": "tools.repository",
     "read_file": "tools.repository",
+    "repository_intelligence": "tools.repository",
+    "skill_recall": "tools.repository",
     "playwright_lookup": "tools.playwright",
     "ui_snapshot": "tools.playwright",
 }
