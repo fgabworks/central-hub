@@ -88,6 +88,11 @@ from hub.notebook import (
     normalize_workspace,
     render_markdown,
 )
+from hub.notebook.references import (
+    REFERENCE_TYPE_LABELS,
+    OfficialReferencesStore,
+    ReferenceError,
+)
 from hub.notebook.dashboard import (
     DASHBOARD_QUEUE_FETCH_LIMIT,
     dashboard_work_queue,
@@ -493,6 +498,7 @@ def create_app() -> Flask:
         if ep in {
             "work_dashboard",
             "work_notebook",
+            "work_notebook_reference_file",
             "work_email",
             "work_calendar",
             "repositories",
@@ -1842,6 +1848,22 @@ def create_app() -> Flask:
             )
         return repositories, checklist, links
 
+    def _reference_subject_from_form():
+        """Return (subject, subject_source) for create.
+
+        Empty untouched fields → (None, None) so the store can auto-detect from
+        the upload. Explicit clear uses subject_source=manual with empty subject.
+        """
+        if "subject" not in request.form:
+            return None, None
+        subj = request.form.get("subject") or ""
+        src = (request.form.get("subject_source") or "").strip().lower()
+        if src not in {"detected", "suggested", "manual", ""}:
+            src = ""
+        if subj.strip() or src == "manual":
+            return subj, src or "manual"
+        return None, None
+
     def _render_notebook(*, scope: str):
         store: NotebookStore = app.config["NOTEBOOK"]
         audit: AuditStore = app.config["AUDIT"]
@@ -1852,11 +1874,94 @@ def create_app() -> Flask:
         nb_ep = notebook_endpoint(scope_n)
         view = (request.values.get("view") or "").strip().lower()
         missions_view = scope_n == "work" and view == "missions"
+        references_view = scope_n == "work" and view == "references"
         mc = mission_control(store) if scope_n == "work" else None
+        refs_store = OfficialReferencesStore(store.db) if scope_n == "work" else None
 
         if request.method == "POST":
             action = (request.form.get("action") or "").strip()
             actor = current_actor()
+            if refs_store is not None and action in {
+                "reference_create",
+                "reference_quick_add",
+                "reference_update",
+                "reference_delete",
+            }:
+                references_view = True
+                try:
+                    if action in {"reference_create", "reference_quick_add"}:
+                        upload = request.files.get("file") or request.files.get("refs-quick-file")
+                        # Quick-add file input uses id refs-quick-file without name — use first file.
+                        if action == "reference_quick_add" and (not upload or not upload.filename):
+                            for _key, fobj in request.files.items():
+                                if fobj and fobj.filename:
+                                    upload = fobj
+                                    break
+                        subj, subj_src = _reference_subject_from_form()
+                        created = refs_store.create(
+                            title=request.form.get("title") or "",
+                            ref_type=request.form.get("ref_type") or "",
+                            year=request.form.get("year") or None,
+                            short_note=request.form.get("short_note") or "",
+                            source_url=request.form.get("source_url") or "",
+                            external_url=request.form.get("external_url") or "",
+                            subject=subj,
+                            subject_source=subj_src,
+                            upload=upload,
+                            actor=actor,
+                        )
+                        audit.append(
+                            action=audit_actions.NOTEBOOK_REFERENCE_CREATE,
+                            target=created["id"],
+                            detail=f"Official reference: {created.get('title')}",
+                            ok=True,
+                        )
+                        flash = f"Saved reference “{created.get('title')}”."
+                        return redirect(url_for(nb_ep, view="references", year=created["year"]))
+                    if action == "reference_update":
+                        ref_id = (request.form.get("ref_id") or "").strip()
+                        update_payload = {
+                            "title": request.form.get("title"),
+                            "ref_type": request.form.get("ref_type"),
+                            "year": request.form.get("year"),
+                            "short_note": request.form.get("short_note"),
+                            "source_url": request.form.get("source_url"),
+                            "external_url": request.form.get("external_url"),
+                            "upload": request.files.get("file"),
+                        }
+                        if "subject" in request.form:
+                            update_payload["subject"] = request.form.get("subject")
+                            src = (request.form.get("subject_source") or "").strip().lower()
+                            if src in {"detected", "suggested", "manual"}:
+                                update_payload["subject_source"] = src
+                            else:
+                                update_payload["subject_source"] = "manual"
+                        updated = refs_store.update(ref_id, update_payload)
+                        audit.append(
+                            action=audit_actions.NOTEBOOK_REFERENCE_UPDATE,
+                            target=updated["id"],
+                            detail=f"Updated official reference: {updated.get('title')}",
+                            ok=True,
+                        )
+                        flash = "Reference updated."
+                        return redirect(url_for(nb_ep, view="references", year=updated["year"]))
+                    if action == "reference_delete":
+                        ref_id = (request.form.get("ref_id") or "").strip()
+                        deleted = refs_store.delete(ref_id)
+                        if deleted:
+                            audit.append(
+                                action=audit_actions.NOTEBOOK_REFERENCE_DELETE,
+                                target=ref_id,
+                                detail="Deleted official reference",
+                                ok=True,
+                            )
+                            flash = "Reference deleted."
+                        else:
+                            error = "Reference not found."
+                        if not error:
+                            return redirect(url_for(nb_ep, view="references"))
+                except ReferenceError as exc:
+                    error = str(exc)
             if action == "new":
                 repo_id = (request.form.get("new_repo") or "").strip()
                 label = ""
@@ -2041,8 +2146,74 @@ def create_app() -> Flask:
                         selected_id = ""
                     else:
                         error = "Note not found."
-            elif action and not action.startswith("mission_"):
+            elif action and not action.startswith("mission_") and not action.startswith("reference_"):
                 error = f"Unknown action: {action}"
+
+        if references_view and refs_store is not None:
+            year_raw = (request.args.get("year") or "").strip()
+            type_raw = (request.args.get("type") or "").strip()
+            q_raw = (request.args.get("q") or "").strip()
+            year_filter = int(year_raw) if year_raw.isdigit() else None
+            edit_id = (request.args.get("edit") or "").strip()
+            refs_edit = refs_store.get(edit_id) if edit_id else None
+            groups = refs_store.grouped(year=year_filter, ref_type=type_raw or None, q=q_raw or None)
+            years = refs_store.available_years()
+            # Ensure filter year appears even if empty after deletes.
+            if year_filter and year_filter not in years:
+                years = sorted(set(years + [year_filter]), reverse=True)
+            from datetime import datetime, timezone as _tz
+
+            persist_workspace(store.db, scope_n)
+            audit.append(
+                action=audit_actions.NOTEBOOK_REFERENCE_VIEW,
+                target="references",
+                detail="Notebook view scope=work view=references",
+                ok=True,
+            )
+            html = render_template(
+                "notebook.html",
+                notes=[],
+                selected=None,
+                selected_id="",
+                counts=store.status_counts(scope=scope_n),
+                status="all",
+                filters={"repo": "", "type": "", "priority": "", "tag": "", "q": ""},
+                registry_repos=_notebook_registry_options(),
+                all_tags=store.list_tags(scope=scope_n),
+                statuses=STATUSES,
+                status_labels=STATUS_LABELS,
+                note_types=NOTE_TYPES,
+                note_type_labels=NOTE_TYPE_LABELS,
+                priorities=PRIORITIES,
+                priority_labels=PRIORITY_LABELS,
+                repo_roles=REPO_ROLES,
+                repo_role_labels=REPO_ROLE_LABELS,
+                preview_html="",
+                notepad=QuickNotepadStore(store.db, scope=scope_n).get(),
+                show_notepad=True,
+                note_scope=scope_n,
+                scope_label=SCOPE_LABELS.get(scope_n, scope_n),
+                notebook_endpoint=nb_ep,
+                allow_repositories=True,
+                page_title="Work Notebook",
+                page_sub="Official References — memoranda, advisories, guidelines, and related work documents.",
+                flash=flash,
+                error=error,
+                missions_view=False,
+                mission_board=None,
+                references_view=True,
+                refs_groups=groups,
+                refs_years=years,
+                refs_filters={"year": year_raw, "type": type_raw, "q": q_raw},
+                refs_type_labels=REFERENCE_TYPE_LABELS,
+                refs_edit=refs_edit,
+                refs_total=sum(g["count"] for g in groups),
+                refs_default_year=datetime.now(_tz.utc).year,
+                refs_quick=None,
+                refs_quick_needed=False,
+            )
+            resp = app.make_response(html)
+            return apply_workspace_cookie(resp, scope_n)
 
         mission_board = None
         if missions_view and mc is not None:
@@ -2227,6 +2398,34 @@ def create_app() -> Flask:
     @app.route("/work/notebook", methods=["GET", "POST"])
     def work_notebook():
         return _render_notebook(scope="work")
+
+    @app.get("/work/notebook/references/<ref_id>/file")
+    def work_notebook_reference_file(ref_id: str):
+        store: NotebookStore = app.config["NOTEBOOK"]
+        refs = OfficialReferencesStore(store.db)
+        try:
+            path = refs.resolve_file(ref_id)
+        except ReferenceError as exc:
+            abort(404, description=str(exc))
+        item = refs.get(ref_id)
+        download_name = (item or {}).get("original_filename") or path.name
+        return send_file(
+            path,
+            as_attachment=False,
+            download_name=download_name,
+            mimetype=(item or {}).get("mime_type") or None,
+        )
+
+    @app.post("/api/notebook/references/detect-meta")
+    def api_notebook_references_detect_meta():
+        """Bounded filename + subject detection for Quick Add / Add Reference."""
+        store: NotebookStore = app.config["NOTEBOOK"]
+        refs = OfficialReferencesStore(store.db)
+        upload = request.files.get("file")
+        if not upload or not upload.filename:
+            return jsonify({"ok": False, "error": "file_required"}), 400
+        meta = refs.suggest_from_upload(upload)
+        return jsonify({"ok": True, **meta})
 
     @app.get("/personal/tasks")
     def personal_tasks():

@@ -139,11 +139,14 @@ Demo `sample-*` entries removed from the active registry; job tests use
 
 Store: `data/notebook.db` (`hub/notebook/`) migrations include `pinned`, `quick_notepad`,
 `scope` (`personal`\|`work`) + `hub_prefs`, separate Quick Notepads (`personal` / `work`),
-and `panel_size` (`normal`\|`expanded`\|`maximized`) for the shared floating drawer.
-Existing notes migrate to **work**. Existing Quick Notepad content migrates to the
-**personal** pad; work starts empty. Convert → note uses the same scope as the pad.
-Work Dashboard queue shows work-scoped notes only. Assistant context never preloads
-Notebook content; selected lookup tools search the active profile scope.
+`panel_size` (`normal`\|`expanded`\|`maximized`) for the shared floating drawer, Official
+References (`009` + subject columns in `010`), and TODAY missions. Work Notebook
+`?view=references` is the Official References library (Year→Type; optional Subject via
+bounded TXT/PDF/DOCX extract — no OCR/LLM). Existing notes migrate to **work**. Existing
+Quick Notepad content migrates to the **personal** pad; work starts empty. Convert → note
+uses the same scope as the pad. Work Dashboard queue shows work-scoped notes only.
+Assistant context never preloads Notebook content; selected lookup tools search the
+active profile scope.
 
 Work Dashboard also shows TODAY Mission Control as a compact, content-height panel.
 It renders up to five mission rows as a dashboard preview. Rows expose

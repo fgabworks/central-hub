@@ -4,7 +4,31 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**ARCTIC — Personal profile + document control center (2026-08-12)**
+**Official References — Subject detection (2026-08-12)**
+
+Editable `subject` (+ internal `subject_source`: detected / suggested / manual) on
+Work Notebook Official References. On upload/replace, bounded text extract from
+TXT/MD/PDF/DOCX (`hub/notebook/text_extract.py`, no OCR) then deterministic
+SUBJECT/RE detection or heading suggestion (`hub/notebook/subject_detect.py`, no
+LLM). Quick Add autofills via `POST /api/notebook/references/detect-meta` before
+submit; user can edit/clear. Legacy rows keep `subject=NULL`. Search includes
+Subject. Migration `010_official_references_subject`.
+
+Tests: `tests/test_official_references.py`.
+
+Prior: **Official References — Work Notebook library (2026-08-12)**
+
+Work-only sub-view at `/work/notebook?view=references`. Groups by Year → Type
+(Department Memoranda / Advisories / Guidelines / Other). Supports local upload,
+external link, or both; optional short note + source URL. Auto-sets added date,
+storage kind, and path under `data/work-notebook/references/{year}/`. Year/type
+inferred from filename when possible (user can correct). Quick Add: pick/drop file,
+only Type/Year if undetected. Search + Year/Type filters. No AI/OCR/versioning/
+approvals/tags. Migration `009_official_references` in `notebook.db`.
+
+Tests: `tests/test_official_references.py`.
+
+Prior: **ARCTIC — Personal profile + document control center (2026-08-12)**
 
 CLIMATE naming: CLIMATE = system · VANTA = Work · ARCTIC = Personal · AiriX = shared AI ·
 ECLIPSE = reserved. ARCTIC (`hub/arctic/`, `data/arctic.db`) is a compact Personal

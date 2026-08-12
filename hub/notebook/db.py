@@ -201,6 +201,42 @@ _MIGRATIONS: list[tuple[str, str]] = [
             ON notes(scope, carry_over, status);
         """,
     ),
+    (
+        "009_official_references",
+        """
+        CREATE TABLE IF NOT EXISTS official_references (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL DEFAULT '',
+            ref_type TEXT NOT NULL DEFAULT 'other',
+            year INTEGER NOT NULL,
+            short_note TEXT NOT NULL DEFAULT '',
+            source_url TEXT NOT NULL DEFAULT '',
+            external_url TEXT NOT NULL DEFAULT '',
+            storage_kind TEXT NOT NULL DEFAULT 'file',
+            original_filename TEXT NOT NULL DEFAULT '',
+            stored_filename TEXT NOT NULL DEFAULT '',
+            relative_path TEXT NOT NULL DEFAULT '',
+            mime_type TEXT NOT NULL DEFAULT '',
+            size_bytes INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            created_by TEXT NOT NULL DEFAULT 'owner'
+        );
+        CREATE INDEX IF NOT EXISTS idx_official_refs_year
+            ON official_references(year DESC);
+        CREATE INDEX IF NOT EXISTS idx_official_refs_type
+            ON official_references(ref_type);
+        CREATE INDEX IF NOT EXISTS idx_official_refs_year_type
+            ON official_references(year DESC, ref_type);
+        """,
+    ),
+    (
+        "010_official_references_subject",
+        """
+        ALTER TABLE official_references ADD COLUMN subject TEXT;
+        ALTER TABLE official_references ADD COLUMN subject_source TEXT NOT NULL DEFAULT '';
+        """,
+    ),
 ]
 
 

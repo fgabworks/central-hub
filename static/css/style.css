@@ -8432,3 +8432,141 @@ table.data tr.is-selected td { background: var(--accent-soft); }
   .arctic-span-2 { grid-column: auto; }
   .arctic-detail-pane { position: static; }
 }
+
+/* ——— Official References (Work Notebook) ——— */
+.nb-refs-shell {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr) minmax(260px, 320px);
+  gap: 0.75rem;
+  align-items: start;
+}
+.nb-refs-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.65rem;
+}
+.nb-refs-title { margin: 0; font-size: 1.05rem; }
+.nb-refs-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
+.nb-refs-file-input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+.nb-refs-quick-btn { cursor: pointer; margin: 0; }
+.nb-refs-dropzone {
+  margin: 0.5rem 0 0.85rem;
+  padding: 0.75rem;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 0.86rem;
+  background: var(--panel-2);
+}
+.nb-refs-dropzone.is-dragover {
+  border-color: var(--crimson);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.nb-refs-quick-form { display: none; margin-bottom: 0.85rem; padding: 0.75rem; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); }
+.nb-refs-quick-form.is-open { display: block; }
+.nb-refs-quick-grid, .nb-refs-form { display: grid; gap: 0.55rem; }
+.nb-refs-quick-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.nb-refs-form label, .nb-refs-quick-form label {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.84rem;
+  color: var(--muted);
+}
+.nb-refs-form input, .nb-refs-form select, .nb-refs-form textarea,
+.nb-refs-quick-form input, .nb-refs-quick-form select, .nb-refs-quick-form textarea {
+  width: 100%;
+  background: var(--charcoal);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.4rem 0.5rem;
+}
+.nb-refs-form textarea,
+.nb-refs-quick-form textarea {
+  min-height: 3.2rem;
+  resize: vertical;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.nb-refs-subject {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.nb-refs-form-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-top: 0.35rem; }
+.nb-refs-req { color: var(--warning); font-size: 0.75rem; }
+.nb-refs-year { margin: 1rem 0 0.35rem; }
+.nb-refs-year-title { margin: 0 0 0.45rem; font-size: 1rem; }
+.nb-refs-type-block { margin: 0 0 0.75rem; }
+.nb-refs-type-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.nb-refs-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; }
+.nb-refs-item {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.nb-refs-item-title { font-weight: 600; }
+.nb-refs-note { font-size: 0.84rem; margin-top: 0.15rem; }
+.nb-refs-item-actions { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; }
+.nb-refs-menu { position: relative; }
+.nb-refs-menu > summary { list-style: none; cursor: pointer; }
+.nb-refs-menu > summary::-webkit-details-marker { display: none; }
+.nb-refs-menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.25rem);
+  min-width: 8rem;
+  z-index: 5;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.35rem;
+  display: grid;
+  gap: 0.2rem;
+}
+.nb-refs-menu-panel a,
+.nb-refs-menu-panel button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  padding: 0.35rem 0.45rem;
+  border-radius: 6px;
+  cursor: pointer;
+  text-decoration: none;
+  font: inherit;
+}
+.nb-refs-menu-panel a:hover,
+.nb-refs-menu-panel button:hover { background: var(--accent-soft); }
+.nb-refs-side .nb-editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+.nb-refs-side .nb-editor-header h2 { margin: 0; font-size: 1rem; }
+@media (max-width: 1100px) {
+  .nb-refs-shell { grid-template-columns: 1fr; }
+  .nb-refs-quick-grid { grid-template-columns: 1fr; }
+}

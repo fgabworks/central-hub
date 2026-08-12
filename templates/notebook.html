@@ -14,7 +14,9 @@
 {% if flash %}<div class="banner" style="background:var(--success-soft);border-color:rgba(34,197,94,.35)">{{ flash }}</div>{% endif %}
 {% if error %}<div class="banner banner-error">{{ error }}</div>{% endif %}
 
-{% if missions_view|default(false) and mission_board %}
+{% if references_view|default(false) %}
+  {% include "partials/notebook_official_references.html" %}
+{% elif missions_view|default(false) and mission_board %}
   {% include "partials/notebook_mission_control.html" %}
 {% else %}
 <div class="nb-workspace">
@@ -24,6 +26,10 @@
     <div class="nav-label">Mission Control</div>
     <a class="nb-status" href="{{ url_for(notebook_endpoint, view='missions') }}">
       <span>🚀 TODAY Mission Control</span>
+    </a>
+    <div class="nav-label">Library</div>
+    <a class="nb-status" href="{{ url_for(notebook_endpoint, view='references') }}">
+      <span>Official References</span>
     </a>
     {% endif %}
     <div class="nav-label">Statuses</div>

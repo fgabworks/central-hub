@@ -1,0 +1,387 @@
+{# Official References — Work Notebook sub-view #}
+<div class="nb-refs-shell">
+  <aside class="nb-rail card" aria-label="Official References">
+    <div class="nav-label">Work Notebook</div>
+    <a class="nb-status" href="{{ url_for(notebook_endpoint) }}">
+      <span>← All Notes</span>
+    </a>
+    {% if note_scope == 'work' %}
+    <a class="nb-status" href="{{ url_for(notebook_endpoint, view='missions') }}">
+      <span>TODAY Mission Control</span>
+    </a>
+    {% endif %}
+    <div class="nav-label">Library</div>
+    <a class="nb-status is-active" href="{{ url_for(notebook_endpoint, view='references') }}">
+      <span>Official References</span>
+      <span class="nb-count">{{ refs_total }}</span>
+    </a>
+    <div class="nav-label">Years</div>
+    <a class="nb-status{% if not refs_filters.year %} is-active{% endif %}"
+       href="{{ url_for(notebook_endpoint, view='references', type=refs_filters.type, q=refs_filters.q) }}">
+      <span>All years</span>
+    </a>
+    {% for y in refs_years %}
+    <a class="nb-status{% if refs_filters.year == y|string %} is-active{% endif %}"
+       href="{{ url_for(notebook_endpoint, view='references', year=y, type=refs_filters.type, q=refs_filters.q) }}">
+      <span>{{ y }}</span>
+    </a>
+    {% endfor %}
+  </aside>
+
+  <section class="nb-list card nb-refs-main">
+    <div class="nb-refs-toolbar">
+      <h2 class="nb-refs-title">Official References</h2>
+      <div class="nb-refs-actions">
+        <button type="button" class="btn btn-primary btn-sm" id="refs-open-add">+ Add Reference</button>
+        <label class="btn btn-sm nb-refs-quick-btn" for="refs-quick-file">Quick Add</label>
+        <input type="file" name="file" id="refs-quick-file" class="nb-refs-file-input" form="refs-quick-form">
+      </div>
+    </div>
+
+    <form class="nb-filters" method="get" action="{{ url_for(notebook_endpoint) }}">
+      <input type="hidden" name="view" value="references">
+      <input type="search" name="q" value="{{ refs_filters.q }}" placeholder="Search references…" aria-label="Search references">
+      <select name="year" aria-label="Year">
+        <option value="">All years</option>
+        {% for y in refs_years %}
+          <option value="{{ y }}" {% if refs_filters.year == y|string %}selected{% endif %}>{{ y }}</option>
+        {% endfor %}
+      </select>
+      <select name="type" aria-label="Type">
+        <option value="">All types</option>
+        {% for key, label in refs_type_labels.items() %}
+          <option value="{{ key }}" {% if refs_filters.type == key %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn btn-sm" type="submit">Filter</button>
+    </form>
+
+    <div class="nb-refs-dropzone" id="refs-dropzone" tabindex="0"
+         aria-label="Drop files here for Quick Add">
+      Drop files here for Quick Add — Type/Year only if not detected.
+    </div>
+
+    {# Quick Add — minimal fields after file select #}
+    <form method="post" enctype="multipart/form-data" class="nb-refs-quick-form{% if refs_quick_needed %} is-open{% endif %}"
+          id="refs-quick-form" action="{{ url_for(notebook_endpoint, view='references') }}">
+      <input type="hidden" name="action" value="reference_quick_add">
+      <div class="nb-refs-quick-grid">
+        <label>Detected title
+          <input name="title" id="refs-quick-title" value="{{ refs_quick.title if refs_quick else '' }}" placeholder="From filename">
+        </label>
+        <label>Subject <span class="muted">(optional)</span>
+          <textarea name="subject" id="refs-quick-subject" rows="2" maxlength="200" placeholder="From document when found">{{ refs_quick.subject if refs_quick and refs_quick.subject else '' }}</textarea>
+          <input type="hidden" name="subject_source" id="refs-quick-subject-source" value="{{ refs_quick.subject_source if refs_quick else '' }}">
+        </label>
+        <label>Type{% if not (refs_quick and refs_quick.ref_type) %} <span class="nb-refs-req">required</span>{% endif %}
+          <select name="ref_type" id="refs-quick-type" {% if not (refs_quick and refs_quick.ref_type) %}required{% endif %}>
+            <option value="">Select type…</option>
+            {% for key, label in refs_type_labels.items() %}
+              <option value="{{ key }}" {% if refs_quick and refs_quick.ref_type == key %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Year{% if not (refs_quick and refs_quick.year) %} <span class="nb-refs-req">required</span>{% endif %}
+          <input name="year" id="refs-quick-year" type="number" min="1990" max="2100"
+                 value="{{ refs_quick.year if refs_quick and refs_quick.year else '' }}"
+                 {% if not (refs_quick and refs_quick.year) %}required{% endif %}>
+        </label>
+      </div>
+      <div class="nb-refs-form-actions">
+        <button class="btn btn-primary btn-sm" type="submit">Save</button>
+        <a class="btn btn-sm" href="{{ url_for(notebook_endpoint, view='references') }}">Cancel</a>
+        <span class="muted">File chosen via Quick Add / drag-drop. Edit metadata later if needed.</span>
+      </div>
+    </form>
+
+    {% if refs_groups %}
+      {% for group in refs_groups %}
+      <section class="nb-refs-year" id="year-{{ group.year }}">
+        <h3 class="nb-refs-year-title">{{ group.year }} <span class="muted">({{ group.count }})</span></h3>
+        {% for tg in group.types %}
+        <div class="nb-refs-type-block">
+          <h4 class="nb-refs-type-title">{{ tg.label }}</h4>
+          <ul class="nb-refs-list">
+            {% for item in tg.references %}
+            <li class="nb-refs-item">
+              <div class="nb-refs-item-main">
+                <div class="nb-refs-item-title">{{ item.title }}</div>
+                {% if item.subject %}<div class="muted nb-refs-subject">Subject: {{ item.subject }}</div>{% endif %}
+                {% if item.short_note %}<div class="muted nb-refs-note">{{ item.short_note }}</div>{% endif %}
+              </div>
+              <div class="nb-refs-item-actions">
+                {% if item.has_file %}
+                  <a class="btn btn-sm" href="{{ url_for('work_notebook_reference_file', ref_id=item.id) }}" target="_blank" rel="noopener noreferrer">Open</a>
+                {% elif item.external_url %}
+                  <a class="btn btn-sm" href="{{ item.external_url }}" target="_blank" rel="noopener noreferrer">Open</a>
+                {% endif %}
+                {% if item.has_source %}
+                  <a class="btn btn-sm" href="{{ item.source_url }}" target="_blank" rel="noopener noreferrer">Source</a>
+                {% endif %}
+                <details class="nb-refs-menu">
+                  <summary class="btn btn-sm" aria-label="More actions">⋯</summary>
+                  <div class="nb-refs-menu-panel">
+                    <a href="{{ url_for(notebook_endpoint, view='references', edit=item.id, year=refs_filters.year, type=refs_filters.type, q=refs_filters.q) }}">Edit</a>
+                    <form method="post" action="{{ url_for(notebook_endpoint, view='references') }}"
+                          onsubmit="return confirm('Delete this reference? Local file will be removed from the library.');">
+                      <input type="hidden" name="action" value="reference_delete">
+                      <input type="hidden" name="ref_id" value="{{ item.id }}">
+                      <button type="submit">Delete</button>
+                    </form>
+                  </div>
+                </details>
+              </div>
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endfor %}
+      </section>
+      {% endfor %}
+    {% else %}
+      <p class="muted" style="padding:1rem">No official references yet. Use Add Reference or Quick Add a file.</p>
+    {% endif %}
+  </section>
+
+  <aside class="nb-editor card nb-refs-side">
+    {% if refs_edit %}
+    <div class="nb-editor-header">
+      <h2>Edit reference</h2>
+      <a class="btn btn-sm" href="{{ url_for(notebook_endpoint, view='references', year=refs_filters.year, type=refs_filters.type, q=refs_filters.q) }}">Cancel</a>
+    </div>
+    <form method="post" enctype="multipart/form-data" class="nb-refs-form" action="{{ url_for(notebook_endpoint, view='references') }}">
+      <input type="hidden" name="action" value="reference_update">
+      <input type="hidden" name="ref_id" value="{{ refs_edit.id }}">
+      <label>Title <input name="title" required value="{{ refs_edit.title }}"></label>
+      <label>Subject <span class="muted">(optional)</span>
+        <textarea name="subject" id="refs-edit-subject" rows="3" maxlength="200" placeholder="Editable; leave blank to clear">{{ refs_edit.subject or '' }}</textarea>
+        <input type="hidden" name="subject_source" id="refs-edit-subject-source" value="{{ refs_edit.subject_source or 'manual' }}">
+      </label>
+      <label>Type
+        <select name="ref_type" required>
+          {% for key, label in refs_type_labels.items() %}
+            <option value="{{ key }}" {% if refs_edit.ref_type == key %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Year <input name="year" type="number" min="1990" max="2100" required value="{{ refs_edit.year }}"></label>
+      <label>Replace file (optional)
+        <input type="file" name="file" id="refs-edit-file">
+      </label>
+      {% if refs_edit.has_file %}
+      <p class="muted">Current file: {{ refs_edit.original_filename }}</p>
+      {% endif %}
+      <label>External link (optional)
+        <input name="external_url" type="url" value="{{ refs_edit.external_url }}" placeholder="https://…">
+      </label>
+      <label>Short note (optional)
+        <input name="short_note" maxlength="500" value="{{ refs_edit.short_note }}">
+      </label>
+      <label>Source URL (optional)
+        <input name="source_url" type="url" value="{{ refs_edit.source_url }}" placeholder="https://…">
+      </label>
+      <p class="muted">Added {{ refs_edit.created_at }} · Storage {{ refs_edit.storage_kind }}</p>
+      <div class="nb-refs-form-actions">
+        <button class="btn btn-primary" type="submit">Save</button>
+        <a class="btn" href="{{ url_for(notebook_endpoint, view='references') }}">Cancel</a>
+      </div>
+    </form>
+    {% else %}
+    <div class="nb-editor-header">
+      <h2>Add Reference</h2>
+    </div>
+    <form method="post" enctype="multipart/form-data" class="nb-refs-form" id="refs-add-form"
+          action="{{ url_for(notebook_endpoint, view='references') }}">
+      <input type="hidden" name="action" value="reference_create">
+      <label>Upload file
+        <input type="file" name="file" id="refs-add-file">
+      </label>
+      <label>…or external link
+        <input name="external_url" type="url" placeholder="https://…">
+      </label>
+      <label>Title
+        <input name="title" id="refs-add-title" placeholder="Auto-filled from filename when possible">
+      </label>
+      <label>Subject <span class="muted">(optional)</span>
+        <textarea name="subject" id="refs-add-subject" rows="3" maxlength="200" placeholder="Auto-filled from document when found"></textarea>
+        <input type="hidden" name="subject_source" id="refs-add-subject-source" value="">
+      </label>
+      <label>Type
+        <select name="ref_type" id="refs-add-type" required>
+          <option value="">Select type…</option>
+          {% for key, label in refs_type_labels.items() %}
+            <option value="{{ key }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Year
+        <input name="year" id="refs-add-year" type="number" min="1990" max="2100"
+               value="{{ refs_default_year }}" required>
+      </label>
+      <label>Short note (optional)
+        <input name="short_note" maxlength="500">
+      </label>
+      <label>Source URL (optional)
+        <input name="source_url" type="url" placeholder="https://…">
+      </label>
+      <div class="nb-refs-form-actions">
+        <button class="btn btn-primary" type="submit">Save</button>
+        <button class="btn" type="reset">Cancel</button>
+      </div>
+      <p class="muted">Added date, storage type, and file path are set automatically. Document numbers stay in the title/filename.</p>
+    </form>
+    {% endif %}
+  </aside>
+</div>
+
+<script>
+(function () {
+  var addFile = document.getElementById("refs-add-file");
+  var addTitle = document.getElementById("refs-add-title");
+  var addYear = document.getElementById("refs-add-year");
+  var addType = document.getElementById("refs-add-type");
+  var addSubject = document.getElementById("refs-add-subject");
+  var addSubjectSrc = document.getElementById("refs-add-subject-source");
+  var editFile = document.getElementById("refs-edit-file");
+  var editSubject = document.getElementById("refs-edit-subject");
+  var editSubjectSrc = document.getElementById("refs-edit-subject-source");
+  var quickFile = document.getElementById("refs-quick-file");
+  var quickForm = document.getElementById("refs-quick-form");
+  var quickTitle = document.getElementById("refs-quick-title");
+  var quickYear = document.getElementById("refs-quick-year");
+  var quickType = document.getElementById("refs-quick-type");
+  var quickSubject = document.getElementById("refs-quick-subject");
+  var quickSubjectSrc = document.getElementById("refs-quick-subject-source");
+  var dropzone = document.getElementById("refs-dropzone");
+  var openAdd = document.getElementById("refs-open-add");
+  var addForm = document.getElementById("refs-add-form");
+
+  function yearFromName(name) {
+    var matches = String(name || "").match(/(20\d{2}|19\d{2})/g);
+    return matches && matches.length ? matches[matches.length - 1] : "";
+  }
+  function titleFromName(name) {
+    var base = String(name || "").replace(/^.*[\\/]/, "").replace(/\.[^.]+$/, "");
+    return base.replace(/[_-]+/g, " ").trim();
+  }
+  function typeFromName(name) {
+    var n = String(name || "").toLowerCase();
+    if (/memorand|memo|\bdm\b/.test(n)) return "department_memorandum";
+    if (/advisor/.test(n)) return "advisory";
+    if (/guideline|guidelines|guide/.test(n)) return "guideline";
+    return "";
+  }
+  function fillFromFile(file, titleEl, yearEl, typeEl) {
+    if (!file) return;
+    if (titleEl && !titleEl.value) titleEl.value = titleFromName(file.name);
+    var y = yearFromName(file.name);
+    if (yearEl && y) yearEl.value = y;
+    var t = typeFromName(file.name);
+    if (typeEl && t) typeEl.value = t;
+  }
+  function bindSubjectManual(subjectEl, sourceEl) {
+    if (!subjectEl || !sourceEl) return;
+    subjectEl.addEventListener("input", function () {
+      sourceEl.value = "manual";
+    });
+  }
+  function applySubjectMeta(meta, subjectEl, sourceEl) {
+    if (!subjectEl || !sourceEl || !meta) return;
+    var subject = meta.subject || "";
+    var source = meta.subject_source || "";
+    var confidence = meta.confidence || "none";
+    // Autofill when detected (high) or suggested (medium); user may edit/clear.
+    if (!subject || (confidence !== "high" && confidence !== "medium")) return;
+    if (subjectEl.value && sourceEl.value === "manual") return;
+    subjectEl.value = subject;
+    sourceEl.value = source || "suggested";
+  }
+  function detectMeta(file) {
+    if (!file) return Promise.resolve(null);
+    var body = new FormData();
+    body.append("file", file);
+    return fetch("{{ url_for('api_notebook_references_detect_meta') }}", {
+      method: "POST",
+      body: body,
+      credentials: "same-origin"
+    }).then(function (resp) {
+      return resp.json();
+    }).then(function (data) {
+      return data && data.ok ? data : null;
+    }).catch(function () {
+      return null;
+    });
+  }
+  bindSubjectManual(addSubject, addSubjectSrc);
+  bindSubjectManual(quickSubject, quickSubjectSrc);
+  bindSubjectManual(editSubject, editSubjectSrc);
+
+  if (addFile) {
+    addFile.addEventListener("change", function () {
+      var file = addFile.files && addFile.files[0];
+      fillFromFile(file, addTitle, addYear, addType);
+      detectMeta(file).then(function (meta) {
+        applySubjectMeta(meta, addSubject, addSubjectSrc);
+      });
+    });
+  }
+  if (editFile) {
+    editFile.addEventListener("change", function () {
+      var file = editFile.files && editFile.files[0];
+      detectMeta(file).then(function (meta) {
+        if (editSubject && editSubjectSrc && editSubjectSrc.value === "manual" && editSubject.value) {
+          return;
+        }
+        applySubjectMeta(meta, editSubject, editSubjectSrc);
+      });
+    });
+  }
+  if (quickFile && quickForm) {
+    quickFile.addEventListener("change", function () {
+      var file = quickFile.files && quickFile.files[0];
+      if (!file) return;
+      fillFromFile(file, quickTitle, quickYear, quickType);
+      quickForm.classList.add("is-open");
+      detectMeta(file).then(function (meta) {
+        applySubjectMeta(meta, quickSubject, quickSubjectSrc);
+        if (quickType.value && quickYear.value) {
+          quickForm.submit();
+        }
+      });
+    });
+  }
+  if (dropzone && quickFile) {
+    ["dragenter", "dragover"].forEach(function (evt) {
+      dropzone.addEventListener(evt, function (e) {
+        e.preventDefault();
+        dropzone.classList.add("is-dragover");
+      });
+    });
+    ["dragleave", "drop"].forEach(function (evt) {
+      dropzone.addEventListener(evt, function (e) {
+        e.preventDefault();
+        dropzone.classList.remove("is-dragover");
+      });
+    });
+    dropzone.addEventListener("drop", function (e) {
+      var files = e.dataTransfer && e.dataTransfer.files;
+      if (!files || !files.length) return;
+      try {
+        var dt = new DataTransfer();
+        dt.items.add(files[0]);
+        quickFile.files = dt.files;
+        quickFile.dispatchEvent(new Event("change"));
+      } catch (err) {
+        dropzone.textContent = "Use Quick Add to select the file.";
+      }
+    });
+  }
+  if (openAdd && addForm) {
+    openAdd.addEventListener("click", function () {
+      addForm.scrollIntoView({ behavior: "smooth", block: "start" });
+      var first = addForm.querySelector("input[type=file], input[name=title]");
+      if (first) first.focus();
+    });
+  }
+})();
+</script>
