@@ -1,0 +1,340 @@
+{
+  "base": "http://127.0.0.1:8095",
+  "errors": [],
+  "viewports": {
+    "1366x768": {
+      "errors": [],
+      "provider": {
+        "kind": "provider",
+        "portaled": true,
+        "isUp": true,
+        "maxHeight": "240px",
+        "zIndex": "10050",
+        "menu": {
+          "x": 991,
+          "y": 611,
+          "w": 148,
+          "h": 95,
+          "top": 611,
+          "bottom": 706
+        },
+        "ai": {
+          "x": 958,
+          "y": 100,
+          "w": 360,
+          "h": 642,
+          "top": 100,
+          "bottom": 742
+        },
+        "status": {
+          "x": 170,
+          "y": 742,
+          "w": 1148,
+          "h": 26,
+          "top": 742,
+          "bottom": 768
+        },
+        "clippedByAi": false,
+        "overlapsStatus": false,
+        "fullyInViewport": true,
+        "optionCount": 3,
+        "shellX": 170
+      },
+      "model": {
+        "kind": "model",
+        "portaled": true,
+        "isUp": true,
+        "maxHeight": "240px",
+        "zIndex": "10050",
+        "menu": {
+          "x": 1124,
+          "y": 470,
+          "w": 148,
+          "h": 236,
+          "top": 470,
+          "bottom": 706
+        },
+        "ai": {
+          "x": 958,
+          "y": 100,
+          "w": 360,
+          "h": 642,
+          "top": 100,
+          "bottom": 742
+        },
+        "status": {
+          "x": 170,
+          "y": 742,
+          "w": 1148,
+          "h": 26,
+          "top": 742,
+          "bottom": 768
+        },
+        "clippedByAi": false,
+        "overlapsStatus": false,
+        "fullyInViewport": true,
+        "optionCount": 8,
+        "shellX": 170
+      },
+      "maxProvider": {
+        "kind": "provider",
+        "portaled": true,
+        "isUp": true,
+        "maxHeight": "240px",
+        "zIndex": "10050",
+        "menu": {
+          "x": 736,
+          "y": 611,
+          "w": 236,
+          "h": 95,
+          "top": 611,
+          "bottom": 706
+        },
+        "ai": {
+          "x": 703,
+          "y": 100,
+          "w": 615,
+          "h": 642,
+          "top": 100,
+          "bottom": 742
+        },
+        "status": {
+          "x": 170,
+          "y": 742,
+          "w": 1148,
+          "h": 26,
+          "top": 742,
+          "bottom": 768
+        },
+        "clippedByAi": false,
+        "overlapsStatus": false,
+        "fullyInViewport": true,
+        "optionCount": 3,
+        "shellX": 170
+      }
+    },
+    "1600x900": {
+      "errors": [],
+      "provider": {
+        "kind": "provider",
+        "portaled": true,
+        "isUp": true,
+        "maxHeight": "240px",
+        "zIndex": "10050",
+        "menu": {
+          "x": 1225,
+          "y": 743,
+          "w": 148,
+          "h": 95,
+          "top": 743,
+          "bottom": 838
+        },
+        "ai": {
+          "x": 1192,
+          "y": 100,
+          "w": 360,
+          "h": 774,
+          "top": 100,
+          "bottom": 874
+        },
+        "status": {
+          "x": 170,
+          "y": 874,
+          "w": 1382,
+          "h": 26,
+          "top": 874,
+          "bottom": 900
+        },
+        "clippedByAi": false,
+        "overlapsStatus": false,
+        "fullyInViewport": true,
+        "optionCount": 3,
+        "shellX": 170
+      },
+      "model": {
+        "kind": "model",
+        "portaled": true,
+        "isUp": true,
+        "maxHeight": "240px",
+        "zIndex": "10050",
+        "menu": {
+          "x": 1358,
+          "y": 602,
+          "w": 148,
+          "h": 236,
+          "top": 602,
+          "bottom": 838
+        },
+        "ai": {
+          "x": 1192,
+          "y": 100,
+          "w": 360,
+          "h": 774,
+          "top": 100,
+          "bottom": 874
+        },
+        "status": {
+          "x": 170,
+          "y": 874,
+          "w": 1382,
+          "h": 26,
+          "top": 874,
+          "bottom": 900
+        },
+        "clippedByAi": false,
+        "overlapsStatus": false,
+        "fullyInViewport": true,
+        "optionCount": 8,
+        "shellX": 170
+      },
+      "maxProvider": {
+        "kind": "provider",
+        "portaled": true,
+        "isUp": true,
+        "maxHeight": "240px",
+        "zIndex": "10050",
+        "menu": {
+          "x": 865,
+          "y": 743,
+          "w": 289,
+          "h": 95,
+          "top": 743,
+          "bottom": 838
+        },
+        "ai": {
+          "x": 832,
+          "y": 100,
+          "w": 720,
+          "h": 774,
+          "top": 100,
+          "bottom": 874
+        },
+        "status": {
+          "x": 170,
+          "y": 874,
+          "w": 1382,
+          "h": 26,
+          "top": 874,
+          "bottom": 900
+        },
+        "clippedByAi": false,
+        "overlapsStatus": false,
+        "fullyInViewport": true,
+        "optionCount": 3,
+        "shellX": 170
+      }
+    },
+    "1920x1080": {
+      "errors": [],
+      "provider": {
+        "kind": "provider",
+        "portaled": true,
+        "isUp": true,
+        "maxHeight": "240px",
+        "zIndex": "10050",
+        "menu": {
+          "x": 1545,
+          "y": 923,
+          "w": 148,
+          "h": 95,
+          "top": 923,
+          "bottom": 1018
+        },
+        "ai": {
+          "x": 1512,
+          "y": 100,
+          "w": 360,
+          "h": 954,
+          "top": 100,
+          "bottom": 1054
+        },
+        "status": {
+          "x": 170,
+          "y": 1054,
+          "w": 1702,
+          "h": 26,
+          "top": 1054,
+          "bottom": 1080
+        },
+        "clippedByAi": false,
+        "overlapsStatus": false,
+        "fullyInViewport": true,
+        "optionCount": 3,
+        "shellX": 170
+      },
+      "model": {
+        "kind": "model",
+        "portaled": true,
+        "isUp": true,
+        "maxHeight": "240px",
+        "zIndex": "10050",
+        "menu": {
+          "x": 1678,
+          "y": 782,
+          "w": 148,
+          "h": 236,
+          "top": 782,
+          "bottom": 1018
+        },
+        "ai": {
+          "x": 1512,
+          "y": 100,
+          "w": 360,
+          "h": 954,
+          "top": 100,
+          "bottom": 1054
+        },
+        "status": {
+          "x": 170,
+          "y": 1054,
+          "w": 1702,
+          "h": 26,
+          "top": 1054,
+          "bottom": 1080
+        },
+        "clippedByAi": false,
+        "overlapsStatus": false,
+        "fullyInViewport": true,
+        "optionCount": 8,
+        "shellX": 170
+      },
+      "maxProvider": {
+        "kind": "provider",
+        "portaled": true,
+        "isUp": true,
+        "maxHeight": "240px",
+        "zIndex": "10050",
+        "menu": {
+          "x": 1185,
+          "y": 923,
+          "w": 289,
+          "h": 95,
+          "top": 923,
+          "bottom": 1018
+        },
+        "ai": {
+          "x": 1152,
+          "y": 100,
+          "w": 720,
+          "h": 954,
+          "top": 100,
+          "bottom": 1054
+        },
+        "status": {
+          "x": 170,
+          "y": 1054,
+          "w": 1702,
+          "h": 26,
+          "top": 1054,
+          "bottom": 1080
+        },
+        "clippedByAi": false,
+        "overlapsStatus": false,
+        "fullyInViewport": true,
+        "optionCount": 3,
+        "shellX": 170
+      }
+    }
+  },
+  "ok": true
+}

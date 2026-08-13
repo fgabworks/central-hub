@@ -1,0 +1,89 @@
+{
+  "data": {
+    "url": "http://127.0.0.1:8091/work/climate",
+    "workbenchClasses": "climate-workbench",
+    "rightVar": 380,
+    "ai": {
+      "x": 1012,
+      "y": 100,
+      "w": 380,
+      "h": 774
+    },
+    "aiRail": {
+      "x": 0,
+      "y": 0,
+      "w": 0,
+      "h": 0
+    },
+    "aiFull": {
+      "x": 1013,
+      "y": 100,
+      "w": 379,
+      "h": 774
+    },
+    "aiFullDisplay": "flex",
+    "aiRailDisplay": "none",
+    "explorerSections": [
+      "› OUTLINE",
+      "› TIMELINE",
+      "› REPOSITORIES"
+    ],
+    "bottomTabs": [
+      {
+        "panel": "problems",
+        "text": "Problems 0",
+        "active": true
+      },
+      {
+        "panel": "output",
+        "text": "Output",
+        "active": false
+      },
+      {
+        "panel": "tests",
+        "text": "Tests",
+        "active": false
+      },
+      {
+        "panel": "git",
+        "text": "Git",
+        "active": false
+      }
+    ],
+    "bottomBodySample": "No problems detected by CLIMATE.",
+    "shell": {
+      "x": 170,
+      "y": 48,
+      "w": 1222,
+      "h": 852
+    },
+    "sidebar": {
+      "x": 0,
+      "y": 0,
+      "w": 170,
+      "h": 900
+    },
+    "localStorageKeys": [
+      "climate:v1:work:live-processing-local",
+      "climate:chat:v1:work"
+    ],
+    "prefsSample": [
+      {
+        "k": "climate:v1:work:live-processing-local",
+        "v": "{\"tabs\":[],\"active\":\"\",\"selectedFiles\":[],\"showExcluded\":false,\"provider\":\"codex\",\"model\":\"gpt-5.6-sol\",\"left\":200,\"right\":380,\"aiPrevRight\":380,\"bottom\":160,\"leftClosed\":false,\"aiClosed\":false,\"aiCol"
+      },
+      {
+        "k": "climate:chat:v1:work",
+        "v": "{\"activeId\":\"chat-mss0hcnlkf4wt\",\"sessions\":[{\"id\":\"chat-mss0hcnlkf4wt\",\"title\":\"New chat\",\"createdAt\":1786655378001,\"updatedAt\":1786655378001,\"provider\":\"codex\",\"model\":\"\",\"lastRunProvider\":\"\",\"works"
+      }
+    ]
+  },
+  "narrow": {
+    "rightVar": 48,
+    "aiW": 48,
+    "fullDisplay": "flex",
+    "railDisplay": "none",
+    "classes": "climate-workbench",
+    "distortedText": "AI ASSISTANT ◈ 0 tokens Connected + ⋯ × New chat CLIMATE coding chat Ask a follo"
+  }
+}

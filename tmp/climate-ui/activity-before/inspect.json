@@ -1,0 +1,18 @@
+{
+  "before": {
+    "feedHtmlSample": "<div class=\"climate-ai-empty\"><strong>CLIMATE coding chat</strong><span>Ask a follow-up about the active repository. Raw provider events stay in Details.</span></div>",
+    "msgClasses": [],
+    "hasActivity": false,
+    "hasRunSummary": false,
+    "detailsCount": 0,
+    "aiW": 360,
+    "shellX": 170
+  },
+  "seeded": "climate:chat:v1:work",
+  "afterSeed": {
+    "messageCount": 2,
+    "assistantHtml": "<div class=\"climate-chat-avatar\" aria-hidden=\"true\">◎</div><div class=\"climate-chat-meta\"><strong>Codex</strong><time>5:35 AM</time></div><div class=\"climate-chat-body\"><div class=\"climate-chat-text\">Working…</div><details class=\"climate-chat-details\"><summary>Details / Diagnostics</summary><pre class=\"mono\">tool_call read path=analytics/derive_member_scores.py\nSearching repository for ANC Binary\nReading analytics/derive_member_scores.py\nExploring 2 files\n</pre></details></div>",
+    "bodyText": "Working…Details / Diagnosticstool_call read path=analytics/derive_member_scores.py\nSearching repository for ANC Binary\nReading analytics/derive_member_scores.py\nExploring 2 files\n",
+    "hasProgress": false
+  }
+}

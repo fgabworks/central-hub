@@ -41,6 +41,7 @@
     tabs: [], active: "", selectedFiles: [], showExcluded: false, panel: "problems",
     runId: "", run: null, streamText: "", git: null, gitPath: "",
     chat: { activeId: "", sessions: [] }, streamingMsgId: "",
+    activityExploreOpen: {},
     modelCache: {}, fetchCount: 0
   };
   var editor = null;
@@ -69,6 +70,7 @@
       document.getElementById("climate-show-excluded").checked = state.showExcluded;
       if (saved.left) workbench.style.setProperty("--left", saved.left + "px");
       if (saved.right) workbench.style.setProperty("--right", Math.max(AI_MIN, saved.right) + "px");
+      else workbench.style.setProperty("--right", AI_DEFAULT + "px");
       if (saved.bottom) workbench.style.setProperty("--bottom", saved.bottom + "px");
       if (saved.aiPrevRight) workbench.dataset.aiPrevRight = Math.max(AI_MIN, parseInt(saved.aiPrevRight, 10) || AI_DEFAULT) + "px";
       workbench.classList.toggle("is-left-closed", !!saved.leftClosed);
@@ -101,34 +103,16 @@
       bottomClosed: center.classList.contains("is-bottom-closed")
     }));
   }
-  function syncAiMaximizeChrome() {
-    var btn = document.getElementById("climate-maximize-ai");
-    if (!btn) return;
-    var closed = workbench.classList.contains("is-ai-closed");
-    var collapsed = workbench.classList.contains("is-ai-collapsed");
-    var max = workbench.classList.contains("is-ai-maximized") && !closed && !collapsed;
-    btn.setAttribute("aria-pressed", max ? "true" : "false");
-    btn.title = max ? "Restore AI panel" : "Maximize AI panel";
-    btn.textContent = max ? "⧉" : "□";
-    if (max) {
-      if (!workbench.dataset.prevRight) {
-        workbench.dataset.prevRight = currentAiWidthPx() + "px";
-      }
-      workbench.style.setProperty("--right", maximizeAiWidthPx() + "px");
-    } else if (workbench.dataset.prevRight && !collapsed) {
-      var restore = Math.max(AI_MIN, parseInt(workbench.dataset.prevRight, 10) || AI_DEFAULT);
-      workbench.style.setProperty("--right", restore + "px");
-      delete workbench.dataset.prevRight;
-    }
-  }
-  var AI_MIN = 360;
-  var AI_DEFAULT = 380;
+  var AI_MIN = 340;
+  var AI_DEFAULT = 360;
   var AI_RAIL = 48;
   function workbenchWidth() {
     return workbench.getBoundingClientRect().width || window.innerWidth;
   }
   function maximizeAiWidthPx() {
-    return Math.max(AI_MIN, Math.min(Math.round(workbenchWidth() * 0.43), Math.round(workbenchWidth() * 0.55)));
+    var vw = window.innerWidth || workbenchWidth();
+    // clamp(480px, 45vw, 720px)
+    return Math.min(720, Math.max(480, Math.round(vw * 0.45)));
   }
   function currentAiWidthPx() {
     var raw = workbench.style.getPropertyValue("--right") || getComputedStyle(workbench).getPropertyValue("--right");
@@ -139,10 +123,29 @@
     var usable = Math.max(AI_MIN, px || currentAiWidthPx());
     workbench.dataset.aiPrevRight = usable + "px";
   }
+  /** Never leave a full AI panel narrower than AI_MIN (legacy prefs / race). */
+  function normalizeAiPanelState() {
+    if (workbench.classList.contains("is-ai-closed")) return;
+    if (workbench.classList.contains("is-ai-collapsed")) {
+      workbench.style.setProperty("--right", AI_RAIL + "px");
+      return;
+    }
+    var w = currentAiWidthPx();
+    if (w > 0 && w < AI_MIN) {
+      collapseAiPanel(AI_DEFAULT);
+      return;
+    }
+    if (!workbench.style.getPropertyValue("--right") && !workbench.classList.contains("is-ai-maximized")) {
+      workbench.style.setProperty("--right", AI_DEFAULT + "px");
+    }
+  }
   function setAiExpandedWidth(px, opts) {
     opts = opts || {};
     workbench.classList.remove("is-ai-collapsed");
-    if (!opts.keepMaximized) workbench.classList.remove("is-ai-maximized");
+    if (!opts.keepMaximized) {
+      workbench.classList.remove("is-ai-maximized");
+      delete workbench.dataset.prevRight;
+    }
     var width = Math.max(AI_MIN, Math.round(px));
     if (!opts.keepMaximized) {
       var maxCap = Math.max(AI_MIN, Math.round(workbenchWidth() * 0.55));
@@ -169,6 +172,35 @@
     if (isNaN(prev) || prev < AI_MIN) prev = AI_DEFAULT;
     workbench.classList.remove("is-ai-closed");
     setAiExpandedWidth(prev);
+  }
+  function syncAiMaximizeChrome() {
+    var btn = document.getElementById("climate-maximize-ai");
+    var closed = workbench.classList.contains("is-ai-closed");
+    var collapsed = workbench.classList.contains("is-ai-collapsed");
+    var max = workbench.classList.contains("is-ai-maximized") && !closed && !collapsed;
+    if (btn) {
+      btn.setAttribute("aria-pressed", max ? "true" : "false");
+      btn.title = max ? "Restore AI panel" : "Maximize AI panel";
+      btn.textContent = max ? "⧉" : "□";
+    }
+    if (max) {
+      if (!workbench.dataset.prevRight) {
+        var before = parseInt(workbench.dataset.aiPrevRight, 10) || currentAiWidthPx();
+        if (before < AI_MIN || before === AI_RAIL) before = AI_DEFAULT;
+        workbench.dataset.prevRight = Math.max(AI_MIN, before) + "px";
+      }
+      workbench.style.setProperty("--right", maximizeAiWidthPx() + "px");
+    }
+  }
+  function restoreAiFromMaximize() {
+    if (!workbench.dataset.prevRight) return;
+    var restore = Math.max(AI_MIN, parseInt(workbench.dataset.prevRight, 10) || AI_DEFAULT);
+    delete workbench.dataset.prevRight;
+    workbench.classList.remove("is-ai-maximized");
+    workbench.style.setProperty("--right", restore + "px");
+    rememberUsableAiWidth(restore);
+    syncAiMaximizeChrome();
+    if (editor) editor.layout();
   }
   function languageId(language, path) {
     var map = {python:"python",javascript:"javascript",typescript:"typescript",json:"json",yaml:"yaml",markdown:"markdown",html:"html",css:"css",sql:"sql",shell:"shell"};
@@ -534,6 +566,202 @@
     }
     return { text: body || "", diagnostics: diag.join("\n") };
   }
+  function activityBaseName(path) {
+    var parts = String(path || "").replace(/\\/g, "/").split("/");
+    return parts[parts.length - 1] || path;
+  }
+  function collectActivityFiles(blob) {
+    var files = [];
+    function add(path) {
+      var p = String(path || "").replace(/\\/g, "/").replace(/^["'`]+|["'`]+$/g, "").trim();
+      if (!p || p.length > 220) return;
+      if (p.indexOf("://") >= 0) return;
+      if (!/[A-Za-z0-9_.\-]+\/[A-Za-z0-9_./\-]+\.[A-Za-z0-9]+/.test(p) && !/\.[A-Za-z0-9]{1,12}$/.test(p)) return;
+      if (files.indexOf(p) < 0) files.push(p);
+    }
+    String(blob || "").replace(/(?:path[=:\s]+|Reading\s+|read(?:_file)?\s*\(\s*|file[=:\s]+)["']?([A-Za-z0-9_.\-]+\/[A-Za-z0-9_./\-]+\.[A-Za-z0-9]+)/gi, function (_, p) {
+      add(p);
+      return _;
+    });
+    String(blob || "").replace(/\b([A-Za-z0-9_.\-]+\/[A-Za-z0-9_./\-]+\.[A-Za-z0-9]{1,12})\b/g, function (_, p) {
+      add(p);
+      return _;
+    });
+    return files;
+  }
+  /**
+   * Build activity steps from runtime/tool log evidence only — never invent unseen steps.
+   */
+  function parseActivityEvidence(source, opts) {
+    opts = opts || {};
+    var blob = String(source || "");
+    var running = !!opts.running;
+    var files = collectActivityFiles(blob);
+    var exploreMatch = blob.match(/Explor(?:ing|ed)\s+(\d+)\s+files?/i);
+    var exploreCount = exploreMatch ? parseInt(exploreMatch[1], 10) : files.length;
+    if (isNaN(exploreCount)) exploreCount = files.length;
+    var steps = [];
+    function has(re) { return re.test(blob); }
+    function addStep(id, label) {
+      if (steps.some(function (s) { return s.id === id; })) {
+        var existing = steps.find(function (s) { return s.id === id; });
+        if (label && existing) existing.label = label;
+        return;
+      }
+      steps.push({ id: id, label: label, state: "done" });
+    }
+    if (exploreCount > 0 || has(/\bexplor(?:e|ing|ed)\b/i) || files.length) {
+      var n = Math.max(exploreCount, files.length);
+      if (n > 0) addStep("explore", "Exploring " + n + " file" + (n === 1 ? "" : "s"));
+    }
+    if (has(/\b(search(?:ing)?\s+repository|grep|glob|ripgrep|find_files?|codebase_search|workspace.?search)\b/i)) {
+      addStep("search", "Searching repository");
+    }
+    if (has(/\b(Reading\s+|read_file|\[tool\]\s*read\b|tool_call\s+read\b|open_file|view_file)\b/i) || files.length) {
+      var last = files.length ? files[files.length - 1] : "";
+      addStep("read", last ? ("Reading " + activityBaseName(last)) : "Reading file");
+    }
+    if (has(/\b(checking related logic|related logic|analyz(?:e|ing)|compliance rules|inspect(?:ing)? logic)\b/i)) {
+      addStep("logic", "Checking related logic");
+    }
+    if (has(/\b(running tests?|pytest|unittest|npm test|tests?\s+(?:passed|failed|ran)|\[tool\]\s*test)\b/i)) {
+      addStep("tests", "Running tests");
+    }
+    if (has(/\b(reviewing changes|prepared?\s+\d+\s+file|proposal|diff\b|apply_patch|edit_file)\b/i) || opts.hasProposal) {
+      addStep("review", "Reviewing changes");
+    }
+    if (has(/\b(preparing response|turn\.completed|response\.completed|final answer)\b/i) || opts.hasAnswer) {
+      addStep("prepare", "Preparing response");
+    }
+    if (running && steps.length) {
+      steps.forEach(function (s) { s.state = "done"; });
+      steps[steps.length - 1].state = "current";
+    }
+    var testsInfo = testsFromText(blob, opts.tests || null);
+    var testsRan = 0;
+    if (testsInfo && typeof testsInfo.count === "number") testsRan = testsInfo.count;
+    else if (testsInfo && testsInfo.label) {
+      var tm = String(testsInfo.label).match(/(\d+)/);
+      testsRan = tm ? parseInt(tm[1], 10) : (testsInfo.passed ? 1 : 0);
+    } else {
+      var ran = blob.match(/(?:Ran|ran)\s+(\d+)\s+tests?/i) || blob.match(/(\d+)\s+tests?\s+(?:passed|failed|ran)/i);
+      if (ran) testsRan = parseInt(ran[1], 10) || 0;
+    }
+    var issues = 0;
+    var issueMatch = blob.match(/(\d+)\s+issues?\s+found/i);
+    if (issueMatch) issues = parseInt(issueMatch[1], 10) || 0;
+    else if (has(/\b(error|failed|exception)\b/i) && opts.status === "failed") issues = 1;
+    var linesAnalyzed = 0;
+    var lineMatch = blob.match(/(\d+)\s+lines?\s+(?:analyzed|read|scanned)/i);
+    if (lineMatch) linesAnalyzed = parseInt(lineMatch[1], 10) || 0;
+    var startedAt = Number(opts.startedAt || 0);
+    var elapsedMs = Number(opts.elapsedMs || 0);
+    if (!elapsedMs && startedAt) elapsedMs = Math.max(0, Date.now() - startedAt);
+    return {
+      steps: steps,
+      explore: {
+        files: files.slice(0, 24),
+        count: Math.max(exploreCount, files.length),
+        scanned: Math.max(exploreCount, files.length),
+        lines: linesAnalyzed,
+        elapsedMs: elapsedMs
+      },
+      testsRan: testsRan,
+      issues: issues,
+      planning: running && steps.length > 0
+    };
+  }
+  function renderActivityProgress(msg) {
+    var activity = msg.activity || parseActivityEvidence((msg.diagnostics || "") + "\n" + (msg.text || ""), {
+      running: true,
+      startedAt: msg.startedAt
+    });
+    var steps = activity.steps || [];
+    var html = '<section class="climate-activity-progress" data-activity-root="' + escapeHtml(msg.id) + '">';
+    html += '<div class="climate-activity-head"><span class="climate-activity-title">Working on your request…</span>';
+    html += '<button type="button" class="climate-activity-chevron" data-activity-collapse aria-label="Collapse activity">▾</button></div>';
+    if (steps.length) {
+      html += '<ol class="climate-activity-steps">';
+      steps.forEach(function (step) {
+        var state = step.state || "done";
+        html += '<li class="climate-activity-step is-' + escapeHtml(state) + (step.id === "explore" ? " is-explore" : "") + '" data-step="' + escapeHtml(step.id) + '">';
+        if (state === "done") html += '<span class="climate-activity-mark" aria-hidden="true">✓</span>';
+        else if (state === "current") html += '<span class="climate-activity-mark is-pulse" aria-hidden="true"><i></i><i></i><i></i></span>';
+        else html += '<span class="climate-activity-mark is-pending" aria-hidden="true"></span>';
+        if (step.id === "explore") {
+          html += '<button type="button" class="climate-activity-step-label is-explore" data-activity-explore="' + escapeHtml(msg.id) + '" aria-expanded="false">' + escapeHtml(step.label) + ' <span aria-hidden="true">›</span></button>';
+        } else {
+          html += '<span class="climate-activity-step-label">' + escapeHtml(step.label) + '</span>';
+        }
+        html += '</li>';
+      });
+      html += '</ol>';
+      var explore = activity.explore || {};
+      if ((explore.files && explore.files.length) || explore.count) {
+        html += '<div class="climate-activity-explore" data-explore-panel="' + escapeHtml(msg.id) + '" hidden>';
+        html += '<div class="climate-activity-explore-head"><span>Exploring ' + escapeHtml(String(explore.count || explore.files.length || 0)) + ' file' + ((explore.count || explore.files.length) === 1 ? "" : "s") + '</span>';
+        html += '<button type="button" class="climate-activity-chevron" data-activity-explore="' + escapeHtml(msg.id) + '" aria-label="Collapse files">▴</button></div>';
+        html += '<ul class="climate-activity-explore-files">';
+        (explore.files || []).forEach(function (path) {
+          html += '<li><i aria-hidden="true"></i><span>' + escapeHtml(path) + '</span></li>';
+        });
+        html += '</ul>';
+        html += '<div class="climate-activity-explore-stats">';
+        html += '<div><span>Files scanned</span><b>' + escapeHtml(String(explore.scanned || explore.files.length || 0)) + '</b></div>';
+        html += '<div><span>Lines analyzed</span><b>' + escapeHtml(String(explore.lines || "—")) + '</b></div>';
+        html += '<div><span>Time elapsed</span><b>' + escapeHtml(formatElapsed(explore.elapsedMs || 0)) + '</b></div>';
+        html += '</div>';
+        html += '<div class="climate-activity-wave" aria-hidden="true"></div>';
+        html += '</div>';
+      }
+      if (activity.planning) {
+        html += '<div class="climate-activity-planning"><span aria-hidden="true">✦</span> Planning next moves</div>';
+      }
+    }
+    html += '</section>';
+    return html;
+  }
+  function renderActivityComplete(msg) {
+    var activity = msg.activity || parseActivityEvidence((msg.diagnostics || "") + "\n" + (msg.text || ""), {
+      running: false,
+      elapsedMs: msg.elapsedMs,
+      tests: msg.tests,
+      hasProposal: !!(msg.proposal && msg.proposal.state === "pending"),
+      status: msg.status
+    });
+    var exploreCount = (activity.explore && activity.explore.count) || (msg.changedFiles || []).length || msg.filesInspected || 0;
+    var testsRan = activity.testsRan || (msg.tests && msg.tests.count) || 0;
+    if (!testsRan && msg.tests && msg.tests.label) {
+      var tm = String(msg.tests.label).match(/(\d+)/);
+      testsRan = tm ? parseInt(tm[1], 10) : 0;
+    }
+    var issues = typeof activity.issues === "number" ? activity.issues : 0;
+    var parts = [];
+    if (exploreCount > 0) parts.push('<span class="is-ok">✓ Explored ' + escapeHtml(String(exploreCount)) + ' file' + (exploreCount === 1 ? "" : "s") + '</span>');
+    if (testsRan > 0) parts.push('<span>Ran ' + escapeHtml(String(testsRan)) + ' test' + (testsRan === 1 ? "" : "s") + '</span>');
+    if (activity.explore || activity.steps || testsRan || exploreCount) {
+      parts.push('<span>' + escapeHtml(String(issues)) + ' issue' + (issues === 1 ? "" : "s") + ' found</span>');
+    }
+    if (!parts.length && !(msg.elapsedMs > 0)) return "";
+    var html = '<section class="climate-activity-complete">';
+    if (msg.elapsedMs > 0) {
+      html += '<button type="button" class="climate-chat-elapsed" data-activity-complete-toggle>Worked for ' + escapeHtml(formatElapsed(msg.elapsedMs)) + ' <span aria-hidden="true">▾</span></button>';
+    }
+    if (parts.length) {
+      html += '<div class="climate-activity-complete-bar">';
+      html += '<div class="climate-activity-complete-parts">' + parts.join('<span class="climate-activity-dot" aria-hidden="true">·</span>') + '</div>';
+      html += '<div class="climate-activity-complete-actions">';
+      if (msg.diagnostics) {
+        html += '<button type="button" class="climate-btn climate-activity-btn" data-activity-details="' + escapeHtml(msg.id) + '">View Details</button>';
+      }
+      if (msg.proposal && msg.proposal.state === "pending") {
+        html += '<button type="button" class="climate-btn climate-activity-btn is-accent" data-chat-action="review" data-msg-id="' + escapeHtml(msg.id) + '">Show Changes</button>';
+      }
+      html += '</div></div>';
+    }
+    html += '</section>';
+    return html;
+  }
   function extractSummary(text, proposal) {
     var summary = [];
     String(text || "").split(/\r?\n/).forEach(function (line) {
@@ -624,21 +852,104 @@
     if (!t) return "New chat";
     return t.length > 52 ? (t.slice(0, 49) + "…") : t;
   }
+  function closeChatPopovers() {
+    if (historyPanel) historyPanel.hidden = true;
+    if (menuPanel) menuPanel.hidden = true;
+    if (contextPanel) contextPanel.hidden = true;
+    if (usagePanel) usagePanel.hidden = true;
+    if (tokenPill) tokenPill.setAttribute("aria-expanded", "false");
+  }
   function closeClimateDropdowns(except) {
     document.querySelectorAll(".climate-dd.is-open").forEach(function (dd) {
       if (except && dd === except) return;
       dd.classList.remove("is-open");
-      var menu = dd.querySelector(".climate-dd-menu");
-      if (menu) menu.hidden = true;
       var trigger = dd.querySelector(".climate-dd-trigger");
       if (trigger) trigger.setAttribute("aria-expanded", "false");
+      var menu = dd._menu || dd.querySelector(".climate-dd-menu");
+      if (!menu) return;
+      menu.hidden = true;
+      menu.classList.remove("is-portal", "is-up");
+      menu.style.position = "";
+      menu.style.top = "";
+      menu.style.left = "";
+      menu.style.right = "";
+      menu.style.bottom = "";
+      menu.style.width = "";
+      menu.style.maxHeight = "";
+      menu.style.zIndex = "";
+      if (menu.parentNode !== dd) dd.appendChild(menu);
     });
+  }
+  function positionClimateDropdownMenu(wrap, menu) {
+    var trigger = wrap.querySelector(".climate-dd-trigger");
+    if (!trigger || !menu) return;
+    var rect = trigger.getBoundingClientRect();
+    var gap = 4;
+    var maxH = 240;
+    var viewportH = window.innerHeight || document.documentElement.clientHeight;
+    var viewportW = window.innerWidth || document.documentElement.clientWidth;
+    var spaceBelow = Math.max(0, viewportH - rect.bottom - gap);
+    var spaceAbove = Math.max(0, rect.top - gap);
+    var preferUp = spaceBelow < Math.min(maxH, 160) && spaceAbove > spaceBelow;
+    if (menu.parentNode !== document.body) document.body.appendChild(menu);
+    menu.classList.add("is-portal");
+    var shell = document.querySelector(".climate-shell");
+    if (shell) {
+      var accent = getComputedStyle(shell).getPropertyValue("--cl-accent").trim();
+      var border = getComputedStyle(shell).getPropertyValue("--cl-border").trim();
+      if (accent) menu.style.setProperty("--cl-accent", accent);
+      if (border) menu.style.setProperty("--cl-border", border);
+    }
+    menu.hidden = false;
+    menu.style.position = "fixed";
+    menu.style.zIndex = "10050";
+    menu.style.right = "auto";
+    menu.style.bottom = "auto";
+    var width = Math.max(rect.width, 148);
+    var left = rect.left;
+    if (left + width > viewportW - 8) left = Math.max(8, viewportW - width - 8);
+    if (left < 8) left = 8;
+    menu.style.left = Math.round(left) + "px";
+    menu.style.width = Math.round(width) + "px";
+    var avail = preferUp ? spaceAbove : spaceBelow;
+    var capped = Math.max(96, Math.min(maxH, avail || maxH));
+    menu.style.maxHeight = capped + "px";
+    // Measure after paint constraints
+    var menuH = Math.min(menu.scrollHeight || capped, capped);
+    if (!preferUp && spaceBelow < Math.min(menuH, 120) && spaceAbove > spaceBelow) {
+      preferUp = true;
+      capped = Math.max(96, Math.min(maxH, spaceAbove));
+      menu.style.maxHeight = capped + "px";
+      menuH = Math.min(menu.scrollHeight || capped, capped);
+    }
+    if (preferUp) {
+      menu.classList.add("is-up");
+      menu.style.top = Math.round(Math.max(8, rect.top - gap - menuH)) + "px";
+    } else {
+      menu.classList.remove("is-up");
+      menu.style.top = Math.round(rect.bottom + gap) + "px";
+      // Clamp if near bottom edge
+      if (rect.bottom + gap + menuH > viewportH - 8) {
+        menu.style.maxHeight = Math.max(96, Math.min(maxH, viewportH - rect.bottom - gap - 8)) + "px";
+      }
+    }
+  }
+  function openClimateDropdown(selectEl) {
+    if (!selectEl || !selectEl._climateDd) return;
+    var wrap = selectEl._climateDd;
+    var menu = wrap._menu || wrap.querySelector(".climate-dd-menu");
+    var trigger = wrap.querySelector(".climate-dd-trigger");
+    if (!menu || !trigger) return;
+    syncClimateDropdown(selectEl);
+    wrap.classList.add("is-open");
+    trigger.setAttribute("aria-expanded", "true");
+    positionClimateDropdownMenu(wrap, menu);
   }
   function syncClimateDropdown(selectEl) {
     if (!selectEl || !selectEl._climateDd) return;
     var dd = selectEl._climateDd;
     var valueEl = dd.querySelector(".climate-dd-value");
-    var menu = dd.querySelector(".climate-dd-menu");
+    var menu = dd._menu || dd.querySelector(".climate-dd-menu");
     if (!menu || !valueEl) return;
     var selected = selectEl.options[selectEl.selectedIndex];
     valueEl.textContent = selected ? selected.textContent : (selectEl.value || "Select");
@@ -687,19 +998,16 @@
     menu.hidden = true;
     wrap.appendChild(trigger);
     wrap.appendChild(menu);
+    wrap._menu = menu;
+    menu._ownerDd = wrap;
     selectEl._climateDd = wrap;
     trigger.addEventListener("click", function (event) {
       event.preventDefault();
       event.stopPropagation();
       if (selectEl.disabled) return;
-      var open = menu.hidden;
+      var willOpen = menu.hidden || !wrap.classList.contains("is-open");
       closeClimateDropdowns();
-      if (open) {
-        syncClimateDropdown(selectEl);
-        menu.hidden = false;
-        wrap.classList.add("is-open");
-        trigger.setAttribute("aria-expanded", "true");
-      }
+      if (willOpen) openClimateDropdown(selectEl);
     });
     selectEl.addEventListener("change", function () { syncClimateDropdown(selectEl); });
     syncClimateDropdown(selectEl);
@@ -778,6 +1086,51 @@
         }
       });
     });
+    feed.querySelectorAll("[data-activity-explore]").forEach(function (button) {
+      button.addEventListener("click", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        var id = button.getAttribute("data-activity-explore");
+        var panel = feed.querySelector('[data-explore-panel="' + id + '"]');
+        if (!panel) return;
+        var open = panel.hasAttribute("hidden");
+        state.activityExploreOpen[id] = open;
+        if (open) panel.removeAttribute("hidden");
+        else panel.setAttribute("hidden", "");
+        feed.querySelectorAll('[data-activity-explore="' + id + '"]').forEach(function (el) {
+          el.setAttribute("aria-expanded", open ? "true" : "false");
+        });
+        var step = feed.querySelector('.climate-activity-step[data-step="explore"]');
+        if (step) step.classList.toggle("is-expanded", open);
+      });
+    });
+    Object.keys(state.activityExploreOpen || {}).forEach(function (id) {
+      if (!state.activityExploreOpen[id]) return;
+      var panel = feed.querySelector('[data-explore-panel="' + id + '"]');
+      if (!panel) return;
+      panel.removeAttribute("hidden");
+      feed.querySelectorAll('[data-activity-explore="' + id + '"]').forEach(function (el) {
+        el.setAttribute("aria-expanded", "true");
+      });
+      var step = feed.querySelector('.climate-activity-step[data-step="explore"]');
+      if (step) step.classList.add("is-expanded");
+    });
+    feed.querySelectorAll("[data-activity-details]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var id = button.getAttribute("data-activity-details");
+        var details = document.getElementById("climate-details-" + id) || feed.querySelector("#climate-details-" + id);
+        if (details) {
+          details.open = true;
+          details.scrollIntoView({ block: "nearest" });
+        }
+      });
+    });
+    feed.querySelectorAll("[data-activity-collapse]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var root = button.closest(".climate-activity-progress");
+        if (root) root.classList.toggle("is-collapsed");
+      });
+    });
     feed.scrollTop = feed.scrollHeight;
     var pending = session.messages.slice().reverse().find(function (msg) {
       return msg.role === "assistant" && msg.proposal && msg.proposal.state === "pending";
@@ -787,22 +1140,32 @@
   function renderChatMessage(msg) {
     var isUser = msg.role === "user";
     var isError = msg.role === "error" || msg.status === "failed";
+    var isRunning = !isUser && msg.status === "running";
+    var isComplete = !isUser && msg.status === "completed";
     var name = isUser ? "You" : providerLabel(msg.provider || (activeSession() || {}).provider);
     var avatar = isUser ? "Y" : providerGlyph(msg.provider || (activeSession() || {}).provider);
-    var body = escapeHtml(msg.text || (msg.status === "running" ? "Working…" : "")).replace(/\n/g, "<br>");
+    var bodyText = msg.text || "";
+    if (isRunning && (!bodyText || bodyText === "Working…" || bodyText === "Working...")) bodyText = "";
+    var body = escapeHtml(bodyText).replace(/\n/g, "<br>");
     var files = Array.isArray(msg.changedFiles) ? msg.changedFiles : [];
     var tests = testsFromText(msg.text, msg.tests);
     var lines = msg.lines || lineDeltaFromProposal(msg.proposal);
     var showRunCard = !isUser && msg.status === "completed" && (files.length || tests || (lines.plus || lines.minus) || (msg.summary && msg.summary.length));
-    var html = '<article class="climate-chat-msg ' + (isUser ? "is-user" : "is-assistant") + (isError ? " is-error" : "") + (msg.status === "running" ? " is-stream" : "") + '" data-msg-id="' + escapeHtml(msg.id) + '">';
+    var html = '<article class="climate-chat-msg ' + (isUser ? "is-user" : "is-assistant") + (isError ? " is-error" : "") + (isRunning ? " is-stream" : "") + '" data-msg-id="' + escapeHtml(msg.id) + '">';
     html += '<div class="climate-chat-avatar" aria-hidden="true">' + escapeHtml(avatar) + '</div>';
-    html += '<div class="climate-chat-meta"><strong>' + escapeHtml(name) + '</strong><time>' + escapeHtml(formatClock(msg.ts)) + '</time></div>';
+    html += '<div class="climate-chat-meta"><strong>' + escapeHtml(name) + '</strong><time>' + escapeHtml(formatClock(msg.ts)) + '</time>';
+    if (isComplete) html += '<span class="climate-chat-status-pill is-ok">✓ Completed</span>';
+    html += '</div>';
     html += '<div class="climate-chat-body">';
-    if (!isUser && msg.elapsedMs) {
+    if (isRunning) {
+      html += renderActivityProgress(msg);
+    } else if (isComplete) {
+      html += renderActivityComplete(msg);
+    } else if (!isUser && msg.elapsedMs) {
       html += '<button type="button" class="climate-chat-elapsed">Worked for ' + escapeHtml(formatElapsed(msg.elapsedMs)) + ' ▾</button>';
     }
     if (body && !showRunCard) html += '<div class="climate-chat-text">' + body + '</div>';
-    else if (body && (msg.text || "").length) html += '<div class="climate-chat-text">' + body + '</div>';
+    else if (body && (msg.text || "").length && !isRunning) html += '<div class="climate-chat-text">' + body + '</div>';
     if (showRunCard) {
       html += '<section class="climate-run-summary">';
       html += '<div class="climate-run-summary-head"><span class="climate-run-summary-title">▣ Run Summary</span><span class="climate-run-status is-ok">Completed ✓</span></div>';
@@ -831,7 +1194,7 @@
         html += '</div>';
       }
       html += '</section>';
-    } else if (!isUser && msg.proposal && msg.proposal.state === "pending") {
+    } else if (!isUser && !isComplete && msg.proposal && msg.proposal.state === "pending") {
       html += '<div class="climate-chat-msg-actions">';
       html += '<button type="button" class="climate-btn" data-chat-action="undo" data-msg-id="' + escapeHtml(msg.id) + '">Undo All</button>';
       html += '<button type="button" class="climate-btn" data-chat-action="keep" data-msg-id="' + escapeHtml(msg.id) + '">Keep All</button>';
@@ -839,7 +1202,7 @@
       html += '</div>';
     }
     if (!isUser && msg.diagnostics) {
-      html += '<details class="climate-chat-details"><summary>Details / Diagnostics</summary><pre class="mono">' + escapeHtml(msg.diagnostics) + '</pre></details>';
+      html += '<details class="climate-chat-details" id="climate-details-' + escapeHtml(msg.id) + '"><summary>Details / Diagnostics</summary><pre class="mono">' + escapeHtml(msg.diagnostics) + '</pre></details>';
     }
     html += '</div></article>';
     return html;
@@ -1069,15 +1432,40 @@
     jsonFetch(endpoint("/runs/" + encodeURIComponent(state.runId))).then(function (data) {
       state.run = data.run;
       var parsed = splitRunOutput(data.run.logs, "");
+      var session = activeSession();
+      var streaming = session && session.messages.find(function (m) { return m.id === state.streamingMsgId; });
+      var evidence = ((parsed.diagnostics || "") + "\n" + (data.run.logs || "") + "\n" + (parsed.text || "")).trim();
+      var activity = parseActivityEvidence(evidence, {
+        running: ["completed", "failed", "cancelled", "unavailable"].indexOf(data.run.status) < 0,
+        startedAt: streaming && streaming.startedAt,
+        hasAnswer: !!(parsed.text && parsed.text.length > 20),
+        hasProposal: !!(data.run.proposal)
+      });
       if (data.run.logs && data.run.logs !== state.streamText) {
         state.streamText = data.run.logs;
         upsertAssistantMessage({
           status: "running",
-          text: parsed.text || "Working…",
+          text: parsed.text || "",
           diagnostics: parsed.diagnostics,
+          activity: activity,
           provider: data.run.provider,
           model: data.run.model
         });
+      } else if (streaming && streaming.status === "running") {
+        // Refresh activity/elapsed without forcing scroll jump when logs unchanged.
+        var prev = JSON.stringify(streaming.activity || {});
+        var next = JSON.stringify(activity || {});
+        if (prev !== next) {
+          upsertAssistantMessage({
+            status: "running",
+            activity: activity,
+            diagnostics: parsed.diagnostics || streaming.diagnostics || ""
+          });
+        } else if (streaming.activity && streaming.activity.explore) {
+          streaming.activity.explore.elapsedMs = activity.explore.elapsedMs;
+          var elapsedEl = feed.querySelector('[data-explore-panel="' + streaming.id + '"] .climate-activity-explore-stats b:last-child');
+          // keep stored; full re-render only when evidence changes
+        }
       }
       if (state.panel === "output") bottomBody.textContent = data.run.logs || data.run.answer || "Waiting for output…";
       if (["completed", "failed", "cancelled", "unavailable"].indexOf(data.run.status) < 0) {
@@ -1090,11 +1478,11 @@
       var files = changedFilesFrom(proposal, finalParsed.text);
       var tests = testsFromText(finalParsed.text, null);
       var lines = lineDeltaFromProposal(proposal);
-      var session = activeSession();
-      var started = Number((session && (session.messages.find(function (m) { return m.id === state.streamingMsgId; }) || {}).startedAt) || data.run.created_at || Date.now());
+      var started = Number((streaming && streaming.startedAt) || data.run.created_at || Date.now());
       var finished = Number(data.run.finished_at || Date.now());
       if (String(started).length < 13) started = Date.now() - 1000;
       if (String(finished).length < 13) finished = Date.now();
+      var elapsedMs = Math.max(0, finished - started);
       var usageParsed = parseUsagePayload(data.run.usage);
       var diagnostics = finalParsed.diagnostics || "";
       if (usageParsed.source !== "unavailable") {
@@ -1102,6 +1490,15 @@
       } else {
         diagnostics = (diagnostics ? diagnostics + "\n\n" : "") + "usage_source=unavailable";
       }
+      var finalActivity = parseActivityEvidence(((diagnostics || "") + "\n" + (data.run.logs || "") + "\n" + (finalParsed.text || "")).trim(), {
+        running: false,
+        startedAt: started,
+        elapsedMs: elapsedMs,
+        hasAnswer: !!(finalParsed.text),
+        hasProposal: !!proposal,
+        tests: tests,
+        status: data.run.status
+      });
       if (session) {
         session.lastRunProvider = data.run.provider || providerSelect.value;
         applyUsageFromRun(session, data.run.provider || providerSelect.value, data.run.usage);
@@ -1112,11 +1509,12 @@
         diagnostics: diagnostics,
         summary: summary,
         changedFiles: files,
-        filesInspected: files.length,
+        filesInspected: Math.max(files.length, (finalActivity.explore && finalActivity.explore.count) || 0),
         tests: tests,
         lines: lines,
         proposal: proposal,
-        elapsedMs: Math.max(0, finished - started),
+        activity: finalActivity,
+        elapsedMs: elapsedMs,
         runId: data.run.id,
         usage: usageParsed
       });
@@ -1165,11 +1563,67 @@
     }).catch(function(error){appendFeed(error.message,"is-error");});
   }
   function switchPanel(panel) {
-    state.panel=panel;center.classList.remove("is-bottom-closed");document.querySelectorAll(".climate-bottom-tabs [data-panel]").forEach(function(btn){btn.classList.toggle("is-active",btn.dataset.panel===panel);});
-    if(panel==="problems")bottomBody.textContent="No problems detected by CLIMATE.";
-    else if(panel==="tests")bottomBody.textContent="No test run selected. CLIMATE v1 does not expose unrestricted shell execution.";
-    else if(panel==="output")bottomBody.textContent=state.run?(state.run.logs||state.run.answer||"Waiting for output…"):"No AI or repository output yet.";
-    else if(state.git)renderGitWorkspace(state.git,state.gitPath);else loadGit();savePrefs();
+    state.panel = panel;
+    center.classList.remove("is-bottom-closed");
+    document.querySelectorAll(".climate-bottom-tabs [data-panel]").forEach(function (btn) {
+      btn.classList.toggle("is-active", btn.dataset.panel === panel);
+    });
+    var termPanel = document.getElementById("climate-terminal-panel");
+    var showTerm = panel === "terminal";
+    bottomBody.hidden = showTerm;
+    if (termPanel) termPanel.hidden = !showTerm;
+    if (window.WCTerminal) {
+      window.WCTerminal.setRenderingPaused(!showTerm);
+      if (showTerm) {
+        ensureClimateTerminal().then(function () {
+          if (window.WCTerminal.scheduleFit) window.WCTerminal.scheduleFit();
+        });
+        savePrefs();
+        return;
+      }
+    }
+    if (showTerm) {
+      savePrefs();
+      return;
+    }
+    if (panel === "problems") bottomBody.textContent = "No problems detected by CLIMATE.";
+    else if (panel === "tests") bottomBody.textContent = "No test run selected. CLIMATE v1 does not expose unrestricted shell execution.";
+    else if (panel === "output") bottomBody.textContent = state.run ? (state.run.logs || state.run.answer || "Waiting for output…") : "No AI or repository output yet.";
+    else if (state.git) renderGitWorkspace(state.git, state.gitPath);
+    else loadGit();
+    savePrefs();
+  }
+  var climateTermReady = null;
+  function syncWcTerminalRepo() {
+    var repoSel = document.getElementById("wc-term-repo");
+    if (!repoSel || !repoId()) return;
+    if (repoSel.value !== repoId()) {
+      repoSel.value = repoId();
+      if (repoSel.onchange) repoSel.onchange();
+    }
+  }
+  function ensureClimateTerminal() {
+    if (!window.WCTerminal) return Promise.resolve(false);
+    if (climateTermReady) {
+      syncWcTerminalRepo();
+      return climateTermReady;
+    }
+    climateTermReady = fetch("/api/workspace-console/terminal", { credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (window.WCTerminal.fillCatalog) window.WCTerminal.fillCatalog(data);
+        syncWcTerminalRepo();
+        return window.WCTerminal.init({});
+      })
+      .then(function () {
+        syncWcTerminalRepo();
+        return true;
+      })
+      .catch(function () {
+        climateTermReady = null;
+        return false;
+      });
+    return climateTermReady;
   }
   function setupResize() {
     document.querySelectorAll("[data-resize]").forEach(function (sash) {
@@ -1284,13 +1738,20 @@
   });
   document.addEventListener("click",function(event){
     var ai=document.getElementById("climate-ai");
-    if(!event.target.closest(".climate-dd")) closeClimateDropdowns();
-    if(!ai||ai.contains(event.target))return;
+    if(!event.target.closest(".climate-dd") && !event.target.closest(".climate-dd-menu")) closeClimateDropdowns();
+    if(!ai||ai.contains(event.target)||event.target.closest(".climate-dd-menu"))return;
     closeChatPopovers();
   });
   document.addEventListener("keydown",function(event){
     if(event.key==="Escape") closeClimateDropdowns();
   });
+  window.addEventListener("resize", function () { closeClimateDropdowns(); });
+  document.addEventListener("scroll", function (event) {
+    if (!document.querySelector(".climate-dd.is-open")) return;
+    // Keep open on menu self-scroll; close on outer scroll that would desync fixed coords.
+    if (event.target && event.target.closest && event.target.closest(".climate-dd-menu")) return;
+    closeClimateDropdowns();
+  }, true);
   document.getElementById("climate-refresh-tree").addEventListener("click",function(){loadTree();loadGit();});document.getElementById("climate-search-run").addEventListener("click",runSearch);document.getElementById("climate-search").addEventListener("keydown",function(e){if(e.key==="Enter")runSearch();});
   document.getElementById("climate-show-excluded").addEventListener("change",function(){state.showExcluded=this.checked;savePrefs();loadTree();});
   document.getElementById("climate-send").addEventListener("click",sendRun);promptEl.addEventListener("keydown",function(e){if((e.ctrlKey||e.metaKey)&&e.key==="Enter")sendRun();});cancelBtn.addEventListener("click",function(){if(!state.runId)return;jsonFetch(endpoint("/runs/"+encodeURIComponent(state.runId)+"/cancel"),{method:"POST"}).then(pollRun).catch(function(e){appendFeed(e.message,"is-error");});});
@@ -1321,12 +1782,14 @@
       if(workbench.classList.contains("is-ai-closed")||workbench.classList.contains("is-ai-collapsed")){
         expandAiPanel();
       }
-      workbench.classList.toggle("is-ai-maximized");
       if(workbench.classList.contains("is-ai-maximized")){
+        restoreAiFromMaximize();
+      } else {
+        workbench.classList.add("is-ai-maximized");
         workbench.classList.remove("is-ai-collapsed");
+        syncAiMaximizeChrome();
+        if(editor)editor.layout();
       }
-      syncAiMaximizeChrome();
-      if(editor)editor.layout();
       savePrefs();
     });
   }
@@ -1350,5 +1813,11 @@
   document.getElementById("climate-toggle-left").addEventListener("click",function(){workbench.classList.toggle("is-left-closed");if(editor)editor.layout();savePrefs();});
   document.querySelectorAll("[data-activity]").forEach(function(button){button.addEventListener("click",function(){var activity=button.dataset.activity;if(activity==="explorer"){workbench.classList.remove("is-left-closed");}else if(activity==="search"){workbench.classList.remove("is-left-closed");document.getElementById("climate-search").focus();}else if(activity==="git"||activity==="tests"){switchPanel(activity);}else if(activity==="ai"){workbench.classList.remove("is-ai-closed");if(workbench.classList.contains("is-ai-collapsed"))expandAiPanel();promptEl.focus();}else{setStatus("Workspace settings remain in CLIMATE Settings.");}document.querySelectorAll("[data-activity]").forEach(function(item){item.classList.toggle("is-active",item===button);});if(editor)editor.layout();savePrefs();});});
   window.addEventListener("beforeunload",function(e){captureActive();if(state.tabs.some(function(tab){return tab.dirty;})){e.preventDefault();e.returnValue="";}});
-  loadPrefs();syncAiMaximizeChrome();renderTabs();renderProviders();enhanceProviderModelDropdowns();loadChatStore();loadTree();loadGit();setupResize();initMonaco();if(state.active)openFile(state.active);
+  window.addEventListener("resize", function () {
+    if (workbench.classList.contains("is-ai-maximized") && !workbench.classList.contains("is-ai-collapsed") && !workbench.classList.contains("is-ai-closed")) {
+      syncAiMaximizeChrome();
+      if (editor) editor.layout();
+    }
+  });
+  loadPrefs();normalizeAiPanelState();syncAiMaximizeChrome();renderTabs();renderProviders();enhanceProviderModelDropdowns();loadChatStore();loadTree();loadGit();setupResize();initMonaco();if(state.active)openFile(state.active);
 }());

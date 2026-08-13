@@ -178,9 +178,34 @@ class ClimateUiContractTests(unittest.TestCase):
             'id="climate-chat-history"', 'id="climate-chat-title"',
             'id="climate-breadcrumb"', 'data-panel="problems"',
             'data-panel="output"', 'data-panel="tests"', 'data-panel="git"',
+            'data-panel="terminal"',
+            'climate-terminal-panel',
+            'wc_terminal.js',
+            'wc-xterm-a',
             'Ask a follow-up',
         ):
             self.assertIn(marker, template)
+        self.assertNotIn("OUTLINE", template)
+        self.assertNotIn("TIMELINE", template)
+        self.assertNotIn("› REPOSITORIES", template)
+        self.assertNotIn("climate_terminal.js", template)
+        self.assertIn("AI_MIN = 340", script)
+        self.assertIn("normalizeAiPanelState", script)
+        self.assertIn("collapseAiPanel", script)
+        self.assertIn("ensureClimateTerminal", script)
+        self.assertIn("WCTerminal", script)
+        self.assertIn("clamp(480px, 45vw, 720px)", script)
+        self.assertIn("font-weight: 400", (root / "static" / "css" / "climate.css").read_text(encoding="utf-8"))
+        self.assertIn("parseActivityEvidence", script)
+        self.assertIn("climate-activity-progress", script)
+        self.assertIn("renderActivityProgress", script)
+        self.assertIn("renderActivityComplete", script)
+        self.assertIn("climate-activity-progress", (root / "static" / "css" / "climate.css").read_text(encoding="utf-8"))
+        self.assertIn("prefers-reduced-motion", (root / "static" / "css" / "climate.css").read_text(encoding="utf-8"))
+        self.assertIn("positionClimateDropdownMenu", script)
+        self.assertIn("is-portal", script)
+        self.assertIn("openClimateDropdown", script)
+        self.assertIn("climate-dd-menu.is-portal", (root / "static" / "css" / "climate.css").read_text(encoding="utf-8"))
         self.assertIn("monaco.editor.create", script)
         self.assertIn("localStorage.setItem", script)
         self.assertIn("climate:chat:v1:", script)

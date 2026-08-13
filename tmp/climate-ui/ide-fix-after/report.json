@@ -1,0 +1,295 @@
+{
+  "base": "http://127.0.0.1:8091",
+  "errors": [],
+  "states": [
+    {
+      "label": "360",
+      "classes": "climate-workbench",
+      "rightVar": 360,
+      "ai": {
+        "w": 360,
+        "h": 774,
+        "x": 1032,
+        "y": 100
+      },
+      "fullVisible": true,
+      "railVisible": false,
+      "titleFs": 13,
+      "tokenFs": 12,
+      "explorerSections": [],
+      "bottomTabs": [
+        "problems",
+        "output",
+        "tests",
+        "git",
+        "terminal"
+      ],
+      "termPanel": true,
+      "termVisible": false,
+      "shell": {
+        "w": 1222,
+        "h": 852,
+        "x": 170,
+        "y": 48
+      },
+      "sidebar": {
+        "w": 170,
+        "h": 900,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "label": "340",
+      "classes": "climate-workbench",
+      "rightVar": 340,
+      "ai": {
+        "w": 340,
+        "h": 774,
+        "x": 1052,
+        "y": 100
+      },
+      "fullVisible": true,
+      "railVisible": false,
+      "titleFs": 13,
+      "tokenFs": 12,
+      "explorerSections": [],
+      "bottomTabs": [
+        "problems",
+        "output",
+        "tests",
+        "git",
+        "terminal"
+      ],
+      "termPanel": true,
+      "termVisible": false,
+      "shell": {
+        "w": 1222,
+        "h": 852,
+        "x": 170,
+        "y": 48
+      },
+      "sidebar": {
+        "w": 170,
+        "h": 900,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "label": "forced-narrow-css-guard",
+      "classes": "climate-workbench",
+      "rightVar": 48,
+      "ai": {
+        "w": 340,
+        "h": 774,
+        "x": 1052,
+        "y": 100
+      },
+      "fullVisible": true,
+      "railVisible": false,
+      "titleFs": 13,
+      "tokenFs": 12,
+      "explorerSections": [],
+      "bottomTabs": [
+        "problems",
+        "output",
+        "tests",
+        "git",
+        "terminal"
+      ],
+      "termPanel": true,
+      "termVisible": false,
+      "shell": {
+        "w": 1222,
+        "h": 852,
+        "x": 170,
+        "y": 48
+      },
+      "sidebar": {
+        "w": 170,
+        "h": 900,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "label": "collapsed",
+      "classes": "climate-workbench is-ai-collapsed",
+      "rightVar": 48,
+      "ai": {
+        "w": 48,
+        "h": 774,
+        "x": 1344,
+        "y": 100
+      },
+      "fullVisible": false,
+      "railVisible": true,
+      "titleFs": 13,
+      "tokenFs": 12,
+      "explorerSections": [],
+      "bottomTabs": [
+        "problems",
+        "output",
+        "tests",
+        "git",
+        "terminal"
+      ],
+      "termPanel": true,
+      "termVisible": false,
+      "shell": {
+        "w": 1222,
+        "h": 852,
+        "x": 170,
+        "y": 48
+      },
+      "sidebar": {
+        "w": 170,
+        "h": 900,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "label": "restore",
+      "classes": "climate-workbench",
+      "rightVar": 360,
+      "ai": {
+        "w": 360,
+        "h": 774,
+        "x": 1032,
+        "y": 100
+      },
+      "fullVisible": true,
+      "railVisible": false,
+      "titleFs": 13,
+      "tokenFs": 12,
+      "explorerSections": [],
+      "bottomTabs": [
+        "problems",
+        "output",
+        "tests",
+        "git",
+        "terminal"
+      ],
+      "termPanel": true,
+      "termVisible": false,
+      "shell": {
+        "w": 1222,
+        "h": 852,
+        "x": 170,
+        "y": 48
+      },
+      "sidebar": {
+        "w": 170,
+        "h": 900,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "label": "maximized",
+      "classes": "climate-workbench is-ai-maximized",
+      "rightVar": 525,
+      "ai": {
+        "w": 525,
+        "h": 774,
+        "x": 867,
+        "y": 100
+      },
+      "fullVisible": true,
+      "railVisible": false,
+      "titleFs": 13,
+      "tokenFs": 12,
+      "explorerSections": [],
+      "bottomTabs": [
+        "problems",
+        "output",
+        "tests",
+        "git",
+        "terminal"
+      ],
+      "termPanel": true,
+      "termVisible": false,
+      "shell": {
+        "w": 1222,
+        "h": 852,
+        "x": 170,
+        "y": 48
+      },
+      "sidebar": {
+        "w": 170,
+        "h": 900,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "label": "terminal-tab",
+      "classes": "climate-workbench is-ai-maximized",
+      "rightVar": 525,
+      "ai": {
+        "w": 525,
+        "h": 774,
+        "x": 867,
+        "y": 100
+      },
+      "fullVisible": true,
+      "railVisible": false,
+      "titleFs": 13,
+      "tokenFs": 12,
+      "explorerSections": [],
+      "bottomTabs": [
+        "problems",
+        "output",
+        "tests",
+        "git",
+        "terminal"
+      ],
+      "termPanel": true,
+      "termVisible": true,
+      "shell": {
+        "w": 1222,
+        "h": 852,
+        "x": 170,
+        "y": 48
+      },
+      "sidebar": {
+        "w": 170,
+        "h": 900,
+        "x": 0,
+        "y": 0
+      }
+    }
+  ],
+  "termUi": {
+    "emptyVisible": true,
+    "emptyText": "Terminal Starts in the active repository path. Manual commands only — AI may insert text but never auto-executes. Start Terminal",
+    "shellDefault": "powershell",
+    "hasNew": true,
+    "hasRestart": true,
+    "hasClose": true,
+    "climateTerminal": true
+  },
+  "termStart": {
+    "hasSession": true,
+    "stageVisible": true,
+    "failVisible": false,
+    "failMsg": "Disconnected",
+    "hasXterm": true,
+    "cwd": "C:\\PMNP\\pmnp-live-processing"
+  },
+  "shellBefore": {
+    "x": 170,
+    "y": 48,
+    "w": 1222,
+    "h": 852
+  },
+  "shellAfter": {
+    "x": 170,
+    "y": 48,
+    "w": 1222,
+    "h": 852
+  },
+  "ok": true
+}

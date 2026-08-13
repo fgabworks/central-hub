@@ -1,0 +1,596 @@
+{
+  "base": "http://127.0.0.1:8091",
+  "states": [
+    {
+      "label": "360",
+      "classes": "climate-workbench",
+      "rightVar": 360,
+      "ai": {
+        "x": 1032,
+        "y": 100,
+        "w": 360,
+        "h": 774
+      },
+      "full": {
+        "x": 1033,
+        "y": 100,
+        "w": 359,
+        "h": 774
+      },
+      "rail": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      },
+      "railVisible": false,
+      "fullVisible": true,
+      "title": {
+        "text": "New chat",
+        "tip": "New chat",
+        "fontSize": 13,
+        "overflow": "ellipsis",
+        "box": {
+          "x": 1043,
+          "y": 141,
+          "w": 339,
+          "h": 18
+        }
+      },
+      "token": {
+        "text": "0 tokens",
+        "fontSize": 12,
+        "box": {
+          "x": 1150,
+          "y": 112,
+          "w": 54,
+          "h": 16
+        }
+      },
+      "composer": {
+        "fontSize": 12,
+        "box": {
+          "x": 1052,
+          "y": 733,
+          "w": 321,
+          "h": 58
+        },
+        "disabled": false
+      },
+      "providerModelOverlap": false,
+      "providerBox": {
+        "x": 1043,
+        "y": 836,
+        "w": 140,
+        "h": 28
+      },
+      "modelBox": {
+        "x": 1189,
+        "y": 836,
+        "w": 160,
+        "h": 28
+      },
+      "shell": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 852
+      },
+      "sidebar": {
+        "x": 0,
+        "y": 0,
+        "w": 170,
+        "h": 900
+      },
+      "aiPrevRight": "360px"
+    },
+    {
+      "label": "340",
+      "classes": "climate-workbench",
+      "rightVar": 340,
+      "ai": {
+        "x": 1052,
+        "y": 100,
+        "w": 340,
+        "h": 774
+      },
+      "full": {
+        "x": 1053,
+        "y": 100,
+        "w": 340,
+        "h": 774
+      },
+      "rail": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      },
+      "railVisible": false,
+      "fullVisible": true,
+      "title": {
+        "text": "New chat",
+        "tip": "New chat",
+        "fontSize": 13,
+        "overflow": "ellipsis",
+        "box": {
+          "x": 1063,
+          "y": 141,
+          "w": 320,
+          "h": 18
+        }
+      },
+      "token": {
+        "text": "0 tokens",
+        "fontSize": 12,
+        "box": {
+          "x": 1170,
+          "y": 112,
+          "w": 35,
+          "h": 16
+        }
+      },
+      "composer": {
+        "fontSize": 12,
+        "box": {
+          "x": 1072,
+          "y": 733,
+          "w": 302,
+          "h": 58
+        },
+        "disabled": false
+      },
+      "providerModelOverlap": false,
+      "providerBox": {
+        "x": 1063,
+        "y": 836,
+        "w": 130,
+        "h": 28
+      },
+      "modelBox": {
+        "x": 1199,
+        "y": 836,
+        "w": 150,
+        "h": 28
+      },
+      "shell": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 852
+      },
+      "sidebar": {
+        "x": 0,
+        "y": 0,
+        "w": 170,
+        "h": 900
+      },
+      "aiPrevRight": "340px"
+    },
+    {
+      "label": "380",
+      "classes": "climate-workbench",
+      "rightVar": 380,
+      "ai": {
+        "x": 1012,
+        "y": 100,
+        "w": 380,
+        "h": 774
+      },
+      "full": {
+        "x": 1013,
+        "y": 100,
+        "w": 379,
+        "h": 774
+      },
+      "rail": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      },
+      "railVisible": false,
+      "fullVisible": true,
+      "title": {
+        "text": "New chat",
+        "tip": "New chat",
+        "fontSize": 13,
+        "overflow": "ellipsis",
+        "box": {
+          "x": 1023,
+          "y": 141,
+          "w": 359,
+          "h": 18
+        }
+      },
+      "token": {
+        "text": "0 tokens",
+        "fontSize": 12,
+        "box": {
+          "x": 1130,
+          "y": 112,
+          "w": 56,
+          "h": 16
+        }
+      },
+      "composer": {
+        "fontSize": 12,
+        "box": {
+          "x": 1032,
+          "y": 733,
+          "w": 341,
+          "h": 58
+        },
+        "disabled": false
+      },
+      "providerModelOverlap": false,
+      "providerBox": {
+        "x": 1023,
+        "y": 836,
+        "w": 150,
+        "h": 28
+      },
+      "modelBox": {
+        "x": 1179,
+        "y": 836,
+        "w": 170,
+        "h": 28
+      },
+      "shell": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 852
+      },
+      "sidebar": {
+        "x": 0,
+        "y": 0,
+        "w": 170,
+        "h": 900
+      },
+      "aiPrevRight": "380px"
+    },
+    {
+      "label": "maximized",
+      "classes": "climate-workbench is-ai-maximized",
+      "rightVar": 525,
+      "ai": {
+        "x": 867,
+        "y": 100,
+        "w": 525,
+        "h": 774
+      },
+      "full": {
+        "x": 868,
+        "y": 100,
+        "w": 524,
+        "h": 774
+      },
+      "rail": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      },
+      "railVisible": false,
+      "fullVisible": true,
+      "title": {
+        "text": "New chat",
+        "tip": "New chat",
+        "fontSize": 13,
+        "overflow": "ellipsis",
+        "box": {
+          "x": 878,
+          "y": 141,
+          "w": 469,
+          "h": 18
+        }
+      },
+      "token": {
+        "text": "0 tokens",
+        "fontSize": 12,
+        "box": {
+          "x": 985,
+          "y": 112,
+          "w": 56,
+          "h": 16
+        }
+      },
+      "composer": {
+        "fontSize": 12,
+        "box": {
+          "x": 887,
+          "y": 733,
+          "w": 486,
+          "h": 58
+        },
+        "disabled": false
+      },
+      "providerModelOverlap": false,
+      "providerBox": {
+        "x": 878,
+        "y": 836,
+        "w": 222,
+        "h": 28
+      },
+      "modelBox": {
+        "x": 1106,
+        "y": 836,
+        "w": 242,
+        "h": 28
+      },
+      "shell": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 852
+      },
+      "sidebar": {
+        "x": 0,
+        "y": 0,
+        "w": 170,
+        "h": 900
+      },
+      "aiPrevRight": "360px"
+    },
+    {
+      "label": "maximize-restore",
+      "classes": "climate-workbench",
+      "rightVar": 360,
+      "ai": {
+        "x": 1032,
+        "y": 100,
+        "w": 360,
+        "h": 774
+      },
+      "full": {
+        "x": 1033,
+        "y": 100,
+        "w": 359,
+        "h": 774
+      },
+      "rail": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      },
+      "railVisible": false,
+      "fullVisible": true,
+      "title": {
+        "text": "New chat",
+        "tip": "New chat",
+        "fontSize": 13,
+        "overflow": "ellipsis",
+        "box": {
+          "x": 1043,
+          "y": 141,
+          "w": 339,
+          "h": 18
+        }
+      },
+      "token": {
+        "text": "0 tokens",
+        "fontSize": 12,
+        "box": {
+          "x": 1150,
+          "y": 112,
+          "w": 54,
+          "h": 16
+        }
+      },
+      "composer": {
+        "fontSize": 12,
+        "box": {
+          "x": 1052,
+          "y": 733,
+          "w": 321,
+          "h": 58
+        },
+        "disabled": false
+      },
+      "providerModelOverlap": false,
+      "providerBox": {
+        "x": 1043,
+        "y": 836,
+        "w": 140,
+        "h": 28
+      },
+      "modelBox": {
+        "x": 1189,
+        "y": 836,
+        "w": 160,
+        "h": 28
+      },
+      "shell": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 852
+      },
+      "sidebar": {
+        "x": 0,
+        "y": 0,
+        "w": 170,
+        "h": 900
+      },
+      "aiPrevRight": "360px"
+    },
+    {
+      "label": "collapsed",
+      "classes": "climate-workbench is-ai-collapsed",
+      "rightVar": 48,
+      "ai": {
+        "x": 1344,
+        "y": 100,
+        "w": 48,
+        "h": 774
+      },
+      "full": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      },
+      "rail": {
+        "x": 1345,
+        "y": 100,
+        "w": 47,
+        "h": 774
+      },
+      "railVisible": true,
+      "fullVisible": false,
+      "title": {
+        "text": "New chat",
+        "tip": "New chat",
+        "fontSize": 13,
+        "overflow": "ellipsis",
+        "box": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        }
+      },
+      "token": {
+        "text": "0 tokens",
+        "fontSize": 12,
+        "box": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        }
+      },
+      "composer": {
+        "fontSize": 12,
+        "box": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "disabled": false
+      },
+      "providerModelOverlap": false,
+      "providerBox": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      },
+      "modelBox": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      },
+      "shell": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 852
+      },
+      "sidebar": {
+        "x": 0,
+        "y": 0,
+        "w": 170,
+        "h": 900
+      },
+      "aiPrevRight": "360px"
+    },
+    {
+      "label": "restore",
+      "classes": "climate-workbench",
+      "rightVar": 360,
+      "ai": {
+        "x": 1032,
+        "y": 100,
+        "w": 360,
+        "h": 774
+      },
+      "full": {
+        "x": 1033,
+        "y": 100,
+        "w": 359,
+        "h": 774
+      },
+      "rail": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      },
+      "railVisible": false,
+      "fullVisible": true,
+      "title": {
+        "text": "New chat",
+        "tip": "New chat",
+        "fontSize": 13,
+        "overflow": "ellipsis",
+        "box": {
+          "x": 1043,
+          "y": 141,
+          "w": 339,
+          "h": 18
+        }
+      },
+      "token": {
+        "text": "0 tokens",
+        "fontSize": 12,
+        "box": {
+          "x": 1150,
+          "y": 112,
+          "w": 54,
+          "h": 16
+        }
+      },
+      "composer": {
+        "fontSize": 12,
+        "box": {
+          "x": 1052,
+          "y": 733,
+          "w": 321,
+          "h": 58
+        },
+        "disabled": false
+      },
+      "providerModelOverlap": false,
+      "providerBox": {
+        "x": 1043,
+        "y": 836,
+        "w": 140,
+        "h": 28
+      },
+      "modelBox": {
+        "x": 1189,
+        "y": 836,
+        "w": 160,
+        "h": 28
+      },
+      "shell": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 852
+      },
+      "sidebar": {
+        "x": 0,
+        "y": 0,
+        "w": 170,
+        "h": 900
+      },
+      "aiPrevRight": "360px"
+    }
+  ],
+  "errors": [],
+  "shellBefore": {
+    "x": 170,
+    "y": 48
+  },
+  "shellAfter": {
+    "x": 170,
+    "y": 48
+  },
+  "ok": true
+}

@@ -1,0 +1,283 @@
+{
+  "base": "http://127.0.0.1:8095",
+  "errors": [],
+  "states": [
+    {
+      "label": "running",
+      "shell": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 852
+      },
+      "sidebar": {
+        "x": 0,
+        "y": 0,
+        "w": 170,
+        "h": 900
+      },
+      "ai": {
+        "x": 1032,
+        "y": 100,
+        "w": 360,
+        "h": 774
+      },
+      "classes": "climate-workbench",
+      "hasProgress": true,
+      "progressTitle": "Working on your request…",
+      "steps": [
+        {
+          "text": "✓Exploring 2 files ›",
+          "cls": "climate-activity-step is-done is-explore"
+        },
+        {
+          "text": "✓Searching repository",
+          "cls": "climate-activity-step is-done"
+        },
+        {
+          "text": "✓Reading anc_compliance.py",
+          "cls": "climate-activity-step is-done"
+        },
+        {
+          "text": "✓Checking related logic",
+          "cls": "climate-activity-step is-done"
+        },
+        {
+          "text": "Running tests",
+          "cls": "climate-activity-step is-current"
+        }
+      ],
+      "hasPulse": true,
+      "hasExploreBtn": true,
+      "exploreOpen": false,
+      "exploreFiles": [
+        "analytics/derive_member_scores.py",
+        "logic/anc_compliance.py"
+      ],
+      "hasComplete": false,
+      "completeText": "",
+      "hasViewDetails": false,
+      "hasShowChanges": false,
+      "hasWorkingPlain": false,
+      "rawInBody": false,
+      "detailsCount": 1
+    },
+    {
+      "label": "explore-open",
+      "shell": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 852
+      },
+      "sidebar": {
+        "x": 0,
+        "y": 0,
+        "w": 170,
+        "h": 900
+      },
+      "ai": {
+        "x": 1032,
+        "y": 100,
+        "w": 360,
+        "h": 774
+      },
+      "classes": "climate-workbench",
+      "hasProgress": true,
+      "progressTitle": "Working on your request…",
+      "steps": [
+        {
+          "text": "✓Exploring 2 files ›",
+          "cls": "climate-activity-step is-done is-explore is-expanded"
+        },
+        {
+          "text": "✓Searching repository",
+          "cls": "climate-activity-step is-done"
+        },
+        {
+          "text": "✓Reading anc_compliance.py",
+          "cls": "climate-activity-step is-done"
+        },
+        {
+          "text": "✓Checking related logic",
+          "cls": "climate-activity-step is-done"
+        },
+        {
+          "text": "Running tests",
+          "cls": "climate-activity-step is-current"
+        }
+      ],
+      "hasPulse": true,
+      "hasExploreBtn": true,
+      "exploreOpen": true,
+      "exploreFiles": [
+        "analytics/derive_member_scores.py",
+        "logic/anc_compliance.py"
+      ],
+      "hasComplete": false,
+      "completeText": "",
+      "hasViewDetails": false,
+      "hasShowChanges": false,
+      "hasWorkingPlain": false,
+      "rawInBody": false,
+      "detailsCount": 1
+    },
+    {
+      "label": "completed",
+      "shell": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 852
+      },
+      "sidebar": {
+        "x": 0,
+        "y": 0,
+        "w": 170,
+        "h": 900
+      },
+      "ai": {
+        "x": 1032,
+        "y": 100,
+        "w": 360,
+        "h": 774
+      },
+      "classes": "climate-workbench",
+      "hasProgress": false,
+      "progressTitle": "",
+      "steps": [],
+      "hasPulse": false,
+      "hasExploreBtn": false,
+      "exploreOpen": false,
+      "exploreFiles": [],
+      "hasComplete": true,
+      "completeText": "Worked for 18s ▾✓ Explored 2 files·Ran 9 tests·0 issues foundView DetailsShow Changes",
+      "hasViewDetails": true,
+      "hasShowChanges": true,
+      "hasWorkingPlain": false,
+      "rawInBody": false,
+      "detailsCount": 1
+    },
+    {
+      "label": "compact-340",
+      "shell": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 852
+      },
+      "sidebar": {
+        "x": 0,
+        "y": 0,
+        "w": 170,
+        "h": 900
+      },
+      "ai": {
+        "x": 1032,
+        "y": 100,
+        "w": 360,
+        "h": 774
+      },
+      "classes": "climate-workbench",
+      "hasProgress": true,
+      "progressTitle": "Working on your request…",
+      "steps": [
+        {
+          "text": "✓Exploring 2 files ›",
+          "cls": "climate-activity-step is-done is-explore"
+        },
+        {
+          "text": "✓Searching repository",
+          "cls": "climate-activity-step is-done"
+        },
+        {
+          "text": "✓Reading anc_compliance.py",
+          "cls": "climate-activity-step is-done"
+        },
+        {
+          "text": "✓Checking related logic",
+          "cls": "climate-activity-step is-done"
+        },
+        {
+          "text": "Running tests",
+          "cls": "climate-activity-step is-current"
+        }
+      ],
+      "hasPulse": true,
+      "hasExploreBtn": true,
+      "exploreOpen": false,
+      "exploreFiles": [
+        "analytics/derive_member_scores.py",
+        "logic/anc_compliance.py"
+      ],
+      "hasComplete": false,
+      "completeText": "",
+      "hasViewDetails": false,
+      "hasShowChanges": false,
+      "hasWorkingPlain": false,
+      "rawInBody": false,
+      "detailsCount": 1
+    },
+    {
+      "label": "maximized",
+      "shell": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 852
+      },
+      "sidebar": {
+        "x": 0,
+        "y": 0,
+        "w": 170,
+        "h": 900
+      },
+      "ai": {
+        "x": 744,
+        "y": 100,
+        "w": 648,
+        "h": 774
+      },
+      "classes": "climate-workbench is-ai-maximized",
+      "hasProgress": true,
+      "progressTitle": "Working on your request…",
+      "steps": [
+        {
+          "text": "✓Exploring 2 files ›",
+          "cls": "climate-activity-step is-done is-explore"
+        },
+        {
+          "text": "✓Searching repository",
+          "cls": "climate-activity-step is-done"
+        },
+        {
+          "text": "✓Reading anc_compliance.py",
+          "cls": "climate-activity-step is-done"
+        },
+        {
+          "text": "✓Checking related logic",
+          "cls": "climate-activity-step is-done"
+        },
+        {
+          "text": "Running tests",
+          "cls": "climate-activity-step is-current"
+        }
+      ],
+      "hasPulse": true,
+      "hasExploreBtn": true,
+      "exploreOpen": false,
+      "exploreFiles": [
+        "analytics/derive_member_scores.py",
+        "logic/anc_compliance.py"
+      ],
+      "hasComplete": false,
+      "completeText": "",
+      "hasViewDetails": false,
+      "hasShowChanges": false,
+      "hasWorkingPlain": false,
+      "rawInBody": false,
+      "detailsCount": 1
+    }
+  ],
+  "ok": true
+}

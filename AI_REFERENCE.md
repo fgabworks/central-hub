@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-13 (CLIMATE shell + Code Workspace v1).
+Last verified: 2026-08-14 (CLIMATE IDE: AI min 340 / terminal / explorer cleanup).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status

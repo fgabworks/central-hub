@@ -66,22 +66,37 @@
   function ensureXterm() {
     return new Promise(function (resolve, reject) {
       if (global.Terminal) return resolve();
-      var link = document.createElement("link");
-      link.rel = "stylesheet";
-      link.href = "/static/vendor/xterm/xterm.css";
-      document.head.appendChild(link);
+      // Suspend AMD (Monaco loader) so UMD xterm scripts attach to window.
+      var savedDefine = global.define;
+      if (typeof savedDefine === "function") {
+        try { global.define = undefined; } catch (_) {}
+      }
+      function restoreAmd() {
+        if (typeof savedDefine === "function") {
+          try { global.define = savedDefine; } catch (_) {}
+        }
+      }
+      if (!document.querySelector('link[data-wc-xterm="1"]')) {
+        var link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = "/static/vendor/xterm/xterm.css";
+        link.setAttribute("data-wc-xterm", "1");
+        document.head.appendChild(link);
+      }
       var s1 = document.createElement("script");
       s1.src = "/static/vendor/xterm/xterm.js";
       s1.onload = function () {
         var s2 = document.createElement("script");
         s2.src = "/static/vendor/xterm/addon-fit.js";
         s2.onload = function () {
-          resolve();
+          restoreAmd();
+          if (!global.Terminal) reject(new Error("xterm failed to load"));
+          else resolve();
         };
-        s2.onerror = reject;
+        s2.onerror = function () { restoreAmd(); reject(new Error("xterm fit addon failed")); };
         document.head.appendChild(s2);
       };
-      s1.onerror = reject;
+      s1.onerror = function () { restoreAmd(); reject(new Error("xterm failed to load")); };
       document.head.appendChild(s1);
     });
   }

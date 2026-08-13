@@ -4,7 +4,17 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**CLIMATE application shell + Code Workspace v1 (2026-08-13)**
+**CLIMATE AI live activity UI (2026-08-14)**
+
+While a coding provider run is active, the assistant message shows an evidence-only
+progress block (`Working on your request…` + observed tool/log steps). On completion
+it collapses to `Worked for … · Explored … · Ran … · issues` with View Details /
+Show Changes when relevant. Raw events stay in Details. Verify:
+`CLIMATE_BASE_URL=… node scripts/climate_activity_verify.js`.
+
+Prior: **CLIMATE IDE polish (2026-08-14)**
+
+**CLIMATE IDE polish (2026-08-14)**
 
 Implemented `/work/climate` (VANTA) and `/personal/climate` (ARCTIC) as one compact
 VS Code-style shell: Monaco with fallback, guarded Explorer/open/search/save,

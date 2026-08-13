@@ -1,0 +1,91 @@
+{
+  "base": "http://127.0.0.1:8094",
+  "errors": [],
+  "widths": {
+    "1366": {
+      "errors": [],
+      "term": {
+        "ready": true,
+        "repoValue": "live-processing-local",
+        "repoOptions": 3,
+        "emptyVisible": true,
+        "shell": "powershell"
+      },
+      "termLive": {
+        "skippedStart": true,
+        "reason": "UI/catalog checked; live start verified at 1600 only"
+      },
+      "shellBefore": {
+        "shellX": 170,
+        "shellY": 48,
+        "sideW": 170
+      },
+      "shellAfter": {
+        "shellX": 170,
+        "shellY": 48,
+        "sideW": 170
+      },
+      "maximizeExpected": 615
+    },
+    "1600": {
+      "errors": [],
+      "term": {
+        "ready": true,
+        "repoValue": "live-processing-local",
+        "repoOptions": 3,
+        "emptyVisible": true,
+        "shell": "powershell"
+      },
+      "termLive": {
+        "activeId": "10e1cd147107",
+        "stageVisible": true,
+        "hasXterm": true,
+        "failVisible": false,
+        "failMsg": "WebSocket disconnected"
+      },
+      "shellBefore": {
+        "shellX": 170,
+        "shellY": 48,
+        "sideW": 170
+      },
+      "shellAfter": {
+        "shellX": 170,
+        "shellY": 48,
+        "sideW": 170
+      },
+      "maximizeExpected": 720
+    },
+    "1920": {
+      "errors": [],
+      "term": {
+        "ready": true,
+        "repoValue": "live-processing-local",
+        "repoOptions": 3,
+        "emptyVisible": true,
+        "shell": "powershell"
+      },
+      "termLive": {
+        "skippedStart": true,
+        "reason": "UI/catalog checked; live start verified at 1600 only"
+      },
+      "shellBefore": {
+        "shellX": 170,
+        "shellY": 48,
+        "sideW": 170
+      },
+      "shellAfter": {
+        "shellX": 170,
+        "shellY": 48,
+        "sideW": 170
+      },
+      "maximizeExpected": 720
+    }
+  },
+  "arctic": {
+    "shellX": 170,
+    "sideW": 170,
+    "hasWorkbench": true
+  },
+  "ok": true,
+  "terminalStatus": "WCTerminal (Workspace Console PTY) embedded in CLIMATE bottom Terminal tab"
+}

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ climate.context_label }} · CLIMATE{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/climate.css') }}?v=11">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/climate.css') }}?v=16">
 {% endblock %}
 {% block content %}
 <div class="climate-shell" id="climate-shell"
@@ -56,9 +56,6 @@
       <label class="climate-excluded-toggle"><input type="checkbox" id="climate-show-excluded"> Show excluded files</label>
       <div class="climate-tree" id="climate-tree" role="tree"></div>
       <div class="climate-search-results" id="climate-search-results" hidden></div>
-      <div class="climate-explorer-sections">
-        <button>› OUTLINE</button><button>› TIMELINE</button><button>› REPOSITORIES</button>
-      </div>
     </aside>
     <div class="climate-sash climate-sash-left" data-resize="left" role="separator" aria-label="Resize Explorer"></div>
 
@@ -83,10 +80,78 @@
           <button data-panel="output">Output</button>
           <button data-panel="tests">Tests</button>
           <button data-panel="git">Git</button>
+          <button data-panel="terminal">Terminal</button>
           <span class="climate-spacer"></span>
           <button id="climate-bottom-close" title="Close panel">×</button>
         </nav>
         <div class="climate-bottom-body mono" id="climate-bottom-body">No problems detected by CLIMATE.</div>
+        <div class="climate-terminal-panel" id="climate-terminal-panel" hidden>
+          <div class="wc-pane wc-pane-terminal climate-wc-terminal" data-wc-pane="terminal" role="tabpanel">
+            <div class="wc-toolbar wc-term-toolbar">
+              <label class="wc-field wc-term-field">
+                <span class="wc-field-label">Repository</span>
+                <span class="wc-term-select-wrap">
+                  <span class="wc-term-status-dot" id="wc-term-repo-dot" aria-hidden="true"></span>
+                  <select id="wc-term-repo" class="wc-control wc-term-repo-select" aria-label="Repository"></select>
+                </span>
+              </label>
+              <label class="wc-field wc-term-field">
+                <span class="wc-field-label">Shell</span>
+                <select id="wc-term-shell" class="wc-control wc-term-shell-select" aria-label="Shell"></select>
+              </label>
+              <button type="button" class="btn btn-sm btn-primary wc-control-btn" id="wc-term-new" title="New interactive terminal">+ New Terminal</button>
+              <div class="wc-term-session-tabs" id="wc-term-session-tabs" role="tablist" aria-label="Terminal sessions"></div>
+              <button type="button" class="btn btn-sm wc-control-btn wc-term-quick-add" id="wc-term-add" title="New terminal" aria-label="New terminal">+</button>
+              <div class="wc-term-actions">
+                <button type="button" class="btn btn-sm wc-control-btn" id="wc-term-split" title="Split view" disabled>Split</button>
+                <button type="button" class="btn btn-sm wc-control-btn" id="wc-term-restart" title="Restart session" disabled>Restart</button>
+                <button type="button" class="btn btn-sm wc-control-btn btn-danger" id="wc-term-kill" title="Kill session process tree" disabled>Kill</button>
+              </div>
+            </div>
+            <div class="wc-term-empty" id="wc-term-empty">
+              <p class="wc-term-empty-title">No terminal sessions</p>
+              <p class="muted wc-term-empty-copy">Start an interactive shell inside the active repository path. AI may insert commands but never executes them.</p>
+              <button type="button" class="btn btn-sm btn-primary wc-control-btn" id="wc-term-empty-new">+ New Terminal</button>
+            </div>
+            <div class="wc-term-stage" id="wc-term-stage" data-split="0" hidden>
+              <div class="wc-term-view is-active" id="wc-term-view-a" data-slot="a">
+                <div class="wc-term-pane-chrome">
+                  <span class="wc-term-pane-title" id="wc-term-title-a">Terminal</span>
+                  <button type="button" class="wc-term-pane-close" data-close-pane="a" title="Close pane" aria-label="Close pane">×</button>
+                </div>
+                <div class="wc-xterm" id="wc-xterm-a"></div>
+                <div class="wc-term-ws-fail" id="wc-term-fail-a" hidden>
+                  <p class="wc-term-ws-fail-msg">WebSocket disconnected</p>
+                  <div class="wc-term-ws-fail-actions">
+                    <button type="button" class="btn btn-sm btn-primary wc-control-btn" data-ws-reconnect="a">Reconnect</button>
+                    <button type="button" class="btn btn-sm wc-control-btn" data-ws-close-pane="a">Close pane</button>
+                  </div>
+                </div>
+              </div>
+              <div class="wc-term-view" id="wc-term-view-b" data-slot="b" hidden>
+                <div class="wc-term-pane-chrome">
+                  <span class="wc-term-pane-title" id="wc-term-title-b">Terminal</span>
+                  <button type="button" class="wc-term-pane-close" data-close-pane="b" title="Close pane" aria-label="Close pane">×</button>
+                </div>
+                <div class="wc-xterm" id="wc-xterm-b"></div>
+                <div class="wc-term-ws-fail" id="wc-term-fail-b" hidden>
+                  <p class="wc-term-ws-fail-msg">WebSocket disconnected</p>
+                  <div class="wc-term-ws-fail-actions">
+                    <button type="button" class="btn btn-sm btn-primary wc-control-btn" data-ws-reconnect="b">Reconnect</button>
+                    <button type="button" class="btn btn-sm wc-control-btn" data-ws-close-pane="b">Close pane</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Profile launcher remains in Workspace Console shell; CLIMATE uses interactive PTY only. -->
+            <div hidden aria-hidden="true">
+              <select id="wc-term-profile"></select>
+              <select id="wc-term-env"><option value="development">development</option></select>
+              <button type="button" id="wc-term-start"></button>
+              <pre id="wc-terminal-out"></pre>
+            </div>
+          </div>
+        </div>
       </section>
     </main>
 
@@ -198,5 +263,6 @@
 {% endblock %}
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
-<script src="{{ url_for('static', filename='js/climate.js') }}?v=7"></script>
+<script src="{{ url_for('static', filename='js/wc_terminal.js') }}?v=climate-1"></script>
+<script src="{{ url_for('static', filename='js/climate.js') }}?v=13"></script>
 {% endblock %}
