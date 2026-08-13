@@ -1,0 +1,646 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VANTA / DOH / PMNP Live Processing · CLIMATE</title>
+  <link rel="stylesheet" href="/static/css/style.css?v=mission-control-3">
+  <link rel="stylesheet" href="/static/css/climate-theme.css?v=5">
+  <link rel="stylesheet" href="/static/css/assistant_dock_maximize.css?v=2">
+  <link rel="stylesheet" href="/static/css/climate-shell.css?v=8">
+  <link rel="icon" type="image/png" href="/static/img/climate-mark.png">
+  
+<link rel="stylesheet" href="/static/css/climate.css?v=17">
+
+</head>
+<body class="climate-system-shell theme-work">
+  
+  
+  
+  
+  <div class="app-shell has-activity-rail"
+       style="--ad-width: 358px;">
+    <aside class="sidebar" id="hub-sidebar" aria-label="Primary navigation">
+      <div class="sidebar-brand">
+        <span class="climate-brand-lockup ">
+    <span class="brand-mark" aria-hidden="true"><img class="brand-logo-mark"
+       src="/static/img/climate-mark.png"
+       width="22"
+       height="22"
+       alt=""
+       decoding="async"></span>
+    
+    <span class="brand-text">
+      <strong class="brand-wordmark">CLIMATE</strong>
+      <span>Integrated Intelligence System</span>
+    </span>
+    
+  </span>
+      </div>
+
+      <div class="workspace-switcher" role="group" aria-label="Workspace">
+        
+          <a
+            class="workspace-btn is-active"
+            href="/workspace/work?from_endpoint=work_climate"
+            aria-current="true"
+            title="VANTA"
+          ><span class="workspace-btn-label">VANTA</span></a>
+        
+          <a
+            class="workspace-btn"
+            href="/workspace/personal?from_endpoint=work_climate"
+            
+            title="ARCTIC"
+          ><span class="workspace-btn-label">ARCTIC</span></a>
+        
+      </div>
+
+      <div class="sidebar-scroll">
+      <nav class="sidebar-nav" aria-label="Primary">
+        
+          
+            
+            
+            
+              <div class="nav-label">VANTA</div>
+              
+                
+                <a
+                  href="/work/climate"
+                  class="nav-link is-active"
+                  title="Code Workspace"
+                  aria-current="page"
+                >
+                  <span class="nav-ico" aria-hidden="true">C</span>
+                  <span class="nav-link-label">Code Workspace</span>
+                  
+                </a>
+              
+                
+                <a
+                  href="/work"
+                  class="nav-link"
+                  title="Dashboard"
+                  
+                >
+                  <span class="nav-ico" aria-hidden="true">⌂</span>
+                  <span class="nav-link-label">Dashboard</span>
+                  
+                </a>
+              
+                
+                <a
+                  href="/repositories"
+                  class="nav-link"
+                  title="Repositories"
+                  
+                >
+                  <span class="nav-ico" aria-hidden="true">▣</span>
+                  <span class="nav-link-label">Repositories</span>
+                  
+                </a>
+              
+                
+                <a
+                  href="/work/notebook"
+                  class="nav-link"
+                  title="Notebook"
+                  
+                >
+                  <span class="nav-ico" aria-hidden="true">✎</span>
+                  <span class="nav-link-label">Notebook</span>
+                  
+                </a>
+              
+                
+                <a
+                  href="/sql"
+                  class="nav-link"
+                  title="SQL Workspace"
+                  
+                >
+                  <span class="nav-ico" aria-hidden="true">▦</span>
+                  <span class="nav-link-label">SQL Workspace</span>
+                  
+                </a>
+              
+                
+                <a
+                  href="/data-explorer"
+                  class="nav-link"
+                  title="Data Explorer"
+                  
+                >
+                  <span class="nav-ico" aria-hidden="true">▤</span>
+                  <span class="nav-link-label">Data Explorer</span>
+                  
+                </a>
+              
+                
+                <a
+                  href="/dhis2"
+                  class="nav-link"
+                  title="DHIS2"
+                  
+                >
+                  <span class="nav-ico" aria-hidden="true">⬡</span>
+                  <span class="nav-link-label">DHIS2</span>
+                  
+                </a>
+              
+            
+          
+        
+          
+            
+            
+            
+              <div class="nav-label">Communication</div>
+              
+                
+                <a
+                  href="/work/email"
+                  class="nav-link"
+                  title="Email"
+                  
+                >
+                  <span class="nav-ico" aria-hidden="true">✉</span>
+                  <span class="nav-link-label">Email</span>
+                  
+                </a>
+              
+                
+                <a
+                  href="/work/calendar"
+                  class="nav-link"
+                  title="Calendar"
+                  
+                >
+                  <span class="nav-ico" aria-hidden="true">📅</span>
+                  <span class="nav-link-label">Calendar</span>
+                  
+                </a>
+              
+            
+          
+        
+          
+            
+            
+            
+              <div class="nav-label">System</div>
+              
+                
+                <a
+                  href="/jobs"
+                  class="nav-link"
+                  title="Jobs"
+                  
+                >
+                  <span class="nav-ico" aria-hidden="true">▶</span>
+                  <span class="nav-link-label">Jobs</span>
+                  
+                </a>
+              
+                
+                <a
+                  href="/health"
+                  class="nav-link"
+                  title="Health"
+                  
+                >
+                  <span class="nav-ico" aria-hidden="true">♡</span>
+                  <span class="nav-link-label">Health</span>
+                  
+                </a>
+              
+                
+                <a
+                  href="/system/ai-connections"
+                  class="nav-link"
+                  title="Connections"
+                  
+                >
+                  <span class="nav-ico" aria-hidden="true">AI</span>
+                  <span class="nav-link-label">Connections</span>
+                  
+                </a>
+              
+                
+                <a
+                  href="/audit"
+                  class="nav-link"
+                  title="Audit"
+                  
+                >
+                  <span class="nav-ico" aria-hidden="true">☰</span>
+                  <span class="nav-link-label">Audit</span>
+                  
+                </a>
+              
+                
+                <a
+                  href="/settings"
+                  class="nav-link"
+                  title="Settings"
+                  
+                >
+                  <span class="nav-ico" aria-hidden="true">⚙</span>
+                  <span class="nav-link-label">Settings</span>
+                  
+                </a>
+              
+            
+          
+        
+      </nav>
+
+      <div class="sidebar-actions">
+        <div class="nav-label">Quick Actions</div>
+        
+          
+            <a class="action-link" href="/repositories/new" title="Add Repository">Add Repository</a>
+          
+        
+          
+            <a class="action-link" href="/health" title="Run Health Check">Run Health Check</a>
+          
+        
+          
+            <a class="action-link" href="/work/email" title="Email Center">Email Center</a>
+          
+        
+          
+            <a class="action-link" href="/dhis2" title="DHIS2 Maintenance">DHIS2 Maintenance</a>
+          
+        
+          
+            <span class="action-link is-disabled" title="Phase 2">Create Demo Job</span>
+          
+        
+          
+            <a class="action-link" href="/audit" title="View Logs">View Logs</a>
+          
+        
+      </div>
+      </div>
+
+      <div class="sidebar-footer">
+        <button type="button"
+                class="sidebar-collapse-btn"
+                id="sidebar-collapse-btn"
+                aria-controls="hub-sidebar"
+                aria-expanded="true"
+                title="Collapse sidebar">
+          <span class="sidebar-collapse-ico" aria-hidden="true">«</span>
+          <span class="sidebar-collapse-label">Collapse</span>
+        </button>
+        <div class="sidebar-footer-meta">
+          <strong>CLIMATE v0.1.0</strong>
+          <span>VANTA</span>
+        </div>
+      </div>
+    </aside>
+
+    <div class="main-column">
+      <header class="topbar">
+        <div class="topbar-left">
+          <span class="badge badge-env">Environment: dev</span>
+          <span class="badge badge-warning badge-dot">DHIS2 Live: Configured</span>
+        </div>
+        <div class="topbar-right">
+          
+          <span class="icon-btn" title="Theme" aria-label="Theme">☾</span>
+          <span class="icon-btn" title="Notifications" aria-label="Notifications">
+            🔔
+            <span class="dot">3</span>
+          </span>
+          <div class="profile">
+            <span class="avatar">AD</span>
+            <span>Admin ▾</span>
+          </div>
+        </div>
+      </header>
+
+      <main class="content">
+        
+        
+          
+        
+        
+<div class="climate-shell" id="climate-shell"
+     data-workspace="work"
+     data-api-root="/api/climate/work"
+     data-bootstrap='{"active_repository_id": "live-processing-local", "coding_defaults": {"default_models": {"claude-code": "", "codex": "", "cursor-agent": ""}, "default_provider": "", "providers": ["codex", "claude-code", "cursor-agent"]}, "context_label": "VANTA / DOH / PMNP Live Processing", "ok": true, "providers": [{"account_label": "ChatGPT", "authenticated": true, "available": true, "capabilities": {"cancel": true, "command_execution": false, "dynamic_models": true, "email_actions": false, "file_write": false, "jsonl_streaming": true, "modes": ["find", "ask", "plan", "review"], "profiles": ["okarun"], "provider_default_model": true, "read_only": true, "repository_runs": true, "sql_execution": false, "streaming": true}, "detail": "Logged in using ChatGPT", "executable_path": "C:\\Users\\fjdga\\.codex\\.sandbox-bin\\codex.exe", "id": "codex", "installed": true, "label": "Codex", "state": "connected", "status": "Connected"}, {"account_label": "", "authenticated": false, "available": false, "capabilities": {"cancel": true, "command_execution": false, "dynamic_models": true, "email_actions": false, "file_write": false, "modes": ["find", "ask", "plan", "review"], "read_only": true, "repository_runs": false, "sql_execution": false, "streaming": true}, "detail": "Claude Code CLI not found on PATH (expected `claude`).", "executable_path": "", "id": "claude-code", "installed": false, "label": "Claude Code", "state": "unavailable", "status": "Unavailable"}, {"account_label": "", "authenticated": false, "available": false, "capabilities": {"cancel": true, "command_execution": false, "dynamic_models": true, "email_actions": false, "file_write": false, "modes": ["find", "ask", "plan", "review"], "read_only": true, "repository_runs": false, "sql_execution": false, "streaming": true}, "detail": "Cursor Agent CLI not found on PATH (expected `agent` or `cursor-agent`). The IDE `cursor` binary is not an agent runner.", "executable_path": "", "id": "cursor-agent", "installed": false, "label": "Cursor Agent", "state": "unavailable", "status": "Unavailable"}], "repositories": [{"available": true, "branch": "fritz-do-not-pull/merge", "id": "live-processing-local", "name": "PMNP Live Processing", "workspace": "work"}, {"available": false, "branch": null, "id": "data-script", "name": "Data-Script", "workspace": "work"}, {"available": false, "branch": null, "id": "report-template", "name": "Report Template", "workspace": "work"}, {"available": true, "branch": "main", "id": "sql-queries", "name": "SQL Queries", "workspace": "work"}, {"available": true, "branch": "master", "id": "ar-task-generator", "name": "ar-task-generator", "workspace": "work"}], "safety": {"proposal_confirmation": true, "safe_file_api": true, "unrestricted_shell": false, "workspace_isolation": true}, "workspace": "work", "workspace_label": "VANTA"}'>
+  <header class="climate-titlebar">
+    <div class="climate-brand">
+      <img class="climate-brand-mark" src="/static/img/climate-mark.png" width="20" height="20" alt="">
+      <span><strong>CLIMATE</strong><small>VANTA / DOH / PMNP Live Processing</small></span>
+    </div>
+    <div class="climate-scope-controls" aria-label="Active coding scope">
+      <label>Repository
+        <select id="climate-repository">
+          
+          
+          <option value="live-processing-local" data-branch="fritz-do-not-pull/merge"
+                  selected
+                  >PMNP Live Processing</option>
+          
+          <option value="data-script" data-branch=""
+                  
+                  disabled>Data-Script</option>
+          
+          <option value="report-template" data-branch=""
+                  
+                  disabled>Report Template</option>
+          
+          <option value="sql-queries" data-branch="main"
+                  
+                  >SQL Queries</option>
+          
+          <option value="ar-task-generator" data-branch="master"
+                  
+                  >ar-task-generator</option>
+          
+        </select>
+      </label>
+      <label>Branch
+        <select id="climate-branch" disabled><option>fritz-do-not-pull/merge</option></select>
+      </label>
+      <label>Provider
+        <select id="climate-provider"></select>
+      </label>
+      <label>Model
+        <select id="climate-model"><option value="">Select model</option></select>
+      </label>
+    </div>
+    <div class="climate-title-actions">
+      <button class="climate-icon-btn is-run" id="climate-send-top" title="Send prompt (Ctrl+Enter)" aria-label="Send prompt">▷</button>
+      <button class="climate-icon-btn" id="climate-cancel-top" title="Cancel active run" aria-label="Cancel active run">□</button>
+      <button class="climate-icon-btn" id="climate-save" title="Save active file (Ctrl+S)" aria-label="Save active file">⚡</button>
+      <button class="climate-icon-btn" id="climate-toggle-left" title="Toggle Explorer" aria-label="Toggle Explorer">◧</button>
+      <button class="climate-icon-btn" id="climate-toggle-bottom" title="Toggle bottom panel" aria-label="Toggle bottom panel">▰</button>
+      <button class="climate-icon-btn" id="climate-toggle-ai" title="Toggle AI coding panel" aria-label="Toggle AI coding panel">✦</button>
+      <button class="climate-icon-btn" id="climate-maximize-ai" title="Maximize AI panel" aria-label="Maximize AI panel" aria-pressed="false">□</button>
+    </div>
+  </header>
+
+  <div class="climate-workbench" id="climate-workbench">
+    <aside class="climate-explorer" id="climate-explorer">
+      <div class="climate-pane-title"><span>EXPLORER</span><button id="climate-refresh-tree" title="Refresh">↻</button></div>
+      <div class="climate-search-row">
+        <input type="search" id="climate-search" placeholder="Search repository" aria-label="Search repository">
+        <button id="climate-search-run" title="Search">⌕</button>
+      </div>
+      <div class="climate-context-note"><span id="climate-context-count">0</span> files selected for AI context</div>
+      <label class="climate-excluded-toggle"><input type="checkbox" id="climate-show-excluded"> Show excluded files</label>
+      <div class="climate-tree" id="climate-tree" role="tree"></div>
+      <div class="climate-search-results" id="climate-search-results" hidden></div>
+    </aside>
+    <div class="climate-sash climate-sash-left" data-resize="left" role="separator" aria-label="Resize Explorer"></div>
+
+    <main class="climate-center">
+      <nav class="climate-tabs" id="climate-tabs" aria-label="Open files">
+        <div class="climate-empty-tab">Open a file from Explorer</div>
+      </nav>
+      <div class="climate-breadcrumb" id="climate-breadcrumb"><span>Open a file from Explorer</span><span class="climate-spacer"></span><button title="Split editor">◫</button><button title="More actions">•••</button></div>
+      <section class="climate-editor-host" id="climate-editor-host">
+        <div class="climate-welcome" id="climate-welcome">
+          <img class="climate-welcome-logo" src="/static/img/climate-mark.png" alt="" width="40" height="40">
+          <h1>CLIMATE</h1>
+          <p>VANTA / DOH / PMNP Live Processing</p>
+          <span>Open a repository file to begin.</span>
+        </div>
+        <textarea id="climate-editor-fallback" spellcheck="false" aria-label="Code editor"></textarea>
+      </section>
+      <div class="climate-sash climate-sash-bottom" data-resize="bottom" role="separator" aria-label="Resize diagnostics"></div>
+      <section class="climate-bottom" id="climate-bottom">
+        <nav class="climate-bottom-tabs" aria-label="Diagnostics panels">
+          <button class="is-active" data-panel="problems">Problems <span class="count">0</span></button>
+          <button data-panel="output">Output</button>
+          <button data-panel="tests">Tests</button>
+          <button data-panel="git">Git</button>
+          <button data-panel="terminal">Terminal</button>
+          <span class="climate-spacer"></span>
+          <button id="climate-bottom-close" title="Close panel">×</button>
+        </nav>
+        <div class="climate-bottom-body mono" id="climate-bottom-body">No problems detected by CLIMATE.</div>
+        <div class="climate-terminal-panel" id="climate-terminal-panel" hidden>
+          <div class="wc-pane wc-pane-terminal climate-wc-terminal" data-wc-pane="terminal" role="tabpanel">
+            <div class="wc-toolbar wc-term-toolbar">
+              <label class="wc-field wc-term-field">
+                <span class="wc-field-label">Repository</span>
+                <span class="wc-term-select-wrap">
+                  <span class="wc-term-status-dot" id="wc-term-repo-dot" aria-hidden="true"></span>
+                  <select id="wc-term-repo" class="wc-control wc-term-repo-select" aria-label="Repository"></select>
+                </span>
+              </label>
+              <label class="wc-field wc-term-field">
+                <span class="wc-field-label">Shell</span>
+                <select id="wc-term-shell" class="wc-control wc-term-shell-select" aria-label="Shell"></select>
+              </label>
+              <button type="button" class="btn btn-sm btn-primary wc-control-btn" id="wc-term-new" title="New interactive terminal">+ New Terminal</button>
+              <div class="wc-term-session-tabs" id="wc-term-session-tabs" role="tablist" aria-label="Terminal sessions"></div>
+              <button type="button" class="btn btn-sm wc-control-btn wc-term-quick-add" id="wc-term-add" title="New terminal" aria-label="New terminal">+</button>
+              <div class="wc-term-actions">
+                <button type="button" class="btn btn-sm wc-control-btn" id="wc-term-split" title="Split view" disabled>Split</button>
+                <button type="button" class="btn btn-sm wc-control-btn" id="wc-term-restart" title="Restart session" disabled>Restart</button>
+                <button type="button" class="btn btn-sm wc-control-btn btn-danger" id="wc-term-kill" title="Kill session process tree" disabled>Kill</button>
+              </div>
+            </div>
+            <div class="wc-term-empty" id="wc-term-empty">
+              <p class="wc-term-empty-title">No terminal sessions</p>
+              <p class="muted wc-term-empty-copy">Start an interactive shell inside the active repository path. AI may insert commands but never executes them.</p>
+              <button type="button" class="btn btn-sm btn-primary wc-control-btn" id="wc-term-empty-new">+ New Terminal</button>
+            </div>
+            <div class="wc-term-stage" id="wc-term-stage" data-split="0" hidden>
+              <div class="wc-term-view is-active" id="wc-term-view-a" data-slot="a">
+                <div class="wc-term-pane-chrome">
+                  <span class="wc-term-pane-title" id="wc-term-title-a">Terminal</span>
+                  <button type="button" class="wc-term-pane-close" data-close-pane="a" title="Close pane" aria-label="Close pane">×</button>
+                </div>
+                <div class="wc-xterm" id="wc-xterm-a"></div>
+                <div class="wc-term-ws-fail" id="wc-term-fail-a" hidden>
+                  <p class="wc-term-ws-fail-msg">WebSocket disconnected</p>
+                  <div class="wc-term-ws-fail-actions">
+                    <button type="button" class="btn btn-sm btn-primary wc-control-btn" data-ws-reconnect="a">Reconnect</button>
+                    <button type="button" class="btn btn-sm wc-control-btn" data-ws-close-pane="a">Close pane</button>
+                  </div>
+                </div>
+              </div>
+              <div class="wc-term-view" id="wc-term-view-b" data-slot="b" hidden>
+                <div class="wc-term-pane-chrome">
+                  <span class="wc-term-pane-title" id="wc-term-title-b">Terminal</span>
+                  <button type="button" class="wc-term-pane-close" data-close-pane="b" title="Close pane" aria-label="Close pane">×</button>
+                </div>
+                <div class="wc-xterm" id="wc-xterm-b"></div>
+                <div class="wc-term-ws-fail" id="wc-term-fail-b" hidden>
+                  <p class="wc-term-ws-fail-msg">WebSocket disconnected</p>
+                  <div class="wc-term-ws-fail-actions">
+                    <button type="button" class="btn btn-sm btn-primary wc-control-btn" data-ws-reconnect="b">Reconnect</button>
+                    <button type="button" class="btn btn-sm wc-control-btn" data-ws-close-pane="b">Close pane</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Profile launcher remains in Workspace Console shell; CLIMATE uses interactive PTY only. -->
+            <div hidden aria-hidden="true">
+              <select id="wc-term-profile"></select>
+              <select id="wc-term-env"><option value="development">development</option></select>
+              <button type="button" id="wc-term-start"></button>
+              <pre id="wc-terminal-out"></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div class="climate-sash climate-sash-right" data-resize="right" role="separator" aria-label="Resize AI panel"></div>
+    <aside class="climate-ai" id="climate-ai">
+      <button type="button" class="climate-ai-rail" id="climate-ai-expand" title="Expand AI Assistant" aria-label="Expand AI Assistant">✦</button>
+      <div class="climate-ai-full">
+      <header class="climate-chat-header">
+        <div class="climate-chat-topline">
+          <span class="climate-chat-label">AI ASSISTANT</span>
+          <button type="button" class="climate-token-pill" id="climate-token-pill" title="Session usage" aria-expanded="false">
+            <span aria-hidden="true">◈</span>
+            <span id="climate-token-label">0 tokens</span>
+          </button>
+          <span class="climate-provider-state" id="climate-provider-state"><i class="climate-provider-state-dot" aria-hidden="true"></i><span class="climate-provider-state-text">Checking</span></span>
+          <button type="button" class="climate-chat-new-btn" id="climate-chat-new" title="New Chat"><span class="climate-chat-new-icon" aria-hidden="true">+</span><span class="climate-chat-new-label">New Chat</span></button>
+          <button type="button" class="climate-icon-btn climate-chat-secondary" id="climate-chat-history" title="History" aria-label="History">◷</button>
+          <button type="button" class="climate-icon-btn" id="climate-chat-menu" title="More" aria-label="More options">⋯</button>
+          <button type="button" class="climate-icon-btn climate-chat-close" id="climate-ai-close" title="Close AI panel" aria-label="Close AI panel">×</button>
+        </div>
+        <div class="climate-chat-title-row">
+          <div class="climate-chat-title" id="climate-chat-title" title="New chat">New chat</div>
+          <button type="button" class="climate-icon-btn climate-chat-secondary" id="climate-chat-rename" title="Rename chat" aria-label="Rename chat">✎</button>
+        </div>
+        <div class="climate-chat-popover climate-usage-popover" id="climate-usage-panel" hidden>
+          <div class="climate-usage-head">
+            <strong>SESSION USAGE</strong>
+            <span id="climate-usage-since">—</span>
+          </div>
+          <div class="climate-usage-label">Session total</div>
+          <div class="climate-usage-total" id="climate-usage-total">0</div>
+          <div class="climate-usage-grid">
+            <div><i class="is-input"></i>Input <b id="climate-usage-input">0</b></div>
+            <div><i class="is-output"></i>Output <b id="climate-usage-output">0</b></div>
+            <div><i class="is-cached"></i>Cached <b id="climate-usage-cached">0</b></div>
+          </div>
+          <div class="climate-usage-section">Provider breakdown</div>
+          <div class="climate-usage-providers" id="climate-usage-providers"></div>
+          <div class="climate-usage-foot">
+            <span>Current run <b id="climate-usage-run">0</b></span>
+            <span id="climate-usage-source">unavailable</span>
+          </div>
+        </div>
+        <div class="climate-chat-popover" id="climate-chat-history-panel" hidden>
+          <div class="climate-chat-popover-title">History</div>
+          <div id="climate-chat-history-list"></div>
+        </div>
+        <div class="climate-chat-popover climate-chat-menu-panel" id="climate-chat-menu-panel" hidden>
+          <button type="button" data-chat-menu="new">New Chat</button>
+          <button type="button" data-chat-menu="history">History</button>
+          <button type="button" data-chat-menu="rename">Rename chat</button>
+          <button type="button" data-chat-menu="context">Context settings</button>
+          <button type="button" data-chat-menu="clear">Clear messages</button>
+        </div>
+      </header>
+
+      <div class="climate-ai-feed" id="climate-ai-feed" aria-live="polite">
+        <div class="climate-ai-empty"><strong>CLIMATE coding chat</strong><span>Ask about the active repository. Provider protocol stays in Details.</span></div>
+      </div>
+
+      <div class="climate-chat-composer" id="climate-chat-composer">
+        <div class="climate-compose-box">
+          <textarea id="climate-prompt" placeholder="Ask a follow-up…" rows="3" aria-label="Ask a follow-up"></textarea>
+          <div class="climate-compose-toolbar">
+            <button type="button" class="climate-compose-tool" id="climate-ctx-mention" title="Context">@</button>
+            <button type="button" class="climate-compose-tool" id="climate-ctx-files" title="Related files">#</button>
+            <button type="button" class="climate-compose-tool" id="climate-ctx-attach" title="Attachments">⧉</button>
+            <span class="climate-spacer"></span>
+            <button type="button" class="climate-btn climate-btn-ghost" id="climate-cancel" hidden>Cancel</button>
+            <button type="button" class="climate-send-fab" id="climate-send" title="Send" aria-label="Send">➤</button>
+          </div>
+        </div>
+        <div class="climate-chat-footer-controls">
+          <label class="climate-chat-pill" title="Provider">
+            <i class="climate-chat-pill-dot" id="climate-provider-dot" aria-hidden="true"></i>
+            <select id="climate-provider-panel" aria-label="Provider"></select>
+          </label>
+          <label class="climate-chat-pill climate-chat-pill-model" title="Model">
+            <select id="climate-model-panel" aria-label="Model"><option value="">Select model</option></select>
+          </label>
+          <button type="button" class="climate-compose-tool" id="climate-model-refresh" title="Refresh models">↻</button>
+        </div>
+        <div class="climate-context-popover" id="climate-context-panel" hidden>
+          <div class="climate-field-label">CONTEXT</div>
+          <label><input type="checkbox" id="climate-current-file" checked><span>Current File<small id="climate-current-file-name">No file open</small></span></label>
+          <label><input type="checkbox" id="climate-selection" checked><span>Selected Code<small id="climate-selection-meta">No selection</small></span></label>
+          <label><input type="checkbox" id="climate-selected-files"><span>Related Files<small><b id="climate-related-count">0</b> selected</small></span></label>
+          <label><input type="checkbox" id="climate-repo-context"><span>Repository Context<small>Active repository only</small></span></label>
+        </div>
+      </div>
+
+      <div id="climate-provider-cards" class="climate-provider-cards" hidden aria-hidden="true"></div>
+      <div class="climate-proposal-actions" id="climate-proposal-actions" hidden>
+        <button class="climate-btn" id="climate-reject">Undo All</button>
+        <button class="climate-btn" id="climate-accept">Keep All</button>
+        <button class="climate-btn climate-btn-primary" id="climate-review">Review Changes</button>
+      </div>
+      </div>
+    </aside>
+  </div>
+  <footer class="climate-statusbar">
+    <span id="climate-status">Ready</span><span class="climate-spacer"></span>
+    <span id="climate-git-summary">Git —</span><span>Ln <b id="climate-line">1</b>, Col <b id="climate-column">1</b></span><span>Spaces: 4</span><span>UTF-8</span><span>LF</span><span id="climate-language">Plain Text</span>
+  </footer>
+
+  <dialog class="climate-dialog" id="climate-save-dialog">
+    <form method="dialog"><h2>Review changes before save</h2><pre id="climate-save-diff" class="mono"></pre><div><button value="cancel" class="climate-btn">Cancel</button><button value="confirm" class="climate-btn climate-btn-primary" id="climate-confirm-save">Confirm save</button></div></form>
+  </dialog>
+</div>
+
+      </main>
+    </div>
+
+    
+
+    
+
+    
+    <aside class="activity-rail" id="activity-rail" aria-label="Activity rail">
+      
+      
+      
+      <button type="button" class="activity-rail-btn is-disabled" disabled title="SQL Workspace (coming to rail)">
+        <span aria-hidden="true">🗄</span><span class="sr-only">SQL</span>
+      </button>
+      <button type="button" class="activity-rail-btn is-disabled" disabled title="Calendar (coming to rail)">
+        <span aria-hidden="true">📅</span><span class="sr-only">Calendar</span>
+      </button>
+      <button type="button" class="activity-rail-btn is-disabled" disabled title="Audit (coming to rail)">
+        <span aria-hidden="true">📈</span><span class="sr-only">Audit</span>
+      </button>
+    </aside>
+    
+  </div>
+
+  
+
+  
+
+  
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
+<script src="/static/js/wc_terminal.js?v=climate-1"></script>
+<script src="/static/js/climate.js?v=14"></script>
+
+  <script src="/static/js/sidebar.js?v=sidebar-compact-1"></script>
+  
+  <script src="/static/js/hub_perf.js?v=perf-1"></script>
+  
+  
+</body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "label": "edit",
+  "title": "Fix app.py null check",
+  "token": "38.4k tokens",
+  "hasRawEdits": false,
+  "hasUndo": true,
+  "hasKeep": true,
+  "hasReview": true,
+  "hasRunSummary": true,
+  "hasSources": true,
+  "hasAskLine": false,
+  "hasDetails": true,
+  "bodySnippet": "Y\nYou\n5:55 AM\nFix app.py to set value = 2\n◎\nCodex\n5:55 AM\n✓ Completed\nProposed changes are ready for review.\nSources · 1 file\n▣ Run Summary\nCompleted ✓\nWorked for\n12s\nFiles changed\n1\nTests\n—\nLines changed\n+2 -1\nChanged files (1)\napp.py\nTests\nNo test summary\nUndo All\nKeep All\nReview Changes\nDetails / Diagnostics",
+  "msgCount": 2,
+  "feedId": "climate-ai-feed",
+  "maximized": false,
+  "historyBtn": true,
+  "newBtn": true,
+  "provider": "codex"
+}

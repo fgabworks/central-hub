@@ -1,0 +1,446 @@
+{
+  "base": "http://127.0.0.1:8099",
+  "checks": [
+    {
+      "name": "1366 compact pill has session tokens",
+      "ok": true,
+      "detail": "38.4k tokens ▰▰▰▰▱ 78%"
+    },
+    {
+      "name": "1366 compact pill shows quota %",
+      "ok": true,
+      "detail": "38.4k tokens ▰▰▰▰▱ 78%"
+    },
+    {
+      "name": "1366 pill font ≤ 13px",
+      "ok": true,
+      "detail": "11"
+    },
+    {
+      "name": "1366 session total font 14–16px",
+      "ok": true,
+      "detail": "14"
+    },
+    {
+      "name": "1366 current-run font ≤ 13px",
+      "ok": true,
+      "detail": "12"
+    },
+    {
+      "name": "1366 popover compact width",
+      "ok": true,
+      "detail": "236"
+    },
+    {
+      "name": "1366 popover compact height",
+      "ok": true,
+      "detail": "321"
+    },
+    {
+      "name": "1366 no AI overflow",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "1366 session+run rows present",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "1366 Codex capacity present",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "1366 bucket % left",
+      "ok": true,
+      "detail": "codex 78% left 5 hour window · resets Aug 14, 8:08 AM"
+    },
+    {
+      "name": "1366 refresh present",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "1366 source exact",
+      "ok": true,
+      "detail": "exact"
+    },
+    {
+      "name": "1366 no usage diagnostics in chat",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "1366 pill height compact",
+      "ok": true,
+      "detail": "22"
+    },
+    {
+      "name": "1366 max keeps total font 14–16px",
+      "ok": true,
+      "detail": "14"
+    },
+    {
+      "name": "1366 max keeps pill font ≤ 13px",
+      "ok": true,
+      "detail": "11"
+    },
+    {
+      "name": "1366 max popover not enlarged",
+      "ok": true,
+      "detail": "236"
+    },
+    {
+      "name": "1366 max no overflow",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "1366 max AI wider",
+      "ok": true,
+      "detail": "615"
+    },
+    {
+      "name": "1600 compact pill has session tokens",
+      "ok": true,
+      "detail": "38.4k tokens ▰▰▰▰▱ 78%"
+    },
+    {
+      "name": "1600 compact pill shows quota %",
+      "ok": true,
+      "detail": "38.4k tokens ▰▰▰▰▱ 78%"
+    },
+    {
+      "name": "1600 pill font ≤ 13px",
+      "ok": true,
+      "detail": "11"
+    },
+    {
+      "name": "1600 session total font 14–16px",
+      "ok": true,
+      "detail": "14"
+    },
+    {
+      "name": "1600 current-run font ≤ 13px",
+      "ok": true,
+      "detail": "12"
+    },
+    {
+      "name": "1600 popover compact width",
+      "ok": true,
+      "detail": "236"
+    },
+    {
+      "name": "1600 popover compact height",
+      "ok": true,
+      "detail": "321"
+    },
+    {
+      "name": "1600 no AI overflow",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "1600 session+run rows present",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "1600 Codex capacity present",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "1600 bucket % left",
+      "ok": true,
+      "detail": "codex 78% left 5 hour window · resets Aug 14, 8:08 AM"
+    },
+    {
+      "name": "1600 refresh present",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "1600 source exact",
+      "ok": true,
+      "detail": "exact"
+    },
+    {
+      "name": "1600 no usage diagnostics in chat",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "1600 pill height compact",
+      "ok": true,
+      "detail": "22"
+    },
+    {
+      "name": "1600 max keeps total font 14–16px",
+      "ok": true,
+      "detail": "14"
+    },
+    {
+      "name": "1600 max keeps pill font ≤ 13px",
+      "ok": true,
+      "detail": "11"
+    },
+    {
+      "name": "1600 max popover not enlarged",
+      "ok": true,
+      "detail": "236"
+    },
+    {
+      "name": "1600 max no overflow",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "1600 max AI wider",
+      "ok": true,
+      "detail": "720"
+    },
+    {
+      "name": "1920 compact pill has session tokens",
+      "ok": true,
+      "detail": "38.4k tokens ▰▰▰▰▱ 78%"
+    },
+    {
+      "name": "1920 compact pill shows quota %",
+      "ok": true,
+      "detail": "38.4k tokens ▰▰▰▰▱ 78%"
+    },
+    {
+      "name": "1920 pill font ≤ 13px",
+      "ok": true,
+      "detail": "11"
+    },
+    {
+      "name": "1920 session total font 14–16px",
+      "ok": true,
+      "detail": "14"
+    },
+    {
+      "name": "1920 current-run font ≤ 13px",
+      "ok": true,
+      "detail": "12"
+    },
+    {
+      "name": "1920 popover compact width",
+      "ok": true,
+      "detail": "236"
+    },
+    {
+      "name": "1920 popover compact height",
+      "ok": true,
+      "detail": "321"
+    },
+    {
+      "name": "1920 no AI overflow",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "1920 session+run rows present",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "1920 Codex capacity present",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "1920 bucket % left",
+      "ok": true,
+      "detail": "codex 78% left 5 hour window · resets Aug 14, 8:08 AM"
+    },
+    {
+      "name": "1920 refresh present",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "1920 source exact",
+      "ok": true,
+      "detail": "exact"
+    },
+    {
+      "name": "1920 no usage diagnostics in chat",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "1920 pill height compact",
+      "ok": true,
+      "detail": "22"
+    },
+    {
+      "name": "1920 max keeps total font 14–16px",
+      "ok": true,
+      "detail": "14"
+    },
+    {
+      "name": "1920 max keeps pill font ≤ 13px",
+      "ok": true,
+      "detail": "11"
+    },
+    {
+      "name": "1920 max popover not enlarged",
+      "ok": true,
+      "detail": "236"
+    },
+    {
+      "name": "1920 max no overflow",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "1920 max AI wider",
+      "ok": true,
+      "detail": "720"
+    }
+  ],
+  "samples": [
+    {
+      "label": "1366-normal",
+      "maximized": false,
+      "aiWidth": 360,
+      "pillText": "38.4k tokens ▰▰▰▰▱ 78%",
+      "pillFont": 11,
+      "totalFont": 14,
+      "runFont": 12,
+      "panelWidth": 236,
+      "panelHeight": 321,
+      "batteryWidth": "",
+      "limitsText": "codex 78% left 5 hour window · resets Aug 14, 8:08 AM",
+      "statusText": "",
+      "hasSessionTotal": true,
+      "hasCurrentRun": true,
+      "hasCodexCapacity": true,
+      "hasRefresh": true,
+      "source": "exact",
+      "diagnosticsInFeed": false,
+      "overflowX": false,
+      "overflowPanel": false,
+      "pillHeight": 22
+    },
+    {
+      "label": "1366-max",
+      "maximized": true,
+      "aiWidth": 615,
+      "pillText": "38.4k tokens ▰▰▰▰▱ 78%",
+      "pillFont": 11,
+      "totalFont": 14,
+      "runFont": 12,
+      "panelWidth": 236,
+      "panelHeight": 323,
+      "batteryWidth": "",
+      "limitsText": "codex 78% left 5 hour window · resets Aug 14, 8:08 AM",
+      "statusText": "",
+      "hasSessionTotal": true,
+      "hasCurrentRun": true,
+      "hasCodexCapacity": true,
+      "hasRefresh": true,
+      "source": "exact",
+      "diagnosticsInFeed": false,
+      "overflowX": false,
+      "overflowPanel": false,
+      "pillHeight": 22
+    },
+    {
+      "label": "1600-normal",
+      "maximized": false,
+      "aiWidth": 360,
+      "pillText": "38.4k tokens ▰▰▰▰▱ 78%",
+      "pillFont": 11,
+      "totalFont": 14,
+      "runFont": 12,
+      "panelWidth": 236,
+      "panelHeight": 321,
+      "batteryWidth": "",
+      "limitsText": "codex 78% left 5 hour window · resets Aug 14, 8:08 AM",
+      "statusText": "",
+      "hasSessionTotal": true,
+      "hasCurrentRun": true,
+      "hasCodexCapacity": true,
+      "hasRefresh": true,
+      "source": "exact",
+      "diagnosticsInFeed": false,
+      "overflowX": false,
+      "overflowPanel": false,
+      "pillHeight": 22
+    },
+    {
+      "label": "1600-max",
+      "maximized": true,
+      "aiWidth": 720,
+      "pillText": "38.4k tokens ▰▰▰▰▱ 78%",
+      "pillFont": 11,
+      "totalFont": 14,
+      "runFont": 12,
+      "panelWidth": 236,
+      "panelHeight": 323,
+      "batteryWidth": "",
+      "limitsText": "codex 78% left 5 hour window · resets Aug 14, 8:08 AM",
+      "statusText": "",
+      "hasSessionTotal": true,
+      "hasCurrentRun": true,
+      "hasCodexCapacity": true,
+      "hasRefresh": true,
+      "source": "exact",
+      "diagnosticsInFeed": false,
+      "overflowX": false,
+      "overflowPanel": false,
+      "pillHeight": 22
+    },
+    {
+      "label": "1920-normal",
+      "maximized": false,
+      "aiWidth": 360,
+      "pillText": "38.4k tokens ▰▰▰▰▱ 78%",
+      "pillFont": 11,
+      "totalFont": 14,
+      "runFont": 12,
+      "panelWidth": 236,
+      "panelHeight": 321,
+      "batteryWidth": "",
+      "limitsText": "codex 78% left 5 hour window · resets Aug 14, 8:08 AM",
+      "statusText": "",
+      "hasSessionTotal": true,
+      "hasCurrentRun": true,
+      "hasCodexCapacity": true,
+      "hasRefresh": true,
+      "source": "exact",
+      "diagnosticsInFeed": false,
+      "overflowX": false,
+      "overflowPanel": false,
+      "pillHeight": 22
+    },
+    {
+      "label": "1920-max",
+      "maximized": true,
+      "aiWidth": 720,
+      "pillText": "38.4k tokens ▰▰▰▰▱ 78%",
+      "pillFont": 11,
+      "totalFont": 14,
+      "runFont": 12,
+      "panelWidth": 236,
+      "panelHeight": 323,
+      "batteryWidth": "",
+      "limitsText": "codex 78% left 5 hour window · resets Aug 14, 8:08 AM",
+      "statusText": "",
+      "hasSessionTotal": true,
+      "hasCurrentRun": true,
+      "hasCodexCapacity": true,
+      "hasRefresh": true,
+      "source": "exact",
+      "diagnosticsInFeed": false,
+      "overflowX": false,
+      "overflowPanel": false,
+      "pillHeight": 22
+    }
+  ],
+  "ok": true
+}

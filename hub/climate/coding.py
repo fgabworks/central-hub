@@ -11,6 +11,62 @@ from hub.agent_center.service import AgentCenterError, AgentCenterService
 
 CODING_PROVIDERS = ("codex", "claude-code", "cursor-agent")
 
+_ASK_RE = re.compile(
+    r"\b("
+    r"explain|describe|summarize|summary|clarify|overview|"
+    r"what(?:'s|\s+is|\s+are|\s+does|\s+do)|"
+    r"how(?:\s+does|\s+do|\s+is|\s+are|\s+can|\s+should)?|"
+    r"why(?:\s+does|\s+do|\s+is|\s+are)?|"
+    r"where(?:\s+is|\s+are|\s+does)?|"
+    r"which|who|when|tell\s+me|show\s+me|list|find|search|look\s+up|"
+    r"compare|difference|derived|derivation|meaning\s+of"
+    r")\b",
+    re.I,
+)
+_EDIT_RE = re.compile(
+    r"\b("
+    r"edit|fix|change|modify|update|refactor|implement|patch|apply|"
+    r"add|remove|delete|rename|replace|write|create|insert|migrate|"
+    r"generate\s+code|make\s+changes?|update\s+the\s+file|open\s+a\s+pr"
+    r")\b",
+    re.I,
+)
+_EDITS_FENCE_RE = re.compile(
+    r"```(?:json)?\s*(\{[\s\S]*?\})\s*```",
+    re.I,
+)
+
+
+def classify_task_mode(prompt: str, explicit: str | None = None) -> str:
+    """Classify a coding prompt as ask (read-only) or edit (proposal allowed)."""
+    mode = str(explicit or "").strip().lower()
+    if mode in {"ask", "edit"}:
+        return mode
+    text = (prompt or "").strip()
+    if not text:
+        return "ask"
+    lower = text.lower()
+    ask_score = 0
+    edit_score = 0
+    if "?" in text:
+        ask_score += 2
+    if _ASK_RE.search(text):
+        ask_score += 2
+    if _EDIT_RE.search(text):
+        edit_score += 2
+    if re.match(r"^(please\s+)?(explain|describe|summarize|what|how|why|where|which|who|when)\b", lower):
+        ask_score += 3
+    if re.match(
+        r"^(please\s+)?(fix|edit|change|update|implement|add|remove|delete|refactor|create|write|patch)\b",
+        lower,
+    ):
+        edit_score += 3
+    if ask_score > edit_score:
+        return "ask"
+    if edit_score > ask_score:
+        return "edit"
+    return "ask"
+
 
 class ClimateCodingError(ValueError):
     def __init__(self, message: str, *, code: str = "invalid_request") -> None:
@@ -62,6 +118,10 @@ class ClimateCodingAdapter:
         current_file: str = "",
         selection: str = "",
         include_repo_context: bool = False,
+        task_mode: str | None = None,
+        reuse_session: bool = True,
+        handoff: bool = False,
+        preflight_log: str = "",
     ) -> dict[str, Any]:
         self._require_provider(provider)
         if workspace not in {"work", "personal"}:
@@ -75,21 +135,52 @@ class ClimateCodingAdapter:
         if not model.strip():
             raise ClimateCodingError("Select an exact model before running", code="model_required")
 
+        mode = classify_task_mode(prompt, task_mode)
+        # Prefer task_mode already applied in the context packet when present.
+        if "CLIMATE context packet (EDIT)" in prompt or "CLIMATE preflight context packet (EDIT)" in prompt:
+            mode = "edit"
+        elif "CLIMATE context packet (ASK)" in prompt or "CLIMATE preflight context packet (ASK)" in prompt:
+            mode = "ask"
         files = list(dict.fromkeys(
             str(path).replace("\\", "/").lstrip("/")
             for path in ([current_file] + list(selected_files or []))
             if str(path).strip()
         ))
-        context_note = [
-            "CLIMATE coding request. Stay read-only and propose edits only.",
-            "Return proposed file replacements in a fenced JSON object using this schema: ",
-            '{"edits":[{"path":"relative/path","content":"complete replacement content"}]}.',
-            "Do not apply edits or execute commands.",
-        ]
+        if mode == "edit":
+            context_note = [
+                "CLIMATE coding request (EDIT mode).",
+                "Stay read-only at runtime; propose file replacements only.",
+                "Return proposed file replacements in a fenced JSON object using this schema: ",
+                '{"edits":[{"path":"relative/path","content":"complete replacement content"}]}.',
+                "Do not apply edits or execute commands.",
+                "Use only the bounded context packet; do not assume full chat history.",
+            ]
+        else:
+            context_note = [
+                "CLIMATE coding request (ASK / EXPLAIN mode).",
+                "Answer in clear human-readable prose (markdown allowed).",
+                "Use the bounded context packet (read-only).",
+                "Do NOT propose file edits, diffs, patches, or JSON {\"edits\":[...]} payloads.",
+                "Cite the concrete paths/functions from the packet.",
+                "Do not apply edits or execute commands.",
+            ]
         if selection:
             context_note.append("Current editor selection:\n" + selection[:20_000])
-        context_note.append("Repository context: " + ("enabled" if include_repo_context else "selected files only"))
-        packed_prompt = "\n\n".join(context_note + [prompt.strip()])
+        if handoff:
+            context_note.append("Cross-provider compact handoff — do not replay full CLIMATE history.")
+        if reuse_session and not handoff:
+            context_note.append("Same-provider session: reuse prior provider context when supported.")
+        has_packet = (
+            "CLIMATE context packet" in prompt
+            or "CLIMATE preflight context packet" in prompt
+        )
+        if has_packet:
+            packed_prompt = "\n\n".join(context_note + [prompt.strip()])
+        else:
+            context_note.append(
+                "Repository context: " + ("enabled" if include_repo_context else "selected files only")
+            )
+            packed_prompt = "\n\n".join(context_note + [prompt.strip()])
 
         profile_id = "okarun" if workspace == "work" else "aira"
         if workspace == "personal" and provider == "codex":
@@ -108,13 +199,20 @@ class ClimateCodingAdapter:
             "repository_ids": [repository_id] if repository_id and workspace == "work" else [],
             "active_repository_id": repository_id if workspace == "work" else None,
             "selected_repository_id": repository_id if workspace == "work" else None,
-            "tool_runtime_lean_context": not include_repo_context,
+            "tool_runtime_lean_context": True if has_packet else (not include_repo_context),
+            "reuse_provider_session": bool(reuse_session) and not handoff,
         }
         try:
             run = self.agent_center.start_run(payload)
         except AgentCenterError as exc:
             raise ClimateCodingError(str(exc), code=exc.code) from exc
-        return self._public_run(run, workspace=workspace, repository_id=repository_id)
+        public = self._public_run(run, workspace=workspace, repository_id=repository_id)
+        public["task_mode"] = mode
+        public["provider_invoked"] = True
+        if preflight_log:
+            logs = str(public.get("logs") or "")
+            public["logs"] = (preflight_log + ("\n\n" if logs else "") + logs).strip()
+        return public
 
     def cancel(self, run_id: str, *, workspace: str) -> dict[str, Any]:
         profile = "okarun" if workspace == "work" else "aira"
@@ -138,7 +236,7 @@ class ClimateCodingAdapter:
 
     @staticmethod
     def proposed_edits(answer: str) -> list[dict[str, str]]:
-        candidates = re.findall(r"```(?:json)?\s*(\{.*?\})\s*```", answer or "", re.S | re.I)
+        candidates = _EDITS_FENCE_RE.findall(answer or "")
         if not candidates and (answer or "").lstrip().startswith("{"):
             candidates = [answer]
         for raw in reversed(candidates):
@@ -160,6 +258,51 @@ class ClimateCodingAdapter:
             if clean:
                 return clean
         return []
+
+    @staticmethod
+    def humanize_answer(answer: str, *, task_mode: str = "ask") -> tuple[str, str]:
+        """Return (display_text, raw_payload_for_diagnostics).
+
+        Never leave provider edit-protocol JSON as the normal chat body.
+        """
+        raw = str(answer or "")
+        if not raw.strip():
+            return "", ""
+        edits = ClimateCodingAdapter.proposed_edits(raw)
+        stripped = _EDITS_FENCE_RE.sub("", raw)
+        stripped = re.sub(
+            r"\{\s*\"edits\"\s*:\s*\[[\s\S]*\]\s*\}",
+            "",
+            stripped,
+        ).strip()
+        # Unescape common dumped string literals when the whole answer is one JSON object.
+        if not stripped and edits:
+            parts = [item["content"].strip() for item in edits if item.get("content", "").strip()]
+            if task_mode == "ask" and parts:
+                return "\n\n".join(parts), raw
+            return ("Proposed changes are ready for review." if task_mode == "edit" else ""), raw
+        if stripped and '"edits"' in stripped and stripped.lstrip().startswith("{"):
+            try:
+                payload = json.loads(stripped)
+            except (TypeError, ValueError):
+                payload = None
+            if isinstance(payload, dict) and isinstance(payload.get("edits"), list):
+                edits = ClimateCodingAdapter.proposed_edits(stripped) or edits
+                parts = [item["content"].strip() for item in edits if item.get("content", "").strip()]
+                if task_mode == "ask" and parts:
+                    return "\n\n".join(parts), raw
+                return ("Proposed changes are ready for review." if task_mode == "edit" else ""), raw
+        display = stripped or raw.strip()
+        if edits and display == raw.strip():
+            # Raw answer still looks like protocol; prefer extracted content for ask.
+            parts = [item["content"].strip() for item in edits if item.get("content", "").strip()]
+            if task_mode == "ask" and parts:
+                return "\n\n".join(parts), raw
+            if task_mode == "edit":
+                return "Proposed changes are ready for review.", raw
+        if edits and display != raw.strip():
+            return display, raw
+        return display, ""
 
     def _require_provider(self, provider: str) -> None:
         if provider not in CODING_PROVIDERS:

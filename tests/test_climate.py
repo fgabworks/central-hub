@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from hub.climate.coding import ClimateCodingError
+from hub.climate.coding import ClimateCodingAdapter, ClimateCodingError, classify_task_mode
 from hub.climate.service import ClimateService
 from hub.registry.models import Registry, Repository
 from hub.repository_workspace.service import RepositoryWorkspaceService
@@ -18,6 +18,7 @@ class FakeCodingAdapter:
     def __init__(self) -> None:
         self.calls = []
         self.cancelled = []
+        self._answers: dict[str, dict] = {}
 
     def availability(self):
         return [
@@ -39,13 +40,20 @@ class FakeCodingAdapter:
 
     def execute(self, **payload):
         self.calls.append(payload)
+        run_id = f"run-{len(self.calls)}"
         return {
-            "id": f"run-{len(self.calls)}", "status": "running",
+            "id": run_id, "status": "running",
             "provider": payload["provider"], "model": payload["model"],
             "workspace": payload["workspace"], "repository_id": payload["repository_id"],
+            "task_mode": payload.get("task_mode") or "ask",
+            "provider_invoked": True,
+            "logs": str(payload.get("preflight_log") or ""),
         }
 
     def result(self, run_id, *, workspace):
+        preset = self._answers.get(run_id)
+        if preset:
+            return dict(preset, id=run_id, workspace=workspace)
         return {"id": run_id, "workspace": workspace, "status": "running", "answer": ""}
 
     def cancel(self, run_id, *, workspace):
@@ -53,9 +61,14 @@ class FakeCodingAdapter:
         return {"id": run_id, "workspace": workspace, "status": "cancelled"}
 
     @staticmethod
-    def proposed_edits(_answer):
-        return []
+    def proposed_edits(answer):
+        from hub.climate.coding import ClimateCodingAdapter
+        return ClimateCodingAdapter.proposed_edits(answer)
 
+    @staticmethod
+    def humanize_answer(answer, *, task_mode="ask"):
+        from hub.climate.coding import ClimateCodingAdapter
+        return ClimateCodingAdapter.humanize_answer(answer, task_mode=task_mode)
 
 class ClimateServiceTests(unittest.TestCase):
     def setUp(self):
@@ -67,6 +80,24 @@ class ClimateServiceTests(unittest.TestCase):
         self.personal.mkdir()
         (self.work / "app.py").write_text("value = 1\n", encoding="utf-8")
         (self.personal / "note.md").write_text("private\n", encoding="utf-8")
+        (self.personal / "AGENTS.md").write_text(
+            "# Personal agents\nKeep ARCTIC files isolated.\n",
+            encoding="utf-8",
+        )
+        (self.work / "AGENTS.md").write_text(
+            "# Agents\nUse repository files as authority for ask/edit tasks.\n",
+            encoding="utf-8",
+        )
+        (self.work / "SKILLS.md").write_text(
+            "# Skills\n\n## ANC Binary\nExplain ANC Binary derivation from visit thresholds.\n\n"
+            "## Unrelated Shipping\nDeploy containers to staging.\n",
+            encoding="utf-8",
+        )
+        (self.work / "docs").mkdir()
+        (self.work / "docs" / "anc.md").write_text(
+            "ANC Binary is derived from visit thresholds.\n",
+            encoding="utf-8",
+        )
         self._git_init(self.work)
         self.registry = Registry([
             Repository(id="work-repo", name="Work", type="command", enabled=True, local_path=str(self.work)),
@@ -167,6 +198,121 @@ class ClimateServiceTests(unittest.TestCase):
         self.assertEqual(rejected["state"], "rejected")
         self.assertEqual((self.work / "app.py").read_text(encoding="utf-8").splitlines(), ["value = 3"])
 
+    def test_ask_mode_does_not_stage_provider_edits(self):
+        run = self.service.execute(
+            "work", "work-repo", provider="codex", model="m",
+            prompt="Explain how ANC Binary is derived", current_file="app.py",
+        )
+        self.assertEqual(self.coding.calls[-1]["task_mode"], "ask")
+        raw = (
+            '```json\n{"edits":[{"path":"app.py","content":"ANC Binary is 1 when compliant.\\n"}]}\n```'
+        )
+        self.coding._answers[run["id"]] = {
+            "status": "completed", "answer": raw, "logs": "", "usage": {},
+            "provider": "codex", "model": "m",
+        }
+        result = self.service.result("work", run["id"])
+        self.assertEqual(result["task_mode"], "ask")
+        self.assertIsNone(result["proposal"])
+        self.assertIn("ANC Binary is 1 when compliant", result["answer"])
+        self.assertNotIn('"edits"', result["answer"])
+
+    def test_edit_mode_stages_reviewed_proposal(self):
+        run = self.service.execute(
+            "work", "work-repo", provider="codex", model="m",
+            prompt="Fix app.py to set value = 9", current_file="app.py",
+        )
+        self.assertEqual(self.coding.calls[-1]["task_mode"], "edit")
+        raw = '{"edits":[{"path":"app.py","content":"value = 9\\n"}]}'
+        self.coding._answers[run["id"]] = {
+            "status": "completed", "answer": raw, "logs": "", "usage": {},
+            "provider": "codex", "model": "m",
+        }
+        result = self.service.result("work", run["id"])
+        self.assertEqual(result["task_mode"], "edit")
+        self.assertIsNotNone(result["proposal"])
+        self.assertEqual(result["proposal"]["state"], "pending")
+        self.assertEqual(result["proposal"]["edits"][0]["path"], "app.py")
+        self.assertTrue(result["proposal"]["requires_review"])
+
+    def test_cancelled_run_does_not_stage_edits(self):
+        run = self.service.execute(
+            "work", "work-repo", provider="codex", model="m",
+            prompt="Fix app.py", current_file="app.py",
+        )
+        self.assertEqual(self.coding.calls[-1]["task_mode"], "edit")
+        raw = '{"edits":[{"path":"app.py","content":"value = 9\\n"}]}'
+        self.coding._answers[run["id"]] = {
+            "status": "cancelled", "answer": raw, "logs": "partial\n[cancelled]\n", "usage": {},
+            "provider": "codex", "model": "m",
+        }
+        result = self.service.result("work", run["id"])
+        self.assertEqual(result["status"], "cancelled")
+        self.assertIsNone(result["proposal"])
+
+    def test_large_diff_is_flagged_for_review(self):
+        (self.work / "app.py").write_text("line\n" * 200, encoding="utf-8")
+        proposal = self.service.stage_proposal(
+            "manual-large", "work", "work-repo",
+            [{"path": "app.py", "content": "x = 1\n"}],
+        )
+        public = self.service._public_proposal(proposal)
+        self.assertTrue(public["large_diff"])
+        self.assertIn("Large or destructive", public["warning"])
+
+
+class ClimateTaskModeUnitTests(unittest.TestCase):
+    def test_classify_ask_vs_edit(self):
+        self.assertEqual(classify_task_mode("Explain how ANC Binary is derived"), "ask")
+        self.assertEqual(classify_task_mode("what is the name of the repo selected"), "ask")
+        self.assertEqual(classify_task_mode("Fix the null check in app.py"), "edit")
+        self.assertEqual(classify_task_mode("anything", "edit"), "edit")
+
+    def test_humanize_strips_edits_json(self):
+        raw = '{"edits":[{"path":"docs/a.md","content":"Hello ANC Binary.\\nRule: 1 means yes."}]}'
+        text, diag = ClimateCodingAdapter.humanize_answer(raw, task_mode="ask")
+        self.assertIn("Hello ANC Binary", text)
+        self.assertNotIn('"edits"', text)
+        self.assertTrue(diag)
+
+    def test_coding_adapter_prompt_respects_task_mode(self):
+        class StubCenter:
+            def __init__(self):
+                self.payload = None
+
+            def start_run(self, payload):
+                self.payload = payload
+                return {
+                    "id": "r1", "status": "running", "agent_id": "codex", "model": "m",
+                    "answer": "", "logs": "", "usage": {},
+                }
+
+        center = StubCenter()
+        adapter = ClimateCodingAdapter(center)
+
+        def fake_availability(provider=None, *, refresh=False):
+            row = {
+                "id": "codex", "state": "connected", "status": "Connected",
+                "detail": "", "account_label": "", "capabilities": {},
+            }
+            return row if provider else [row]
+
+        adapter.availability = fake_availability  # type: ignore[method-assign]
+        ask = adapter.execute(
+            workspace="work", repository_id="work-repo", provider="codex", model="m",
+            prompt="Explain ANC Binary", task_mode="ask",
+        )
+        self.assertEqual(ask["task_mode"], "ask")
+        self.assertIn("ASK / EXPLAIN", center.payload["prompt"])
+        self.assertNotIn('{"edits":[{"path"', center.payload["prompt"])
+        edit = adapter.execute(
+            workspace="work", repository_id="work-repo", provider="codex", model="m",
+            prompt="Fix ANC Binary", task_mode="edit",
+        )
+        self.assertEqual(edit["task_mode"], "edit")
+        self.assertIn("EDIT mode", center.payload["prompt"])
+        self.assertIn('"edits"', center.payload["prompt"])
+
 
 class ClimateUiContractTests(unittest.TestCase):
     def test_mockup_shell_and_persistence_contract(self):
@@ -183,8 +329,19 @@ class ClimateUiContractTests(unittest.TestCase):
             'wc_terminal.js',
             'wc-xterm-a',
             'Ask a follow-up',
+            'Session total',
+            'Provider breakdown',
+            'climate-token-quota',
+            'climate-usage-limits',
+            'climate-usage-refresh',
+            'Codex capacity',
+            'Codex limit unavailable',
+            'id="climate-stop"',
+            'id="climate-stop-top"',
         ):
             self.assertIn(marker, template)
+        self.assertNotIn('id="climate-cancel"', template)
+        self.assertNotIn('id="climate-cancel-top"', template)
         self.assertNotIn("OUTLINE", template)
         self.assertNotIn("TIMELINE", template)
         self.assertNotIn("› REPOSITORIES", template)
@@ -195,17 +352,40 @@ class ClimateUiContractTests(unittest.TestCase):
         self.assertIn("ensureClimateTerminal", script)
         self.assertIn("WCTerminal", script)
         self.assertIn("clamp(480px, 45vw, 720px)", script)
-        self.assertIn("font-weight: 400", (root / "static" / "css" / "climate.css").read_text(encoding="utf-8"))
+        css = (root / "static" / "css" / "climate.css").read_text(encoding="utf-8")
+        self.assertIn("font-weight: 400", css)
+        self.assertIn(".climate-usage-totals", css)
+        self.assertIn(".climate-usage-limits", css)
+        self.assertIn("font-size: 14px", css)
+        self.assertNotIn(".climate-usage-total {\n  margin: 8px 0 10px;\n  font-size: 28px;", css)
+        self.assertNotRegex(css, r"\.climate-usage-total\s*\{[^}]*font-size:\s*28px")
         self.assertIn("parseActivityEvidence", script)
         self.assertIn("climate-activity-progress", script)
         self.assertIn("renderActivityProgress", script)
         self.assertIn("renderActivityComplete", script)
-        self.assertIn("climate-activity-progress", (root / "static" / "css" / "climate.css").read_text(encoding="utf-8"))
-        self.assertIn("prefers-reduced-motion", (root / "static" / "css" / "climate.css").read_text(encoding="utf-8"))
+        self.assertIn("classifyTaskMode", script)
+        self.assertIn("humanizeAnswer", script)
+        self.assertIn("looksLikeEditsJson", script)
+        self.assertIn("Sources ·", script)
+        self.assertIn("task_mode", script)
+        self.assertIn("formatQuotaMeter", script)
+        self.assertIn("resolveCodexQuotaRemaining", script)
+        self.assertIn("fetchCodexRateLimits", script)
+        self.assertIn("Resolving repo", script)
+        self.assertIn("Matching skill", script)
+        self.assertIn("No model invoked", script)
+        self.assertIn("stopRun", script)
+        self.assertIn("setRunControls", script)
+        self.assertIn("Stopped by user", script)
+        self.assertIn("finalizeStoppedRun", script)
+        self.assertNotIn("Planning next moves", script)
+        self.assertNotIn("climate-activity-planning", script)
+        self.assertIn("climate-activity-progress", css)
+        self.assertIn("prefers-reduced-motion", css)
         self.assertIn("positionClimateDropdownMenu", script)
         self.assertIn("is-portal", script)
         self.assertIn("openClimateDropdown", script)
-        self.assertIn("climate-dd-menu.is-portal", (root / "static" / "css" / "climate.css").read_text(encoding="utf-8"))
+        self.assertIn("climate-dd-menu.is-portal", css)
         self.assertIn("monaco.editor.create", script)
         self.assertIn("localStorage.setItem", script)
         self.assertIn("climate:chat:v1:", script)
@@ -215,16 +395,18 @@ class ClimateUiContractTests(unittest.TestCase):
         self.assertIn("restoreChatSession", script)
         self.assertIn("compactHandoffPrompt", script)
         self.assertIn("climate-token-pill", template)
-        self.assertIn("SESSION USAGE", template)
+        self.assertIn("Session usage", template)
         self.assertIn("climate-run-summary", script)
         self.assertIn("selectProvider", script)
         self.assertIn("enhanceClimateSelect", script)
-        self.assertIn("--cl-font-ui", (root / "static" / "css" / "climate.css").read_text(encoding="utf-8"))
-        self.assertIn("climate-dd-menu", (root / "static" / "css" / "climate.css").read_text(encoding="utf-8"))
+        self.assertIn("--cl-font-ui", css)
+        self.assertIn("climate-dd-menu", css)
         self.assertIn('key==="s"', script)
         self.assertIn('key==="p"', script)
         self.assertIn("renderProposalReview", script)
         self.assertIn("show_excluded", script)
+        self.assertNotIn("usage_source=", script)
+        self.assertNotIn("SESSION USAGE", template)
 
     def test_climate_is_the_visible_shell(self):
         root = Path(__file__).resolve().parents[1]

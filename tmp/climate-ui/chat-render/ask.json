@@ -1,0 +1,20 @@
+{
+  "label": "ask",
+  "title": "Explain how ANC Binary is derived",
+  "token": "38.4k tokens",
+  "hasRawEdits": false,
+  "hasUndo": false,
+  "hasKeep": false,
+  "hasReview": false,
+  "hasRunSummary": false,
+  "hasSources": true,
+  "hasAskLine": true,
+  "hasDetails": true,
+  "bodySnippet": "Y\nYou\n5:55 AM\nExplain how ANC Binary is derived\n◎\nCodex\n5:55 AM\n✓ Completed\nWorked for 36s · Explored 1 file\nSources\nDetails\nANC Binary is 1 when ANC visits meet the rule.\nSet to 0 otherwise.\nSources · 2 files\nDetails / Diagnostics",
+  "msgCount": 2,
+  "feedId": "climate-ai-feed",
+  "maximized": false,
+  "historyBtn": true,
+  "newBtn": true,
+  "provider": "codex"
+}

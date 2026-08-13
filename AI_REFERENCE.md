@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-14 (CLIMATE IDE: AI min 340 / terminal / explorer cleanup).
+Last verified: 2026-08-14 (CLIMATE Context Resolver + confidence gate).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -16,6 +16,12 @@ without owning credentials or provider argv. AI runs remain read-only; replaceme
 are parsed as proposals and require Accept/Reject with base-content conflict checks.
 Codex remains VANTA-only under its existing profile policy; ARCTIC surfaces that state
 explicitly and can use authenticated Claude Code or Cursor Agent with selected ARCTIC files.
+Codex capacity in the AI usage chrome comes from authenticated `codex app-server`
+(`account/rateLimits/read` + `account/rateLimits/updated`), not from session token
+estimates; unavailable/non–ChatGPT auth shows `Codex limit unavailable`.
+CLIMATE coding runs use a deterministic Context Resolver (AGENTS/SKILLS/provider/nested
+instructions + RI/local search + confidence gate) and do not invoke providers without
+enough repository evidence (`Not enough repository evidence. Model not invoked · 0 tokens`).
 VANTA and ARCTIC repository/run/proposal scopes are server-isolated; repositories tagged
 `personal`/`arctic` belong only to ARCTIC and all others default to VANTA. AiriX Tool
 Runtime and ECLIPSE are unchanged.

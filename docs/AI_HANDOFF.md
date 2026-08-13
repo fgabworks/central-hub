@@ -4,13 +4,65 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**CLIMATE AI live activity UI (2026-08-14)**
+**CLIMATE Context Resolver (2026-08-14)**
 
-While a coding provider run is active, the assistant message shows an evidence-only
-progress block (`Working on your request…` + observed tool/log steps). On completion
-it collapses to `Worked for … · Explored … · Ran … · issues` with View Details /
-Show Changes when relevant. Raw events stay in Details. Verify:
-`CLIMATE_BASE_URL=… node scripts/climate_activity_verify.js`.
+Deterministic local context resolution runs before any coding-provider call (0 AI
+tokens): resolve repo → applicable/nearest instructions → metadata-scored skills →
+RI/local search → bounded packet → confidence gate. High confidence invokes the
+selected provider; medium expands local search once; low/no authoritative source
+returns `Not enough repository evidence. Model not invoked · 0 tokens.` ASK stays
+read-only; EDIT gathers evidence first. Same-provider session reuse; cross-provider
+compact handoff only. Activity:
+`Resolving repo → Loading instructions → Matching skill → Searching repo → Found N
+sources → Building context → Asking Codex`.
+
+Prior: **CLIMATE zero-token preflight + evidence gate (2026-08-14)**
+
+Before every CLIMATE provider call, a local preflight resolves the repo, loads
+applicable AGENTS/SKILLS/provider/nested instructions (task-relevant only),
+searches RI + local files, and builds a bounded context packet. Repo-specific
+Ask/Edit calls are gated until instructions + at least one authoritative source
+exist; otherwise the UI returns a zero-token blocked answer. Superseded by the
+Context Resolver milestone above.
+
+Prior: **CLIMATE Codex account rate limits (2026-08-14)**
+
+Codex capacity in the AI usage chrome is no longer estimated from chat/session tokens.
+CLIMATE starts/reuses `codex app-server`, calls `account/rateLimits/read`, listens for
+`account/rateLimits/updated`, and normalizes multi-bucket `rateLimitsByLimitId` windows
+(`usedPercent` → `remainingPercent`, reset times, plan, credits). Session tokens stay
+separate from Codex capacity. Unavailable / non–ChatGPT-backed auth shows
+`Codex limit unavailable` with no fabricated percentage. Refresh on Codex connect, AI
+panel open, completed Codex run, and Refresh. Brief server cache avoids respawning on
+every open. Verify: `CLIMATE_BASE_URL=… node scripts/climate_codex_limits_verify.js`.
+
+Prior: **CLIMATE AI Stop control (2026-08-14)**
+
+While a run is active, Send is replaced by a red `■ Stop` that calls the real
+`/runs/<id>/cancel` path (provider terminate). UI shows Stopping… → Stopped by user,
+freezes live activity, keeps partial answer, never stages incomplete edits, and returns
+to Send for a new prompt. Activity UI shows one current pulse + ✓ completed steps
+(no Planning next moves duplicate). Verify:
+`CLIMATE_BASE_URL=… node scripts/climate_stop_verify.js`.
+
+Prior: **CLIMATE Session Usage compact UI (2026-08-14)**
+
+Token pill is a single compact row (`38.4k tokens ▰▰▰▰▱ 78%`); popover is IDE-sized
+(14px session total, 12px current-run/values). Codex capacity now uses account rate
+limits (see current milestone). Maximized AI widens the panel only — usage fonts stay
+fixed. Verify: `CLIMATE_BASE_URL=… node scripts/climate_usage_compact_verify.js`.
+
+Prior: **CLIMATE AI chat ask/edit rendering (2026-08-14)**
+
+Requests are classified as ASK/EXPLAIN vs EDIT before execution. Ask stays read-only
+(no staged proposals / Undo-Keep-Review) even if the provider returns `{"edits":…}`;
+human answers are extracted for chat and raw protocol stays in Details. Edit keeps
+reviewed diffs, large-diff warnings, and Run Summary. Session titles come from the
+first task; token header remains session total with a labeled usage popover.
+Verify: `CLIMATE_BASE_URL=… node scripts/climate_chat_render_verify.js`.
+
+Prior: **CLIMATE AI live activity UI (2026-08-14)** — evidence-only progress;
+`scripts/climate_activity_verify.js`.
 
 Prior: **CLIMATE IDE polish (2026-08-14)**
 

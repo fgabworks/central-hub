@@ -35,14 +35,21 @@
   var tokenLabel = document.getElementById("climate-token-label");
   var promptEl = document.getElementById("climate-prompt");
   var sendBtn = document.getElementById("climate-send");
-  var cancelBtn = document.getElementById("climate-cancel");
+  var stopBtn = document.getElementById("climate-stop");
+  var sendTopBtn = document.getElementById("climate-send-top");
+  var stopTopBtn = document.getElementById("climate-stop-top");
   var proposalActions = document.getElementById("climate-proposal-actions");
   var state = {
     tabs: [], active: "", selectedFiles: [], showExcluded: false, panel: "problems",
     runId: "", run: null, streamText: "", git: null, gitPath: "",
     chat: { activeId: "", sessions: [] }, streamingMsgId: "",
     activityExploreOpen: {},
-    modelCache: {}, fetchCount: 0
+    modelCache: {}, fetchCount: 0,
+    codexRateLimits: null,
+    codexRateLimitsPromise: null,
+    stopRequested: false,
+    pollTimer: null,
+    runActive: false
   };
   var editor = null;
   var monacoReady = false;
@@ -172,6 +179,7 @@
     if (isNaN(prev) || prev < AI_MIN) prev = AI_DEFAULT;
     workbench.classList.remove("is-ai-closed");
     setAiExpandedWidth(prev);
+    fetchCodexRateLimits({ refresh: false });
   }
   function syncAiMaximizeChrome() {
     var btn = document.getElementById("climate-maximize-ai");
@@ -426,6 +434,142 @@
     if (n < 1000000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
     return (n / 1000000).toFixed(2).replace(/\.00$/, "") + "M";
   }
+  function resolveCodexQuotaRemaining() {
+    var payload = state.codexRateLimits;
+    if (!payload || !payload.available) return null;
+    var pct = payload.remainingPercent;
+    if (pct == null || isNaN(Number(pct))) return null;
+    return Math.max(0, Math.min(100, Number(pct)));
+  }
+  function formatQuotaMeter(pct) {
+    if (pct == null || isNaN(pct)) {
+      return { available: false, bar: "▱▱▱▱▱", label: "—", value: 0 };
+    }
+    var p = Math.max(0, Math.min(100, Math.round(Number(pct))));
+    var filled = Math.round(p / 20);
+    var bar = "";
+    for (var i = 0; i < 5; i++) bar += (i < filled ? "▰" : "▱");
+    return { available: true, bar: bar, label: p + "%", value: p };
+  }
+  function formatResetAt(ts) {
+    var n = Number(ts);
+    if (!n || isNaN(n)) return "";
+    try {
+      return new Date(n * 1000).toLocaleString(undefined, {
+        month: "short", day: "numeric", hour: "numeric", minute: "2-digit"
+      });
+    } catch (_err) {
+      return "";
+    }
+  }
+  function formatDurationMins(mins) {
+    var n = Number(mins);
+    if (!n || isNaN(n) || n <= 0) return "";
+    if (n < 60) return n + " min window";
+    if (n % 60 === 0) {
+      var hours = n / 60;
+      if (hours % 24 === 0) {
+        var days = hours / 24;
+        return days + (days === 1 ? " day window" : " day window");
+      }
+      return hours + (hours === 1 ? " hour window" : " hour window");
+    }
+    return n + " min window";
+  }
+  function applyCodexRateLimits(payload) {
+    state.codexRateLimits = payload && typeof payload === "object" ? payload : null;
+    renderUsageChrome(activeSession());
+  }
+  function fetchCodexRateLimits(opts) {
+    opts = opts || {};
+    var refresh = !!opts.refresh;
+    if (workspace !== "work") {
+      applyCodexRateLimits({
+        available: false,
+        message: "Codex limit unavailable",
+        buckets: [],
+        remainingPercent: null
+      });
+      return Promise.resolve(state.codexRateLimits);
+    }
+    if (!refresh && state.codexRateLimitsPromise) return state.codexRateLimitsPromise;
+    var url = endpoint("/providers/codex/rate-limits" + (refresh ? "?refresh=1" : ""));
+    state.codexRateLimitsPromise = jsonFetch(url).then(function (data) {
+      applyCodexRateLimits(data);
+      return data;
+    }).catch(function () {
+      applyCodexRateLimits({
+        available: false,
+        message: "Codex limit unavailable",
+        buckets: [],
+        remainingPercent: null
+      });
+      return state.codexRateLimits;
+    }).finally(function () {
+      state.codexRateLimitsPromise = null;
+    });
+    return state.codexRateLimitsPromise;
+  }
+  function renderCodexLimitsPopover(payload) {
+    var statusEl = document.getElementById("climate-usage-quota-status");
+    var limitsEl = document.getElementById("climate-usage-limits");
+    var creditsEl = document.getElementById("climate-usage-credits");
+    payload = payload || state.codexRateLimits;
+    if (!payload || !payload.available) {
+      if (statusEl) {
+        statusEl.hidden = false;
+        statusEl.textContent = (payload && payload.message) || "Codex limit unavailable";
+      }
+      if (limitsEl) {
+        limitsEl.hidden = true;
+        limitsEl.innerHTML = "";
+      }
+      if (creditsEl) {
+        creditsEl.hidden = true;
+        creditsEl.textContent = "";
+      }
+      return;
+    }
+    var buckets = Array.isArray(payload.buckets) ? payload.buckets : [];
+    if (statusEl) {
+      statusEl.hidden = buckets.length > 0;
+      statusEl.textContent = buckets.length ? "" : "Codex limit unavailable";
+    }
+    if (limitsEl) {
+      if (!buckets.length) {
+        limitsEl.hidden = true;
+        limitsEl.innerHTML = "";
+      } else {
+        limitsEl.hidden = false;
+        limitsEl.innerHTML = buckets.map(function (bucket) {
+          var left = bucket.remainingPercent != null ? (Math.round(Number(bucket.remainingPercent) * 10) / 10) + "% left" : "—";
+          var meta = [];
+          var duration = formatDurationMins(bucket.windowDurationMins);
+          if (duration) meta.push(duration);
+          var reset = formatResetAt(bucket.resetsAt);
+          if (reset) meta.push("resets " + reset);
+          return '<div class="climate-usage-limit-row">'
+            + '<div class="climate-usage-limit-top"><span>' + escapeHtml(bucket.limitName || bucket.limitId || "limit") + '</span><b>' + escapeHtml(left) + '</b></div>'
+            + (meta.length ? '<div class="climate-usage-limit-meta">' + escapeHtml(meta.join(" · ")) + '</div>' : "")
+            + '</div>';
+        }).join("");
+      }
+    }
+    if (creditsEl) {
+      var credits = payload.credits;
+      if (credits && (credits.unlimited || credits.hasCredits || credits.balance != null)) {
+        creditsEl.hidden = false;
+        if (credits.unlimited) creditsEl.textContent = "Credits: unlimited";
+        else if (credits.balance != null && String(credits.balance).trim() !== "") {
+          creditsEl.textContent = "Credits: " + String(credits.balance);
+        } else if (credits.hasCredits) creditsEl.textContent = "Credits available";
+        else creditsEl.textContent = "Credits: none";
+      } else {
+        creditsEl.hidden = true;
+        creditsEl.textContent = "";
+      }
+    }
+  }
   function applyUsageFromRun(session, providerId, usageRaw) {
     var usage = ensureUsage(session);
     var parsed = parseUsagePayload(usageRaw);
@@ -451,6 +595,23 @@
     session = session || activeSession();
     var usage = session ? ensureUsage(session) : emptyUsage();
     if (tokenLabel) tokenLabel.textContent = formatTokenCount(usage.total) + " tokens";
+    var quota = formatQuotaMeter(resolveCodexQuotaRemaining());
+    var quotaWrap = document.getElementById("climate-token-quota");
+    var meterEl = document.getElementById("climate-token-meter");
+    var quotaPctEl = document.getElementById("climate-token-quota-pct");
+    if (quotaWrap) {
+      if (quota.available) {
+        quotaWrap.hidden = false;
+        if (meterEl) meterEl.textContent = quota.bar;
+        if (quotaPctEl) quotaPctEl.textContent = quota.label;
+        quotaWrap.title = "Codex remaining capacity " + quota.label;
+      } else {
+        quotaWrap.hidden = true;
+        if (meterEl) meterEl.textContent = "▱▱▱▱▱";
+        if (quotaPctEl) quotaPctEl.textContent = "—";
+        quotaWrap.title = "Codex limit unavailable";
+      }
+    }
     if (!usagePanel) return;
     var sinceEl = document.getElementById("climate-usage-since");
     if (sinceEl) sinceEl.textContent = "Since " + formatClock(usage.since || Date.now());
@@ -462,7 +623,10 @@
     set("climate-usage-cached", usage.cached);
     set("climate-usage-run", usage.currentRun);
     var sourceEl = document.getElementById("climate-usage-source");
-    if (sourceEl) sourceEl.textContent = usage.source || "unavailable";
+    if (sourceEl) {
+      var src = usage.source || "unavailable";
+      sourceEl.textContent = src === "exact" ? "exact" : (src === "estimated" ? "estimated" : "unavailable");
+    }
     var host = document.getElementById("climate-usage-providers");
     if (host) {
       var rows = [
@@ -474,6 +638,7 @@
         return '<div><span>' + row[1] + '</span><b>' + ((usage.byProvider[row[0]] || 0).toLocaleString()) + '</b></div>';
       }).join("");
     }
+    renderCodexLimitsPopover(state.codexRateLimits);
   }
   function lineDeltaFromProposal(proposal) {
     var plus = 0, minus = 0;
@@ -538,6 +703,71 @@
     if (/^(delta|reasoning|output_text|content_block|message_start|message_stop)\b/i.test(t)) return true;
     return false;
   }
+  function looksLikeEditsJson(text) {
+    var t = String(text || "").trim();
+    if (!t) return false;
+    if (/^\{\s*"edits"\s*:/.test(t)) return true;
+    if (/```(?:json)?\s*\{\s*"edits"\s*:/i.test(t)) return true;
+    if (/"edits"\s*:\s*\[/.test(t) && /"path"\s*:/.test(t) && /"content"\s*:/.test(t)) return true;
+    return false;
+  }
+  function classifyTaskMode(prompt, explicit) {
+    var mode = String(explicit || "").trim().toLowerCase();
+    if (mode === "ask" || mode === "edit") return mode;
+    var text = String(prompt || "").trim();
+    if (!text) return "ask";
+    var lower = text.toLowerCase();
+    var askScore = 0;
+    var editScore = 0;
+    if (text.indexOf("?") >= 0) askScore += 2;
+    if (/\b(explain|describe|summarize|summary|clarify|overview|what(?:'s|\s+is|\s+are|\s+does|\s+do)|how(?:\s+does|\s+do|\s+is|\s+are|\s+can|\s+should)?|why(?:\s+does|\s+do|\s+is|\s+are)?|where(?:\s+is|\s+are|\s+does)?|which|who|when|tell\s+me|show\s+me|list|find|search|look\s+up|compare|difference|derived|derivation|meaning\s+of)\b/i.test(text)) askScore += 2;
+    if (/\b(edit|fix|change|modify|update|refactor|implement|patch|apply|add|remove|delete|rename|replace|write|create|insert|migrate|generate\s+code|make\s+changes?|update\s+the\s+file)\b/i.test(text)) editScore += 2;
+    if (/^(please\s+)?(explain|describe|summarize|what|how|why|where|which|who|when)\b/.test(lower)) askScore += 3;
+    if (/^(please\s+)?(fix|edit|change|update|implement|add|remove|delete|refactor|create|write|patch)\b/.test(lower)) editScore += 3;
+    if (askScore > editScore) return "ask";
+    if (editScore > askScore) return "edit";
+    return "ask";
+  }
+  function extractEditsContents(text) {
+    var raw = String(text || "");
+    var parts = [];
+    var fence = raw.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/i);
+    var blob = fence ? fence[1] : (/^\s*\{/.test(raw) ? raw : "");
+    if (!blob) return parts;
+    try {
+      var payload = JSON.parse(blob);
+      var edits = payload && payload.edits;
+      if (!Array.isArray(edits)) return parts;
+      edits.forEach(function (item) {
+        if (item && typeof item.content === "string" && item.content.trim()) parts.push(item.content.trim());
+      });
+    } catch (_) {}
+    return parts;
+  }
+  function humanizeAnswer(answer, taskMode) {
+    var raw = String(answer || "");
+    if (!raw.trim()) return { text: "", diagnostics: "" };
+    var mode = taskMode === "edit" ? "edit" : "ask";
+    if (!looksLikeEditsJson(raw) && !isRawProviderLine(raw) && !looksLikeProtocolDump(raw)) {
+      return { text: raw.trim(), diagnostics: "" };
+    }
+    var diag = raw;
+    var stripped = raw
+      .replace(/```(?:json)?\s*\{[\s\S]*?"edits"[\s\S]*?\}\s*```/ig, "")
+      .replace(/\{\s*"edits"\s*:\s*\[[\s\S]*\]\s*\}/g, "")
+      .trim();
+    if (stripped && !looksLikeEditsJson(stripped)) {
+      return { text: stripped, diagnostics: diag };
+    }
+    var contents = extractEditsContents(raw);
+    if (mode === "ask" && contents.length) {
+      return { text: contents.join("\n\n"), diagnostics: diag };
+    }
+    if (mode === "edit") {
+      return { text: "Proposed changes are ready for review.", diagnostics: diag };
+    }
+    return { text: "", diagnostics: diag };
+  }
   function looksLikeProtocolDump(text) {
     var t = String(text || "").trim();
     if (!t) return false;
@@ -546,25 +776,52 @@
     var raw = lines.filter(isRawProviderLine).length;
     return raw >= Math.ceil(lines.length * 0.5) || (lines.length <= 3 && raw > 0);
   }
-  function splitRunOutput(logs, answer) {
+  function splitRunOutput(logs, answer, taskMode) {
     var diag = [];
     var clean = [];
     String(logs || "").split(/\r?\n/).forEach(function (line) {
       if (!line) return;
-      if (isRawProviderLine(line)) diag.push(line);
+      if (isRawProviderLine(line) || looksLikeEditsJson(line)) diag.push(line);
       else clean.push(line);
     });
     var body = String(answer || "").trim();
     if (!body) body = clean.join("\n").trim();
-    if (body && (isRawProviderLine(body) || looksLikeProtocolDump(body))) {
+    var humanized = humanizeAnswer(body, taskMode || "ask");
+    if (humanized.diagnostics) {
+      diag.push(humanized.diagnostics);
+      body = humanized.text;
+    } else if (body && (isRawProviderLine(body) || looksLikeProtocolDump(body) || looksLikeEditsJson(body))) {
       diag.push(body);
-      body = clean.filter(function (line) { return !isRawProviderLine(line); }).join("\n").trim();
+      body = clean.filter(function (line) { return !isRawProviderLine(line) && !looksLikeEditsJson(line); }).join("\n").trim();
+      var again = humanizeAnswer(body, taskMode || "ask");
+      if (again.diagnostics) {
+        diag.push(again.diagnostics);
+        body = again.text;
+      } else {
+        body = again.text || body;
+      }
+    } else {
+      body = humanized.text || body;
     }
     if (!body && clean.length) {
-      var residual = clean.filter(function (line) { return !isRawProviderLine(line); }).join("\n").trim();
+      var residual = clean.filter(function (line) { return !isRawProviderLine(line) && !looksLikeEditsJson(line); }).join("\n").trim();
       body = residual;
     }
     return { text: body || "", diagnostics: diag.join("\n") };
+  }
+  function collectSources(msg, run, activity) {
+    var files = [];
+    function add(path) {
+      var p = String(path || "").replace(/\\/g, "/").replace(/^["'`]+|["'`]+$/g, "").trim();
+      if (!p || p.length > 220) return;
+      if (files.indexOf(p) >= 0) return;
+      files.push(p);
+    }
+    ((run && run.sources) || []).forEach(add);
+    ((msg && msg.sources) || []).forEach(add);
+    ((activity && activity.explore && activity.explore.files) || []).forEach(add);
+    ((msg && msg.changedFiles) || []).forEach(add);
+    return files.slice(0, 24);
   }
   function activityBaseName(path) {
     var parts = String(path || "").replace(/\\/g, "/").split("/");
@@ -614,8 +871,22 @@
       var n = Math.max(exploreCount, files.length);
       if (n > 0) addStep("explore", "Exploring " + n + " file" + (n === 1 ? "" : "s"));
     }
-    if (has(/\b(search(?:ing)?\s+repository|grep|glob|ripgrep|find_files?|codebase_search|workspace.?search)\b/i)) {
-      addStep("search", "Searching repository");
+    if (has(/\bResolving repo\b/i)) addStep("resolve", "Resolving repo");
+    if (has(/\bLoading instructions\b/i)) addStep("instructions", "Loading instructions");
+    if (has(/\b(Matching skill|Finding relevant skill)\b/i)) addStep("skill", "Matching skill");
+    if (has(/\bExpanding local search\b/i)) addStep("expand", "Expanding local search");
+    if (has(/\b(search(?:ing)?\s+repository|Searching repo|grep|glob|ripgrep|find_files?|codebase_search|workspace.?search)\b/i)) {
+      addStep("search", "Searching repo");
+    }
+    var foundMatch = blob.match(/Found\s+(\d+)\s+sources?/i);
+    if (foundMatch) addStep("sources", "Found " + foundMatch[1] + " sources");
+    if (has(/\bBuilding context\b/i)) addStep("context", "Building context");
+    if (has(/\bAsking\s+(Codex|Claude|Cursor|Gemini)\b/i)) {
+      var ask = blob.match(/Asking\s+(Codex|Claude|Cursor|Gemini)/i);
+      addStep("ask", ask ? ("Asking " + ask[1]) : "Asking provider");
+    }
+    if (has(/\b(No model invoked|Model not invoked|Not enough repository evidence)\b/i)) {
+      addStep("gate", "No model invoked · 0 tokens");
     }
     if (has(/\b(Reading\s+|read_file|\[tool\]\s*read\b|tool_call\s+read\b|open_file|view_file)\b/i) || files.length) {
       var last = files.length ? files[files.length - 1] : "";
@@ -630,7 +901,8 @@
     if (has(/\b(reviewing changes|prepared?\s+\d+\s+file|proposal|diff\b|apply_patch|edit_file)\b/i) || opts.hasProposal) {
       addStep("review", "Reviewing changes");
     }
-    if (has(/\b(preparing response|turn\.completed|response\.completed|final answer)\b/i) || opts.hasAnswer) {
+    // Avoid treating raw protocol turn/response events as user-visible steps.
+    if (has(/\bpreparing response\b/i) || opts.hasAnswer) {
       addStep("prepare", "Preparing response");
     }
     if (running && steps.length) {
@@ -668,14 +940,18 @@
       },
       testsRan: testsRan,
       issues: issues,
-      planning: running && steps.length > 0
+      planning: false
     };
   }
   function renderActivityProgress(msg) {
+    var running = msg.status === "running";
     var activity = msg.activity || parseActivityEvidence((msg.diagnostics || "") + "\n" + (msg.text || ""), {
-      running: true,
+      running: running,
       startedAt: msg.startedAt
     });
+    if (!running && activity && activity.steps) {
+      activity.steps.forEach(function (step) { step.state = "done"; });
+    }
     var steps = activity.steps || [];
     var html = '<section class="climate-activity-progress" data-activity-root="' + escapeHtml(msg.id) + '">';
     html += '<div class="climate-activity-head"><span class="climate-activity-title">Working on your request…</span>';
@@ -683,10 +959,10 @@
     if (steps.length) {
       html += '<ol class="climate-activity-steps">';
       steps.forEach(function (step) {
-        var state = step.state || "done";
-        html += '<li class="climate-activity-step is-' + escapeHtml(state) + (step.id === "explore" ? " is-explore" : "") + '" data-step="' + escapeHtml(step.id) + '">';
-        if (state === "done") html += '<span class="climate-activity-mark" aria-hidden="true">✓</span>';
-        else if (state === "current") html += '<span class="climate-activity-mark is-pulse" aria-hidden="true"><i></i><i></i><i></i></span>';
+        var stateCls = step.state || "done";
+        html += '<li class="climate-activity-step is-' + escapeHtml(stateCls) + (step.id === "explore" ? " is-explore" : "") + '" data-step="' + escapeHtml(step.id) + '">';
+        if (stateCls === "done") html += '<span class="climate-activity-mark" aria-hidden="true">✓</span>';
+        else if (stateCls === "current") html += '<span class="climate-activity-mark is-pulse" aria-hidden="true"><i></i><i></i><i></i></span>';
         else html += '<span class="climate-activity-mark is-pending" aria-hidden="true"></span>';
         if (step.id === "explore") {
           html += '<button type="button" class="climate-activity-step-label is-explore" data-activity-explore="' + escapeHtml(msg.id) + '" aria-expanded="false">' + escapeHtml(step.label) + ' <span aria-hidden="true">›</span></button>';
@@ -714,14 +990,13 @@
         html += '<div class="climate-activity-wave" aria-hidden="true"></div>';
         html += '</div>';
       }
-      if (activity.planning) {
-        html += '<div class="climate-activity-planning"><span aria-hidden="true">✦</span> Planning next moves</div>';
-      }
     }
     html += '</section>';
     return html;
   }
   function renderActivityComplete(msg) {
+    var taskMode = msg.taskMode || "ask";
+    var isEdit = taskMode === "edit" && !!(msg.proposal && msg.proposal.state === "pending" || (msg.changedFiles || []).length);
     var activity = msg.activity || parseActivityEvidence((msg.diagnostics || "") + "\n" + (msg.text || ""), {
       running: false,
       elapsedMs: msg.elapsedMs,
@@ -729,7 +1004,11 @@
       hasProposal: !!(msg.proposal && msg.proposal.state === "pending"),
       status: msg.status
     });
-    var exploreCount = (activity.explore && activity.explore.count) || (msg.changedFiles || []).length || msg.filesInspected || 0;
+    var exploreCount = (msg.sources || []).length
+      || (activity.explore && activity.explore.count)
+      || (msg.changedFiles || []).length
+      || msg.filesInspected
+      || 0;
     var testsRan = activity.testsRan || (msg.tests && msg.tests.count) || 0;
     if (!testsRan && msg.tests && msg.tests.label) {
       var tm = String(msg.tests.label).match(/(\d+)/);
@@ -737,28 +1016,29 @@
     }
     var issues = typeof activity.issues === "number" ? activity.issues : 0;
     var parts = [];
-    if (exploreCount > 0) parts.push('<span class="is-ok">✓ Explored ' + escapeHtml(String(exploreCount)) + ' file' + (exploreCount === 1 ? "" : "s") + '</span>');
-    if (testsRan > 0) parts.push('<span>Ran ' + escapeHtml(String(testsRan)) + ' test' + (testsRan === 1 ? "" : "s") + '</span>');
-    if (activity.explore || activity.steps || testsRan || exploreCount) {
-      parts.push('<span>' + escapeHtml(String(issues)) + ' issue' + (issues === 1 ? "" : "s") + ' found</span>');
+    if (msg.elapsedMs > 0) {
+      parts.push("Worked for " + formatElapsed(msg.elapsedMs));
+    }
+    if (exploreCount > 0) parts.push("Explored " + exploreCount + " file" + (exploreCount === 1 ? "" : "s"));
+    if (isEdit && testsRan > 0) parts.push("Ran " + testsRan + " test" + (testsRan === 1 ? "" : "s"));
+    if (isEdit && (activity.explore || activity.steps || testsRan || exploreCount)) {
+      parts.push(issues + " issue" + (issues === 1 ? "" : "s") + " found");
     }
     if (!parts.length && !(msg.elapsedMs > 0)) return "";
     var html = '<section class="climate-activity-complete">';
-    if (msg.elapsedMs > 0) {
-      html += '<button type="button" class="climate-chat-elapsed" data-activity-complete-toggle>Worked for ' + escapeHtml(formatElapsed(msg.elapsedMs)) + ' <span aria-hidden="true">▾</span></button>';
+    html += '<div class="climate-ask-runline">';
+    html += '<span>' + escapeHtml(parts.join(" · ")) + '</span>';
+    html += '<div class="climate-activity-complete-actions">';
+    if ((msg.sources || []).length) {
+      html += '<button type="button" class="climate-btn climate-activity-btn" data-sources-toggle="' + escapeHtml(msg.id) + '">Sources</button>';
     }
-    if (parts.length) {
-      html += '<div class="climate-activity-complete-bar">';
-      html += '<div class="climate-activity-complete-parts">' + parts.join('<span class="climate-activity-dot" aria-hidden="true">·</span>') + '</div>';
-      html += '<div class="climate-activity-complete-actions">';
-      if (msg.diagnostics) {
-        html += '<button type="button" class="climate-btn climate-activity-btn" data-activity-details="' + escapeHtml(msg.id) + '">View Details</button>';
-      }
-      if (msg.proposal && msg.proposal.state === "pending") {
-        html += '<button type="button" class="climate-btn climate-activity-btn is-accent" data-chat-action="review" data-msg-id="' + escapeHtml(msg.id) + '">Show Changes</button>';
-      }
-      html += '</div></div>';
+    if (msg.diagnostics) {
+      html += '<button type="button" class="climate-btn climate-activity-btn" data-activity-details="' + escapeHtml(msg.id) + '">Details</button>';
     }
+    if (isEdit && msg.proposal && msg.proposal.state === "pending") {
+      html += '<button type="button" class="climate-btn climate-activity-btn is-accent" data-chat-action="review" data-msg-id="' + escapeHtml(msg.id) + '">Show Changes</button>';
+    }
+    html += '</div></div>';
     html += '</section>';
     return html;
   }
@@ -1140,35 +1420,57 @@
   function renderChatMessage(msg) {
     var isUser = msg.role === "user";
     var isError = msg.role === "error" || msg.status === "failed";
-    var isRunning = !isUser && msg.status === "running";
+    var isRunning = !isUser && (msg.status === "running" || msg.status === "stopping");
+    var isStopped = !isUser && (msg.status === "cancelled" || msg.stoppedByUser);
     var isComplete = !isUser && msg.status === "completed";
+    var taskMode = msg.taskMode || "ask";
+    var hasPendingProposal = !!(msg.proposal && msg.proposal.state === "pending") && !isStopped && msg.status !== "stopping";
+    var isEditRun = !isUser && taskMode === "edit" && (hasPendingProposal || (msg.changedFiles || []).length) && !isStopped;
     var name = isUser ? "You" : providerLabel(msg.provider || (activeSession() || {}).provider);
     var avatar = isUser ? "Y" : providerGlyph(msg.provider || (activeSession() || {}).provider);
     var bodyText = msg.text || "";
+    if (looksLikeEditsJson(bodyText) || isRawProviderLine(bodyText) || looksLikeProtocolDump(bodyText)) {
+      var cleaned = humanizeAnswer(bodyText, taskMode);
+      bodyText = cleaned.text || "";
+    }
     if (isRunning && (!bodyText || bodyText === "Working…" || bodyText === "Working...")) bodyText = "";
     var body = escapeHtml(bodyText).replace(/\n/g, "<br>");
     var files = Array.isArray(msg.changedFiles) ? msg.changedFiles : [];
+    var sources = Array.isArray(msg.sources) ? msg.sources : [];
     var tests = testsFromText(msg.text, msg.tests);
     var lines = msg.lines || lineDeltaFromProposal(msg.proposal);
-    var showRunCard = !isUser && msg.status === "completed" && (files.length || tests || (lines.plus || lines.minus) || (msg.summary && msg.summary.length));
-    var html = '<article class="climate-chat-msg ' + (isUser ? "is-user" : "is-assistant") + (isError ? " is-error" : "") + (isRunning ? " is-stream" : "") + '" data-msg-id="' + escapeHtml(msg.id) + '">';
+    var showRunCard = isComplete && isEditRun;
+    var html = '<article class="climate-chat-msg ' + (isUser ? "is-user" : "is-assistant") + (isError ? " is-error" : "") + (isRunning ? " is-stream" : "") + '" data-msg-id="' + escapeHtml(msg.id) + '" data-task-mode="' + escapeHtml(taskMode) + '">';
     html += '<div class="climate-chat-avatar" aria-hidden="true">' + escapeHtml(avatar) + '</div>';
     html += '<div class="climate-chat-meta"><strong>' + escapeHtml(name) + '</strong><time>' + escapeHtml(formatClock(msg.ts)) + '</time>';
     if (isComplete) html += '<span class="climate-chat-status-pill is-ok">✓ Completed</span>';
+    else if (msg.status === "stopping") html += '<span class="climate-chat-status-pill is-stop">Stopping…</span>';
+    else if (isStopped) html += '<span class="climate-chat-status-pill is-stop">Stopped</span>';
     html += '</div>';
     html += '<div class="climate-chat-body">';
-    if (isRunning) {
+    if (msg.stopNotice) html += '<div class="climate-stop-notice">' + escapeHtml(msg.stopNotice) + '</div>';
+    if (msg.status === "running") {
       html += renderActivityProgress(msg);
-    } else if (isComplete) {
+    } else if (msg.status === "stopping" && msg.activity) {
+      html += renderActivityProgress(Object.assign({}, msg, { status: "stopping" }));
+    } else if ((isComplete || isStopped) && !showRunCard) {
       html += renderActivityComplete(msg);
-    } else if (!isUser && msg.elapsedMs) {
+    } else if (!isUser && msg.elapsedMs && !showRunCard) {
       html += '<button type="button" class="climate-chat-elapsed">Worked for ' + escapeHtml(formatElapsed(msg.elapsedMs)) + ' ▾</button>';
     }
-    if (body && !showRunCard) html += '<div class="climate-chat-text">' + body + '</div>';
-    else if (body && (msg.text || "").length && !isRunning) html += '<div class="climate-chat-text">' + body + '</div>';
+    if (body) html += '<div class="climate-chat-text">' + body + '</div>';
+    if ((isComplete || isStopped) && sources.length) {
+      html += '<details class="climate-sources"><summary>Sources · ' + sources.length + ' file' + (sources.length === 1 ? "" : "s") + '</summary>';
+      html += '<ul>' + sources.map(function (path) {
+        return '<li><button type="button" class="climate-chat-file" data-open-file="' + escapeHtml(path) + '">' + escapeHtml(path) + '</button></li>';
+      }).join("") + '</ul></details>';
+    }
     if (showRunCard) {
       html += '<section class="climate-run-summary">';
       html += '<div class="climate-run-summary-head"><span class="climate-run-summary-title">▣ Run Summary</span><span class="climate-run-status is-ok">Completed ✓</span></div>';
+      if (msg.proposal && msg.proposal.large_diff) {
+        html += '<div class="climate-run-warning" role="status">' + escapeHtml(msg.proposal.warning || "Large or destructive replacement detected. Review the diff before Keep All.") + '</div>';
+      }
       html += '<div class="climate-run-stats">';
       html += '<div><small>Worked for</small><b>' + escapeHtml(formatElapsed(msg.elapsedMs || 0)) + '</b></div>';
       html += '<div><small>Files changed</small><b>' + files.length + '</b></div>';
@@ -1186,7 +1488,7 @@
       if (tests) html += '<div class="climate-run-test-row"><span>' + escapeHtml(tests.suite || "tests") + '</span><b class="is-ok">' + escapeHtml(tests.label || "passed") + ' ›</b></div>';
       else html += '<span class="climate-muted">No test summary</span>';
       html += '</div></div>';
-      if (msg.proposal && msg.proposal.state === "pending") {
+      if (hasPendingProposal) {
         html += '<div class="climate-chat-msg-actions">';
         html += '<button type="button" class="climate-btn" data-chat-action="undo" data-msg-id="' + escapeHtml(msg.id) + '">Undo All</button>';
         html += '<button type="button" class="climate-btn" data-chat-action="keep" data-msg-id="' + escapeHtml(msg.id) + '">Keep All</button>';
@@ -1194,12 +1496,6 @@
         html += '</div>';
       }
       html += '</section>';
-    } else if (!isUser && !isComplete && msg.proposal && msg.proposal.state === "pending") {
-      html += '<div class="climate-chat-msg-actions">';
-      html += '<button type="button" class="climate-btn" data-chat-action="undo" data-msg-id="' + escapeHtml(msg.id) + '">Undo All</button>';
-      html += '<button type="button" class="climate-btn" data-chat-action="keep" data-msg-id="' + escapeHtml(msg.id) + '">Keep All</button>';
-      html += '<button type="button" class="climate-btn climate-btn-primary" data-chat-action="review" data-msg-id="' + escapeHtml(msg.id) + '">Review Changes</button>';
-      html += '</div>';
     }
     if (!isUser && msg.diagnostics) {
       html += '<details class="climate-chat-details" id="climate-details-' + escapeHtml(msg.id) + '"><summary>Details / Diagnostics</summary><pre class="mono">' + escapeHtml(msg.diagnostics) + '</pre></details>';
@@ -1282,7 +1578,7 @@
       modelSelect.value = pick;
       panelModelSelect.value = pick;
     }
-    sendBtn.disabled = !modelSelect.value;
+    if (!state.runActive) sendBtn.disabled = !modelSelect.value;
     enhanceProviderModelDropdowns();
   }
   function selectProvider(providerId, opts) {
@@ -1304,11 +1600,14 @@
     providerState.className = "climate-provider-state " + (connected ? "is-ok" : "is-error");
     providerState.title = statusText;
     if (providerDot) providerDot.className = "climate-chat-pill-dot " + (connected ? "is-ok" : "is-error");
-    sendBtn.disabled = !connected;
+    if (!state.runActive) sendBtn.disabled = !connected;
     var session = activeSession();
     if (session) {
       session.provider = providerSelect.value;
       saveChatStore();
+    }
+    if (providerSelect.value === "codex" && connected) {
+      fetchCodexRateLimits({ refresh: !!opts.refreshLimits });
     }
     if (!connected) {
       var unavailable = '<option value="">' + escapeHtml((p && p.detail) || "Provider unavailable") + '</option>';
@@ -1356,7 +1655,8 @@
     var session = activeSession() || newChatSession(true);
     if (cls === "is-user") {
       session.messages.push({ id: uid("msg"), role: "user", text: text, ts: Date.now() });
-      if (!session.title || session.title === "New chat") session.title = titleFromPrompt(text);
+      var userCount = session.messages.filter(function (m) { return m.role === "user"; }).length;
+      if (userCount === 1 && (!session.title || session.title === "New chat")) session.title = titleFromPrompt(text);
     } else if (cls === "is-error") {
       session.messages.push({ id: uid("msg"), role: "error", text: text, ts: Date.now(), status: "failed" });
     } else {
@@ -1370,18 +1670,62 @@
     renderChat();
   }
   function currentSelection() { if(editor){var sel=editor.getSelection();return sel?editor.getModel().getValueInRange(sel):"";}var start=fallback.selectionStart||0,end=fallback.selectionEnd||0;return fallback.value.slice(start,end); }
+  function clearPollTimer() {
+    if (state.pollTimer) {
+      window.clearTimeout(state.pollTimer);
+      state.pollTimer = null;
+    }
+  }
+  function setRunControls(mode) {
+    var idle = mode === "idle";
+    var stopping = mode === "stopping";
+    if (sendBtn) {
+      sendBtn.hidden = !idle;
+      sendBtn.disabled = idle ? !modelSelect.value : true;
+    }
+    if (stopBtn) {
+      stopBtn.hidden = idle;
+      stopBtn.disabled = stopping;
+      stopBtn.textContent = stopping ? "Stopping…" : "■ Stop";
+    }
+    if (sendTopBtn) sendTopBtn.hidden = !idle;
+    if (stopTopBtn) {
+      stopTopBtn.hidden = idle;
+      stopTopBtn.disabled = stopping;
+      stopTopBtn.title = stopping ? "Stopping…" : "Stop active run";
+    }
+  }
+  function freezeActivity(activity) {
+    if (!activity) return null;
+    var copy;
+    try { copy = JSON.parse(JSON.stringify(activity)); }
+    catch (_) { copy = activity; }
+    (copy.steps || []).forEach(function (step) { step.state = "done"; });
+    copy.planning = false;
+    return copy;
+  }
   function sendRun() {
     var prompt = promptEl.value.trim();
     if (!prompt || !repoId() || !providerSelect.value || !modelSelect.value) return;
+    if (state.runActive || state.runId || state.stopRequested) {
+      setStatus("A run is already active — Stop it first");
+      return;
+    }
     captureActive();
     state.streamText = "";
     state.streamingMsgId = "";
+    state.stopRequested = false;
+    state.runActive = true;
     var session = activeSession() || newChatSession(true);
     var priorProvider = session.lastRunProvider || "";
     var crossProvider = !!(priorProvider && priorProvider !== providerSelect.value);
     var outboundPrompt = crossProvider ? compactHandoffPrompt(prompt, session) : prompt;
+    var taskMode = classifyTaskMode(prompt);
+    var priorUserCount = (session.messages || []).filter(function (m) { return m.role === "user"; }).length;
     session.messages.push({ id: uid("msg"), role: "user", text: prompt, ts: Date.now() });
-    if (!session.title || session.title === "New chat") session.title = titleFromPrompt(prompt);
+    if (priorUserCount === 0 && (!session.title || session.title === "New chat")) {
+      session.title = titleFromPrompt(prompt);
+    }
     session.provider = providerSelect.value;
     session.model = modelSelect.value;
     session.repositoryId = repoId();
@@ -1391,9 +1735,7 @@
     saveChatStore();
     renderChat();
     promptEl.value = "";
-    sendBtn.disabled = true;
-    cancelBtn.hidden = false;
-    document.getElementById("climate-cancel-top").disabled = false;
+    setRunControls("running");
     proposalActions.hidden = true;
     setStatus(crossProvider ? "AI run started (handoff)" : "AI run started");
     upsertAssistantMessage({
@@ -1401,7 +1743,12 @@
       text: "",
       provider: providerSelect.value,
       model: modelSelect.value,
-      startedAt: Date.now()
+      startedAt: Date.now(),
+      taskMode: taskMode,
+      sources: [],
+      stopNotice: "",
+      stoppedByUser: false,
+      proposal: null
     });
     var tab = currentTab(), files = document.getElementById("climate-selected-files").checked ? state.selectedFiles : [];
     jsonFetch(endpoint("/repositories/" + encodeURIComponent(repoId()) + "/runs"), {
@@ -1411,6 +1758,7 @@
         provider: providerSelect.value,
         model: modelSelect.value,
         prompt: outboundPrompt,
+        task_mode: taskMode,
         current_file: document.getElementById("climate-current-file").checked && tab ? tab.path : "",
         selection: document.getElementById("climate-selection").checked ? currentSelection() : "",
         selected_files: files,
@@ -1419,27 +1767,149 @@
         reuse_session: !crossProvider
       })
     }).then(function (data) {
+      if (state.stopRequested) {
+        state.runId = data.run.id;
+        state.run = data.run;
+        requestStop(data.run.id);
+        return;
+      }
       state.runId = data.run.id;
       state.run = data.run;
+      if (data.run && data.run.preflight && data.run.preflight.activity) {
+        var prefLog = "[climate_context_resolver]\n" + (data.run.preflight.activity || []).join("\n");
+        upsertAssistantMessage({
+          status: data.run.status === "completed" && data.run.provider_invoked === false ? "completed" : "running",
+          diagnostics: prefLog,
+          activity: parseActivityEvidence(prefLog + "\n" + (data.run.logs || ""), {
+            running: data.run.provider_invoked !== false && data.run.status === "running",
+            startedAt: Date.now()
+          }),
+          sources: data.run.sources || [],
+          text: data.run.provider_invoked === false ? (data.run.answer || "") : "",
+          provider: data.run.provider,
+          model: data.run.model,
+          taskMode: data.run.task_mode || taskMode
+        });
+        if (data.run.provider_invoked === false) {
+          applyUsageFromRun(activeSession(), data.run.provider || providerSelect.value, data.run.usage || {
+            total_tokens: 0, usage_source: "exact"
+          });
+          finishRun();
+          return;
+        }
+      }
       pollRun();
     }).catch(function (error) {
-      upsertAssistantMessage({ status: "failed", text: error.message, role: "error" });
+      upsertAssistantMessage({ status: "failed", text: error.message, role: "error", stopNotice: "" });
       finishRun();
     });
   }
+  function requestStop(runId) {
+    var id = runId || state.runId;
+    if (!id) return;
+    setRunControls("stopping");
+    setStatus("Stopping…");
+    var session = activeSession();
+    var streaming = session && session.messages.find(function (m) { return m.id === state.streamingMsgId; });
+    upsertAssistantMessage({
+      status: "stopping",
+      stopNotice: "Stopping…",
+      activity: freezeActivity(streaming && streaming.activity),
+      proposal: null
+    });
+    jsonFetch(endpoint("/runs/" + encodeURIComponent(id) + "/cancel"), { method: "POST" })
+      .then(function (data) {
+        state.run = data.run || state.run;
+        if (data.run && ["completed", "failed", "cancelled", "unavailable"].indexOf(data.run.status) >= 0) {
+          finalizeStoppedRun(data.run);
+        } else {
+          pollRun();
+        }
+      })
+      .catch(function (error) {
+        upsertAssistantMessage({
+          status: "cancelled",
+          stoppedByUser: true,
+          stopNotice: "Stopped by user",
+          text: (streaming && streaming.text) || "",
+          proposal: null
+        });
+        appendFeed(error.message || "Stop request failed", "is-error");
+        finishRun();
+      });
+  }
+  function stopRun() {
+    if (!state.runActive && !state.runId) return;
+    if (state.stopRequested) return;
+    state.stopRequested = true;
+    clearPollTimer();
+    if (state.runId) requestStop(state.runId);
+    else {
+      setRunControls("stopping");
+      setStatus("Stopping…");
+      upsertAssistantMessage({ status: "stopping", stopNotice: "Stopping…", proposal: null });
+    }
+  }
+  function finalizeStoppedRun(run) {
+    if (!state.runActive && !state.streamingMsgId && !state.stopRequested) return;
+    var session = activeSession();
+    var streaming = session && session.messages.find(function (m) { return m.id === state.streamingMsgId; });
+    var taskMode = (run && run.task_mode) || (streaming && streaming.taskMode) || "ask";
+    var partial = (streaming && streaming.text) || "";
+    var parsed = splitRunOutput((run && run.logs) || "", (run && run.answer) || partial, taskMode);
+    var text = parsed.text || partial;
+    if (looksLikeEditsJson(text)) text = humanizeAnswer(text, taskMode).text || partial;
+    var started = Number((streaming && streaming.startedAt) || (run && run.created_at) || Date.now());
+    if (String(started).length < 13) started = Date.now() - 1000;
+    var elapsedMs = Math.max(0, Date.now() - started);
+    var frozen = freezeActivity(streaming && streaming.activity);
+    var sources = collectSources(streaming, run, frozen);
+    if (session) session.lastRunProvider = (run && run.provider) || providerSelect.value;
+    upsertAssistantMessage({
+      status: "cancelled",
+      stoppedByUser: true,
+      stopNotice: "Stopped by user",
+      text: text,
+      diagnostics: parsed.diagnostics || (streaming && streaming.diagnostics) || "",
+      activity: frozen,
+      sources: sources,
+      filesInspected: Math.max(sources.length, (frozen && frozen.explore && frozen.explore.count) || 0),
+      proposal: null,
+      changedFiles: [],
+      elapsedMs: elapsedMs,
+      runId: (run && run.id) || state.runId,
+      taskMode: taskMode
+    });
+    proposalActions.hidden = true;
+    finishRun();
+  }
   function pollRun() {
     if (!state.runId) return;
+    var pollId = state.runId;
     jsonFetch(endpoint("/runs/" + encodeURIComponent(state.runId))).then(function (data) {
+      if (pollId !== state.runId) return;
       state.run = data.run;
-      var parsed = splitRunOutput(data.run.logs, "");
       var session = activeSession();
       var streaming = session && session.messages.find(function (m) { return m.id === state.streamingMsgId; });
+      var taskMode = (data.run && data.run.task_mode) || (streaming && streaming.taskMode) || "ask";
+      var terminal = ["completed", "failed", "cancelled", "unavailable"].indexOf(data.run.status) >= 0;
+
+      if (state.stopRequested) {
+        if (!terminal) {
+          state.pollTimer = window.setTimeout(pollRun, 400);
+          return;
+        }
+        finalizeStoppedRun(data.run);
+        return;
+      }
+
+      var parsed = splitRunOutput(data.run.logs, "", taskMode);
       var evidence = ((parsed.diagnostics || "") + "\n" + (data.run.logs || "") + "\n" + (parsed.text || "")).trim();
       var activity = parseActivityEvidence(evidence, {
-        running: ["completed", "failed", "cancelled", "unavailable"].indexOf(data.run.status) < 0,
+        running: !terminal,
         startedAt: streaming && streaming.startedAt,
         hasAnswer: !!(parsed.text && parsed.text.length > 20),
-        hasProposal: !!(data.run.proposal)
+        hasProposal: !!(data.run.proposal) && taskMode === "edit"
       });
       if (data.run.logs && data.run.logs !== state.streamText) {
         state.streamText = data.run.logs;
@@ -1448,34 +1918,36 @@
           text: parsed.text || "",
           diagnostics: parsed.diagnostics,
           activity: activity,
+          taskMode: taskMode,
+          sources: collectSources(streaming, data.run, activity),
           provider: data.run.provider,
-          model: data.run.model
+          model: data.run.model,
+          stopNotice: ""
         });
       } else if (streaming && streaming.status === "running") {
-        // Refresh activity/elapsed without forcing scroll jump when logs unchanged.
         var prev = JSON.stringify(streaming.activity || {});
         var next = JSON.stringify(activity || {});
         if (prev !== next) {
           upsertAssistantMessage({
             status: "running",
             activity: activity,
+            taskMode: taskMode,
+            sources: collectSources(streaming, data.run, activity),
             diagnostics: parsed.diagnostics || streaming.diagnostics || ""
           });
         } else if (streaming.activity && streaming.activity.explore) {
           streaming.activity.explore.elapsedMs = activity.explore.elapsedMs;
-          var elapsedEl = feed.querySelector('[data-explore-panel="' + streaming.id + '"] .climate-activity-explore-stats b:last-child');
-          // keep stored; full re-render only when evidence changes
         }
       }
       if (state.panel === "output") bottomBody.textContent = data.run.logs || data.run.answer || "Waiting for output…";
-      if (["completed", "failed", "cancelled", "unavailable"].indexOf(data.run.status) < 0) {
-        window.setTimeout(pollRun, 650);
+      if (!terminal) {
+        state.pollTimer = window.setTimeout(pollRun, 650);
         return;
       }
-      var finalParsed = splitRunOutput(data.run.logs, data.run.answer);
-      var proposal = data.run.proposal || null;
+      var finalParsed = splitRunOutput(data.run.logs, data.run.answer, taskMode);
+      var proposal = (data.run.status === "completed" && taskMode === "edit") ? (data.run.proposal || null) : null;
       var summary = extractSummary(finalParsed.text, proposal);
-      var files = changedFilesFrom(proposal, finalParsed.text);
+      var files = proposal ? changedFilesFrom(proposal, finalParsed.text) : [];
       var tests = testsFromText(finalParsed.text, null);
       var lines = lineDeltaFromProposal(proposal);
       var started = Number((streaming && streaming.startedAt) || data.run.created_at || Date.now());
@@ -1485,10 +1957,8 @@
       var elapsedMs = Math.max(0, finished - started);
       var usageParsed = parseUsagePayload(data.run.usage);
       var diagnostics = finalParsed.diagnostics || "";
-      if (usageParsed.source !== "unavailable") {
-        diagnostics = (diagnostics ? diagnostics + "\n\n" : "") + "usage_source=" + usageParsed.source + " total=" + usageParsed.total;
-      } else {
-        diagnostics = (diagnostics ? diagnostics + "\n\n" : "") + "usage_source=unavailable";
+      if (data.run.raw_answer && diagnostics.indexOf(data.run.raw_answer) < 0) {
+        diagnostics = (diagnostics ? diagnostics + "\n\n" : "") + "[provider_raw_answer]\n" + data.run.raw_answer;
       }
       var finalActivity = parseActivityEvidence(((diagnostics || "") + "\n" + (data.run.logs || "") + "\n" + (finalParsed.text || "")).trim(), {
         running: false,
@@ -1499,24 +1969,40 @@
         tests: tests,
         status: data.run.status
       });
+      var sources = collectSources({ sources: data.run.sources || (streaming && streaming.sources) || [] }, data.run, finalActivity);
       if (session) {
         session.lastRunProvider = data.run.provider || providerSelect.value;
         applyUsageFromRun(session, data.run.provider || providerSelect.value, data.run.usage);
       }
+      if (data.run.status === "completed" && (data.run.provider || providerSelect.value) === "codex") {
+        fetchCodexRateLimits({ refresh: true });
+      }
+      if (data.run.status === "cancelled") {
+        finalizeStoppedRun(data.run);
+        return;
+      }
+      var displayText = data.run.error ? data.run.error : (finalParsed.text || (proposal ? "Proposed changes are ready for review." : "Run finished."));
+      if (looksLikeEditsJson(displayText)) {
+        displayText = humanizeAnswer(displayText, taskMode).text || (proposal ? "Proposed changes are ready for review." : "Run finished.");
+      }
       upsertAssistantMessage({
         status: data.run.status,
-        text: data.run.error ? data.run.error : (finalParsed.text || (proposal ? "Proposed changes are ready for review." : "Run finished.")),
+        text: displayText,
         diagnostics: diagnostics,
         summary: summary,
         changedFiles: files,
-        filesInspected: Math.max(files.length, (finalActivity.explore && finalActivity.explore.count) || 0),
+        sources: sources,
+        filesInspected: Math.max(sources.length, files.length, (finalActivity.explore && finalActivity.explore.count) || 0),
         tests: tests,
         lines: lines,
         proposal: proposal,
+        taskMode: taskMode,
         activity: finalActivity,
         elapsedMs: elapsedMs,
         runId: data.run.id,
-        usage: usageParsed
+        usage: usageParsed,
+        stopNotice: "",
+        stoppedByUser: false
       });
       if (data.run.error && !finalParsed.text) {
         var msg = session && session.messages.find(function (row) { return row.id === state.streamingMsgId; });
@@ -1527,11 +2013,23 @@
       renderProposal(proposal);
       finishRun();
     }).catch(function (error) {
+      if (state.stopRequested) {
+        finalizeStoppedRun(state.run || { id: state.runId, status: "cancelled", logs: "", answer: "" });
+        return;
+      }
       upsertAssistantMessage({ status: "failed", text: error.message });
       finishRun();
     });
   }
-  function finishRun(){cancelBtn.hidden=true;document.getElementById("climate-cancel-top").disabled=true;sendBtn.disabled=!modelSelect.value;setStatus("Ready");state.streamingMsgId="";}
+  function finishRun(){
+    clearPollTimer();
+    state.runActive = false;
+    state.stopRequested = false;
+    state.runId = "";
+    state.streamingMsgId = "";
+    setRunControls("idle");
+    setStatus("Ready");
+  }
   function renderProposal(proposal){
     if(!proposal||proposal.state!=="pending"){proposalActions.hidden=true;return;}
     proposalActions.hidden=false;
@@ -1540,7 +2038,8 @@
   function renderProposalReview(proposal){
     state.panel="git";center.classList.remove("is-bottom-closed");document.querySelectorAll(".climate-bottom-tabs [data-panel]").forEach(function(btn){btn.classList.toggle("is-active",btn.dataset.panel==="git");});
     var edits=proposal.edits||[],active=edits[0]||{},sides=diffSides(active.diff||"");
-    bottomBody.innerHTML='<div class="climate-git-workspace"><aside class="climate-git-changes"><div class="climate-git-title">Proposed changes <span class="count">'+edits.length+'</span></div>'+edits.map(function(edit,index){return '<button class="climate-git-file '+(index===0?'is-active':'')+'" data-proposal-index="'+index+'"><span>◆</span><span>'+escapeHtml(edit.path)+'</span><b>M</b></button>';}).join('')+'</aside><section class="climate-git-review"><div class="climate-git-review-head"><span>'+escapeHtml(active.path||'Proposed edit')+'</span><select disabled><option>Unified</option></select></div><div class="climate-diff-split"><div class="climate-diff-column is-before"><h4>Original</h4><pre>'+escapeHtml(sides.before||'No original content')+'</pre></div><div class="climate-diff-column is-after"><h4>Modified</h4><pre>'+escapeHtml(sides.after||'No modified content')+'</pre></div></div><div class="climate-git-actions"><button class="climate-btn" id="climate-reject-bottom">Undo All</button><button class="climate-btn climate-btn-primary" id="climate-accept-bottom">Keep All</button></div></section></div>';
+    var warn = proposal.large_diff ? ('<div class="climate-run-warning" role="status">'+escapeHtml(proposal.warning||"Large or destructive replacement detected. Review the diff before Keep All.")+'</div>') : "";
+    bottomBody.innerHTML='<div class="climate-git-workspace"><aside class="climate-git-changes"><div class="climate-git-title">Proposed changes <span class="count">'+edits.length+'</span></div>'+edits.map(function(edit,index){return '<button class="climate-git-file '+(index===0?'is-active':'')+'" data-proposal-index="'+index+'"><span>◆</span><span>'+escapeHtml(edit.path)+'</span><b>M</b></button>';}).join('')+'</aside><section class="climate-git-review"><div class="climate-git-review-head"><span>'+escapeHtml(active.path||'Proposed edit')+'</span><select disabled><option>Unified</option></select></div>'+warn+'<div class="climate-diff-split"><div class="climate-diff-column is-before"><h4>Original</h4><pre>'+escapeHtml(sides.before||'No original content')+'</pre></div><div class="climate-diff-column is-after"><h4>Modified</h4><pre>'+escapeHtml(sides.after||'No modified content')+'</pre></div></div><div class="climate-git-actions"><button class="climate-btn" id="climate-reject-bottom">Undo All</button><button class="climate-btn climate-btn-primary" id="climate-accept-bottom">Keep All</button></div></section></div>';
     bottomBody.querySelectorAll("[data-proposal-index]").forEach(function(button){button.addEventListener("click",function(){var edit=edits[parseInt(button.getAttribute("data-proposal-index"),10)];var split=diffSides(edit.diff||"");bottomBody.querySelectorAll(".climate-git-file").forEach(function(row){row.classList.toggle("is-active",row===button);});bottomBody.querySelector(".climate-git-review-head span").textContent=edit.path;bottomBody.querySelector(".is-before pre").textContent=split.before;bottomBody.querySelector(".is-after pre").textContent=split.after;});});
     document.getElementById("climate-reject-bottom").addEventListener("click",function(){proposalAction("reject");});document.getElementById("climate-accept-bottom").addEventListener("click",function(){proposalAction("accept");});savePrefs();
   }
@@ -1550,6 +2049,11 @@
     var msg = session && session.messages.find(function (row) { return row.id === (msgId || state.streamingMsgId); });
     if (msg && msg.runId) runId = msg.runId;
     if(!runId)return;
+    var proposal = (msg && msg.proposal) || (state.run && state.run.proposal) || null;
+    if (action === "accept" && proposal && proposal.large_diff) {
+      var ok = window.confirm(proposal.warning || "Large or destructive replacement detected. Apply these edits anyway?");
+      if (!ok) return;
+    }
     jsonFetch(endpoint("/runs/"+encodeURIComponent(runId)+"/"+action),{method:"POST"}).then(function(data){
       proposalActions.hidden=true;
       if (msg && msg.proposal) msg.proposal.state = action === "accept" ? "accepted" : "rejected";
@@ -1684,8 +2188,8 @@
   repoSelect.addEventListener("change",function(){captureActive();savePrefs();window.location.assign((workspace==="work"?"/work/climate":"/personal/climate")+"?repo="+encodeURIComponent(repoId()));});
   providerSelect.addEventListener("change",function(){if(panelProviderSelect)panelProviderSelect.value=providerSelect.value;selectProvider(providerSelect.value,{refresh:false});});
   if(panelProviderSelect){panelProviderSelect.addEventListener("change",function(){providerSelect.value=panelProviderSelect.value;selectProvider(providerSelect.value,{refresh:false});});}
-  modelSelect.addEventListener("change",function(){panelModelSelect.value=modelSelect.value;sendBtn.disabled=!modelSelect.value;var session=activeSession();if(session){session.model=modelSelect.value;saveChatStore();}savePrefs();});
-  panelModelSelect.addEventListener("change",function(){modelSelect.value=panelModelSelect.value;sendBtn.disabled=!modelSelect.value;var session=activeSession();if(session){session.model=modelSelect.value;saveChatStore();}savePrefs();});
+  modelSelect.addEventListener("change",function(){panelModelSelect.value=modelSelect.value;if(!state.runActive)sendBtn.disabled=!modelSelect.value;var session=activeSession();if(session){session.model=modelSelect.value;saveChatStore();}savePrefs();});
+  panelModelSelect.addEventListener("change",function(){modelSelect.value=panelModelSelect.value;if(!state.runActive)sendBtn.disabled=!modelSelect.value;var session=activeSession();if(session){session.model=modelSelect.value;saveChatStore();}savePrefs();});
   document.getElementById("climate-model-refresh").addEventListener("click",function(){selectProvider(providerSelect.value,{refresh:true});});
   document.getElementById("climate-chat-new").addEventListener("click",function(){closeChatPopovers();newChatSession(false);promptEl.focus();});
   function renameActiveChat(){
@@ -1703,7 +2207,20 @@
       var open=usagePanel.hidden;
       usagePanel.hidden=!open;
       tokenPill.setAttribute("aria-expanded", open?"true":"false");
-      if(open)renderUsageChrome(activeSession());
+      if(open){
+        renderUsageChrome(activeSession());
+        fetchCodexRateLimits({ refresh: false });
+      }
+    });
+  }
+  var usageRefreshBtn=document.getElementById("climate-usage-refresh");
+  if(usageRefreshBtn){
+    usageRefreshBtn.addEventListener("click",function(event){
+      event.stopPropagation();
+      usageRefreshBtn.disabled=true;
+      fetchCodexRateLimits({ refresh: true }).finally(function(){
+        usageRefreshBtn.disabled=false;
+      });
     });
   }
   document.getElementById("climate-chat-history").addEventListener("click",function(){
@@ -1723,7 +2240,7 @@
       else if(action==="history"){historyPanel.hidden=false;renderHistoryList();}
       else if(action==="rename") renameActiveChat();
       else if(action==="context"){contextPanel.hidden=false;}
-      else if(action==="clear"&&session){session.messages=[];session.updatedAt=Date.now();saveChatStore();renderChat();}
+      else if(action==="clear"&&session){session.messages=[];session.title="New chat";session.updatedAt=Date.now();saveChatStore();renderChat();renderUsageChrome(session);}
       menuPanel.hidden=true;
     });
   });
@@ -1754,8 +2271,17 @@
   }, true);
   document.getElementById("climate-refresh-tree").addEventListener("click",function(){loadTree();loadGit();});document.getElementById("climate-search-run").addEventListener("click",runSearch);document.getElementById("climate-search").addEventListener("keydown",function(e){if(e.key==="Enter")runSearch();});
   document.getElementById("climate-show-excluded").addEventListener("change",function(){state.showExcluded=this.checked;savePrefs();loadTree();});
-  document.getElementById("climate-send").addEventListener("click",sendRun);promptEl.addEventListener("keydown",function(e){if((e.ctrlKey||e.metaKey)&&e.key==="Enter")sendRun();});cancelBtn.addEventListener("click",function(){if(!state.runId)return;jsonFetch(endpoint("/runs/"+encodeURIComponent(state.runId)+"/cancel"),{method:"POST"}).then(pollRun).catch(function(e){appendFeed(e.message,"is-error");});});
-  document.getElementById("climate-send-top").addEventListener("click",sendRun);document.getElementById("climate-cancel-top").disabled=true;document.getElementById("climate-cancel-top").addEventListener("click",function(){cancelBtn.click();});
+  document.getElementById("climate-send").addEventListener("click",sendRun);
+  promptEl.addEventListener("keydown",function(e){
+    if((e.ctrlKey||e.metaKey)&&e.key==="Enter"){
+      if(state.runActive||state.runId) return;
+      sendRun();
+    }
+  });
+  if(stopBtn) stopBtn.addEventListener("click", stopRun);
+  if(sendTopBtn) sendTopBtn.addEventListener("click", sendRun);
+  if(stopTopBtn) stopTopBtn.addEventListener("click", stopRun);
+  setRunControls("idle");
   document.getElementById("climate-accept").addEventListener("click",function(){proposalAction("accept");});document.getElementById("climate-reject").addEventListener("click",function(){proposalAction("reject");});
   document.getElementById("climate-confirm-save").addEventListener("click",function(e){e.preventDefault();document.getElementById("climate-save-dialog").close();confirmSave();});
   document.getElementById("climate-save").addEventListener("click",saveFile);
@@ -1766,6 +2292,7 @@
       workbench.classList.remove("is-ai-closed");
       if(workbench.classList.contains("is-ai-collapsed")) expandAiPanel();
       else if(currentAiWidthPx() < AI_MIN) setAiExpandedWidth(AI_DEFAULT);
+      fetchCodexRateLimits({ refresh: false });
     } else {
       workbench.classList.add("is-ai-closed");
       workbench.classList.remove("is-ai-maximized");
@@ -1811,7 +2338,7 @@
     });
   }
   document.getElementById("climate-toggle-left").addEventListener("click",function(){workbench.classList.toggle("is-left-closed");if(editor)editor.layout();savePrefs();});
-  document.querySelectorAll("[data-activity]").forEach(function(button){button.addEventListener("click",function(){var activity=button.dataset.activity;if(activity==="explorer"){workbench.classList.remove("is-left-closed");}else if(activity==="search"){workbench.classList.remove("is-left-closed");document.getElementById("climate-search").focus();}else if(activity==="git"||activity==="tests"){switchPanel(activity);}else if(activity==="ai"){workbench.classList.remove("is-ai-closed");if(workbench.classList.contains("is-ai-collapsed"))expandAiPanel();promptEl.focus();}else{setStatus("Workspace settings remain in CLIMATE Settings.");}document.querySelectorAll("[data-activity]").forEach(function(item){item.classList.toggle("is-active",item===button);});if(editor)editor.layout();savePrefs();});});
+  document.querySelectorAll("[data-activity]").forEach(function(button){button.addEventListener("click",function(){var activity=button.dataset.activity;if(activity==="explorer"){workbench.classList.remove("is-left-closed");}else if(activity==="search"){workbench.classList.remove("is-left-closed");document.getElementById("climate-search").focus();}else if(activity==="git"||activity==="tests"){switchPanel(activity);}else if(activity==="ai"){workbench.classList.remove("is-ai-closed");if(workbench.classList.contains("is-ai-collapsed"))expandAiPanel();promptEl.focus();fetchCodexRateLimits({ refresh: false });}else{setStatus("Workspace settings remain in CLIMATE Settings.");}document.querySelectorAll("[data-activity]").forEach(function(item){item.classList.toggle("is-active",item===button);});if(editor)editor.layout();savePrefs();});});
   window.addEventListener("beforeunload",function(e){captureActive();if(state.tabs.some(function(tab){return tab.dirty;})){e.preventDefault();e.returnValue="";}});
   window.addEventListener("resize", function () {
     if (workbench.classList.contains("is-ai-maximized") && !workbench.classList.contains("is-ai-collapsed") && !workbench.classList.contains("is-ai-closed")) {
@@ -1820,4 +2347,5 @@
     }
   });
   loadPrefs();normalizeAiPanelState();syncAiMaximizeChrome();renderTabs();renderProviders();enhanceProviderModelDropdowns();loadChatStore();loadTree();loadGit();setupResize();initMonaco();if(state.active)openFile(state.active);
+  if(!workbench.classList.contains("is-ai-closed")) fetchCodexRateLimits({ refresh: false });
 }());

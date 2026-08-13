@@ -1,0 +1,76 @@
+{
+  "base": "http://127.0.0.1:8099",
+  "checks": [
+    {
+      "name": "pill keeps session tokens",
+      "ok": true,
+      "detail": "38.9k tokens ▰▰▰▱▱ 69%"
+    },
+    {
+      "name": "pill shows actual remaining %",
+      "ok": true,
+      "detail": "38.9k tokens ▰▰▰▱▱ 69%"
+    },
+    {
+      "name": "quota meter visible when available",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "session total present",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "current run present",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "primary bucket shown",
+      "ok": true,
+      "detail": "SESSION USAGE\nSince 7:07 AM\nSession total\n38,900\nCurrent run\n900\nInput\n28,000\nOutput\n10,900\nCached\n0\nPROVIDER BREAKDOWN\nCodex\n38,900\nClaude\n0\nCursor\n0\nCODEX CAPACITY\ncodex\n69% left\n5 hour window · resets Aug 14, 8:08 AM\ncodex (secondary)\n88"
+    },
+    {
+      "name": "secondary bucket shown",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "credits shown",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "refresh control present",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "refresh hits API",
+      "ok": true,
+      "detail": "4"
+    },
+    {
+      "name": "unavailable hides fabricated %",
+      "ok": true,
+      "detail": "38.9k tokens"
+    },
+    {
+      "name": "unavailable quota chrome hidden",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "unavailable message shown",
+      "ok": true,
+      "detail": "SESSION USAGE\nSince 7:07 AM\nSession total\n38,900\nCurrent run\n900\nInput\n28,000\nOutput\n10,900\nCached\n0\nPROVIDER BREAKDOWN\nCodex\n38,900\nClaude\n0\nCursor\n0\nCODEX CAPACITY\nCodex limit unavailable\nRefresh\nex"
+    },
+    {
+      "name": "unavailable does not invent bucket %",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "ok": true
+}

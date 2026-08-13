@@ -1,0 +1,117 @@
+{
+  "base": "http://127.0.0.1:8096",
+  "checks": [
+    {
+      "name": "new chat starts blank title",
+      "ok": true,
+      "detail": "New chat"
+    },
+    {
+      "name": "ask title from first task",
+      "ok": true,
+      "detail": "Explain how ANC Binary is derived"
+    },
+    {
+      "name": "ask never shows raw edits JSON",
+      "ok": true,
+      "detail": "Y\nYou\n5:55 AM\nExplain how ANC Binary is derived\n◎\nCodex\n5:55 AM\n✓ Completed\nWorked for 36s · Explored 1 file\nSources\nDetails\nANC Binary is 1 when ANC visits meet the rule.\nSet to 0 otherwise.\nSources · 2 files\nDetails / Diagnostics"
+    },
+    {
+      "name": "ask has no Undo/Keep/Review",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "ask has no Run Summary card",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "ask shows sources",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "ask shows worked/explored line",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "ask keeps raw in Details",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "session token total in header",
+      "ok": true,
+      "detail": "38.4k tokens"
+    },
+    {
+      "name": "history/new controls intact",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "usage shows Session total",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "usage shows Current run",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "usage shows Input/Output/Cached",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "usage shows Provider breakdown",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "usage source exact|estimated|unavailable",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "classify explain => ask",
+      "ok": true,
+      "detail": "ask"
+    },
+    {
+      "name": "classify fix => edit",
+      "ok": true,
+      "detail": "edit"
+    },
+    {
+      "name": "edit title from first task",
+      "ok": true,
+      "detail": "Fix app.py null check"
+    },
+    {
+      "name": "edit shows Run Summary",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "edit shows review actions",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "edit chat body not raw JSON",
+      "ok": true,
+      "detail": "Y\nYou\n5:55 AM\nFix app.py to set value = 2\n◎\nCodex\n5:55 AM\n✓ Completed\nProposed changes are ready for review.\nSources · 1 file\n▣ Run Summary\nCompleted ✓\nWorked for\n12s\nFiles changed\n1\nTests\n—\nLines changed\n+2 -1\nChanged files (1)\napp.py\nTests\nNo test summary\nUndo All\nKeep All\nReview Changes\nDetails / Diagnostics"
+    },
+    {
+      "name": "follow-up keeps session title",
+      "ok": true,
+      "detail": "Fix app.py null check"
+    }
+  ],
+  "ok": true,
+  "usageText": "SESSION USAGE\nSince 5:54 AM\nSESSION TOTAL\n38,400\nInput\n28,000\nOutput\n8,400\nCached\n2,000\nPROVIDER BREAKDOWN\nCodex\n38,400\nClaude\n0\nCursor\n0\nCurrent run 1,200\nexact"
+}

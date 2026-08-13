@@ -74,6 +74,15 @@ def register_climate_routes(app: Flask) -> None:
         except ClimateCodingError as exc:
             return _error(exc)
 
+    @app.get("/api/climate/<workspace>/providers/codex/rate-limits")
+    def api_climate_codex_rate_limits(workspace: str):
+        try:
+            return jsonify(_svc().codex_rate_limits(
+                workspace, refresh=request.args.get("refresh") == "1"
+            ))
+        except ClimateCodingError as exc:
+            return _error(exc)
+
     @app.get("/api/climate/<workspace>/repositories/<repo_id>/tree")
     def api_climate_tree(workspace: str, repo_id: str):
         show_excluded = request.args.get("show_excluded") == "1"

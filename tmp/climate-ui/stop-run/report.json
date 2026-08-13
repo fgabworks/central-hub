@@ -1,0 +1,68 @@
+{
+  "base": "http://127.0.0.1:8098",
+  "checks": [
+    {
+      "name": "running shows Stop, hides Send",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "no Planning next moves",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "at most one current activity pulse",
+      "ok": true,
+      "detail": "1"
+    },
+    {
+      "name": "shows Stopping or Stopped state",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "cancel API called",
+      "ok": true,
+      "detail": "1"
+    },
+    {
+      "name": "Stopped by user shown",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "partial response preserved",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "idle Send restored",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "no edit actions after stop",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "still no Planning next moves",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "new run starts after stop",
+      "ok": true,
+      "detail": "4"
+    },
+    {
+      "name": "second stop returns to idle",
+      "ok": true,
+      "detail": "2"
+    }
+  ],
+  "ok": true,
+  "cancelCalls": 2,
+  "pollAfterCancel": 0
+}
