@@ -1,13 +1,33 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-12 (ARCTIC Personal profile + document registry).
+Last verified: 2026-08-13 (CLIMATE shell + Code Workspace v1).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
 
-**ARCTIC (CLIMATE / Personal)** is implemented as `/personal/arctic` with Dashboard |
-Profile | Files. Metadata/references only in `data/arctic.db`. Google Drive sync
-deferred. VANTA/ECLIPSE unchanged. AiriX Tool Runtime unchanged.
+**CLIMATE Code Workspace v1** is implemented at `/work/climate` (VANTA) and
+`/personal/climate` (ARCTIC). It reuses the guarded Repository Workspace file/Git
+services and existing Agent Center CLI adapters/runner. The IDE shell provides Monaco
+(textarea fallback), Explorer/search, safe preview-confirm save, multiple tabs,
+persisted per-workspace/repository tabs/layout, Git status/diff, resizable panels, and
+Problems | Output | Tests | Git. Its provider-neutral coding adapter exposes Codex,
+Claude Code, and Cursor Agent availability/model discovery/exact selection/cancel/result
+without owning credentials or provider argv. AI runs remain read-only; replacement edits
+are parsed as proposals and require Accept/Reject with base-content conflict checks.
+Codex remains VANTA-only under its existing profile policy; ARCTIC surfaces that state
+explicitly and can use authenticated Claude Code or Cursor Agent with selected ARCTIC files.
+VANTA and ARCTIC repository/run/proposal scopes are server-isolated; repositories tagged
+`personal`/`arctic` belong only to ARCTIC and all others default to VANTA. AiriX Tool
+Runtime and ECLIPSE are unchanged.
+
+The visible application shell is CLIMATE. Its switcher presents only VANTA and
+ARCTIC while retaining the existing `work` and `personal` route/storage identities.
+Code Workspace context labels use `VANTA / DOH / <Repository>` or
+`ARCTIC / <Personal Context>` without adding Work/Personal workspace subtitles.
+VANTA tools are direct navigation entries and Code Workspace reuses that navigation
+instead of rendering a second activity rail. Explorer trees hide generated/cache/temp
+directories by default and can reveal them explicitly without exposing `.git` or
+blocked secret files.
 
 **AiriX Unified Tool Runtime Phase 2** — same `hub/agent_center/tool_runtime/` package
 as Phase 1 (no parallel runtime). Adds dynamic scored tool selection (intent /
@@ -74,6 +94,7 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Registry + health | `config/repositories.yaml`, `${VAR:-default}` expansion, `hub/adapters/` |
 | Registry grouping | Optional `repository_group_id` merges adapters into one UI row (`hub/registry/grouping.py`); Workspace / Application / API statuses independent |
 | Registry management | Add / Edit / Enable / Disable via UI → YAML (`hub/registry/store.py`); no auto-clone |
+| CLIMATE Code Workspace | `/work/climate` (VANTA) + `/personal/climate` (ARCTIC); `hub/climate/`; Monaco IDE shell over existing safe file/Git and authenticated coding-provider services; exact provider/model, cancel/output, proposal diff Accept/Reject; no unrestricted shell |
 | Repository Workspace | Phases 1–2 + Connect + Run Profile Builder + Active Application + Repository Intelligence: General / Connection / Repository Intelligence / Files & Changes / Settings / Logs & History; process vs HTTP health reconciled (`hub/repository_workspace/run_status.py`); YAML templates + SQLite repo profiles |
 | DHIS2 Reports | `/dhis2/reports` — Phase 1 Standard Report Manager: sync Stage/Live `/api/reports` metadata cache, filters, View / Open in DHIS2 / HTML source / Download / Refresh; period+OU controls; iframe embed with Open-in-DHIS2 fallback. Catalog shortcuts remain for repository/static HTML (`hub/dhis2_reports/`) |
 | Central Hub HCSC–RF | `/dhis2/hcsc-indicators` — Phase 0–3 registry + batched Overview/report/category + Compare Sources (`hub/hcsc_indicators/`); quarters **2025Q3–2026Q4**; National (DHIS2 level-1 `Philippines`) plus Region → Province → Municipality/City → Barangay via env-isolated SQLite cache + DHIS2 GET refresh; National passes the root UID through the unchanged batched analytics/registry path without child enumeration; generated reports have server-side CSV download with result/N/D/source/scope/timestamp lineage; optional **Geographic Breakdown** remains batched below the selected level; Population Filter = All Households; no formula engine |
@@ -413,6 +434,8 @@ See [SECURITY.md](SECURITY.md).
 Next development target: **DHIS2 Standard Reports** (credentialed HTML viewer / library polish).
 DHIS2 Standard Report Manager Phase 2+ (replacement / design write-back) is **not** started.
 Optional: more GET-only LP capabilities via YAML; enrichment Phase A completeness.
-Repository Workspace Phase 3+ (commit/push/pull UI, agent-driven edits) stays deferred.
+Repository Workspace Phase 3+ (commit/push/pull UI and autonomous/unreviewed agent edits)
+stays deferred. CLIMATE v1 supports only explicit safe saves and review-gated full-file
+replacement proposals.
 Do **not** enable DHIS2 writes without [docs/DHIS2_SAFETY.md](docs/DHIS2_SAFETY.md).
 Do **not** expand Gmail or Calendar beyond readonly without an explicit safety design.

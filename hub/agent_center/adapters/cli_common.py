@@ -89,6 +89,7 @@ class BaseCliAdapter:
                 "authenticated": False,
                 "version": "",
                 "available": False,
+                "executable_path": "",
                 "cli_commands": list(self._cli_command_candidates()),
                 "install_help": self._install_help(),
             }
@@ -104,6 +105,7 @@ class BaseCliAdapter:
                 "authenticated": False,
                 "version": version,
                 "available": False,
+                "executable_path": exe,
                 "cli_commands": list(self._cli_command_candidates()),
                 "install_help": self._install_help(),
             }
@@ -116,6 +118,7 @@ class BaseCliAdapter:
             "authenticated": authenticated,
             "version": version or str(probe.get("version") or ""),
             "available": authenticated,
+            "executable_path": exe,
             "cli_commands": list(self._cli_command_candidates()),
             "install_help": self._install_help(),
             "error_code": str(probe.get("error_code") or ("" if authenticated else "authentication_required")),

@@ -142,6 +142,25 @@ SKIP_DIR_NAMES: frozenset[str] = frozenset(
     }
 )
 
+GENERATED_DIR_NAMES: frozenset[str] = frozenset(
+    {
+        ".venv",
+        "venv",
+        "node_modules",
+        "__pycache__",
+        ".tox",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".cache",
+        "coverage",
+        "dist",
+        "build",
+        "eggs",
+        ".eggs",
+        "__pypackages__",
+    }
+)
+
 # Extra secret basenames beyond Agent Center patterns.
 _EXTRA_SECRET_NAMES = frozenset(
     {
@@ -223,8 +242,18 @@ def is_blocked_secret(rel_path: str | Path) -> bool:
     return False
 
 
+def is_generated_dir(name: str) -> bool:
+    lowered = name.lower()
+    return (
+        lowered in GENERATED_DIR_NAMES
+        or lowered.startswith("tmp")
+        or "pycache" in lowered
+    )
+
+
 def should_skip_dir(name: str) -> bool:
-    return name in SKIP_DIR_NAMES or name.startswith(".git")
+    lowered = name.lower()
+    return lowered in SKIP_DIR_NAMES or lowered.startswith(".git") or is_generated_dir(lowered)
 
 
 def language_for(path: Path | str) -> str:

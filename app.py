@@ -100,9 +100,11 @@ from hub.notebook.dashboard import (
 )
 from hub.notebook.workspace import (
     apply_workspace_cookie,
+    counterpart_endpoint,
     dashboard_endpoint,
     notebook_endpoint,
     persist_workspace,
+    primary_endpoint,
     read_workspace,
 )
 from hub.sql_workspace import (
@@ -150,6 +152,8 @@ from hub.live_data_export.routes import register_live_data_export_routes
 from hub.data_explorer.routes import register_data_explorer_routes
 from hub.data_explorer.service import DataExplorerService
 from hub.repository_workspace.service import RepositoryWorkspaceService
+from hub.climate import ClimateCodingAdapter, ClimateService
+from hub.climate.routes import register_climate_routes
 from hub.registry import load_registry
 from hub.registry.git_util import default_search_roots, find_local_checkout, slugify_repo_id
 from hub.registry.loader import RegistryError
@@ -382,6 +386,13 @@ def create_app() -> Flask:
     )
     register_repository_workspace_routes(app)
 
+    app.config["CLIMATE"] = ClimateService(
+        registry if registry is not None else Registry([]),
+        app.config["REPO_WORKSPACE"],
+        ClimateCodingAdapter(app.config["AGENT_CENTER"]),
+    )
+    register_climate_routes(app)
+
     app.config["WORKSPACE_CONSOLE"] = WorkspaceConsoleService(
         registry=app.config.get("REGISTRY"),
         repo_workspace=app.config["REPO_WORKSPACE"],
@@ -511,11 +522,12 @@ def create_app() -> Flask:
             "agent_center",
             "work_airix",
             "work_okarun",
+            "work_climate",
             "dhis2",
             "jobs",
             "job_detail",
             "health",
-        } or (ep.startswith("dhis2") if ep else False) or (ep.startswith("repository") if ep else False) or (ep.startswith("sql_") if ep else False) or (ep.startswith("api_live_export") if ep else False) or (ep.startswith("live_data") if ep else False) or (ep.startswith("api_data_explorer") if ep else False) or (ep.startswith("data_explorer") if ep else False) or (ep.startswith("api_agent") if ep else False) or (ep.startswith("api_agents") if ep else False) or (ep.startswith("api_context") if ep else False) or (ep.startswith("api_prompts") if ep else False):
+        } or (ep.startswith("dhis2") if ep else False) or (ep.startswith("repository") if ep else False) or (ep.startswith("sql_") if ep else False) or (ep.startswith("api_live_export") if ep else False) or (ep.startswith("live_data") if ep else False) or (ep.startswith("api_data_explorer") if ep else False) or (ep.startswith("data_explorer") if ep else False) or (ep.startswith("api_agent") if ep else False) or (ep.startswith("api_agents") if ep else False) or (ep.startswith("api_context") if ep else False) or (ep.startswith("api_prompts") if ep else False) or (ep.startswith("api_climate") and request.view_args and request.view_args.get("workspace") == "work" if ep else False):
             workspace = "work"
         elif ep in {
             "personal_dashboard",
@@ -524,34 +536,41 @@ def create_app() -> Flask:
             "personal_email",
             "personal_calendar",
             "personal_aira",
+            "personal_climate",
             "arctic_dashboard",
             "arctic_profile",
             "arctic_files",
-        } or (ep.startswith("api_arctic") if ep else False) or (ep.startswith("arctic_") if ep else False):
+        } or (ep.startswith("api_arctic") if ep else False) or (ep.startswith("arctic_") if ep else False) or (ep.startswith("api_climate") and request.view_args and request.view_args.get("workspace") == "personal" if ep else False):
             workspace = "personal"
 
         personal_nav = [
             {
+                "endpoint": "personal_climate",
+                "label": "Code Workspace",
+                "icon": "C",
+                "active_prefix": "personal_climate",
+            },
+            {
                 "endpoint": "personal_dashboard",
-                "label": "Personal Dashboard",
+                "label": "Dashboard",
                 "icon": "⌂",
                 "active_prefix": None,
             },
             {
                 "endpoint": "arctic_dashboard",
-                "label": "ARCTIC",
+                "label": "Personal Files",
                 "icon": "◈",
                 "active_prefix": "arctic_",
             },
             {
                 "endpoint": "personal_notebook",
-                "label": "Personal Notebook",
+                "label": "Notebook",
                 "icon": "✎",
                 "active_prefix": "personal_notebook",
             },
             {
                 "endpoint": "personal_tasks",
-                "label": "Personal Tasks",
+                "label": "Tasks",
                 "icon": "☑",
                 "active_prefix": None,
             },
@@ -563,7 +582,7 @@ def create_app() -> Flask:
             },
             {
                 "endpoint": "personal_email",
-                "label": "Email Center",
+                "label": "Email",
                 "icon": "✉",
                 "active_prefix": "personal_email",
             },
@@ -576,8 +595,14 @@ def create_app() -> Flask:
         ]
         work_core_nav = [
             {
+                "endpoint": "work_climate",
+                "label": "Code Workspace",
+                "icon": "C",
+                "active_prefix": "work_climate",
+            },
+            {
                 "endpoint": "work_dashboard",
-                "label": "Work Dashboard",
+                "label": "Dashboard",
                 "icon": "⌂",
                 "active_prefix": None,
             },
@@ -589,7 +614,7 @@ def create_app() -> Flask:
             },
             {
                 "endpoint": "work_notebook",
-                "label": "Work Notebook",
+                "label": "Notebook",
                 "icon": "✎",
                 "active_prefix": "work_notebook",
             },
@@ -604,6 +629,12 @@ def create_app() -> Flask:
                 "label": "Data Explorer",
                 "icon": "▤",
                 "active_prefix": "data_explorer",
+            },
+            {
+                "endpoint": "dhis2",
+                "label": "DHIS2",
+                "icon": "⬡",
+                "active_prefix": "dhis2",
             },
         ]
         dhis2_nav = [
@@ -641,13 +672,13 @@ def create_app() -> Flask:
             },
             {
                 "endpoint": "work_email",
-                "label": "Email Center",
+                "label": "Email",
                 "icon": "✉",
                 "active_prefix": "work_email",
             },
             {
                 "endpoint": "work_calendar",
-                "label": "Work Calendar",
+                "label": "Calendar",
                 "icon": "📅",
                 "active_prefix": "work_calendar",
             },
@@ -667,15 +698,9 @@ def create_app() -> Flask:
             },
             {
                 "endpoint": "ai_connections",
-                "label": "AI Connections",
+                "label": "Connections",
                 "icon": "AI",
                 "active_prefix": "ai_connections",
-            },
-            {
-                "endpoint": "google_connections",
-                "label": "Google Connections",
-                "icon": "⧉",
-                "active_prefix": "google_connections",
             },
             {
                 "endpoint": "audit",
@@ -692,23 +717,15 @@ def create_app() -> Flask:
         ]
         if workspace == "work":
             nav_sections = [
-                {"id": "work", "label": "Work", "entries": work_core_nav},
-                {
-                    "id": "dhis2",
-                    "label": "DHIS2",
-                    "icon": "⬡",
-                    "expandable": True,
-                    "expand_prefix": "dhis2",
-                    "entries": dhis2_nav,
-                },
-                {"id": "ai", "label": "AI", "entries": ai_nav},
+                {"id": "vanta", "label": "VANTA", "entries": work_core_nav},
+                {"id": "communication", "label": "Communication", "entries": ai_nav[1:]},
                 {"id": "system", "label": "System", "entries": system_nav},
             ]
         else:
             nav_sections = [
                 {
-                    "id": "personal",
-                    "label": "Personal",
+                    "id": "arctic",
+                    "label": "ARCTIC",
                     "entries": personal_nav,
                 },
                 {"id": "system", "label": "System", "entries": system_nav},
@@ -749,7 +766,7 @@ def create_app() -> Flask:
         workspace_console = console_shell_bootstrap(notebook.db, workspace=workspace)
 
         return {
-            "app_name": settings.app_name,
+            "app_name": "CLIMATE",
             "env_profile": settings.env_profile,
             "hub_version": __version__,
             "registry_error": app.config.get("REGISTRY_ERROR"),
@@ -758,8 +775,8 @@ def create_app() -> Flask:
             "actor": current_actor(),
             "owner_token_configured": settings.owner_token_configured,
             "workspace": workspace,
-            "workspaces": WORKSPACES,
-            "workspace_labels": SCOPE_LABELS,
+            "workspaces": ("work", "personal"),
+            "workspace_labels": {"personal": "ARCTIC", "work": "VANTA"},
             "nav_sections": nav_sections,
             "nav_items": nav_items,
             "quick_actions": personal_actions if workspace == "personal" else work_actions,
@@ -772,7 +789,7 @@ def create_app() -> Flask:
     def _set_workspace_and_redirect(workspace: str, next_url: str | None = None):
         notebook: NotebookStore = app.config["NOTEBOOK"]
         value = persist_workspace(notebook.db, workspace)
-        target = next_url or url_for(dashboard_endpoint(value))
+        target = next_url or url_for(primary_endpoint(value))
         resp = redirect(target)
         return apply_workspace_cookie(resp, value)
 
@@ -782,6 +799,9 @@ def create_app() -> Flask:
         next_url = (request.values.get("next") or "").strip() or None
         if next_url and not next_url.startswith("/"):
             next_url = None
+        if not next_url:
+            from_ep = (request.values.get("from_endpoint") or "").strip() or None
+            next_url = url_for(counterpart_endpoint(from_ep, value))
         return _set_workspace_and_redirect(value, next_url)
 
     def _render_dashboard(*, scope: str):
@@ -1047,7 +1067,7 @@ def create_app() -> Flask:
         notebook: NotebookStore = app.config["NOTEBOOK"]
         workspace = read_workspace(request, notebook.db)
         args = request.args.to_dict(flat=True)
-        return redirect(url_for(dashboard_endpoint(workspace), **args))
+        return redirect(url_for(primary_endpoint(workspace), **args))
 
     @app.get("/personal")
     def personal_dashboard():

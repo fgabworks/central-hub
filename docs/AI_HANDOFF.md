@@ -4,6 +4,42 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
+**CLIMATE application shell + Code Workspace v1 (2026-08-13)**
+
+Implemented `/work/climate` (VANTA) and `/personal/climate` (ARCTIC) as one compact
+VS Code-style shell: Monaco with fallback, guarded Explorer/open/search/save,
+multi-tabs, Git status/diff, Problems | Output | Tests | Git, collapsible/resizable
+panels, and per-workspace/repository local tab/layout persistence. `hub/climate/`
+enforces repository/run/proposal isolation; `personal`/`arctic` tagged repositories
+are ARCTIC-only and untagged repositories remain VANTA by default.
+
+The single provider-neutral `ClimateCodingAdapter` delegates availability, model
+discovery, execution, cancellation, results, usage, auth, argv construction, and
+streaming logs to existing Agent Center connections/adapters/runner. Supported panel
+providers are Codex, Claude Code, and Cursor Agent with exact selected models and no
+silent substitution. Selected file/current selection/repo context are bounded to the
+active scope. Providers stay read-only; fenced replacement proposals produce server-
+owned diffs and require Accept/Reject, with base SHA-256 conflict detection before the
+existing safe editor writes. No AiriX Tool Runtime changes, MCP/browser/scheduler,
+marketplace/debugger, unrestricted shell, commit/push/pull, or ECLIPSE work.
+Codex is explicitly VANTA-only under its existing Agent Center profile policy; ARCTIC
+shows that limitation instead of crossing profiles, while Claude Code and Cursor Agent
+can receive explicitly selected ARCTIC file content.
+
+Focused tests: `tests/test_climate.py` (7 tests). Combined repository/provider/CLIMATE
+regression: 32 passed, 1 skipped. Route smoke: both CLIMATE pages HTTP
+200. Browser visual QA was unavailable because no browser backend was connected.
+
+The base shell now brands only CLIMATE and exposes a `VANTA | ARCTIC` switcher.
+Workspace context is displayed as `VANTA / DOH / <Repository>` or
+`ARCTIC / <Personal Context>` without redundant Work/Personal workspace labels.
+Work/Personal backend identifiers, routes, tables, environment variables, and storage
+paths remain unchanged. VANTA navigation is flattened to the requested tool list; Code
+Workspace no longer duplicates it with an inner activity rail. Explorer noise is hidden
+by default behind a persisted Show excluded control; `.git` and secrets remain hidden.
+
+Prior: **Official References — Subject detection (2026-08-12)**
+
 **Official References — Subject detection (2026-08-12)**
 
 Editable `subject` (+ internal `subject_source`: detected / suggested / manual) on

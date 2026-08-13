@@ -316,6 +316,16 @@ _MIGRATIONS: list[tuple[str, str]] = [
             ON repository_intelligence_scans(repository_id, finished_at DESC);
         """,
     ),
+    (
+        "012_agent_prefs",
+        """
+        CREATE TABLE IF NOT EXISTS agent_prefs (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL
+        );
+        """,
+    ),
 ]
 
 

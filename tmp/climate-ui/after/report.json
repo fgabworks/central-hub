@@ -1,0 +1,408 @@
+{
+  "label": "after",
+  "base": "http://127.0.0.1:8081",
+  "pages": {
+    "/": {
+      "url": "http://127.0.0.1:8081/work/climate",
+      "title": "VANTA / DOH / PMNP Live Processing · CLIMATE",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "sidebarBrand": {
+        "w": 0,
+        "h": 0,
+        "t": 0,
+        "l": 0,
+        "text": " CLIMATE "
+      },
+      "brandMark": {
+        "w": 0,
+        "h": 0,
+        "t": 0,
+        "l": 0,
+        "text": ""
+      },
+      "topbarBrand": null,
+      "climateBrand": {
+        "w": 199,
+        "h": 31,
+        "t": 10,
+        "l": 184,
+        "text": "CLIMATE VANTA / DOH / PMNP Live Processing"
+      },
+      "climateWelcomeLogo": {
+        "w": 40,
+        "h": 40,
+        "t": 350,
+        "l": 739,
+        "text": ""
+      },
+      "explorer": {
+        "w": 200,
+        "h": 821,
+        "t": 52,
+        "l": 170,
+        "text": "EXPLORER ↻ ⌕ 0 files selected for AI context Show excluded files ▸ .claude settings.local.json ▸ .tmp-tests ▸ _support _"
+      },
+      "editor": {
+        "w": 770,
+        "h": 821,
+        "t": 52,
+        "l": 374,
+        "text": "Open a file from Explorer Open a file from Explorer ◫ ••• CLIMATE VANTA / DOH / PMNP LIVE PROCESSING Open a repository"
+      },
+      "ai": {
+        "w": 292,
+        "h": 821,
+        "t": 52,
+        "l": 1148,
+        "text": "AI ASSISTANT Connected × PROVIDER ◎ Codex ✹ Claude Code ⬡ Cursor Agent MODEL Select exact model gpt-5.6-sol gpt-5.6-terr"
+      },
+      "bottom": {
+        "w": 770,
+        "h": 160,
+        "t": 713,
+        "l": 374,
+        "text": "PROBLEMS 0 OUTPUT TESTS GIT × No problems detected by CLIMATE."
+      },
+      "bottomClosed": false,
+      "aiMaximized": false,
+      "providerCards": 3,
+      "providerSelect": true,
+      "modelSelect": true,
+      "workspaceSwitcher": [
+        "VANTA",
+        "ARCTIC"
+      ],
+      "firstNav": "Code Workspace",
+      "wcHostVisible": false,
+      "climateBrandCount": 2,
+      "bodyClasses": "climate-system-shell theme-work enable-motion underline-links",
+      "appShellClasses": "app-shell"
+    },
+    "/work": {
+      "url": "http://127.0.0.1:8081/work",
+      "title": "Work Dashboard · CLIMATE",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "sidebarBrand": {
+        "w": 169,
+        "h": 44,
+        "t": 0,
+        "l": 0,
+        "text": "CLIMATE"
+      },
+      "brandMark": {
+        "w": 22,
+        "h": 22,
+        "t": 11,
+        "l": 8,
+        "text": ""
+      },
+      "topbarBrand": null,
+      "climateBrand": null,
+      "climateWelcomeLogo": null,
+      "explorer": null,
+      "editor": null,
+      "ai": null,
+      "bottom": null,
+      "bottomClosed": false,
+      "aiMaximized": false,
+      "providerCards": 0,
+      "providerSelect": false,
+      "modelSelect": false,
+      "workspaceSwitcher": [
+        "VANTA",
+        "ARCTIC"
+      ],
+      "firstNav": "Code Workspace",
+      "wcHostVisible": true,
+      "climateBrandCount": 1,
+      "bodyClasses": "climate-system-shell theme-work",
+      "appShellClasses": "app-shell has-activity-rail has-ad-dock is-wc-open"
+    },
+    "/work/climate": {
+      "url": "http://127.0.0.1:8081/work/climate",
+      "title": "VANTA / DOH / PMNP Live Processing · CLIMATE",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "sidebarBrand": {
+        "w": 0,
+        "h": 0,
+        "t": 0,
+        "l": 0,
+        "text": " CLIMATE "
+      },
+      "brandMark": {
+        "w": 0,
+        "h": 0,
+        "t": 0,
+        "l": 0,
+        "text": ""
+      },
+      "topbarBrand": null,
+      "climateBrand": {
+        "w": 199,
+        "h": 31,
+        "t": 10,
+        "l": 184,
+        "text": "CLIMATE VANTA / DOH / PMNP Live Processing"
+      },
+      "climateWelcomeLogo": {
+        "w": 40,
+        "h": 40,
+        "t": 350,
+        "l": 739,
+        "text": ""
+      },
+      "explorer": {
+        "w": 200,
+        "h": 821,
+        "t": 52,
+        "l": 170,
+        "text": "EXPLORER ↻ ⌕ 0 files selected for AI context Show excluded files ▸ .claude settings.local.json ▸ .tmp-tests ▸ _support _"
+      },
+      "editor": {
+        "w": 770,
+        "h": 821,
+        "t": 52,
+        "l": 374,
+        "text": "Open a file from Explorer Open a file from Explorer ◫ ••• CLIMATE VANTA / DOH / PMNP LIVE PROCESSING Open a repository"
+      },
+      "ai": {
+        "w": 292,
+        "h": 821,
+        "t": 52,
+        "l": 1148,
+        "text": "AI ASSISTANT Connected × PROVIDER ◎ Codex ✹ Claude Code ⬡ Cursor Agent MODEL Select exact model gpt-5.6-sol gpt-5.6-terr"
+      },
+      "bottom": {
+        "w": 770,
+        "h": 160,
+        "t": 713,
+        "l": 374,
+        "text": "PROBLEMS 0 OUTPUT TESTS GIT × No problems detected by CLIMATE."
+      },
+      "bottomClosed": false,
+      "aiMaximized": false,
+      "providerCards": 3,
+      "providerSelect": true,
+      "modelSelect": true,
+      "workspaceSwitcher": [
+        "VANTA",
+        "ARCTIC"
+      ],
+      "firstNav": "Code Workspace",
+      "wcHostVisible": false,
+      "climateBrandCount": 2,
+      "bodyClasses": "climate-system-shell theme-work enable-motion underline-links",
+      "appShellClasses": "app-shell"
+    },
+    "/personal": {
+      "url": "http://127.0.0.1:8081/personal",
+      "title": "Personal Dashboard · CLIMATE",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "sidebarBrand": {
+        "w": 169,
+        "h": 44,
+        "t": 0,
+        "l": 0,
+        "text": "CLIMATE"
+      },
+      "brandMark": {
+        "w": 22,
+        "h": 22,
+        "t": 11,
+        "l": 8,
+        "text": ""
+      },
+      "topbarBrand": null,
+      "climateBrand": null,
+      "climateWelcomeLogo": null,
+      "explorer": null,
+      "editor": null,
+      "ai": null,
+      "bottom": null,
+      "bottomClosed": false,
+      "aiMaximized": false,
+      "providerCards": 0,
+      "providerSelect": false,
+      "modelSelect": false,
+      "workspaceSwitcher": [
+        "VANTA",
+        "ARCTIC"
+      ],
+      "firstNav": "Dashboard",
+      "wcHostVisible": false,
+      "climateBrandCount": 1,
+      "bodyClasses": "climate-system-shell theme-personal",
+      "appShellClasses": "app-shell has-activity-rail has-ad-dock"
+    },
+    "bottom_collapsed": {
+      "url": "http://127.0.0.1:8081/work/climate",
+      "title": "VANTA / DOH / PMNP Live Processing · CLIMATE",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "sidebarBrand": {
+        "w": 0,
+        "h": 0,
+        "t": 0,
+        "l": 0,
+        "text": " CLIMATE "
+      },
+      "brandMark": {
+        "w": 0,
+        "h": 0,
+        "t": 0,
+        "l": 0,
+        "text": ""
+      },
+      "topbarBrand": null,
+      "climateBrand": {
+        "w": 199,
+        "h": 31,
+        "t": 10,
+        "l": 184,
+        "text": "CLIMATE VANTA / DOH / PMNP Live Processing"
+      },
+      "climateWelcomeLogo": {
+        "w": 40,
+        "h": 40,
+        "t": 432,
+        "l": 739,
+        "text": ""
+      },
+      "explorer": {
+        "w": 200,
+        "h": 821,
+        "t": 52,
+        "l": 170,
+        "text": "EXPLORER ↻ ⌕ 0 files selected for AI context Show excluded files ▸ .claude settings.local.json ▸ .tmp-tests ▸ _support _"
+      },
+      "editor": {
+        "w": 770,
+        "h": 821,
+        "t": 52,
+        "l": 374,
+        "text": "Open a file from Explorer Open a file from Explorer ◫ ••• CLIMATE VANTA / DOH / PMNP LIVE PROCESSING Open a repository"
+      },
+      "ai": {
+        "w": 292,
+        "h": 821,
+        "t": 52,
+        "l": 1148,
+        "text": "AI ASSISTANT Connected × PROVIDER ◎ Codex ✹ Claude Code ⬡ Cursor Agent MODEL Select exact model gpt-5.6-sol gpt-5.6-terr"
+      },
+      "bottom": {
+        "w": 0,
+        "h": 0,
+        "t": 0,
+        "l": 0,
+        "text": " Problems 0 Output Tests Git × No"
+      },
+      "bottomClosed": true,
+      "aiMaximized": false,
+      "providerCards": 3,
+      "providerSelect": true,
+      "modelSelect": true,
+      "workspaceSwitcher": [
+        "VANTA",
+        "ARCTIC"
+      ],
+      "firstNav": "Code Workspace",
+      "wcHostVisible": false,
+      "climateBrandCount": 2,
+      "bodyClasses": "climate-system-shell theme-work enable-motion underline-links",
+      "appShellClasses": "app-shell"
+    },
+    "ai_maximized": {
+      "url": "http://127.0.0.1:8081/work/climate",
+      "title": "VANTA / DOH / PMNP Live Processing · CLIMATE",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "sidebarBrand": {
+        "w": 0,
+        "h": 0,
+        "t": 0,
+        "l": 0,
+        "text": " CLIMATE "
+      },
+      "brandMark": {
+        "w": 0,
+        "h": 0,
+        "t": 0,
+        "l": 0,
+        "text": ""
+      },
+      "topbarBrand": null,
+      "climateBrand": {
+        "w": 199,
+        "h": 31,
+        "t": 10,
+        "l": 184,
+        "text": "CLIMATE VANTA / DOH / PMNP Live Processing"
+      },
+      "climateWelcomeLogo": {
+        "w": 40,
+        "h": 40,
+        "t": 350,
+        "l": 605,
+        "text": ""
+      },
+      "explorer": {
+        "w": 200,
+        "h": 821,
+        "t": 52,
+        "l": 170,
+        "text": "EXPLORER ↻ ⌕ 0 files selected for AI context Show excluded files ▸ .claude settings.local.json ▸ .tmp-tests ▸ _support _"
+      },
+      "editor": {
+        "w": 502,
+        "h": 821,
+        "t": 52,
+        "l": 374,
+        "text": "Open a file from Explorer Open a file from Explorer ◫ ••• CLIMATE VANTA / DOH / PMNP LIVE PROCESSING Open a repository"
+      },
+      "ai": {
+        "w": 560,
+        "h": 821,
+        "t": 52,
+        "l": 880,
+        "text": "AI ASSISTANT Connected × PROVIDER ◎ Codex ✹ Claude Code ⬡ Cursor Agent MODEL Select exact model gpt-5.6-sol gpt-5.6-terr"
+      },
+      "bottom": {
+        "w": 502,
+        "h": 160,
+        "t": 713,
+        "l": 374,
+        "text": "PROBLEMS 0 OUTPUT TESTS GIT × No problems detected by CLIMATE."
+      },
+      "bottomClosed": false,
+      "aiMaximized": true,
+      "providerCards": 3,
+      "providerSelect": true,
+      "modelSelect": true,
+      "workspaceSwitcher": [
+        "VANTA",
+        "ARCTIC"
+      ],
+      "firstNav": "Code Workspace",
+      "wcHostVisible": false,
+      "climateBrandCount": 2,
+      "bodyClasses": "climate-system-shell theme-work enable-motion underline-links",
+      "appShellClasses": "app-shell"
+    }
+  }
+}

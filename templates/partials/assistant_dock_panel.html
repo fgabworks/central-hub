@@ -20,6 +20,7 @@
         </div>
       </div>
       <button type="button" class="btn btn-sm ad-icon-btn{% if assistant_dock.prefs.pinned %} is-active{% endif %}" id="ad-pin" title="Pin panel" aria-pressed="{{ 'true' if assistant_dock.prefs.pinned else 'false' }}">📌</button>
+      <button type="button" class="btn btn-sm ad-icon-btn" id="ad-maximize" title="Maximize assistant" aria-label="Maximize assistant" aria-pressed="false">□</button>
       <button type="button" class="btn btn-sm ad-icon-btn" id="ad-minimize" title="Minimize panel">—</button>
       <button type="button" class="btn btn-sm ad-icon-btn" id="ad-close" title="Close panel" aria-label="Close assistant">×</button>
     </div>

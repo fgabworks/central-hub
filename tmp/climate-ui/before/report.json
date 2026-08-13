@@ -1,0 +1,783 @@
+{
+  "label": "before",
+  "base": "http://127.0.0.1:8080",
+  "pages": {
+    "/work": {
+      "url": "http://127.0.0.1:8080/work",
+      "title": "Work Dashboard · CLIMATE",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "sidebarBrand": {
+        "w": 169,
+        "h": 58,
+        "t": 0,
+        "l": 0,
+        "text": "CLIMATE INTEGRATED INTELLIGENCE SYSTEM"
+      },
+      "brandLockup": {
+        "w": 152,
+        "h": 39,
+        "t": 9,
+        "l": 8,
+        "text": "CLIMATE INTEGRATED INTELLIGENCE SYSTEM"
+      },
+      "brandMark": {
+        "w": 34,
+        "h": 34,
+        "t": 12,
+        "l": 8,
+        "text": ""
+      },
+      "brandMarkImg": {
+        "w": 32,
+        "h": 32,
+        "t": 13,
+        "l": 9,
+        "text": ""
+      },
+      "topbarBrand": {
+        "w": 85,
+        "h": 22,
+        "t": 16,
+        "l": 188,
+        "text": "CLIMATE"
+      },
+      "topbarBrandImg": {
+        "w": 22,
+        "h": 22,
+        "t": 16,
+        "l": 188,
+        "text": ""
+      },
+      "climateBrand": null,
+      "climateBrandMark": null,
+      "climateWelcomeLogo": null,
+      "climateShell": null,
+      "explorer": null,
+      "editor": null,
+      "ai": null,
+      "bottom": null,
+      "providerCards": 0,
+      "providerSelect": false,
+      "modelSelect": false,
+      "workspaceSwitcher": [
+        "VANTA",
+        "ARCTIC"
+      ],
+      "navLabels": [
+        "⌂\n                  Dashboard",
+        "Dashboard",
+        "C\n                  Code Workspace",
+        "Code Workspace",
+        "▣\n                  Repositories",
+        "Repositories",
+        "✎\n                  Notebook",
+        "Notebook",
+        "▦\n                  SQL Workspace",
+        "SQL Workspace",
+        "▤\n                  Data Explorer",
+        "Data Explorer",
+        "⬡\n                  DHIS2",
+        "DHIS2",
+        "✉\n                  Email",
+        "Email",
+        "📅\n                  Calendar",
+        "Calendar",
+        "▶\n                  Jobs",
+        "Jobs",
+        "♡\n                  Health",
+        "Health",
+        "AI\n                  Connections",
+        "Connections",
+        "☰\n                  Audit",
+        "Audit",
+        "⚙\n                  Settings",
+        "Settings"
+      ],
+      "climateBrandSurfaces": [
+        {
+          "cls": "sidebar-brand",
+          "tag": "DIV",
+          "box": {
+            "w": 169,
+            "h": 58,
+            "t": 0,
+            "l": 0,
+            "text": "CLIMATE INTEGRATED INTELLIGENCE SYSTEM"
+          }
+        },
+        {
+          "cls": "brand-wordmark",
+          "tag": "STRONG",
+          "box": {
+            "w": 111,
+            "h": 18,
+            "t": 9,
+            "l": 50,
+            "text": "CLIMATE"
+          }
+        },
+        {
+          "cls": "topbar-brand",
+          "tag": "A",
+          "box": {
+            "w": 85,
+            "h": 22,
+            "t": 16,
+            "l": 188,
+            "text": "CLIMATE"
+          }
+        },
+        {
+          "cls": "topbar-brand-name",
+          "tag": "SPAN",
+          "box": {
+            "w": 57,
+            "h": 16,
+            "t": 19,
+            "l": 216,
+            "text": "CLIMATE"
+          }
+        }
+      ],
+      "centralHubHits": [
+        "Central Hub DHIS2 Report ( need validation)",
+        "Central Hub DHIS2 Report ( need validation)"
+      ],
+      "wcHost": {
+        "w": 1222,
+        "h": 300,
+        "t": 600,
+        "l": 170,
+        "text": "Workspace Console Ctrl+J ▁ ▢ ✕ Problems Output Debug Console Terminal Ports Repository PMNP Live Processing SQL Queries "
+      },
+      "adHost": {
+        "w": 0,
+        "h": 0,
+        "t": 0,
+        "l": 0,
+        "text": " AiriX Assistant online ⋯ Assistant Center "
+      },
+      "bodyClasses": "climate-system-shell theme-work",
+      "appShellClasses": "app-shell has-activity-rail has-ad-dock is-wc-open"
+    },
+    "/work/climate": {
+      "url": "http://127.0.0.1:8080/work/climate",
+      "title": "VANTA / DOH / PMNP Live Processing · CLIMATE",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "sidebarBrand": {
+        "w": 0,
+        "h": 0,
+        "t": 0,
+        "l": 0,
+        "text": " CLIMATE Integrated Intelligence System "
+      },
+      "brandLockup": {
+        "w": 0,
+        "h": 0,
+        "t": 0,
+        "l": 0,
+        "text": " CLIMATE Integrated Intelligence System "
+      },
+      "brandMark": {
+        "w": 0,
+        "h": 0,
+        "t": 0,
+        "l": 0,
+        "text": ""
+      },
+      "brandMarkImg": {
+        "w": 0,
+        "h": 0,
+        "t": 0,
+        "l": 0,
+        "text": ""
+      },
+      "topbarBrand": {
+        "w": 0,
+        "h": 0,
+        "t": 0,
+        "l": 0,
+        "text": " CLIMATE "
+      },
+      "topbarBrandImg": {
+        "w": 0,
+        "h": 0,
+        "t": 0,
+        "l": 0,
+        "text": ""
+      },
+      "climateBrand": {
+        "w": 207,
+        "h": 31,
+        "t": 10,
+        "l": 184,
+        "text": "CLIMATE VANTA / DOH / PMNP Live Processing"
+      },
+      "climateBrandMark": {
+        "w": 28,
+        "h": 28,
+        "t": 12,
+        "l": 184,
+        "text": ""
+      },
+      "climateWelcomeLogo": {
+        "w": 280,
+        "h": 158,
+        "t": 274,
+        "l": 619,
+        "text": ""
+      },
+      "climateShell": {
+        "w": 1270,
+        "h": 899,
+        "t": 0,
+        "l": 170,
+        "text": "CLIMATE VANTA / DOH / PMNP Live Processing REPOSITORY PMNP Live Processing Data-Script Report Template SQL Queries ar-ta"
+      },
+      "explorer": {
+        "w": 200,
+        "h": 821,
+        "t": 52,
+        "l": 170,
+        "text": "EXPLORER ↻ ⌕ 0 files selected for AI context Show excluded files ▸ .claude settings.local.json ▸ .tmp-tests ▸ _support _"
+      },
+      "editor": {
+        "w": 770,
+        "h": 821,
+        "t": 52,
+        "l": 374,
+        "text": "Open a file from Explorer Open a file from Explorer ◫ ••• VANTA / DOH / PMNP LIVE PROCESSING Open a repository file to"
+      },
+      "ai": {
+        "w": 292,
+        "h": 821,
+        "t": 52,
+        "l": 1148,
+        "text": "AI ASSISTANT Connected × PROVIDER ◎ Codex ✹ Claude Code ⬡ Cursor Agent MODEL Select exact model gpt-5.6-sol gpt-5.6-terr"
+      },
+      "bottom": {
+        "w": 770,
+        "h": 220,
+        "t": 653,
+        "l": 374,
+        "text": "PROBLEMS 0 OUTPUT TESTS GIT × No problems detected by CLIMATE."
+      },
+      "providerCards": 3,
+      "providerSelect": true,
+      "modelSelect": true,
+      "workspaceSwitcher": [
+        "VANTA",
+        "ARCTIC"
+      ],
+      "navLabels": [
+        "⌂\n                  Dashboard",
+        "Dashboard",
+        "C\n                  Code Workspace",
+        "Code Workspace",
+        "▣\n                  Repositories",
+        "Repositories",
+        "✎\n                  Notebook",
+        "Notebook",
+        "▦\n                  SQL Workspace",
+        "SQL Workspace",
+        "▤\n                  Data Explorer",
+        "Data Explorer",
+        "⬡\n                  DHIS2",
+        "DHIS2",
+        "✉\n                  Email",
+        "Email",
+        "📅\n                  Calendar",
+        "Calendar",
+        "▶\n                  Jobs",
+        "Jobs",
+        "♡\n                  Health",
+        "Health",
+        "AI\n                  Connections",
+        "Connections",
+        "☰\n                  Audit",
+        "Audit",
+        "⚙\n                  Settings",
+        "Settings"
+      ],
+      "climateBrandSurfaces": [
+        {
+          "cls": "sidebar-brand",
+          "tag": "DIV",
+          "box": {
+            "w": 0,
+            "h": 0,
+            "t": 0,
+            "l": 0,
+            "text": " CLIMATE Integrated Intelligence System "
+          }
+        },
+        {
+          "cls": "brand-wordmark",
+          "tag": "STRONG",
+          "box": {
+            "w": 0,
+            "h": 0,
+            "t": 0,
+            "l": 0,
+            "text": "CLIMATE"
+          }
+        },
+        {
+          "cls": "topbar-brand",
+          "tag": "A",
+          "box": {
+            "w": 0,
+            "h": 0,
+            "t": 0,
+            "l": 0,
+            "text": " CLIMATE "
+          }
+        },
+        {
+          "cls": "topbar-brand-name",
+          "tag": "SPAN",
+          "box": {
+            "w": 0,
+            "h": 0,
+            "t": 0,
+            "l": 0,
+            "text": "CLIMATE"
+          }
+        },
+        {
+          "cls": "climate-brand",
+          "tag": "DIV",
+          "box": {
+            "w": 207,
+            "h": 31,
+            "t": 10,
+            "l": 184,
+            "text": "CLIMATE VANTA / DOH / PMNP Live Processing"
+          }
+        },
+        {
+          "cls": "climate-welcome-logo",
+          "tag": "IMG",
+          "box": {
+            "w": 280,
+            "h": 158,
+            "t": 274,
+            "l": 619,
+            "text": ""
+          }
+        }
+      ],
+      "centralHubHits": [],
+      "wcHost": {
+        "w": 1222,
+        "h": 300,
+        "t": 600,
+        "l": 170,
+        "text": "Workspace Console Ctrl+J ▁ ▢ ✕ Problems Output Debug Console Terminal Ports Repository Shell + New Terminal + Split Rest"
+      },
+      "adHost": null,
+      "bodyClasses": "climate-system-shell theme-work enable-motion underline-links",
+      "appShellClasses": "app-shell is-wc-open"
+    },
+    "/personal": {
+      "url": "http://127.0.0.1:8080/personal",
+      "title": "Personal Dashboard · CLIMATE",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "sidebarBrand": {
+        "w": 169,
+        "h": 58,
+        "t": 0,
+        "l": 0,
+        "text": "CLIMATE INTEGRATED INTELLIGENCE SYSTEM"
+      },
+      "brandLockup": {
+        "w": 152,
+        "h": 39,
+        "t": 9,
+        "l": 8,
+        "text": "CLIMATE INTEGRATED INTELLIGENCE SYSTEM"
+      },
+      "brandMark": {
+        "w": 34,
+        "h": 34,
+        "t": 12,
+        "l": 8,
+        "text": ""
+      },
+      "brandMarkImg": {
+        "w": 32,
+        "h": 32,
+        "t": 13,
+        "l": 9,
+        "text": ""
+      },
+      "topbarBrand": {
+        "w": 85,
+        "h": 22,
+        "t": 16,
+        "l": 188,
+        "text": "CLIMATE"
+      },
+      "topbarBrandImg": {
+        "w": 22,
+        "h": 22,
+        "t": 16,
+        "l": 188,
+        "text": ""
+      },
+      "climateBrand": null,
+      "climateBrandMark": null,
+      "climateWelcomeLogo": null,
+      "climateShell": null,
+      "explorer": null,
+      "editor": null,
+      "ai": null,
+      "bottom": null,
+      "providerCards": 0,
+      "providerSelect": false,
+      "modelSelect": false,
+      "workspaceSwitcher": [
+        "VANTA",
+        "ARCTIC"
+      ],
+      "navLabels": [
+        "⌂\n                  Dashboard",
+        "Dashboard",
+        "◈\n                  Personal Files",
+        "Personal Files",
+        "C\n                  Code Workspace",
+        "Code Workspace",
+        "✎\n                  Notebook",
+        "Notebook",
+        "☑\n                  Tasks",
+        "Tasks",
+        "AI\n                  Aira",
+        "Aira",
+        "✉\n                  Email",
+        "Email",
+        "📅\n                  Calendar",
+        "Calendar",
+        "▶\n                  Jobs",
+        "Jobs",
+        "♡\n                  Health",
+        "Health",
+        "AI\n                  Connections",
+        "Connections",
+        "☰\n                  Audit",
+        "Audit",
+        "⚙\n                  Settings",
+        "Settings"
+      ],
+      "climateBrandSurfaces": [
+        {
+          "cls": "sidebar-brand",
+          "tag": "DIV",
+          "box": {
+            "w": 169,
+            "h": 58,
+            "t": 0,
+            "l": 0,
+            "text": "CLIMATE INTEGRATED INTELLIGENCE SYSTEM"
+          }
+        },
+        {
+          "cls": "brand-wordmark",
+          "tag": "STRONG",
+          "box": {
+            "w": 111,
+            "h": 18,
+            "t": 9,
+            "l": 50,
+            "text": "CLIMATE"
+          }
+        },
+        {
+          "cls": "topbar-brand",
+          "tag": "A",
+          "box": {
+            "w": 85,
+            "h": 22,
+            "t": 16,
+            "l": 188,
+            "text": "CLIMATE"
+          }
+        },
+        {
+          "cls": "topbar-brand-name",
+          "tag": "SPAN",
+          "box": {
+            "w": 57,
+            "h": 16,
+            "t": 19,
+            "l": 216,
+            "text": "CLIMATE"
+          }
+        }
+      ],
+      "centralHubHits": [],
+      "wcHost": {
+        "w": 0,
+        "h": 0,
+        "t": 0,
+        "l": 0,
+        "text": " Workspace Console Ctrl+J ▁ ▢ ✕ "
+      },
+      "adHost": {
+        "w": 0,
+        "h": 0,
+        "t": 0,
+        "l": 0,
+        "text": " Aira Assistant online ⋯ Assistant Center "
+      },
+      "bodyClasses": "climate-system-shell theme-personal",
+      "appShellClasses": "app-shell has-activity-rail has-ad-dock"
+    },
+    "/work/climate__bottom_toggle": {
+      "beforeBottom": {
+        "w": 770,
+        "h": 220,
+        "t": 653,
+        "l": 374,
+        "text": "PROBLEMS 0 OUTPUT TESTS GIT × No problems detected by CLIMATE."
+      },
+      "afterBottom": {
+        "w": 770,
+        "h": 220,
+        "t": 653,
+        "l": 374,
+        "text": "PROBLEMS 0 OUTPUT TESTS GIT × No problems detected by CLIMATE."
+      }
+    },
+    "/work/climate__ai_toggled": {
+      "url": "http://127.0.0.1:8080/work/climate",
+      "title": "VANTA / DOH / PMNP Live Processing · CLIMATE",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "sidebarBrand": {
+        "w": 0,
+        "h": 0,
+        "t": 0,
+        "l": 0,
+        "text": " CLIMATE Integrated Intelligence System "
+      },
+      "brandLockup": {
+        "w": 0,
+        "h": 0,
+        "t": 0,
+        "l": 0,
+        "text": " CLIMATE Integrated Intelligence System "
+      },
+      "brandMark": {
+        "w": 0,
+        "h": 0,
+        "t": 0,
+        "l": 0,
+        "text": ""
+      },
+      "brandMarkImg": {
+        "w": 0,
+        "h": 0,
+        "t": 0,
+        "l": 0,
+        "text": ""
+      },
+      "topbarBrand": {
+        "w": 0,
+        "h": 0,
+        "t": 0,
+        "l": 0,
+        "text": " CLIMATE "
+      },
+      "topbarBrandImg": {
+        "w": 0,
+        "h": 0,
+        "t": 0,
+        "l": 0,
+        "text": ""
+      },
+      "climateBrand": {
+        "w": 207,
+        "h": 31,
+        "t": 10,
+        "l": 184,
+        "text": "CLIMATE VANTA / DOH / PMNP Live Processing"
+      },
+      "climateBrandMark": {
+        "w": 28,
+        "h": 28,
+        "t": 12,
+        "l": 184,
+        "text": ""
+      },
+      "climateWelcomeLogo": {
+        "w": 280,
+        "h": 158,
+        "t": 274,
+        "l": 767,
+        "text": ""
+      },
+      "climateShell": {
+        "w": 1270,
+        "h": 899,
+        "t": 0,
+        "l": 170,
+        "text": "CLIMATE VANTA / DOH / PMNP Live Processing REPOSITORY PMNP Live Processing Data-Script Report Template SQL Queries ar-ta"
+      },
+      "explorer": {
+        "w": 200,
+        "h": 821,
+        "t": 52,
+        "l": 170,
+        "text": "EXPLORER ↻ ⌕ 0 files selected for AI context Show excluded files ▸ .claude settings.local.json ▸ .tmp-tests ▸ _support _"
+      },
+      "editor": {
+        "w": 1066,
+        "h": 821,
+        "t": 52,
+        "l": 374,
+        "text": "Open a file from Explorer Open a file from Explorer ◫ ••• VANTA / DOH / PMNP LIVE PROCESSING Open a repository file to"
+      },
+      "ai": {
+        "w": 0,
+        "h": 0,
+        "t": 0,
+        "l": 0,
+        "text": " AI ASSISTANTConnected× PROVIDER ◎Codex✹Claude Code⬡Cursor Agent MODELSelect exact "
+      },
+      "bottom": {
+        "w": 1066,
+        "h": 220,
+        "t": 653,
+        "l": 374,
+        "text": "PROBLEMS 0 OUTPUT TESTS GIT × No problems detected by CLIMATE."
+      },
+      "providerCards": 3,
+      "providerSelect": true,
+      "modelSelect": true,
+      "workspaceSwitcher": [
+        "VANTA",
+        "ARCTIC"
+      ],
+      "navLabels": [
+        "⌂\n                  Dashboard",
+        "Dashboard",
+        "C\n                  Code Workspace",
+        "Code Workspace",
+        "▣\n                  Repositories",
+        "Repositories",
+        "✎\n                  Notebook",
+        "Notebook",
+        "▦\n                  SQL Workspace",
+        "SQL Workspace",
+        "▤\n                  Data Explorer",
+        "Data Explorer",
+        "⬡\n                  DHIS2",
+        "DHIS2",
+        "✉\n                  Email",
+        "Email",
+        "📅\n                  Calendar",
+        "Calendar",
+        "▶\n                  Jobs",
+        "Jobs",
+        "♡\n                  Health",
+        "Health",
+        "AI\n                  Connections",
+        "Connections",
+        "☰\n                  Audit",
+        "Audit",
+        "⚙\n                  Settings",
+        "Settings"
+      ],
+      "climateBrandSurfaces": [
+        {
+          "cls": "sidebar-brand",
+          "tag": "DIV",
+          "box": {
+            "w": 0,
+            "h": 0,
+            "t": 0,
+            "l": 0,
+            "text": " CLIMATE Integrated Intelligence System "
+          }
+        },
+        {
+          "cls": "brand-wordmark",
+          "tag": "STRONG",
+          "box": {
+            "w": 0,
+            "h": 0,
+            "t": 0,
+            "l": 0,
+            "text": "CLIMATE"
+          }
+        },
+        {
+          "cls": "topbar-brand",
+          "tag": "A",
+          "box": {
+            "w": 0,
+            "h": 0,
+            "t": 0,
+            "l": 0,
+            "text": " CLIMATE "
+          }
+        },
+        {
+          "cls": "topbar-brand-name",
+          "tag": "SPAN",
+          "box": {
+            "w": 0,
+            "h": 0,
+            "t": 0,
+            "l": 0,
+            "text": "CLIMATE"
+          }
+        },
+        {
+          "cls": "climate-brand",
+          "tag": "DIV",
+          "box": {
+            "w": 207,
+            "h": 31,
+            "t": 10,
+            "l": 184,
+            "text": "CLIMATE VANTA / DOH / PMNP Live Processing"
+          }
+        },
+        {
+          "cls": "climate-welcome-logo",
+          "tag": "IMG",
+          "box": {
+            "w": 280,
+            "h": 158,
+            "t": 274,
+            "l": 767,
+            "text": ""
+          }
+        }
+      ],
+      "centralHubHits": [],
+      "wcHost": {
+        "w": 1222,
+        "h": 300,
+        "t": 600,
+        "l": 170,
+        "text": "Workspace Console Ctrl+J ▁ ▢ ✕ Problems Output Debug Console Terminal Ports Repository Shell + New Terminal + Split Rest"
+      },
+      "adHost": null,
+      "bodyClasses": "climate-system-shell theme-work enable-motion underline-links",
+      "appShellClasses": "app-shell is-wc-open"
+    }
+  }
+}

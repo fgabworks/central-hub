@@ -19,7 +19,7 @@
 {% if live_warning %}
 <div class="banner banner-error">
   <strong>Live instance selected.</strong>
-  Central Hub remains read-only (<code>ALLOW_DHIS2_WRITES=false</code>). Prefer Stage for exploration when possible.
+  CLIMATE remains read-only (<code>ALLOW_DHIS2_WRITES=false</code>). Prefer Stage for exploration when possible.
 </div>
 {% endif %}
 
@@ -28,7 +28,7 @@
   <div class="panel-body">
     <div class="summary-grid" style="grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:0.85rem">
       <article class="stat-card card">
-        <div class="stat-label">Central Hub environment</div>
+        <div class="stat-label">CLIMATE environment</div>
         <div class="stat-value" style="font-size:1.1rem"><code>{{ hub_environment }}</code></div>
         <div class="stat-sub">App profile (<code>CENTRAL_HUB_ENV</code>) — not the DHIS2 target</div>
       </article>
@@ -136,7 +136,7 @@
             <tr>
               <td><code>specialized_builder</code></td>
               <td>{{ (catalog.builder_modes.specialized_builder if catalog and catalog.builder_modes else 0) or 0 }}</td>
-              <td class="muted">Has a dedicated preview builder in Central Hub</td>
+              <td class="muted">Has a dedicated preview builder in CLIMATE</td>
             </tr>
             <tr>
               <td><code>generic_schema_builder</code></td>

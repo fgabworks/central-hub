@@ -1,0 +1,325 @@
+{
+  "label": "after",
+  "base": "http://127.0.0.1:8091",
+  "checks": {
+    "initial": {
+      "url": "http://127.0.0.1:8091/work/climate",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "sidebar": {
+        "x": 0,
+        "y": 0,
+        "w": 170,
+        "h": 900
+      },
+      "content": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 852
+      },
+      "ai": {
+        "x": 1032,
+        "y": 100,
+        "w": 360,
+        "h": 774
+      },
+      "aiStructure": {
+        "title": "AI ASSISTANT",
+        "conversationTitle": "New chat",
+        "hasNewChat": true,
+        "hasHistory": true,
+        "hasMenu": true,
+        "hasTokenPill": true,
+        "tokenLabel": "0 tokens",
+        "hasUsagePopover": true,
+        "hasRunSummary": false,
+        "hasReviewChanges": false,
+        "hasProviderCards": true,
+        "providerCardsVisible": false,
+        "composerPlaceholder": "Ask a follow-up…",
+        "composerNearBottom": true,
+        "providerSelectNearComposer": true,
+        "messageCount": 0,
+        "hasYouLabel": false,
+        "hasUndoKeepReview": true,
+        "hasDetailsDiagnostics": false,
+        "rawEventLeak": false,
+        "feedTextSample": "CLIMATE coding chatAsk a follow-up about the active repository. Raw provider events stay in Details."
+      },
+      "workbenchClasses": "climate-workbench"
+    },
+    "afterSeed": {
+      "url": "http://127.0.0.1:8091/work/climate",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "sidebar": {
+        "x": 0,
+        "y": 0,
+        "w": 170,
+        "h": 900
+      },
+      "content": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 852
+      },
+      "ai": {
+        "x": 1032,
+        "y": 100,
+        "w": 360,
+        "h": 774
+      },
+      "aiStructure": {
+        "title": "AI ASSISTANT",
+        "conversationTitle": "Fix CLIMATE navigation consistency",
+        "hasNewChat": true,
+        "hasHistory": true,
+        "hasMenu": true,
+        "hasTokenPill": true,
+        "tokenLabel": "12.4k tokens",
+        "hasUsagePopover": true,
+        "hasRunSummary": true,
+        "hasReviewChanges": true,
+        "hasProviderCards": true,
+        "providerCardsVisible": false,
+        "composerPlaceholder": "Ask a follow-up…",
+        "composerNearBottom": true,
+        "providerSelectNearComposer": true,
+        "messageCount": 2,
+        "hasYouLabel": true,
+        "hasUndoKeepReview": true,
+        "hasDetailsDiagnostics": true,
+        "rawEventLeak": false,
+        "feedTextSample": "YYou4:54 AMFix the layout shifting between Dashboard and Code Workspace. Keep the same shell.◎Codex4:55 AMWorked for 8s ▾Updated the shared shell so Dashboard and Code Workspace keep identical chrome."
+      },
+      "workbenchClasses": "climate-workbench"
+    },
+    "afterNewChat": {
+      "url": "http://127.0.0.1:8091/work/climate",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "sidebar": {
+        "x": 0,
+        "y": 0,
+        "w": 170,
+        "h": 900
+      },
+      "content": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 852
+      },
+      "ai": {
+        "x": 1032,
+        "y": 100,
+        "w": 360,
+        "h": 774
+      },
+      "aiStructure": {
+        "title": "AI ASSISTANT",
+        "conversationTitle": "New chat",
+        "hasNewChat": true,
+        "hasHistory": true,
+        "hasMenu": true,
+        "hasTokenPill": true,
+        "tokenLabel": "0 tokens",
+        "hasUsagePopover": true,
+        "hasRunSummary": false,
+        "hasReviewChanges": false,
+        "hasProviderCards": true,
+        "providerCardsVisible": false,
+        "composerPlaceholder": "Ask a follow-up…",
+        "composerNearBottom": true,
+        "providerSelectNearComposer": true,
+        "messageCount": 0,
+        "hasYouLabel": false,
+        "hasUndoKeepReview": true,
+        "hasDetailsDiagnostics": false,
+        "rawEventLeak": false,
+        "feedTextSample": "CLIMATE coding chatAsk a follow-up about the active repository. Raw provider events stay in Details."
+      },
+      "workbenchClasses": "climate-workbench"
+    },
+    "newChatClears": true,
+    "afterHistoryRestore": {
+      "url": "http://127.0.0.1:8091/work/climate",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "sidebar": {
+        "x": 0,
+        "y": 0,
+        "w": 170,
+        "h": 900
+      },
+      "content": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 852
+      },
+      "ai": {
+        "x": 1032,
+        "y": 100,
+        "w": 360,
+        "h": 774
+      },
+      "aiStructure": {
+        "title": "AI ASSISTANT",
+        "conversationTitle": "Fix CLIMATE navigation consistency",
+        "hasNewChat": true,
+        "hasHistory": true,
+        "hasMenu": true,
+        "hasTokenPill": true,
+        "tokenLabel": "12.4k tokens",
+        "hasUsagePopover": true,
+        "hasRunSummary": true,
+        "hasReviewChanges": true,
+        "hasProviderCards": true,
+        "providerCardsVisible": false,
+        "composerPlaceholder": "Ask a follow-up…",
+        "composerNearBottom": true,
+        "providerSelectNearComposer": true,
+        "messageCount": 2,
+        "hasYouLabel": true,
+        "hasUndoKeepReview": true,
+        "hasDetailsDiagnostics": true,
+        "rawEventLeak": false,
+        "feedTextSample": "YYou4:54 AMFix the layout shifting between Dashboard and Code Workspace. Keep the same shell.◎Codex4:55 AMWorked for 8s ▾Updated the shared shell so Dashboard and Code Workspace keep identical chrome."
+      },
+      "workbenchClasses": "climate-workbench"
+    },
+    "historyRestoredTitle": "Fix CLIMATE navigation consistency",
+    "providerSwitchRequests": [],
+    "providerSwitchNoRequest": true,
+    "afterProviderSwitch": {
+      "url": "http://127.0.0.1:8091/work/climate",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "sidebar": {
+        "x": 0,
+        "y": 0,
+        "w": 170,
+        "h": 900
+      },
+      "content": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 852
+      },
+      "ai": {
+        "x": 1032,
+        "y": 100,
+        "w": 360,
+        "h": 774
+      },
+      "aiStructure": {
+        "title": "AI ASSISTANT",
+        "conversationTitle": "Fix CLIMATE navigation consistency",
+        "hasNewChat": true,
+        "hasHistory": true,
+        "hasMenu": true,
+        "hasTokenPill": true,
+        "tokenLabel": "12.4k tokens",
+        "hasUsagePopover": true,
+        "hasRunSummary": true,
+        "hasReviewChanges": true,
+        "hasProviderCards": true,
+        "providerCardsVisible": false,
+        "composerPlaceholder": "Ask a follow-up…",
+        "composerNearBottom": true,
+        "providerSelectNearComposer": true,
+        "messageCount": 2,
+        "hasYouLabel": true,
+        "hasUndoKeepReview": true,
+        "hasDetailsDiagnostics": true,
+        "rawEventLeak": false,
+        "feedTextSample": "YYou4:54 AMFix the layout shifting between Dashboard and Code Workspace. Keep the same shell.◎Codex4:55 AMWorked for 8s ▾Updated the shared shell so Dashboard and Code Workspace keep identical chrome."
+      },
+      "workbenchClasses": "climate-workbench"
+    },
+    "afterMaximize": {
+      "url": "http://127.0.0.1:8091/work/climate",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "sidebar": {
+        "x": 0,
+        "y": 0,
+        "w": 170,
+        "h": 900
+      },
+      "content": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 852
+      },
+      "ai": {
+        "x": 832,
+        "y": 100,
+        "w": 560,
+        "h": 774
+      },
+      "aiStructure": {
+        "title": "AI ASSISTANT",
+        "conversationTitle": "Fix CLIMATE navigation consistency",
+        "hasNewChat": true,
+        "hasHistory": true,
+        "hasMenu": true,
+        "hasTokenPill": true,
+        "tokenLabel": "12.4k tokens",
+        "hasUsagePopover": true,
+        "hasRunSummary": true,
+        "hasReviewChanges": true,
+        "hasProviderCards": true,
+        "providerCardsVisible": false,
+        "composerPlaceholder": "Ask a follow-up…",
+        "composerNearBottom": true,
+        "providerSelectNearComposer": true,
+        "messageCount": 2,
+        "hasYouLabel": true,
+        "hasUndoKeepReview": true,
+        "hasDetailsDiagnostics": true,
+        "rawEventLeak": false,
+        "feedTextSample": "YYou4:54 AMFix the layout shifting between Dashboard and Code Workspace. Keep the same shell.◎Codex4:55 AMWorked for 8s ▾Updated the shared shell so Dashboard and Code Workspace keep identical chrome."
+      },
+      "workbenchClasses": "climate-workbench is-ai-maximized"
+    },
+    "maximizePreserves": true,
+    "shellStable": {
+      "sidebarMatch": true,
+      "topbarH": true,
+      "contentOrigin": true,
+      "contentW": true
+    },
+    "usagePopoverOpen": true,
+    "usagePopoverText": "SESSION USAGE Since 3:57 AM 12,430 Input 9,820 Output 1,950 Cached 660 BY PROVIDER Codex 8,420 Claude 4,010 Cursor 0 Current run 2,140 exact"
+  },
+  "pass": {
+    "newChat": true,
+    "history": true,
+    "noRawEvents": true,
+    "summaryUi": true,
+    "tokenPill": true,
+    "tokenPopover": true,
+    "providerSwitchNoRequest": true,
+    "sameUiAfterProviderSwitch": true,
+    "maximizePreserves": true,
+    "shellStable": true
+  }
+}

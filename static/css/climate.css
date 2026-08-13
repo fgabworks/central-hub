@@ -1,0 +1,978 @@
+:root {
+  --cl-bg: var(--climate-bg, #0f1014);
+  --cl-bg-elevated: var(--climate-bg-elevated, #0b0d12);
+  --cl-panel: var(--climate-panel, #161a20);
+  --cl-panel-2: var(--climate-panel-2, #1c2129);
+  --cl-border: var(--climate-border, #2a3038);
+  --cl-text: var(--climate-text, #f3f5f7);
+  --cl-muted: var(--climate-muted, #8e959e);
+  --cl-font-ui: "Inter", "Segoe UI", system-ui, sans-serif;
+  --cl-font-tech: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  --cl-cyan: var(--climate-arctic-bright, #5ec0ea);
+  --cl-coral: var(--climate-coral, #e23b40);
+}
+.climate-shell {
+  color-scheme: dark;
+  font-family: var(--cl-font-ui);
+  --cl-accent: var(--workspace-accent, var(--climate-arctic, #26c6da));
+}
+.climate-shell button,
+.climate-shell input,
+.climate-shell select,
+.climate-shell textarea {
+  font-family: inherit;
+  color-scheme: dark;
+}
+/* Technical / code surfaces — not chat body copy */
+.climate-scope-controls select,
+.climate-chat-pill select,
+.climate-dd-value,
+.climate-dd-option,
+.climate-tree,
+.climate-file-name,
+.climate-tab-name,
+.climate-breadcrumb,
+.climate-chat-file,
+.climate-git-file,
+#climate-token-label,
+.climate-usage-total,
+.climate-usage-grid b,
+.climate-usage-providers b,
+.climate-usage-foot b,
+.climate-chat-details pre,
+.climate-bottom-body,
+.climate-editor-host textarea,
+.climate-statusbar,
+.climate-run-stats b,
+.climate-ai-message pre,
+.mono {
+  font-family: var(--cl-font-tech);
+}
+.climate-chat-text,
+.climate-chat-meta strong,
+.climate-chat-title,
+.climate-ai-empty,
+.climate-compose-box textarea,
+.climate-run-summary-title,
+.climate-chat-label {
+  font-family: var(--cl-font-ui);
+}
+
+/* Native selects: dark surface (popup may still be OS-native on Windows) */
+.climate-shell select {
+  background-color: var(--cl-panel-2);
+  color: var(--cl-text);
+  border-color: var(--cl-border);
+}
+.climate-shell select option,
+.climate-shell select optgroup {
+  background-color: #161a1f;
+  color: #f3f5f7;
+}
+
+/* Custom CLIMATE dropdown — provider/model only */
+.climate-dd {
+  position: relative;
+  display: block;
+  min-width: 0;
+  width: 100%;
+}
+.climate-dd-native {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  clip: rect(0 0 0 0);
+}
+.climate-dd-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--cl-text);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.climate-dd-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--cl-text);
+}
+.climate-dd-caret {
+  color: var(--cl-muted);
+  font-size: 10px;
+  flex: 0 0 auto;
+}
+.climate-dd-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  max-height: 240px;
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--cl-border);
+  border-radius: 8px;
+  background: #14181e;
+  color: var(--cl-text);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.55);
+  color-scheme: dark;
+}
+.climate-dd-menu[hidden] { display: none !important; }
+.climate-shell .climate-dd-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #e8eaed;
+  padding: 7px 8px;
+  cursor: pointer;
+  font-family: var(--cl-font-tech);
+  font-size: 11px;
+  line-height: 1.3;
+}
+.climate-shell .climate-dd-option:hover,
+.climate-shell .climate-dd-option:focus {
+  background: color-mix(in srgb, var(--cl-accent) 18%, #1c2129);
+  color: #fff;
+  outline: none;
+}
+.climate-shell .climate-dd-option.is-selected {
+  background: color-mix(in srgb, var(--cl-accent) 28%, #1a1f27);
+  color: #fff;
+  box-shadow: inset 2px 0 0 var(--cl-accent);
+}
+.climate-shell .climate-dd-option:disabled,
+.climate-shell .climate-dd-option.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.climate-shell .climate-dd-value {
+  font-family: var(--cl-font-tech);
+}
+.climate-scope-controls .climate-dd-trigger { min-height: 18px; }
+.climate-chat-pill .climate-dd { width: 100%; }
+.climate-chat-pill .climate-dd-trigger { min-height: 20px; }
+
+/* Code Workspace fills the shared shell content slot — never repositions system chrome. */
+.main-column:has(.climate-shell) {
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
+}
+.content:has(.climate-shell) {
+  padding: 0;
+  overflow: hidden;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 0; /* fill remaining main-column under sticky topbar */
+}
+/* Keep content width aligned with Dashboard even if rail markup is briefly missing. */
+.app-shell:has(.climate-shell):not(.has-activity-rail) {
+  padding-right: var(--activity-rail-w, 48px);
+  box-sizing: border-box;
+}
+.climate-shell { height: 100%; min-height: 0; display: grid; grid-template-rows: 38px minmax(0, 1fr) 22px; color: var(--cl-text); background: var(--cl-bg); font: 12px/1.35 var(--cl-font-ui); overflow: hidden; }
+.climate-shell button,.climate-shell input,.climate-shell select,.climate-shell textarea { font:inherit; }
+.climate-titlebar { display:flex; align-items:center; gap:20px; padding:0 9px; border-bottom:1px solid var(--cl-border); background:var(--cl-bg-elevated); }
+.climate-brand { display:flex; align-items:center; gap:8px; min-width:215px; letter-spacing:.04em; }.climate-brand>span:last-child { color:var(--cl-muted); letter-spacing:0; }.climate-mark,.climate-welcome-mark { display:grid; place-items:center; background:var(--cl-panel-2); color:var(--cl-text); font-weight:800; }.climate-mark { width:20px;height:20px;border-radius:4px; }
+.climate-scope-controls { display:flex; align-items:center; gap:6px; flex:1; min-width:0; }.climate-scope-controls label,.climate-ai-controls label { display:flex; align-items:center; gap:6px; color:var(--cl-muted); }.climate-scope-controls select,.climate-ai-controls select { color:var(--cl-text); background:var(--cl-panel-2); border:1px solid var(--cl-border); border-radius:3px; height:26px; padding:0 24px 0 7px; max-width:230px; }
+.climate-title-actions { display:flex; gap:2px; }.climate-icon-btn,.climate-pane-title button,.climate-search-row button { border:0;background:transparent;color:var(--cl-muted);height:26px;min-width:27px;cursor:pointer; }.climate-icon-btn:hover,.climate-pane-title button:hover,.climate-search-row button:hover { color:white;background:var(--cl-panel-2); }
+.climate-workbench { --left:230px;--right:380px;--bottom:190px; min-width:0;min-height:0;display:grid;grid-template-columns:var(--left) 4px minmax(260px,1fr) 4px var(--right);background:var(--cl-bg); }
+.climate-explorer,.climate-ai,.climate-bottom { min-width:0;min-height:0;background:var(--cl-panel); }.climate-explorer { display:flex;flex-direction:column;border-right:1px solid var(--cl-border); }.climate-ai { display:flex;flex-direction:column;border-left:1px solid var(--cl-border); }
+.climate-pane-title { height:34px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;color:var(--cl-muted);font-size:10px;letter-spacing:.12em;border-bottom:1px solid var(--cl-border);background:var(--cl-bg-elevated); }.climate-provider-state { letter-spacing:0;text-transform:none;font-size:10px;color:var(--cl-muted); }.climate-provider-state.is-ok { color:var(--success,#22c55e); }.climate-provider-state.is-error { color:#f08b87; }
+.climate-search-row { display:flex;padding:7px;border-bottom:1px solid var(--cl-border); }.climate-search-row input { min-width:0;flex:1;height:25px;background:var(--cl-bg); border:1px solid var(--cl-border);border-radius:3px;color:var(--cl-text);padding:0 7px; }.climate-context-note { color:var(--cl-muted);font-size:10px;padding:5px 8px;border-bottom:1px solid var(--cl-border); }
+.climate-tree,.climate-search-results { overflow:auto;flex:1;padding:4px 0; }.climate-tree details>summary { cursor:pointer;padding:3px 7px;white-space:nowrap; }.climate-file-row { display:flex;align-items:center;width:100%;height:23px;border:0;background:transparent;color:var(--cl-text);text-align:left;cursor:pointer;white-space:nowrap; }.climate-file-row:hover,.climate-file-row.is-active { background:var(--cl-panel-2); }.climate-file-row.is-active { color:white;box-shadow:inset 2px 0 var(--cl-accent); }.climate-file-row input { margin:0 5px 0 0;accent-color:var(--cl-accent); }.climate-file-name { overflow:hidden;text-overflow:ellipsis; }.climate-git-mark { margin-left:auto;padding-right:7px;color:var(--warning,#f59e0b); }
+.climate-sash { position:relative;background:var(--cl-bg);z-index:4; }.climate-sash:hover,.climate-sash.is-dragging { background:var(--cl-accent); }.climate-sash-left,.climate-sash-right { cursor:col-resize; }.climate-sash-bottom { cursor:row-resize;height:4px; }
+.climate-center { min-width:0;min-height:0;display:grid;grid-template-rows:34px minmax(140px,1fr) 4px var(--bottom);background:var(--cl-bg); }.climate-tabs { display:flex;overflow-x:auto;background:var(--cl-bg-elevated);border-bottom:1px solid var(--cl-border); }.climate-empty-tab { color:var(--cl-muted);padding:9px 12px; }.climate-tab { display:flex;align-items:center;gap:7px;max-width:210px;padding:0 8px 0 11px;border:0;border-right:1px solid var(--cl-border);background:var(--cl-panel);color:var(--cl-muted);cursor:pointer; }.climate-tab.is-active { color:white;background:var(--cl-bg);border-top:1px solid var(--cl-accent); }.climate-tab-name { overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }.climate-tab-dirty { color:var(--cl-accent); }.climate-tab-close { color:var(--cl-muted);padding:2px 3px;border-radius:2px; }.climate-tab-close:hover { background:var(--cl-panel-2);color:white; }
+.climate-editor-host { position:relative;min-width:0;min-height:0; }.climate-editor-host>.monaco-editor { position:absolute!important;inset:0; }.climate-welcome { position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--cl-muted); }.climate-welcome h1 { color:var(--cl-text);letter-spacing:.18em;margin:14px 0 2px;font-size:24px; }.climate-welcome p { color:var(--cl-accent);margin:0 0 16px;text-transform:uppercase;letter-spacing:.16em; }.climate-welcome-mark { width:54px;height:54px;border-radius:12px;font-size:28px;opacity:.8; }.climate-editor-host textarea { position:absolute;inset:0;width:100%;height:100%;resize:none;border:0;outline:0;background:var(--cl-bg);color:var(--cl-text);padding:12px;font:12px/1.55 Consolas,"Courier New",monospace;tab-size:4;display:none; }
+.climate-bottom { overflow:hidden;border-top:1px solid var(--cl-border); }.climate-bottom-tabs { height:31px;display:flex;align-items:center;border-bottom:1px solid var(--cl-border); }.climate-bottom-tabs button { align-self:stretch;border:0;border-bottom:1px solid transparent;background:transparent;color:var(--cl-muted);padding:0 10px;cursor:pointer; }.climate-bottom-tabs button.is-active { color:white;border-color:var(--cl-accent); }.climate-bottom-tabs .count { padding:0 4px;border-radius:8px;background:var(--cl-panel-2); }.climate-spacer { flex:1; }.climate-bottom-body { height:calc(100% - 31px);overflow:auto;padding:8px 10px;white-space:pre-wrap;color:var(--cl-muted); }
+.climate-ai-controls { display:grid;grid-template-columns:1fr;gap:6px;padding:8px;border-bottom:1px solid var(--cl-border); }.climate-ai-controls label { justify-content:space-between; }.climate-ai-controls select { width:215px;max-width:68%; }.climate-context-chips { display:flex;flex-wrap:wrap;gap:4px;padding:7px;border-bottom:1px solid var(--cl-border); }.climate-context-chips label { display:flex;gap:4px;align-items:center;background:var(--cl-panel-2);color:var(--cl-muted);padding:3px 6px;border:1px solid var(--cl-border);border-radius:3px; }.climate-context-chips input { margin:0;accent-color:var(--cl-accent); }
+.climate-ai-feed { flex:1;overflow:auto;padding:10px;white-space:pre-wrap;word-break:break-word; }.climate-ai-empty { height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:7px;color:var(--cl-muted); }.climate-ai-empty strong { color:var(--cl-text); }.climate-ai-message { margin-bottom:10px;padding:8px;border:1px solid var(--cl-border);border-radius:4px;background:var(--cl-panel); }.climate-ai-message.is-user { border-color:var(--accent-border); }.climate-ai-message.is-error { border-color:#75413e;color:#f0aaa6; }.climate-ai-message pre { overflow:auto;background:var(--cl-bg);padding:7px;border:1px solid var(--cl-border); }
+.climate-proposal-actions { display:flex;gap:6px;padding:7px;border-top:1px solid var(--cl-border);background:var(--cl-bg-elevated); }.climate-compose { padding:8px;border-top:1px solid var(--cl-border);background:var(--cl-bg-elevated); }.climate-compose textarea { box-sizing:border-box;width:100%;resize:vertical;max-height:150px;border:1px solid var(--cl-border);border-radius:4px;background:var(--cl-panel-2);color:white;padding:8px;outline:none; }.climate-compose textarea:focus { border-color:var(--cl-accent); }.climate-compose>div { display:flex;align-items:center;gap:6px;margin-top:6px;color:var(--cl-muted); }.climate-compose #climate-run-meta { flex:1; }
+.climate-btn { border:1px solid var(--cl-border);border-radius:3px;background:var(--cl-panel-2);color:var(--cl-text);padding:4px 9px;cursor:pointer; }.climate-btn:hover { background:var(--climate-panel-3,#1e1e24); }.climate-btn-primary { border-color:var(--accent-border-strong);background:var(--workspace-accent,var(--cl-accent));color:white; }.climate-btn:disabled { opacity:.45;cursor:not-allowed; }
+.climate-statusbar { display:flex; align-items:center; gap:16px; padding:0 8px; background:var(--cl-bg-elevated); color:var(--cl-muted); font-size:11px; border-top:1px solid var(--cl-border); }.climate-dialog { width:min(850px,80vw);max-height:80vh;border:1px solid var(--cl-border);background:var(--cl-panel);color:var(--cl-text); }.climate-dialog::backdrop { background:#000a; }.climate-dialog form { display:flex;flex-direction:column;max-height:72vh; }.climate-dialog h2 { font-size:15px; }.climate-dialog pre { min-height:180px;overflow:auto;background:var(--cl-bg);border:1px solid var(--cl-border);padding:10px; }.climate-dialog form>div { display:flex;justify-content:flex-end;gap:6px; }
+.climate-workbench.is-left-closed { grid-template-columns:0 0 minmax(260px,1fr) 4px var(--right); }.climate-workbench.is-left-closed .climate-explorer,.climate-workbench.is-left-closed .climate-sash-left,.climate-workbench.is-ai-closed .climate-ai,.climate-workbench.is-ai-closed .climate-sash-right { display:none; }.climate-workbench.is-ai-closed { grid-template-columns:var(--left) 4px minmax(260px,1fr) 0 0; }.climate-center.is-bottom-closed { grid-template-rows:34px minmax(140px,1fr) 0 0; }.climate-center.is-bottom-closed .climate-bottom,.climate-center.is-bottom-closed .climate-sash-bottom { display:none; }
+@media (max-width:1050px) { .climate-workbench { --left:205px; }.climate-scope-controls label { font-size:0; }.climate-scope-controls select { font-size:11px;max-width:175px; } }
+@media (max-width:760px) { .climate-workbench { grid-template-columns:42px minmax(0,1fr)!important; }.climate-explorer,.climate-ai,.climate-sash-left,.climate-sash-right { display:none!important; }.climate-titlebar { gap:7px; }.climate-brand small { display:none; }.climate-scope-controls label:nth-child(n+3) { display:none; } }
+
+/* v2 mockup alignment: VS Code activity rail, editor chrome, provider cards and Git review. */
+.climate-shell { grid-template-rows:52px minmax(0,1fr) 26px; background:var(--cl-bg); }
+.climate-titlebar { gap:14px; padding:0 14px; background:var(--cl-bg-elevated); }
+.climate-brand { min-width:196px; gap:10px; letter-spacing:0; }
+.climate-brand>span:last-child { display:flex; flex-direction:column; color:var(--cl-text); }
+.climate-brand strong {
+  font-size:14px;
+  line-height:17px;
+  letter-spacing:0.12em;
+  color: var(--cl-text);
+  background: none;
+  -webkit-background-clip: unset;
+  background-clip: unset;
+}
+.climate-brand small { color:var(--cl-muted); font-size:10px; font-weight:400; }
+.climate-brand-mark {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: block;
+  border: 1px solid color-mix(in srgb, var(--cl-accent) 25%, transparent);
+}
+.climate-welcome-logo {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 0.55rem;
+  border-radius: 50%;
+}
+.climate-welcome h1 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  letter-spacing: 0.16em;
+  color: var(--cl-text);
+  background: none;
+  -webkit-background-clip: unset;
+  background-clip: unset;
+}
+.climate-cloud-mark { color:var(--cl-accent); font-size:31px; line-height:1; transform:rotate(180deg); }
+.climate-scope-controls { gap:10px; }
+.climate-scope-controls label { position:relative; display:block; min-width:118px; padding:5px 8px 4px; border:1px solid var(--cl-border); border-radius:6px; background:var(--cl-panel); color:var(--cl-muted); font-size:8px; text-transform:uppercase; letter-spacing:.05em; }
+.climate-scope-controls label:nth-child(1) { min-width:180px; }
+.climate-scope-controls label:nth-child(4) { min-width:150px; }
+.climate-scope-controls select { display:block; width:100%; max-width:none; height:20px; padding:0 19px 0 0; border:0; background:transparent; color:var(--cl-text); font-size:11px; text-transform:none; outline:0; }
+.climate-title-actions { align-items:center; gap:7px; }
+.climate-title-actions .climate-icon-btn { height:30px; min-width:30px; border-radius:4px; font-size:16px; }
+.climate-title-actions .is-run { color:var(--cl-accent); }
+
+.climate-workbench { --left:200px; --right:380px; --bottom:160px; grid-template-columns:var(--left) 4px minmax(300px,1fr) 4px var(--right); }
+.climate-activity { display:flex; flex-direction:column; align-items:stretch; background:var(--cl-bg-elevated); border-right:1px solid var(--cl-border); }
+.climate-activity button { position:relative; height:45px; border:0; background:transparent; color:var(--cl-muted); font-size:20px; cursor:pointer; }
+.climate-activity button:hover { color:var(--cl-text); background:var(--cl-panel); }
+.climate-activity button.is-active { color:var(--cl-text); }
+.climate-activity button.is-active::before { content:""; position:absolute; inset:7px auto 7px 0; width:2px; background:var(--cl-accent); }
+.climate-activity span { flex:1; }
+.climate-explorer { background:var(--cl-panel); }
+.climate-pane-title { height:39px; background:var(--cl-panel); border-color:var(--cl-border); }
+.climate-explorer-sections { border-top:1px solid var(--cl-border); }
+.climate-explorer-sections button { display:block; width:100%; height:27px; border:0; border-bottom:1px solid var(--cl-border); background:var(--cl-panel); color:var(--cl-text); text-align:left; padding:0 10px; font-size:10px; cursor:pointer; }
+.climate-tree details>summary { min-height:22px; color:var(--cl-text); }
+.climate-file-row { height:24px; }
+.climate-file-row.is-active { background:var(--cl-panel-2); box-shadow:inset 2px 0 var(--cl-accent); color:#fff; }
+
+.climate-center { grid-template-rows:36px 28px minmax(140px,1fr) 4px var(--bottom); background:var(--cl-bg); }
+.climate-tabs { background:var(--cl-bg-elevated); }
+.climate-tab { min-width:145px; max-width:220px; background:var(--cl-panel); }
+.climate-tab.is-active { background:var(--cl-bg); border-top:2px solid var(--cl-accent); }
+.climate-breadcrumb { display:flex; align-items:center; gap:6px; min-width:0; padding:0 10px; border-bottom:1px solid var(--cl-border); background:var(--cl-bg); color:var(--cl-muted); font-size:10px; white-space:nowrap; overflow:hidden; }
+.climate-breadcrumb span:first-child { overflow:hidden; text-overflow:ellipsis; }
+.climate-breadcrumb button { border:0; background:transparent; color:var(--cl-muted); cursor:pointer; }
+.climate-editor-host,.climate-editor-host textarea { background:var(--cl-bg); }
+
+.climate-bottom { background:var(--cl-panel); border-color:var(--cl-border); }
+.climate-bottom-tabs { height:34px; background:var(--cl-bg-elevated); }
+.climate-bottom-tabs button { padding:0 12px; text-transform:uppercase; font-size:9px; letter-spacing:.04em; }
+.climate-bottom-body { height:calc(100% - 34px); padding:0; }
+.climate-git-workspace { display:grid; grid-template-columns:180px minmax(0,1fr); height:100%; min-height:0; }
+.climate-git-changes { overflow:auto; border-right:1px solid var(--cl-border); background:var(--cl-panel); }
+.climate-git-title { padding:9px 10px; border-bottom:1px solid var(--cl-border); color:var(--cl-text); }
+.climate-git-file { display:flex; width:100%; gap:7px; padding:6px 9px; border:0; background:transparent; color:var(--cl-muted); text-align:left; cursor:pointer; }
+.climate-git-file:hover,.climate-git-file.is-active { background:var(--cl-panel-2); color:#fff; }
+.climate-git-file b { margin-left:auto; color:var(--warning,#f59e0b); }
+.climate-git-review { display:grid; grid-template-rows:34px minmax(0,1fr) 43px; min-width:0; min-height:0; }
+.climate-git-review-head { display:flex; align-items:center; gap:8px; padding:0 10px; border-bottom:1px solid var(--cl-border); color:var(--cl-text); }
+.climate-git-review-head select { margin-left:auto; height:24px; border:1px solid var(--cl-border); background:var(--cl-panel-2); color:var(--cl-text); }
+.climate-diff-split { display:grid; grid-template-columns:1fr 1fr; overflow:auto; min-height:0; }
+.climate-diff-column { min-width:0; border-right:1px solid var(--cl-border); }
+.climate-diff-column h4 { position:sticky; top:0; margin:0; padding:6px 9px; background:var(--cl-bg-elevated); border-bottom:1px solid var(--cl-border); color:var(--cl-muted); font-weight:400; }
+.climate-diff-column pre { margin:0; padding:8px; min-height:100%; white-space:pre; color:var(--cl-muted); }
+.climate-diff-column.is-before pre { background:linear-gradient(90deg,#351c20aa 0 38px,transparent 38px); }
+.climate-diff-column.is-after pre { background:linear-gradient(90deg,#173626aa 0 38px,transparent 38px); }
+.climate-git-actions { display:flex; justify-content:flex-end; align-items:center; gap:7px; padding:0 10px; border-top:1px solid var(--cl-border); }
+
+.climate-ai { background:var(--cl-panel); }
+.climate-ai .climate-pane-title>span:last-child { display:flex; align-items:center; gap:7px; }
+.climate-ai .climate-pane-title button { min-width:21px; height:21px; }
+.climate-ai-controls { gap:7px; padding:9px 10px; background:var(--cl-panel); }
+.climate-field-label,.climate-conversation-label { color:var(--cl-text); font-size:9px; letter-spacing:.04em; }
+.climate-provider-cards { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+.climate-provider-card { position:relative; min-width:0; height:62px; border:1px solid var(--cl-border); border-radius:5px; background:var(--cl-panel-2); color:var(--cl-text); cursor:pointer; }
+.climate-provider-card:hover { border-color:var(--climate-border-soft,#363b46); }
+.climate-provider-card.is-active { border-color:var(--cl-accent); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--cl-accent) 45%, transparent); color:#fff; }
+.climate-provider-card.is-unavailable { opacity:.52; }
+.climate-provider-card strong { display:block; margin:auto; color:var(--cl-text); font-size:18px; line-height:21px; }
+.climate-provider-card span { display:block; overflow:hidden; text-overflow:ellipsis; font-size:10px; white-space:nowrap; }
+.climate-provider-card i { position:absolute; top:5px; right:5px; width:6px; height:6px; border-radius:50%; background:var(--cl-muted); }
+.climate-provider-card.is-connected i { background:var(--success,#22c55e); }
+.climate-ai-controls label { display:grid; grid-template-columns:auto minmax(0,1fr) 27px; gap:7px; }
+.climate-ai-controls select { width:100%; max-width:none; }
+.climate-ai-controls label button { border:1px solid var(--cl-border); background:var(--cl-panel-2); color:var(--cl-muted); border-radius:4px; }
+.climate-context-chips { display:block; padding:8px 10px 5px; }
+.climate-context-chips>.climate-field-label { margin-bottom:5px; }
+.climate-context-chips label { display:flex; align-items:flex-start; gap:7px; padding:4px 0; border:0; background:transparent; color:var(--cl-text); }
+.climate-context-chips label span { display:flex; flex-direction:column; min-width:0; }
+.climate-context-chips label small { color:var(--cl-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.climate-compose { padding:8px 10px; background:var(--cl-panel); }
+.climate-compose .climate-field-label { margin-bottom:5px; }
+.climate-compose textarea { min-height:62px; background:var(--cl-panel-2); }
+.climate-compose .climate-btn-primary { min-width:115px; background:var(--workspace-accent,var(--cl-accent)); border-color:var(--accent-border-strong); }
+.climate-conversation-label { padding:8px 10px 4px; border-top:1px solid var(--cl-border); }
+.climate-ai-feed { padding:7px 10px; }
+.climate-ai-message { background:var(--cl-panel-2); }
+.climate-proposal-actions { order:10; }
+.climate-statusbar { background:var(--cl-bg-elevated); border-top:1px solid var(--cl-border); color:var(--cl-muted); }
+
+.climate-workbench.is-left-closed { grid-template-columns:0 0 minmax(300px,1fr) 4px var(--right); }
+.climate-workbench.is-ai-closed { grid-template-columns:var(--left) 4px minmax(300px,1fr) 0 0; }
+.climate-workbench.is-left-closed.is-ai-closed { grid-template-columns:0 0 minmax(300px,1fr) 0 0; }
+/* Maximized width is applied via JS (--right ≈ 40–45% of workbench). */
+.climate-excluded-toggle { display:flex; align-items:center; gap:6px; padding:5px 8px; border-bottom:1px solid var(--cl-border); color:var(--cl-muted); font-size:10px; }
+.climate-excluded-toggle input { margin:0; accent-color:var(--cl-accent); }
+.climate-center.is-bottom-closed { grid-template-rows:36px 28px minmax(140px,1fr) 0 0; }
+
+/* CLIMATE AI chat — mockup conversation UI (panel-only; shell unchanged). */
+.climate-ai {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--cl-panel);
+}
+.climate-ai-rail {
+  display: none;
+  flex: 1 1 auto;
+  width: 100%;
+  margin: 0;
+  padding: 12px 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--workspace-accent, var(--cl-accent));
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  align-items: flex-start;
+  justify-content: center;
+}
+.climate-ai-rail:hover {
+  color: var(--cl-text);
+  background: color-mix(in srgb, var(--workspace-accent, var(--cl-accent)) 10%, transparent);
+}
+.climate-ai-full {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 360px;
+  min-height: 0;
+  height: 100%;
+  container-type: inline-size;
+  container-name: climate-ai;
+}
+.climate-workbench.is-ai-collapsed:not(.is-ai-closed) .climate-ai-full {
+  display: none !important;
+}
+.climate-workbench.is-ai-collapsed:not(.is-ai-closed) .climate-ai-rail {
+  display: flex;
+}
+.climate-chat-header {
+  position: relative;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--cl-border);
+  background: var(--cl-bg-elevated);
+}
+.climate-chat-topline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  min-width: 0;
+  padding: 4px 8px 0;
+}
+.climate-chat-label {
+  flex: 0 0 auto;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--cl-muted);
+  font-weight: 600;
+  margin-right: 2px;
+  white-space: nowrap;
+}
+.climate-token-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 1 auto;
+  min-width: 0;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--workspace-accent, #e53935) 55%, var(--cl-border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--workspace-accent, #e53935) 14%, transparent);
+  color: #ffb4b0;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+#climate-token-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.climate-token-pill:hover { filter: brightness(1.08); }
+.climate-chat-new-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  flex: 0 0 auto;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--workspace-accent, #e53935) 50%, var(--cl-border));
+  border-radius: 6px;
+  background: transparent;
+  color: #ff8e88;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.climate-chat-new-btn:hover { background: color-mix(in srgb, var(--workspace-accent, #e53935) 12%, transparent); }
+.climate-chat-new-icon { font-size: 14px; line-height: 1; }
+.climate-usage-popover {
+  left: 8px;
+  right: auto;
+  width: min(280px, calc(100% - 16px));
+  padding: 10px;
+}
+.climate-usage-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--cl-muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+.climate-usage-total {
+  margin: 8px 0 10px;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--cl-text);
+  line-height: 1;
+}
+.climate-usage-grid {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.climate-usage-grid div,
+.climate-usage-providers div,
+.climate-usage-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--cl-muted);
+  font-size: 12px;
+}
+.climate-usage-grid i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 6px;
+}
+.climate-usage-grid i.is-input { background: #5b9bd5; }
+.climate-usage-grid i.is-output { background: #22c55e; }
+.climate-usage-grid i.is-cached { background: #a78bfa; }
+.climate-usage-section {
+  margin: 8px 0 4px;
+  color: var(--cl-muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.climate-usage-providers { display: grid; gap: 4px; }
+.climate-usage-foot {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--cl-border);
+}
+.climate-run-summary {
+  margin-top: 10px;
+  border: 1px solid var(--cl-border);
+  border-radius: 10px;
+  background: var(--cl-bg);
+  overflow: hidden;
+}
+.climate-run-summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--cl-border);
+  background: var(--cl-bg-elevated);
+}
+.climate-run-summary-title { color: var(--cl-text); font-size: 12px; font-weight: 650; }
+.climate-run-status.is-ok { color: #7ddea0; font-size: 11px; }
+.climate-run-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--cl-border);
+}
+.climate-run-stats small { display: block; color: var(--cl-muted); font-size: 9px; margin-bottom: 2px; }
+.climate-run-stats b { color: var(--cl-text); font-size: 12px; }
+.climate-run-stats .is-ok { color: #7ddea0; }
+.climate-run-stats .is-plus { color: #7ddea0; }
+.climate-run-stats .is-minus { color: #f08b87; }
+.climate-run-columns {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 8px;
+  padding: 8px 10px;
+}
+.climate-run-test-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--cl-text);
+  font-size: 12px;
+}
+.climate-muted { color: var(--cl-muted); font-size: 11px; }
+.climate-run-summary .climate-chat-msg-actions {
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--cl-border);
+}
+.climate-chat-title-row .climate-icon-btn { width: 26px; height: 26px; }
+
+/* keep prior topline rules from being fully overridden */
+.climate-chat-topline .climate-provider-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--cl-muted);
+  margin-left: 0;
+}
+.climate-chat-topline .climate-provider-state.is-ok {
+  color: #d7f5df;
+}
+.climate-chat-topline .climate-provider-state.is-ok::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success, #22c55e);
+  display: inline-block;
+}
+.climate-chat-close { min-width: 22px; height: 22px; }
+.climate-chat-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 10px 8px;
+}
+.climate-chat-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--cl-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.climate-chat-actions { display: flex; gap: 4px; flex: 0 0 auto; }
+.climate-chat-actions button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--cl-muted);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+}
+.climate-chat-actions button:hover {
+  color: var(--cl-text);
+  background: var(--cl-panel-2);
+  border-color: var(--cl-border);
+}
+.climate-chat-popover {
+  position: absolute;
+  top: calc(100% - 4px);
+  right: 8px;
+  z-index: 20;
+  width: min(260px, calc(100% - 16px));
+  max-height: 280px;
+  overflow: auto;
+  border: 1px solid var(--cl-border);
+  border-radius: 8px;
+  background: var(--cl-panel);
+  box-shadow: 0 10px 28px rgba(0,0,0,0.45);
+  padding: 6px;
+}
+.climate-chat-popover-title {
+  padding: 6px 8px 4px;
+  color: var(--cl-muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.climate-chat-history-item,
+.climate-chat-menu-panel button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: var(--cl-text);
+  padding: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+}
+.climate-chat-history-item:hover,
+.climate-chat-menu-panel button:hover { background: var(--cl-panel-2); }
+.climate-chat-history-item small { display: block; color: var(--cl-muted); font-size: 10px; margin-top: 2px; }
+.climate-chat-history-item.is-active { box-shadow: inset 2px 0 0 var(--cl-accent); background: var(--cl-panel-2); }
+
+.climate-ai-feed {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 12px 8px;
+  white-space: normal;
+  word-break: break-word;
+}
+.climate-ai-empty {
+  height: 100%;
+  min-height: 140px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 7px;
+  color: var(--cl-muted);
+  padding: 16px;
+}
+.climate-ai-empty strong { color: var(--cl-text); }
+
+.climate-chat-msg {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 8px 10px;
+  margin: 0 0 16px;
+}
+.climate-chat-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--cl-panel-2);
+  border: 1px solid var(--cl-border);
+  color: var(--cl-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.climate-chat-msg.is-assistant .climate-chat-avatar {
+  border-radius: 8px;
+  color: var(--cl-text);
+  background: color-mix(in srgb, var(--cl-accent) 16%, var(--cl-panel-2));
+  border-color: color-mix(in srgb, var(--cl-accent) 35%, var(--cl-border));
+}
+.climate-chat-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  grid-column: 2;
+}
+.climate-chat-meta strong { color: var(--cl-text); font-size: 12px; }
+.climate-chat-meta time { color: var(--cl-muted); font-size: 11px; }
+.climate-chat-body { grid-column: 2; min-width: 0; color: var(--cl-text); font-size: 12.5px; line-height: 1.45; }
+.climate-chat-msg.is-user .climate-chat-body { color: #e8eaed; }
+.climate-chat-msg.is-error .climate-chat-body { color: #f0aaa6; }
+.climate-chat-elapsed {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 4px 0 8px;
+  color: var(--cl-muted);
+  font-size: 11px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+}
+.climate-chat-summary {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+}
+.climate-chat-summary li {
+  position: relative;
+  padding: 2px 0 2px 18px;
+  color: var(--cl-text);
+  font-size: 12px;
+}
+.climate-chat-summary li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: var(--success, #22c55e);
+  font-weight: 700;
+}
+.climate-chat-files {
+  border: 1px solid var(--cl-border);
+  border-radius: 8px;
+  background: var(--cl-bg);
+  padding: 8px 10px;
+  margin: 0 0 10px;
+}
+.climate-chat-files-title {
+  color: var(--cl-muted);
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+.climate-chat-files a,
+.climate-chat-files button.climate-chat-file {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: #9ec3e8;
+  padding: 2px 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+.climate-chat-files a:hover,
+.climate-chat-files button.climate-chat-file:hover { color: #c5ddf5; text-decoration: underline; }
+.climate-chat-msg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.climate-chat-msg-actions .climate-btn {
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+}
+.climate-chat-msg-actions .climate-btn-primary {
+  background: var(--workspace-accent, var(--cl-coral, #e53935));
+  border-color: color-mix(in srgb, var(--workspace-accent, #e53935) 70%, #000);
+}
+.climate-chat-details {
+  margin-top: 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.climate-chat-details > summary {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 0;
+  color: var(--cl-muted);
+  font-size: 11px;
+  list-style: none;
+}
+.climate-chat-details > summary::-webkit-details-marker { display: none; }
+.climate-chat-details pre {
+  margin: 6px 0 0;
+  padding: 8px;
+  max-height: 160px;
+  overflow: auto;
+  border: 1px solid var(--cl-border);
+  border-radius: 6px;
+  background: var(--cl-bg);
+  color: var(--cl-muted);
+  font-size: 11px;
+  white-space: pre-wrap;
+}
+.climate-send-fab {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--workspace-accent, var(--cl-coral, #e53935));
+  color: #fff;
+  cursor: pointer;
+  font-size: 13px;
+}
+.climate-chat-msg-actions .climate-btn {
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.climate-chat-composer {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--cl-border);
+  background: var(--cl-bg-elevated);
+  padding: 10px;
+  position: relative;
+}
+.climate-compose-box {
+  border: 1px solid color-mix(in srgb, var(--workspace-accent, #e53935) 55%, var(--cl-border));
+  border-radius: 10px;
+  background: var(--cl-panel);
+  padding: 8px 8px 6px;
+}
+.climate-compose-box textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 54px;
+  max-height: 140px;
+  resize: vertical;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--cl-text);
+  padding: 2px 4px 6px;
+  font: inherit;
+  line-height: 1.4;
+}
+.climate-compose-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.climate-compose-tool {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--cl-muted);
+  cursor: pointer;
+}
+.climate-compose-tool:hover { color: var(--cl-text); background: var(--cl-panel-2); }
+.climate-send-fab:disabled { opacity: 0.45; cursor: not-allowed; }
+.climate-btn-ghost {
+  background: transparent;
+  color: var(--cl-muted);
+}
+.climate-chat-footer-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.climate-chat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 120px;
+  max-width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--cl-border);
+  border-radius: 8px;
+  background: var(--cl-panel);
+  color: var(--cl-text);
+}
+.climate-chat-pill-model { flex: 1 1 140px; }
+.climate-chat-pill select {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--cl-text);
+  font: inherit;
+  font-size: 11px;
+  outline: 0;
+}
+.climate-chat-pill .climate-dd {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.climate-chat-pill .climate-dd-trigger {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.climate-chat-pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--cl-muted);
+  flex: 0 0 auto;
+}
+.climate-chat-pill-dot.is-ok { background: var(--success, #22c55e); }
+.climate-chat-pill-dot.is-error { background: #f08b87; }
+.climate-context-popover {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: calc(100% - 4px);
+  z-index: 21;
+  border: 1px solid var(--cl-border);
+  border-radius: 8px;
+  background: var(--cl-panel);
+  padding: 8px 10px;
+  box-shadow: 0 -8px 24px rgba(0,0,0,0.35);
+}
+.climate-context-popover label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 5px 0;
+  color: var(--cl-text);
+  font-size: 12px;
+}
+.climate-context-popover label span { display: flex; flex-direction: column; min-width: 0; }
+.climate-context-popover small { color: var(--cl-muted); }
+.climate-provider-cards[hidden],
+.climate-proposal-actions[hidden] { display: none !important; }
+.climate-proposal-actions {
+  display: none;
+}
+
+@media (max-width:1180px) { .climate-scope-controls label:nth-child(2),.climate-scope-controls label:nth-child(4) { display:none; } .climate-workbench { --left:185px; } }
+@media (max-width:760px) { .climate-workbench { grid-template-columns:minmax(0,1fr)!important; } }
+
+/* At minimum usable AI width, tuck secondary header actions into ⋯ — never shrink fonts. */
+@container climate-ai (max-width: 400px) {
+  .climate-chat-secondary { display: none !important; }
+  .climate-chat-new-label { display: none; }
+  .climate-chat-new-btn { padding: 0 7px; }
+  .climate-chat-topline .climate-provider-state-text {
+    max-width: 72px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

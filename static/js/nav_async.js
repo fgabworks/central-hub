@@ -189,7 +189,7 @@
         var otherRows = (data && data.other_python) || [];
         tbody.innerHTML = hubRows.length
           ? hubRows.map(hubProcessRow).join("")
-          : '<tr class="empty-row"><td colspan="10">No Central Hub-owned process found.</td></tr>';
+          : '<tr class="empty-row"><td colspan="10">No CLIMATE-owned process found.</td></tr>';
         if (otherBody) {
           otherBody.innerHTML = otherRows.length
             ? otherRows.map(hubProcessRow).join("")
@@ -198,13 +198,13 @@
         var status = qs("#hub-process-action-status");
         if (status) {
           status.textContent =
-            hubRows.length + " Central Hub process(es), " + otherRows.length +
+            hubRows.length + " CLIMATE process(es), " + otherRows.length +
             " other Python; current PID " + (data.current_pid || "unavailable") + ".";
         }
         return data;
       })
       .catch(function () {
-        tbody.innerHTML = '<tr class="empty-row"><td colspan="10">Central Hub process scan unavailable.</td></tr>';
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="10">CLIMATE process scan unavailable.</td></tr>';
         if (otherBody) {
           otherBody.innerHTML = '<tr class="empty-row"><td colspan="10">Other Python scan unavailable.</td></tr>';
         }
@@ -270,7 +270,7 @@
     var root = qs("[data-central-hub-processes]");
     if (refresh) refresh.addEventListener("click", function () { refreshCentralHubProcesses(); });
     if (stale) stale.addEventListener("click", function () {
-      if (!window.confirm("Stop only verified stale Central Hub instances?")) return;
+      if (!window.confirm("Stop only verified stale CLIMATE instances?")) return;
       postHubProcessAction("/api/health/central-hub-processes/stop-stale", { confirm: true })
         .then(function (data) {
           if (status) status.textContent = "Stopped " + data.count + " stale instance(s).";
@@ -279,7 +279,7 @@
         .catch(function (error) { if (status) status.textContent = error.message; });
     });
     if (restart) restart.addEventListener("click", function () {
-      if (!window.confirm("Restart Central Hub cleanly and verify one healthy listener?")) return;
+      if (!window.confirm("Restart CLIMATE cleanly and verify one healthy listener?")) return;
       postHubProcessAction("/api/health/central-hub-processes/restart", { confirm: true })
         .then(function (data) {
           if (status) status.textContent = "Restart queued for verified PID(s): " + data.target_pids.join(", ") + ".";
@@ -293,7 +293,7 @@
       postHubProcessAction("/api/health/central-hub-processes/stop-central-hub", {
         typed_confirmation: phrase,
       }).then(function (data) {
-        if (status) status.textContent = "Stop Central Hub queued for PID(s): " + data.target_pids.join(", ") + ".";
+        if (status) status.textContent = "Stop CLIMATE queued for PID(s): " + data.target_pids.join(", ") + ".";
         return pollHubAction(data.action_id, 45);
       }).catch(function (error) { if (status) status.textContent = error.message; });
     });
@@ -310,7 +310,7 @@
       var stopBtn = event.target.closest(".hub-proc-stop");
       var restartBtn = event.target.closest(".hub-proc-restart");
       if (stopBtn) {
-        if (!window.confirm("Stop Central Hub-owned PID " + stopBtn.getAttribute("data-pid") + "?")) return;
+        if (!window.confirm("Stop CLIMATE-owned PID " + stopBtn.getAttribute("data-pid") + "?")) return;
         postHubProcessAction("/api/health/central-hub-processes/stop", {
           confirm: true,
           pid: Number(stopBtn.getAttribute("data-pid")),
@@ -326,7 +326,7 @@
         }).catch(function (error) { if (status) status.textContent = error.message; });
       }
       if (restartBtn) {
-        if (!window.confirm("Restart Central Hub Server PID " + restartBtn.getAttribute("data-pid") + "?")) return;
+        if (!window.confirm("Restart CLIMATE Server PID " + restartBtn.getAttribute("data-pid") + "?")) return;
         postHubProcessAction("/api/health/central-hub-processes/restart-one", {
           confirm: true,
           pid: Number(restartBtn.getAttribute("data-pid")),

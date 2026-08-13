@@ -98,6 +98,8 @@
     var skipRoutingOnce = false;
     var activeRouteExecutionId = null;
     var routePollTimer = null;
+    var maximized = false;
+    var maximizedWidth = 0;
 
     function isMobile() {
       return window.matchMedia(MOBILE_MQ).matches;
@@ -107,16 +109,50 @@
       return !!prefs.open && !prefs.minimized;
     }
 
+    function contentAreaWidth() {
+      var rail = document.querySelector(".activity-rail");
+      var sidebar = document.querySelector(".sidebar");
+      var railW = rail ? rail.getBoundingClientRect().width : 48;
+      var sideW = sidebar ? sidebar.getBoundingClientRect().width : 0;
+      return Math.max(640, window.innerWidth - railW - sideW);
+    }
+
+    function computeMaximizedWidth() {
+      /* ~45% of CLIMATE content area (between sidebar and activity rail). */
+      var contentW = contentAreaWidth();
+      var target = Math.round(contentW * 0.45);
+      var rail = document.querySelector(".activity-rail");
+      var railW = rail ? rail.getBoundingClientRect().width : 48;
+      var sidebar = document.querySelector(".sidebar");
+      var sideW = sidebar ? sidebar.getBoundingClientRect().width : 0;
+      /* Leave a usable main workspace (~40% content / min 280px). */
+      var maxAvailable = Math.max(
+        prefs.min_width,
+        window.innerWidth - railW - sideW - Math.max(280, Math.round(contentW * 0.4))
+      );
+      return Math.max(prefs.min_width, Math.min(maxAvailable, target));
+    }
+
     function applyChrome() {
       if (!shell) return;
       var visible = !!prefs.open;
+      var isMax = visible && !prefs.minimized && maximized && !isMobile();
       shell.classList.toggle("is-ad-open", visible);
       shell.classList.toggle("is-ad-minimized", visible && !!prefs.minimized);
       shell.classList.toggle("is-ad-mobile", isMobile());
-      shell.style.setProperty(
-        "--ad-width",
-        Math.max(prefs.min_width, Math.min(prefs.max_width, prefs.width)) + "px"
-      );
+      shell.classList.toggle("is-ad-maximized", isMax);
+      var compactW = Math.max(prefs.min_width, Math.min(prefs.max_width, prefs.width));
+      shell.style.setProperty("--ad-width", compactW + "px");
+      maximizedWidth = computeMaximizedWidth();
+      shell.style.setProperty("--ad-max-width", maximizedWidth + "px");
+      var activeW = !visible
+        ? 0
+        : prefs.minimized
+          ? 48
+          : isMax
+            ? maximizedWidth
+            : compactW;
+      shell.style.setProperty("--ad-active-width", activeW + "px");
       if (panel) panel.hidden = !expanded();
       function syncToggle(btn) {
         if (!btn) return;
@@ -134,6 +170,19 @@
       if (pin) {
         pin.setAttribute("aria-pressed", prefs.pinned ? "true" : "false");
         pin.classList.toggle("is-active", !!prefs.pinned);
+      }
+      var titleEl = $("ad-title");
+      if (titleEl) {
+        titleEl.textContent = isMax
+          ? "AI Assistant (Maximized)"
+          : profile.name || "Assistant";
+      }
+      var maximizeBtn = $("ad-maximize");
+      if (maximizeBtn) {
+        maximizeBtn.setAttribute("aria-pressed", maximized ? "true" : "false");
+        maximizeBtn.setAttribute("aria-label", maximized ? "Restore assistant" : "Maximize assistant");
+        maximizeBtn.title = maximized ? "Restore assistant" : "Maximize assistant";
+        maximizeBtn.textContent = maximized ? "⧉" : "□";
       }
     }
 
@@ -417,7 +466,10 @@
     function setOpen(open) {
       prefs.open = !!open;
       if (prefs.open) prefs.minimized = false;
-      else prefs.minimized = false;
+      else {
+        prefs.minimized = false;
+        maximized = false;
+      }
       applyChrome();
       persistPrefs(true);
       if (prefs.open) ensureAgents();
@@ -433,9 +485,22 @@
 
     function setMinimized(min) {
       prefs.minimized = !!min;
-      if (prefs.minimized) prefs.open = true;
+      if (prefs.minimized) {
+        prefs.open = true;
+        maximized = false;
+      }
       applyChrome();
       persistPrefs(true);
+    }
+
+    function setMaximized(max) {
+      maximized = !!max;
+      if (maximized) {
+        prefs.open = true;
+        prefs.minimized = false;
+        maximizedWidth = computeMaximizedWidth();
+      }
+      applyChrome();
     }
 
     function setContextOpen(open) {
@@ -2231,6 +2296,12 @@
       var closeBtn = $("ad-close");
       if (closeBtn) closeBtn.addEventListener("click", function () { setOpen(false); });
       if (backdrop) backdrop.addEventListener("click", function () { setOpen(false); });
+      var maximizeBtn = $("ad-maximize");
+      if (maximizeBtn) {
+        maximizeBtn.addEventListener("click", function () {
+          setMaximized(!maximized);
+        });
+      }
       var minBtn = $("ad-minimize");
       if (minBtn) {
         minBtn.addEventListener("click", function () {
@@ -2498,7 +2569,14 @@
           var rail = document.querySelector(".activity-rail");
           var railW = rail ? rail.getBoundingClientRect().width : 48;
           var width = Math.round(window.innerWidth - railW - ev.clientX);
-          prefs.width = Math.max(prefs.min_width, Math.min(prefs.max_width, width));
+          if (maximized) {
+            maximizedWidth = Math.max(
+              prefs.min_width,
+              Math.min(computeMaximizedWidth(), width)
+            );
+          } else {
+            prefs.width = Math.max(prefs.min_width, Math.min(prefs.max_width, width));
+          }
           applyChrome();
         });
         window.addEventListener("mouseup", function () {
@@ -2532,6 +2610,7 @@
       ensureAgents: ensureAgents,
       applyChrome: applyChrome,
       openWithPrompt: openWithPrompt,
+      setMaximized: setMaximized,
     };
   }
 

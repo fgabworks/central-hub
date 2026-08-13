@@ -1,0 +1,103 @@
+/* Assistant-only expanded layout. Workspace Console height/maximize remain independent. */
+
+/* Same dock host (#assistant-dock-host.ad-host) — wider right rail, not a modal. */
+.app-shell.is-ad-open.is-ad-maximized:not(.is-ad-mobile).has-activity-rail {
+  padding-right: calc(
+    var(--activity-rail-w, 48px) + var(--ad-active-width, var(--ad-max-width, 45vw))
+  );
+}
+
+.app-shell.is-ad-open.is-ad-maximized:not(.is-ad-mobile) .ad-host {
+  width: var(--ad-active-width, var(--ad-max-width, 45vw));
+  max-width: min(52vw, calc(100vw - var(--sidebar-w, 170px) - var(--activity-rail-w, 48px) - 280px));
+  top: 0;
+  bottom: 0;
+  height: auto;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: -10px 0 28px rgba(0, 0, 0, 0.45);
+  background: #12151a;
+}
+
+.app-shell.is-ad-open.is-ad-maximized:not(.is-ad-mobile) .ad-panel {
+  background: #12151a;
+}
+
+/* Vertical divider between workspace and maximized assistant */
+.app-shell.is-ad-open.is-ad-maximized:not(.is-ad-mobile) .ad-resize {
+  width: 4px;
+  background: rgba(255, 255, 255, 0.06);
+}
+.app-shell.is-ad-open.is-ad-maximized:not(.is-ad-mobile) .ad-resize:hover {
+  background: rgba(196, 64, 64, 0.45);
+}
+
+/* Header: title + window controls (minimize / restore / close) */
+.app-shell.is-ad-open.is-ad-maximized:not(.is-ad-mobile) .ad-header {
+  padding: 0.55rem 0.65rem 0.55rem 0.85rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: #161a20;
+}
+.app-shell.is-ad-open.is-ad-maximized:not(.is-ad-mobile) .ad-title {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 650;
+  color: #e8eef4;
+}
+.app-shell.is-ad-open.is-ad-maximized:not(.is-ad-mobile) .ad-status,
+.app-shell.is-ad-open.is-ad-maximized:not(.is-ad-mobile) #ad-pin,
+.app-shell.is-ad-open.is-ad-maximized:not(.is-ad-mobile) #ad-menu {
+  display: none;
+}
+
+.app-shell.is-ad-open.is-ad-maximized:not(.is-ad-mobile) .ad-tabs {
+  flex: 0 0 auto;
+  padding: 0 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Conversation fills most of the panel; composer stays pinned at bottom */
+.app-shell.is-ad-open.is-ad-maximized:not(.is-ad-mobile) .ad-body {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.app-shell.is-ad-open.is-ad-maximized:not(.is-ad-mobile) .ad-messages,
+.app-shell.is-ad-open.is-ad-maximized:not(.is-ad-mobile) .ad-output {
+  padding: 1rem 1.05rem;
+}
+.app-shell.is-ad-open.is-ad-maximized:not(.is-ad-mobile) .ad-suggestions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+.app-shell.is-ad-open.is-ad-maximized:not(.is-ad-mobile) .ad-suggestion {
+  min-height: 3.1rem;
+  padding: 0.65rem 0.7rem;
+  border-radius: 10px;
+  background: #1a1f26;
+}
+
+/* Compact provider / model / context row above fixed composer */
+.app-shell.is-ad-open.is-ad-maximized:not(.is-ad-mobile) .ad-composer {
+  flex: 0 0 auto;
+  padding: 0.65rem 0.85rem 0.75rem;
+  background: #14181e;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.app-shell.is-ad-open.is-ad-maximized:not(.is-ad-mobile) .ad-composer-selects {
+  gap: 0.35rem;
+}
+.app-shell.is-ad-open.is-ad-maximized:not(.is-ad-mobile) .ad-select-wrap select,
+.app-shell.is-ad-open.is-ad-maximized:not(.is-ad-mobile) .ad-context-add {
+  font-size: 0.72rem;
+  min-height: 1.75rem;
+}
+.app-shell.is-ad-open.is-ad-maximized:not(.is-ad-mobile) .ad-prompt {
+  min-height: 3.4rem;
+  border-radius: 12px;
+}
+.app-shell.is-ad-open.is-ad-maximized:not(.is-ad-mobile) .ad-send {
+  min-width: 2.4rem;
+  min-height: 2.4rem;
+  border-radius: 10px;
+}

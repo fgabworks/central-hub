@@ -1,0 +1,131 @@
+/* CLIMATE global theme — measured against reference mockup; VANTA/ARCTIC change accents only. */
+
+:root {
+  /* Surfaces — cool graphite (reference averages) */
+  --climate-bg: #0d0f12;
+  --climate-bg-elevated: #0b0d12;
+  --climate-panel: #161a1f;
+  --climate-panel-2: #1c2128;
+  --climate-panel-3: #222831;
+  --climate-border: #262b32;
+  --climate-border-soft: #323842;
+
+  /* Text hierarchy */
+  --climate-text: #f5f7f9;
+  --climate-muted: #9ea3a9;
+  --climate-muted-2: #6a7280;
+
+  /* Workspace accents (from reference bright samples) */
+  --climate-arctic: #26c6da;
+  --climate-arctic-bright: #4dd0e1;
+  --climate-arctic-deep: #0097a7;
+  --climate-coral: #e53935;
+  --climate-coral-bright: #ef5350;
+  --climate-coral-deep: #d32f2f;
+  --climate-mid: #9a7ab8;
+
+  --climate-gradient: linear-gradient(
+    90deg,
+    var(--climate-arctic) 0%,
+    var(--climate-mid) 50%,
+    var(--climate-coral) 100%
+  );
+
+  /* Functional (shared) */
+  --success: #22c55e;
+  --success-soft: rgba(34, 197, 94, 0.14);
+  --warning: #f59e0b;
+  --warning-soft: rgba(245, 158, 11, 0.14);
+
+  /* Compact IDE chrome */
+  --radius: 6px;
+  --topbar-h: 48px;
+
+  /* Legacy hub aliases */
+  --charcoal: var(--climate-bg);
+  --panel: var(--climate-panel);
+  --panel-2: var(--climate-panel-2);
+  --border: var(--climate-border);
+  --border-soft: var(--climate-border-soft);
+  --text: var(--climate-text);
+  --muted: var(--climate-muted);
+  --muted-2: var(--climate-muted-2);
+  --cool: var(--climate-muted);
+  --slate: var(--climate-muted-2);
+
+  --crimson: var(--climate-coral-deep);
+  --burgundy: #9e2a2e;
+  --accent-ring: rgba(211, 47, 47, 0.28);
+  --accent-border: rgba(229, 57, 53, 0.45);
+  --accent-border-strong: var(--climate-coral);
+  --accent-soft: rgba(229, 57, 53, 0.14);
+  --accent-soft-strong: rgba(229, 57, 53, 0.26);
+  --accent-text: #ffcdd2;
+  --accent-metallic: var(--climate-coral-deep);
+  --focus-ring: rgba(38, 198, 218, 0.4);
+  --workspace-accent: var(--climate-coral);
+  --workspace-accent-soft: rgba(229, 57, 53, 0.14);
+}
+
+/* VANTA — crimson accents only */
+body.theme-work,
+body.climate-system-shell.theme-work {
+  --crimson: var(--climate-coral-deep);
+  --burgundy: #9e2a2e;
+  --accent-ring: rgba(211, 47, 47, 0.28);
+  --accent-border: rgba(229, 57, 53, 0.48);
+  --accent-border-strong: var(--climate-coral);
+  --accent-soft: rgba(229, 57, 53, 0.16);
+  --accent-soft-strong: rgba(229, 57, 53, 0.28);
+  --accent-text: #ffcdd2;
+  --accent-metallic: var(--climate-coral-deep);
+  --workspace-accent: var(--climate-coral);
+  --workspace-accent-soft: rgba(229, 57, 53, 0.14);
+  --focus-ring: rgba(211, 47, 47, 0.4);
+}
+
+/* ARCTIC — cyan accents only; identical surfaces */
+body.theme-personal,
+body.climate-system-shell.theme-personal {
+  --crimson: var(--climate-arctic-deep);
+  --burgundy: #00838f;
+  --accent-ring: rgba(38, 198, 218, 0.3);
+  --accent-border: rgba(38, 198, 218, 0.48);
+  --accent-border-strong: var(--climate-arctic);
+  --accent-soft: rgba(38, 198, 218, 0.14);
+  --accent-soft-strong: rgba(38, 198, 218, 0.26);
+  --accent-text: #b2ebf2;
+  --accent-metallic: var(--climate-arctic-deep);
+  --workspace-accent: var(--climate-arctic);
+  --workspace-accent-soft: rgba(38, 198, 218, 0.14);
+  --focus-ring: rgba(38, 198, 218, 0.42);
+}
+
+html,
+body.climate-system-shell {
+  background-color: var(--climate-bg);
+  color: var(--climate-text);
+}
+
+/* Premium depth: soft vignette + micro grain (not noisy) */
+body.climate-system-shell {
+  background-image:
+    radial-gradient(ellipse 120% 80% at 50% -20%, rgba(255, 255, 255, 0.028), transparent 55%),
+    radial-gradient(ellipse 60% 50% at 100% 100%, rgba(58, 169, 217, 0.018), transparent 50%),
+    radial-gradient(ellipse 50% 40% at 0% 90%, rgba(214, 50, 55, 0.014), transparent 45%),
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  background-attachment: fixed, fixed, fixed, fixed;
+  background-size: auto, auto, auto, 180px 180px;
+}
+
+a {
+  color: var(--climate-arctic-bright);
+}
+a:hover {
+  color: #8fd4f2;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring, var(--climate-arctic));
+  outline-offset: 2px;
+}

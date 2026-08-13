@@ -178,7 +178,7 @@
         "<p class='muted'>" + esc((data.population_compatibility || {}).note) + "</p></article>" +
         "<article class='pnc-card'><h3>Report Generation / Sources</h3>" +
         "<p class='muted'>DHIS2 Report UID</p><code class='pnc-uid' data-copy='" + esc(rep.uid) + "'>" + esc(rep.uid) + "</code>" +
-        "<p class='muted'>Central Hub Report</p><code class='pnc-uid' data-copy='" + esc(rep.central_hub_report_id) + "'>" + esc(rep.central_hub_report_id) + "</code>" +
+        "<p class='muted'>CLIMATE Report</p><code class='pnc-uid' data-copy='" + esc(rep.central_hub_report_id) + "'>" + esc(rep.central_hub_report_id) + "</code>" +
         "<p class='muted'>Extraction: " + esc(rep.extraction_method) + "</p></article>";
       var btn = $("#pnc-goto-ind");
       if (btn) btn.addEventListener("click", function () {

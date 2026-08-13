@@ -1,0 +1,874 @@
+{
+  "label": "ref-after",
+  "base": "http://127.0.0.1:8080",
+  "refPath": "C:\\Users\\fjdga\\.cursor\\projects\\c-PMNP-personal-central-hub\\assets\\c__Users_fjdga_AppData_Roaming_Cursor_User_workspaceStorage_0990eee19f2598856270d44f0f78fb62_images_image-d530a99f-d73c-4c57-beab-d2cf60ea1b53.png",
+  "reference": {
+    "size": {
+      "w": 1024,
+      "h": 576
+    },
+    "pageBg": {
+      "r": 18,
+      "g": 21,
+      "b": 26,
+      "hex": "#12151a"
+    },
+    "sidebarBg": {
+      "r": 9,
+      "g": 18,
+      "b": 25,
+      "hex": "#091219"
+    },
+    "headerBg": {
+      "r": 12,
+      "g": 13,
+      "b": 17,
+      "hex": "#0c0d11"
+    },
+    "cardBg": {
+      "r": 15,
+      "g": 20,
+      "b": 24,
+      "hex": "#0f1418"
+    },
+    "cardBg2": {
+      "r": 10,
+      "g": 13,
+      "b": 18,
+      "hex": "#0a0d12"
+    },
+    "borderLikely": {
+      "r": 59,
+      "g": 132,
+      "b": 105,
+      "hex": "#3b8469"
+    },
+    "vantaAccent": {
+      "r": 30,
+      "g": 18,
+      "b": 18,
+      "hex": "#1e1212"
+    },
+    "arcticAccent": {
+      "r": 13,
+      "g": 22,
+      "b": 29,
+      "hex": "#0d161d"
+    },
+    "textPrimary": {
+      "r": 15,
+      "g": 19,
+      "b": 22,
+      "hex": "#0f1316"
+    },
+    "mutedText": {
+      "r": 11,
+      "g": 12,
+      "b": 14,
+      "hex": "#0b0c0e"
+    }
+  },
+  "pages": {
+    "vanta": {
+      "url": "http://127.0.0.1:8080/work",
+      "bodyClass": "climate-system-shell theme-work",
+      "tokens": {
+        "--climate-bg": "#0f1014",
+        "--climate-bg-elevated": "#0b0d12",
+        "--climate-panel": "#161a20",
+        "--climate-panel-2": "#1c2129",
+        "--climate-border": "#2a3038",
+        "--climate-text": "#f3f5f7",
+        "--climate-muted": "#8e959e",
+        "--workspace-accent": "#e23b40",
+        "--climate-coral": "#e23b40",
+        "--climate-arctic": "#3aa9d9",
+        "--success": "#22c55e",
+        "--warning": "#f59e0b",
+        "--sidebar-w": "170px",
+        "--topbar-h": "48px",
+        "--radius": "6px",
+        "--charcoal": "#0f1014",
+        "--panel": "#161a20",
+        "--border": "#2a3038",
+        "--text": "#f3f5f7",
+        "--muted": "#8e959e"
+      },
+      "body": {
+        "bg": "rgb(15, 16, 20)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "w": 1440,
+        "h": 1400,
+        "gap": "normal"
+      },
+      "sidebar": {
+        "bg": "rgb(11, 13, 18)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "w": 170,
+        "h": 900,
+        "gap": "normal"
+      },
+      "topbar": {
+        "bg": "color(srgb 0.0588235 0.0627451 0.0784314 / 0.94)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "w": 1222,
+        "h": 48,
+        "gap": "14px"
+      },
+      "content": {
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "w": 1222,
+        "h": 1352,
+        "gap": "normal"
+      },
+      "card": {
+        "bg": "rgb(22, 26, 32)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(42, 48, 56)",
+        "radius": "6px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "w": 228,
+        "h": 90,
+        "gap": "1.68px"
+      },
+      "cards": [
+        {
+          "bg": "rgb(22, 26, 32)",
+          "color": "rgb(243, 245, 247)",
+          "border": "rgb(42, 48, 56)",
+          "radius": "6px",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "w": 228,
+          "h": 90,
+          "gap": "1.68px"
+        },
+        {
+          "bg": "rgb(22, 26, 32)",
+          "color": "rgb(243, 245, 247)",
+          "border": "rgb(42, 48, 56)",
+          "radius": "6px",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "w": 228,
+          "h": 90,
+          "gap": "1.68px"
+        },
+        {
+          "bg": "rgb(22, 26, 32)",
+          "color": "rgb(243, 245, 247)",
+          "border": "rgb(42, 48, 56)",
+          "radius": "6px",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "w": 228,
+          "h": 90,
+          "gap": "1.68px"
+        },
+        {
+          "bg": "rgb(22, 26, 32)",
+          "color": "rgb(243, 245, 247)",
+          "border": "rgb(42, 48, 56)",
+          "radius": "6px",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "w": 228,
+          "h": 90,
+          "gap": "1.68px"
+        },
+        {
+          "bg": "rgb(22, 26, 32)",
+          "color": "rgb(243, 245, 247)",
+          "border": "rgb(42, 48, 56)",
+          "radius": "6px",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "w": 228,
+          "h": 90,
+          "gap": "1.68px"
+        },
+        {
+          "bg": "rgb(22, 26, 32)",
+          "color": "rgb(243, 245, 247)",
+          "border": "rgba(239, 68, 68, 0.5)",
+          "radius": "6px",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "w": 749,
+          "h": 207,
+          "gap": "normal"
+        }
+      ],
+      "contentGap": null,
+      "navActive": {
+        "bg": "rgb(34, 40, 49)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "5px",
+        "fontSize": "11px",
+        "fontWeight": "500",
+        "w": 157,
+        "h": 32,
+        "gap": "7px"
+      },
+      "workspaceActive": {
+        "bg": "rgba(226, 59, 64, 0.16)",
+        "color": "rgb(255, 196, 198)",
+        "border": "rgba(226, 59, 64, 0.48)",
+        "radius": "5px",
+        "fontSize": "11px",
+        "fontWeight": "650",
+        "w": 76,
+        "h": 36,
+        "gap": "normal"
+      },
+      "brandMark": {
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(255, 255, 255)",
+        "border": "rgba(61, 193, 255, 0.2)",
+        "radius": "50%",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "w": 22,
+        "h": 22,
+        "gap": "normal"
+      },
+      "brandText": {
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "12px",
+        "fontWeight": "750",
+        "w": 58,
+        "h": 13,
+        "gap": "normal",
+        "text": "CLIMATE"
+      },
+      "climateShell": null,
+      "climateExplorer": null,
+      "climateCenter": null,
+      "climateAi": null,
+      "climateTitlebar": null
+    },
+    "arctic": {
+      "url": "http://127.0.0.1:8080/personal",
+      "bodyClass": "climate-system-shell theme-personal",
+      "tokens": {
+        "--climate-bg": "#0f1014",
+        "--climate-bg-elevated": "#0b0d12",
+        "--climate-panel": "#161a20",
+        "--climate-panel-2": "#1c2129",
+        "--climate-border": "#2a3038",
+        "--climate-text": "#f3f5f7",
+        "--climate-muted": "#8e959e",
+        "--workspace-accent": "#3aa9d9",
+        "--climate-coral": "#e23b40",
+        "--climate-arctic": "#3aa9d9",
+        "--success": "#22c55e",
+        "--warning": "#f59e0b",
+        "--sidebar-w": "170px",
+        "--topbar-h": "48px",
+        "--radius": "6px",
+        "--charcoal": "#0f1014",
+        "--panel": "#161a20",
+        "--border": "#2a3038",
+        "--text": "#f3f5f7",
+        "--muted": "#8e959e"
+      },
+      "body": {
+        "bg": "rgb(15, 16, 20)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "w": 1440,
+        "h": 900,
+        "gap": "normal"
+      },
+      "sidebar": {
+        "bg": "rgb(11, 13, 18)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "w": 170,
+        "h": 900,
+        "gap": "normal"
+      },
+      "topbar": {
+        "bg": "color(srgb 0.0588235 0.0627451 0.0784314 / 0.94)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "w": 1222,
+        "h": 48,
+        "gap": "14px"
+      },
+      "content": {
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "w": 1222,
+        "h": 817,
+        "gap": "normal"
+      },
+      "card": {
+        "bg": "rgb(22, 26, 32)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(42, 48, 56)",
+        "radius": "6px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "w": 287,
+        "h": 90,
+        "gap": "1.68px"
+      },
+      "cards": [
+        {
+          "bg": "rgb(22, 26, 32)",
+          "color": "rgb(243, 245, 247)",
+          "border": "rgb(42, 48, 56)",
+          "radius": "6px",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "w": 287,
+          "h": 90,
+          "gap": "1.68px"
+        },
+        {
+          "bg": "rgb(22, 26, 32)",
+          "color": "rgb(243, 245, 247)",
+          "border": "rgb(42, 48, 56)",
+          "radius": "6px",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "w": 287,
+          "h": 90,
+          "gap": "1.68px"
+        },
+        {
+          "bg": "rgb(22, 26, 32)",
+          "color": "rgb(243, 245, 247)",
+          "border": "rgb(42, 48, 56)",
+          "radius": "6px",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "w": 287,
+          "h": 90,
+          "gap": "1.68px"
+        },
+        {
+          "bg": "rgb(22, 26, 32)",
+          "color": "rgb(243, 245, 247)",
+          "border": "rgb(42, 48, 56)",
+          "radius": "6px",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "w": 287,
+          "h": 90,
+          "gap": "1.68px"
+        },
+        {
+          "bg": "rgb(22, 26, 32)",
+          "color": "rgb(243, 245, 247)",
+          "border": "rgb(42, 48, 56)",
+          "radius": "6px",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "w": 749,
+          "h": 178,
+          "gap": "normal"
+        },
+        {
+          "bg": "rgb(22, 26, 32)",
+          "color": "rgb(243, 245, 247)",
+          "border": "rgb(42, 48, 56)",
+          "radius": "6px",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "w": 749,
+          "h": 424,
+          "gap": "normal"
+        }
+      ],
+      "contentGap": null,
+      "navActive": {
+        "bg": "rgb(34, 40, 49)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "5px",
+        "fontSize": "11px",
+        "fontWeight": "500",
+        "w": 157,
+        "h": 32,
+        "gap": "7px"
+      },
+      "workspaceActive": {
+        "bg": "rgba(58, 169, 217, 0.14)",
+        "color": "rgb(183, 230, 248)",
+        "border": "rgba(58, 169, 217, 0.48)",
+        "radius": "5px",
+        "fontSize": "11px",
+        "fontWeight": "650",
+        "w": 76,
+        "h": 36,
+        "gap": "normal"
+      },
+      "brandMark": {
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(255, 255, 255)",
+        "border": "rgba(61, 193, 255, 0.2)",
+        "radius": "50%",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "w": 22,
+        "h": 22,
+        "gap": "normal"
+      },
+      "brandText": {
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "12px",
+        "fontWeight": "750",
+        "w": 58,
+        "h": 13,
+        "gap": "normal",
+        "text": "CLIMATE"
+      },
+      "climateShell": null,
+      "climateExplorer": null,
+      "climateCenter": null,
+      "climateAi": null,
+      "climateTitlebar": null
+    },
+    "code_workspace": {
+      "url": "http://127.0.0.1:8080/work/climate",
+      "bodyClass": "climate-system-shell theme-work enable-motion underline-links",
+      "tokens": {
+        "--climate-bg": "#0f1014",
+        "--climate-bg-elevated": "#0b0d12",
+        "--climate-panel": "#161a20",
+        "--climate-panel-2": "#1c2129",
+        "--climate-border": "#2a3038",
+        "--climate-text": "#f3f5f7",
+        "--climate-muted": "#8e959e",
+        "--workspace-accent": "#e23b40",
+        "--climate-coral": "#e23b40",
+        "--climate-arctic": "#3aa9d9",
+        "--success": "#22c55e",
+        "--warning": "#f59e0b",
+        "--sidebar-w": "170px",
+        "--topbar-h": "48px",
+        "--radius": "6px",
+        "--charcoal": "#0f1014",
+        "--panel": "#161a20",
+        "--border": "#2a3038",
+        "--text": "#f3f5f7",
+        "--muted": "#8e959e"
+      },
+      "body": {
+        "bg": "rgb(15, 16, 20)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "w": 1440,
+        "h": 900,
+        "gap": "normal"
+      },
+      "sidebar": {
+        "bg": "rgb(11, 13, 18)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "w": 170,
+        "h": 900,
+        "gap": "normal"
+      },
+      "topbar": {
+        "bg": "color(srgb 0.0588235 0.0627451 0.0784314 / 0.94)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "w": 0,
+        "h": 0,
+        "gap": "14px"
+      },
+      "content": {
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "w": 1270,
+        "h": 899,
+        "gap": "normal"
+      },
+      "card": null,
+      "cards": [],
+      "contentGap": null,
+      "navActive": {
+        "bg": "rgb(34, 40, 49)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "5px",
+        "fontSize": "11px",
+        "fontWeight": "500",
+        "w": 157,
+        "h": 32,
+        "gap": "7px"
+      },
+      "workspaceActive": {
+        "bg": "rgba(226, 59, 64, 0.16)",
+        "color": "rgb(255, 196, 198)",
+        "border": "rgba(226, 59, 64, 0.48)",
+        "radius": "5px",
+        "fontSize": "11px",
+        "fontWeight": "650",
+        "w": 76,
+        "h": 36,
+        "gap": "normal"
+      },
+      "brandMark": {
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(255, 255, 255)",
+        "border": "rgba(61, 193, 255, 0.2)",
+        "radius": "50%",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "w": 0,
+        "h": 0,
+        "gap": "normal"
+      },
+      "brandText": {
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "12px",
+        "fontWeight": "750",
+        "w": 0,
+        "h": 0,
+        "gap": "normal",
+        "text": "CLIMATE"
+      },
+      "climateShell": {
+        "bg": "rgb(15, 16, 20)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "12px",
+        "fontWeight": "400",
+        "w": 1270,
+        "h": 899,
+        "gap": "normal"
+      },
+      "climateExplorer": {
+        "bg": "rgb(22, 26, 32)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "12px",
+        "fontWeight": "400",
+        "w": 200,
+        "h": 821,
+        "gap": "normal"
+      },
+      "climateCenter": {
+        "bg": "rgb(15, 16, 20)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "12px",
+        "fontWeight": "400",
+        "w": 770,
+        "h": 821,
+        "gap": "normal"
+      },
+      "climateAi": {
+        "bg": "rgb(22, 26, 32)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "12px",
+        "fontWeight": "400",
+        "w": 292,
+        "h": 821,
+        "gap": "normal"
+      },
+      "climateTitlebar": {
+        "bg": "rgb(11, 13, 18)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "12px",
+        "fontWeight": "400",
+        "w": 1270,
+        "h": 52,
+        "gap": "14px"
+      }
+    },
+    "code_workspace_arctic": {
+      "url": "http://127.0.0.1:8080/personal/climate",
+      "bodyClass": "climate-system-shell theme-personal enable-motion underline-links",
+      "tokens": {
+        "--climate-bg": "#0f1014",
+        "--climate-bg-elevated": "#0b0d12",
+        "--climate-panel": "#161a20",
+        "--climate-panel-2": "#1c2129",
+        "--climate-border": "#2a3038",
+        "--climate-text": "#f3f5f7",
+        "--climate-muted": "#8e959e",
+        "--workspace-accent": "#3aa9d9",
+        "--climate-coral": "#e23b40",
+        "--climate-arctic": "#3aa9d9",
+        "--success": "#22c55e",
+        "--warning": "#f59e0b",
+        "--sidebar-w": "170px",
+        "--topbar-h": "48px",
+        "--radius": "6px",
+        "--charcoal": "#0f1014",
+        "--panel": "#161a20",
+        "--border": "#2a3038",
+        "--text": "#f3f5f7",
+        "--muted": "#8e959e"
+      },
+      "body": {
+        "bg": "rgb(15, 16, 20)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "w": 1440,
+        "h": 900,
+        "gap": "normal"
+      },
+      "sidebar": {
+        "bg": "rgb(11, 13, 18)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "w": 170,
+        "h": 900,
+        "gap": "normal"
+      },
+      "topbar": {
+        "bg": "color(srgb 0.0588235 0.0627451 0.0784314 / 0.94)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "w": 0,
+        "h": 0,
+        "gap": "14px"
+      },
+      "content": {
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "w": 1270,
+        "h": 899,
+        "gap": "normal"
+      },
+      "card": null,
+      "cards": [],
+      "contentGap": null,
+      "navActive": {
+        "bg": "rgb(34, 40, 49)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "5px",
+        "fontSize": "11px",
+        "fontWeight": "500",
+        "w": 157,
+        "h": 32,
+        "gap": "7px"
+      },
+      "workspaceActive": {
+        "bg": "rgba(58, 169, 217, 0.14)",
+        "color": "rgb(183, 230, 248)",
+        "border": "rgba(58, 169, 217, 0.48)",
+        "radius": "5px",
+        "fontSize": "11px",
+        "fontWeight": "650",
+        "w": 76,
+        "h": 36,
+        "gap": "normal"
+      },
+      "brandMark": {
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(255, 255, 255)",
+        "border": "rgba(61, 193, 255, 0.2)",
+        "radius": "50%",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "w": 0,
+        "h": 0,
+        "gap": "normal"
+      },
+      "brandText": {
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "12px",
+        "fontWeight": "750",
+        "w": 0,
+        "h": 0,
+        "gap": "normal",
+        "text": "CLIMATE"
+      },
+      "climateShell": {
+        "bg": "rgb(15, 16, 20)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "12px",
+        "fontWeight": "400",
+        "w": 1270,
+        "h": 899,
+        "gap": "normal"
+      },
+      "climateExplorer": {
+        "bg": "rgb(22, 26, 32)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "12px",
+        "fontWeight": "400",
+        "w": 200,
+        "h": 821,
+        "gap": "normal"
+      },
+      "climateCenter": {
+        "bg": "rgb(15, 16, 20)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "12px",
+        "fontWeight": "400",
+        "w": 770,
+        "h": 821,
+        "gap": "normal"
+      },
+      "climateAi": {
+        "bg": "rgb(22, 26, 32)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "12px",
+        "fontWeight": "400",
+        "w": 292,
+        "h": 821,
+        "gap": "normal"
+      },
+      "climateTitlebar": {
+        "bg": "rgb(11, 13, 18)",
+        "color": "rgb(243, 245, 247)",
+        "border": "rgb(243, 245, 247)",
+        "radius": "0px",
+        "fontSize": "12px",
+        "fontWeight": "400",
+        "w": 1270,
+        "h": 52,
+        "gap": "14px"
+      }
+    }
+  },
+  "compare": {
+    "surfacesIdentical": true,
+    "accentsDiffer": true,
+    "sidebarWidth": 170,
+    "topbarHeight": 48,
+    "cardRadius": "6px",
+    "brandMark": {
+      "bg": "rgba(0, 0, 0, 0)",
+      "color": "rgb(255, 255, 255)",
+      "border": "rgba(61, 193, 255, 0.2)",
+      "radius": "50%",
+      "fontSize": "14px",
+      "fontWeight": "400",
+      "w": 22,
+      "h": 22,
+      "gap": "normal"
+    },
+    "vsRef": {
+      "refPageBg": {
+        "r": 18,
+        "g": 21,
+        "b": 26,
+        "hex": "#12151a"
+      },
+      "livePageBg": "rgb(15, 16, 20)",
+      "refSidebar": {
+        "r": 9,
+        "g": 18,
+        "b": 25,
+        "hex": "#091219"
+      },
+      "liveSidebar": "rgb(11, 13, 18)",
+      "refCard": {
+        "r": 15,
+        "g": 20,
+        "b": 24,
+        "hex": "#0f1418"
+      },
+      "liveCard": "rgb(22, 26, 32)",
+      "refVanta": {
+        "r": 30,
+        "g": 18,
+        "b": 18,
+        "hex": "#1e1212"
+      },
+      "liveVantaAccent": "#e23b40",
+      "refArctic": {
+        "r": 13,
+        "g": 22,
+        "b": 29,
+        "hex": "#0d161d"
+      },
+      "liveArcticAccent": "#3aa9d9"
+    }
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "label": "before",
+  "base": "http://127.0.0.1:8091",
+  "checks": {
+    "initial": {
+      "url": "http://127.0.0.1:8091/work/climate",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "sidebar": {
+        "x": 0,
+        "y": 0,
+        "w": 170,
+        "h": 900
+      },
+      "content": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 852
+      },
+      "ai": {
+        "x": 1100,
+        "y": 100,
+        "w": 292,
+        "h": 774
+      },
+      "aiStructure": {
+        "title": "EXPLORER↻",
+        "conversationTitle": "",
+        "hasNewChat": false,
+        "hasHistory": false,
+        "hasMenu": false,
+        "hasProviderCards": true,
+        "providerCardsVisible": true,
+        "composerPlaceholder": "Ask about the active repository…",
+        "composerNearBottom": false,
+        "providerSelectNearComposer": false,
+        "messageCount": 0,
+        "hasYouLabel": false,
+        "hasUndoKeepReview": false,
+        "hasDetailsDiagnostics": false,
+        "rawEventLeak": false,
+        "feedTextSample": "Provider-neutral coding assistantSelect an authenticated provider and exact model. Proposed edits require review."
+      },
+      "workbenchClasses": "climate-workbench"
+    }
+  }
+}

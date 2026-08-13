@@ -123,14 +123,20 @@ class PerformanceRegressionTests(unittest.TestCase):
         connections = self.app.config["AGENT_CENTER"].connections
         with mock.patch.object(
             connections,
+            "list_coding_clis",
+            wraps=connections.list_coding_clis,
+        ) as coding_mock, mock.patch.object(
+            connections,
             "list",
             wraps=connections.list,
         ) as list_mock:
             resp = self.client.get("/system/ai-connections")
         self.assertEqual(resp.status_code, 200)
-        list_mock.assert_called()
-        kwargs = list_mock.call_args.kwargs
+        coding_mock.assert_called()
+        kwargs = coding_mock.call_args.kwargs
         self.assertFalse(kwargs.get("probe", True))
+        list_mock.assert_called()
+        self.assertFalse(list_mock.call_args.kwargs.get("probe", True))
 
     def test_cached_navigation_p95_budget(self) -> None:
         routes = [

@@ -5,26 +5,29 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=mission-control-3">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/climate-theme.css') }}?v=5">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/assistant_dock_maximize.css') }}?v=2">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/climate-shell.css') }}?v=8">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/climate-mark.png') }}">
   {% block head_extra %}{% endblock %}
 </head>
-<body class="theme-{{ workspace|default('work') }}">
-  {% from "macros.html" import brand_icon %}
-  <div class="app-shell has-activity-rail{% if assistant_dock and not skip_assistant_dock|default(false) %} has-ad-dock{% endif %}{% if assistant_dock and assistant_dock.prefs.open and not assistant_dock.prefs.minimized %} is-ad-open{% elif assistant_dock and assistant_dock.prefs.minimized %} is-ad-open is-ad-minimized{% endif %}{% if workspace_console and workspace_console.prefs.open and not workspace_console.prefs.minimized %} is-wc-open{% elif workspace_console and workspace_console.prefs.minimized %} is-wc-open is-wc-minimized{% endif %}{% if workspace_console and workspace_console.prefs.maximized %} is-wc-maximized{% endif %}"
-       style="{% if assistant_dock %}--ad-width: {{ assistant_dock.prefs.width }}px;{% endif %}{% if workspace_console %}--wc-height: {{ workspace_console.prefs.height }}px;{% endif %}">
+<body class="climate-system-shell theme-{{ workspace|default('work') }}">
+  {% from "macros.html" import brand_icon, brand_logo %}
+  {# Code Workspace keeps Dashboard system chrome (pixel-stable shared shell). #}
+  {% set climate_shared_shell = request.endpoint in ('work_climate', 'personal_climate') %}
+  {% set show_activity_rail = climate_shared_shell or (not skip_activity_rail|default(false)) %}
+  <div class="app-shell{% if show_activity_rail %} has-activity-rail{% endif %}{% if assistant_dock and not skip_assistant_dock|default(false) %} has-ad-dock{% endif %}{% if assistant_dock and assistant_dock.prefs.open and not assistant_dock.prefs.minimized %} is-ad-open{% elif assistant_dock and assistant_dock.prefs.minimized %} is-ad-open is-ad-minimized{% endif %}{% if workspace_console and not skip_workspace_console|default(false) and workspace_console.prefs.open and not workspace_console.prefs.minimized %} is-wc-open{% elif workspace_console and not skip_workspace_console|default(false) and workspace_console.prefs.minimized %} is-wc-open is-wc-minimized{% endif %}{% if workspace_console and not skip_workspace_console|default(false) and workspace_console.prefs.maximized %} is-wc-maximized{% endif %}"
+       style="{% if assistant_dock %}--ad-width: {{ assistant_dock.prefs.width }}px;{% endif %}{% if workspace_console and not skip_workspace_console|default(false) %}--wc-height: {{ workspace_console.prefs.height }}px;{% endif %}">
     <aside class="sidebar" id="hub-sidebar" aria-label="Primary navigation">
       <div class="sidebar-brand">
-        <div class="brand-mark">{{ brand_icon() }}</div>
-        <div class="brand-text">
-          <strong>{{ app_name }}</strong>
-          <span>Personal Repository Control Center</span>
-        </div>
+        {{ brand_logo(show_wordmark=true, mark_size=22, show_tagline=true) }}
       </div>
 
       <div class="workspace-switcher" role="group" aria-label="Workspace">
         {% for ws in workspaces %}
           <a
             class="workspace-btn{% if workspace == ws %} is-active{% endif %}"
-            href="{{ url_for('switch_workspace', workspace_name=ws) }}"
+            href="{% if request.endpoint %}{{ url_for('switch_workspace', workspace_name=ws, from_endpoint=request.endpoint) }}{% else %}{{ url_for('switch_workspace', workspace_name=ws) }}{% endif %}"
             {% if workspace == ws %}aria-current="true"{% endif %}
             title="{{ workspace_labels[ws] }}"
           ><span class="workspace-btn-label">{{ workspace_labels[ws] }}</span></a>
@@ -111,8 +114,8 @@
           <span class="sidebar-collapse-label">Collapse</span>
         </button>
         <div class="sidebar-footer-meta">
-          <strong>Central Hub v{{ hub_version }}</strong>
-          <span>{{ workspace_labels[workspace] }} workspace</span>
+          <strong>CLIMATE v{{ hub_version }}</strong>
+          <span>{{ workspace_labels[workspace] }}</span>
         </div>
       </div>
     </aside>
@@ -170,7 +173,7 @@
     </div>
     {% endif %}
 
-    {% if workspace_console %}
+    {% if workspace_console and not skip_workspace_console|default(false) %}
     <div class="wc-host"
          id="workspace-console-host"
          {% if not workspace_console.prefs.open %}hidden{% endif %}
@@ -179,6 +182,7 @@
     </div>
     {% endif %}
 
+    {% if show_activity_rail %}
     <aside class="activity-rail" id="activity-rail" aria-label="Activity rail">
       {% if assistant_dock and not skip_assistant_dock|default(false) %}
       <button type="button"
@@ -202,7 +206,7 @@
         <span class="sr-only">Quick Notepad</span>
       </button>
       {% endif %}
-      {% if workspace_console %}
+      {% if workspace_console and not skip_workspace_console|default(false) %}
       <button type="button"
               class="activity-rail-btn{% if workspace_console.prefs.open and not workspace_console.prefs.minimized %} is-active{% endif %}"
               id="ar-console"
@@ -223,6 +227,7 @@
         <span aria-hidden="true">📈</span><span class="sr-only">Audit</span>
       </button>
     </aside>
+    {% endif %}
   </div>
 
   {% if assistant_dock and not skip_assistant_dock|default(false) %}
@@ -253,9 +258,9 @@
   {% endif %}
   <script src="{{ url_for('static', filename='js/hub_perf.js') }}?v=perf-1"></script>
   {% if assistant_dock and not skip_assistant_dock|default(false) %}
-  <script src="{{ url_for('static', filename='js/assistant_dock.js') }}?v=shell-dock-29"></script>
+  <script src="{{ url_for('static', filename='js/assistant_dock.js') }}?v=shell-dock-30"></script>
   {% endif %}
-  {% if workspace_console %}
+  {% if workspace_console and not skip_workspace_console|default(false) %}
   <script src="{{ url_for('static', filename='js/wc_terminal.js') }}?v=shell-term-1"></script>
   <script src="{{ url_for('static', filename='js/workspace_console.js') }}?v=shell-term-1"></script>
   {% endif %}

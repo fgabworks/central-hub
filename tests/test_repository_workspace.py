@@ -112,6 +112,24 @@ class WorkspaceFilesEditorTests(unittest.TestCase):
         content = self.files.search_content("needle-token")
         self.assertEqual(content[0]["path"], "readme.md")
 
+    def test_tree_hides_generated_dirs_until_explicitly_shown(self) -> None:
+        for name in ("tmp-run", "custom_pycache_build", ".venv", "node_modules"):
+            folder = self.root / name
+            folder.mkdir()
+            (folder / "visible.txt").write_text("generated\n", encoding="utf-8")
+        (self.root / ".git").mkdir()
+        (self.root / ".git" / "config").write_text("secret\n", encoding="utf-8")
+
+        default_names = {entry["name"] for entry in self.files.build_tree()["entries"]}
+        self.assertTrue({"tmp-run", "custom_pycache_build", ".venv", "node_modules"}.isdisjoint(default_names))
+
+        shown = self.files.build_tree(include_excluded=True)
+        shown_names = {entry["name"] for entry in shown["entries"]}
+        self.assertTrue({"tmp-run", "custom_pycache_build", ".venv", "node_modules"} <= shown_names)
+        self.assertNotIn(".git", shown_names)
+        node_modules = next(entry for entry in shown["entries"] if entry["name"] == "node_modules")
+        self.assertEqual(node_modules["children"][0]["name"], "visible.txt")
+
     def test_preview_binary_and_text(self) -> None:
         text = self.files.read_preview("app.py")
         self.assertFalse(text["binary"])
@@ -263,7 +281,7 @@ repositories:
         self.assertEqual(r.status_code, 200)
         html = r.get_data(as_text=True)
         self.assertIn(UNAVAILABLE_MESSAGE, html)
-        self.assertIn("Overview", html)
+        self.assertIn("Repositories", html)
         self.assertIn("Files", html)
         self.assertIn("Changes", html)
         self.assertIn("Settings", html)
@@ -271,7 +289,7 @@ repositories:
     def test_tabs_and_tree_file_search_security(self) -> None:
         overview = self.client.get("/repositories/ws-local")
         self.assertEqual(overview.status_code, 200)
-        self.assertIn("Overview", overview.get_data(as_text=True))
+        self.assertIn("Repositories", overview.get_data(as_text=True))
 
         files_page = self.client.get("/repositories/ws-local/files")
         self.assertEqual(files_page.status_code, 200)

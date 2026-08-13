@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 from hub.agent_center.adapters.cli_common import BaseCliAdapter
+from hub.agent_center.redact import redact_text
 
 
 class ClaudeCodeAdapter(BaseCliAdapter):
@@ -14,9 +15,10 @@ class ClaudeCodeAdapter(BaseCliAdapter):
         result = self._run_probe([executable, "auth", "status"])
         raw = (result.stdout or result.stderr or "").strip()
         if result.returncode != 0:
+            reason = redact_text(raw, limit=240) if raw else "Claude Code authentication required"
             return {
                 "state": "authentication_required",
-                "detail": "Claude Code authentication required",
+                "detail": reason,
                 "error_code": "authentication_required",
             }
         account = ""

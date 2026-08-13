@@ -97,37 +97,79 @@ class WorkspaceNavRouteTests(unittest.TestCase):
     def test_root_redirects_to_work_by_default(self) -> None:
         resp = self.client.get("/")
         self.assertEqual(resp.status_code, 302)
-        self.assertTrue(resp.headers["Location"].endswith("/work"))
+        # VANTA primary surface is Code Workspace.
+        self.assertTrue(resp.headers["Location"].endswith("/work/climate"))
 
     def test_switch_workspace_remembers_cookie_and_pref(self) -> None:
         resp = self.client.get("/workspace/personal", follow_redirects=False)
         self.assertEqual(resp.status_code, 302)
-        self.assertTrue(resp.headers["Location"].endswith("/personal"))
+        # ARCTIC primary surface is also Code Workspace.
+        self.assertTrue(resp.headers["Location"].endswith("/personal/climate"))
         self.assertIn(COOKIE_NAME, resp.headers.get("Set-Cookie", ""))
         store: NotebookStore = self.app.config["NOTEBOOK"]
         self.assertEqual(get_pref(store.db, "workspace"), "personal")
-        # Next / visit uses remembered workspace.
+        # Next / visit uses remembered workspace → Code Workspace.
         resp2 = self.client.get("/")
         self.assertEqual(resp2.status_code, 302)
-        self.assertTrue(resp2.headers["Location"].endswith("/personal"))
+        self.assertTrue(resp2.headers["Location"].endswith("/personal/climate"))
+        # VANTA switch lands on Code Workspace; Dashboard remains at /work.
+        resp3 = self.client.get("/workspace/work", follow_redirects=False)
+        self.assertEqual(resp3.status_code, 302)
+        self.assertTrue(resp3.headers["Location"].endswith("/work/climate"))
+        dash = self.client.get("/work")
+        self.assertEqual(dash.status_code, 200)
+        self.assertIn("Work Dashboard", dash.get_data(as_text=True))
+
+    def test_switch_workspace_preserves_equivalent_section(self) -> None:
+        # Dashboard ↔ Dashboard
+        resp = self.client.get(
+            "/workspace/personal?from_endpoint=work_dashboard",
+            follow_redirects=False,
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(resp.headers["Location"].endswith("/personal"))
+        resp = self.client.get(
+            "/workspace/work?from_endpoint=personal_dashboard",
+            follow_redirects=False,
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(resp.headers["Location"].endswith("/work"))
+        # Notebook ↔ Notebook
+        resp = self.client.get(
+            "/workspace/personal?from_endpoint=work_notebook",
+            follow_redirects=False,
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(resp.headers["Location"].endswith("/personal/notebook"))
+        # Non-equivalent falls back to Code Workspace
+        resp = self.client.get(
+            "/workspace/personal?from_endpoint=repositories",
+            follow_redirects=False,
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(resp.headers["Location"].endswith("/personal/climate"))
 
     def test_nav_sections_personal_vs_work(self) -> None:
         work_html = self.client.get("/work").get_data(as_text=True)
         self.assertIn("workspace-switcher", work_html)
-        self.assertIn('class="theme-work"', work_html)
-        self.assertIn("Work Dashboard", work_html)
+        self.assertIn('class="climate-system-shell theme-work"', work_html)
+        self.assertIn(">VANTA<", work_html)
+        self.assertLess(work_html.index(">VANTA<"), work_html.index(">ARCTIC<"))
+        self.assertIn("Code Workspace", work_html)
         self.assertIn("Repositories", work_html)
-        self.assertIn("Work Notebook", work_html)
+        self.assertIn("Notebook", work_html)
         self.assertIn("SQL Workspace", work_html)
-        self.assertIn("DHIS2 Reports", work_html)
-        self.assertIn("HCSC–RF", work_html)
-        self.assertIn("/dhis2/hcsc-indicators", work_html)
-        self.assertLess(work_html.index("DHIS2 Reports"), work_html.index("HCSC–RF"))
-        self.assertIn("nav-group", work_html)
+        self.assertIn(">DHIS2<", work_html)
+        self.assertNotIn("CLIMATE · VANTA", work_html)
         self.assertIn("sidebar-collapse-btn", work_html)
         self.assertIn(">System<", work_html)
         self.assertIn("Audit", work_html)
         self.assertNotIn("Personal Notebook", work_html)
+        # Shared primary order: Code Workspace before Dashboard.
+        w_side = work_html[
+            work_html.find('class="sidebar-nav"') : work_html.find('class="sidebar-actions"')
+        ]
+        self.assertLess(w_side.index("Code Workspace"), w_side.index(">Dashboard<"))
         # Quick Notepad opens from the activity rail (no floating pill).
         self.assertIn("id=\"qn-panel\"", work_html)
         self.assertIn('id="ar-notepad"', work_html)
@@ -135,13 +177,16 @@ class WorkspaceNavRouteTests(unittest.TestCase):
         self.assertNotIn('href="/work#quick-notepad"', work_html)
 
         personal_html = self.client.get("/personal").get_data(as_text=True)
-        self.assertIn('class="theme-personal"', personal_html)
-        self.assertIn("Personal Dashboard", personal_html)
-        self.assertIn("Personal Notebook", personal_html)
-        self.assertIn("Personal Tasks", personal_html)
+        self.assertIn('class="climate-system-shell theme-personal"', personal_html)
+        self.assertIn(">ARCTIC<", personal_html)
+        self.assertIn("Code Workspace", personal_html)
+        self.assertIn("Notebook", personal_html)
+        self.assertIn("Tasks", personal_html)
         p_side = personal_html[
             personal_html.find('class="sidebar-nav"') : personal_html.find('class="sidebar-actions"')
         ]
+        self.assertLess(p_side.index("Code Workspace"), p_side.index(">Dashboard<"))
+        self.assertLess(p_side.index(">Dashboard<"), p_side.index("Personal Files"))
         self.assertNotIn("HCSC–RF", p_side)
         self.assertNotIn("/dhis2/hcsc-indicators", p_side)
         self.assertIn("id=\"qn-panel\"", personal_html)
@@ -168,11 +213,11 @@ class WorkspaceNavRouteTests(unittest.TestCase):
             "/work/notebook",
             "/repositories",
             "/sql",
-            "/agents",
+            "/work/airix",
             "/work/email",
             "/work/calendar",
         ):
-            html = self.client.get(path).get_data(as_text=True)
+            html = self.client.get(path, follow_redirects=True).get_data(as_text=True)
             self.assertIn('id="ar-notepad"', html, msg=path)
             self.assertIn('id="qn-panel"', html, msg=path)
             self.assertIn("qn-open-btn sr-only", html, msg=path)

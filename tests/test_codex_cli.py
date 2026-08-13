@@ -443,10 +443,11 @@ class CodexUiFactsTests(unittest.TestCase):
         page = client.get("/system/ai-connections")
         self.assertEqual(page.status_code, 200)
         self.assertIn(b"Installed", page.data)
-        self.assertIn(b"Authenticated", page.data)
+        self.assertIn(b"Connected", page.data)
         self.assertIn(b"Version", page.data)
         self.assertIn(b"Last Checked", page.data)
-        self.assertIn(b"Test Connection", page.data)
+        self.assertIn(b"Refresh Status", page.data)
+        self.assertIn(b"Default Coding Provider", page.data)
 
 
 if __name__ == "__main__":

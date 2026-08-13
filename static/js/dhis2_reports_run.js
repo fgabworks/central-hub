@@ -641,7 +641,7 @@
       hint.textContent =
         "Renders via /api/reports/" +
         (meta.uid || "") +
-        "/data.html using Central Hub .env credentials (never sent to the browser).";
+        "/data.html using CLIMATE .env credentials (never sent to the browser).";
     } else {
       hint.textContent = meta.description || "";
     }

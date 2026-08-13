@@ -150,7 +150,7 @@ class DockRouteTests(unittest.TestCase):
         self.assertIn("position: fixed", css)
         self.assertIn("padding-right: var(--activity-rail-w, 48px)", css)
         self.assertIn(
-            "padding-right: calc(var(--activity-rail-w, 48px) + var(--ad-width, 400px))",
+            "padding-right: calc(var(--activity-rail-w, 48px) + var(--ad-active-width, var(--ad-width, 400px)))",
             css,
         )
         self.assertIn(".ad-host", css)
@@ -265,6 +265,7 @@ class DockRouteTests(unittest.TestCase):
         self.assertIn('id="ad-more"', html)
         self.assertIn('id="ad-menu-pop"', html)
         self.assertIn('id="ad-pin"', html)
+        self.assertIn('id="ad-maximize"', html)
         self.assertIn('id="ad-minimize"', html)
         self.assertIn('id="ad-close"', html)
         self.assertIn('id="ad-cancel"', html)
@@ -303,7 +304,7 @@ class DockRouteTests(unittest.TestCase):
         self.assertIn("max-width: none", css)
         # Console sits under main content only (left of dock when open).
         self.assertIn(
-            "right: calc(var(--activity-rail-w, 48px) + var(--ad-width, 400px))",
+            "right: calc(var(--activity-rail-w, 48px) + var(--ad-active-width, var(--ad-width, 400px)))",
             css,
         )
         js = (ROOT / "static" / "js" / "assistant_dock.js").read_text(encoding="utf-8")
@@ -313,6 +314,52 @@ class DockRouteTests(unittest.TestCase):
         self.assertIn("clearEmptyState", js)
         self.assertIn("document.visibilityState === \"hidden\"", js)
         self.assertIn("if (!expanded()) return", js)
+
+    def test_maximize_changes_only_the_single_assistant_panel(self) -> None:
+        """Maximize reuses the mounted dock and never drives Workspace Console state."""
+        root = Path(__file__).resolve().parents[1]
+        html = (root / "templates" / "base.html").read_text(encoding="utf-8")
+        panel = (root / "templates" / "partials" / "assistant_dock_panel.html").read_text(
+            encoding="utf-8"
+        )
+        js = (root / "static" / "js" / "assistant_dock.js").read_text(encoding="utf-8")
+        css = (root / "static" / "css" / "assistant_dock_maximize.css").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertEqual(html.count('id="assistant-dock-host"'), 1)
+        self.assertEqual(panel.count('id="ad-panel"'), 1)
+        self.assertIn("function setMaximized(max)", js)
+        self.assertIn('setMaximized(!maximized)', js)
+        self.assertIn('"is-ad-maximized"', js)
+        self.assertNotIn('"is-wc-maximized"', js)
+        self.assertNotIn("cloneNode", js)
+        self.assertEqual(js.count("window.__assistantDock = createDockController(host)"), 1)
+        self.assertIn("--ad-max-width", css)
+        self.assertIn("45vw", css)
+        self.assertIn("AI Assistant (Maximized)", js)
+        self.assertIn("computeMaximizedWidth", js)
+        self.assertIn("0.45", js)
+        self.assertNotIn(".wc-host", css)
+        self.assertNotIn("is-wc-maximized", css)
+
+    def test_maximize_restore_keeps_assistant_runtime_state_in_place(self) -> None:
+        """The layout toggle does not recreate or clear draft, selections, history, or runs."""
+        js = (ROOT / "static" / "js" / "assistant_dock.js").read_text(encoding="utf-8")
+        start = js.index("function setMaximized(max)")
+        end = js.index("function setContextOpen", start)
+        maximize_body = js[start:end]
+
+        for preserved in (
+            "promptEl.value",
+            "selectedAgent",
+            "selectedModel",
+            "activeRunId",
+            "activeRouteExecutionId",
+            "messages.innerHTML",
+        ):
+            self.assertNotIn(preserved, maximize_body)
+        self.assertNotIn("persistPrefs", maximize_body)
 
     def test_quick_notepad_rail_placement_without_overlap(self) -> None:
         """Notepad launches from the rail and docks beside Okarun, not over the composer."""
@@ -328,7 +375,7 @@ class DockRouteTests(unittest.TestCase):
         self.assertIn(".qn-open-btn {", css)
         self.assertIn("display: none !important", css)
         self.assertIn(
-            "right: calc(var(--activity-rail-w, 48px) + var(--ad-width, 400px))",
+            "right: calc(var(--activity-rail-w, 48px) + var(--ad-active-width, var(--ad-width, 400px)))",
             css,
         )
         # Global notepad is a sibling drawer; ensure overlap rule exists for open dock.

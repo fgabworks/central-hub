@@ -1,0 +1,249 @@
+/* CLIMATE system shell chrome — VANTA/ARCTIC share one brand; accents come from climate-theme.css */
+
+body.climate-system-shell {
+  --sidebar-w: 170px;
+  --radius: 6px;
+  --topbar-h: 48px;
+}
+
+body.climate-system-shell .sidebar {
+  background: var(--climate-bg-elevated, #0b0d12);
+  border-right: 1px solid var(--climate-border, #2a3038);
+}
+
+body.climate-system-shell .sidebar-brand {
+  min-height: 48px;
+  padding: 0.4rem 0.55rem;
+  gap: 0.45rem;
+  border-bottom-color: var(--climate-border, #2a3038);
+  align-items: center;
+}
+
+.climate-brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.topbar-brand {
+  text-decoration: none;
+}
+.topbar-brand:hover {
+  text-decoration: none;
+}
+
+body.climate-system-shell .brand-mark {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: none;
+  overflow: hidden;
+  border: 1px solid var(--climate-border, #2a3038);
+}
+
+body.climate-system-shell .brand-mark img,
+body.climate-system-shell .brand-logo-mark {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+body.climate-system-shell .brand-text strong,
+body.climate-system-shell .brand-wordmark {
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  font-weight: 750;
+  line-height: 1.1;
+  color: var(--climate-text);
+  background: none;
+  -webkit-background-clip: unset;
+  background-clip: unset;
+}
+
+body.climate-system-shell .brand-text span {
+  display: block;
+  font-size: 8px;
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+  color: var(--climate-muted-2, #6a7280);
+  font-weight: 500;
+  max-width: 118px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+body.climate-system-shell .workspace-switcher {
+  gap: 5px;
+  padding: 7px 6px 5px;
+}
+
+body.climate-system-shell .workspace-btn {
+  min-height: 36px;
+  border-radius: 5px;
+  background: var(--climate-panel, #141417);
+  border-color: var(--climate-border, #2c313a);
+}
+
+body.climate-system-shell .workspace-btn.is-active {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  border-color: var(--accent-border);
+  box-shadow: inset 0 -2px 0 var(--workspace-accent, var(--climate-arctic));
+}
+
+body.climate-system-shell .sidebar-nav {
+  padding: 2px 6px;
+}
+
+body.climate-system-shell .nav-label {
+  padding: 8px 0 3px;
+  color: var(--climate-muted-2, #6f7d8c);
+  font-size: 9px;
+}
+
+body.climate-system-shell .nav-link {
+  min-height: 32px;
+  margin: 0 0 2px;
+  padding: 4px 6px;
+  border-radius: 5px;
+  font-size: 11px;
+}
+
+body.climate-system-shell .nav-link.is-active {
+  background: var(--climate-panel-3, #162230);
+  color: var(--climate-text);
+  box-shadow: inset 2px 0 0 var(--workspace-accent, var(--climate-arctic));
+}
+
+body.climate-system-shell .sidebar-actions {
+  display: none;
+}
+
+body.climate-system-shell .sidebar-footer-meta strong {
+  color: #c8d3dc;
+}
+
+/* Topbar / cards / primary chrome */
+body.climate-system-shell .topbar {
+  background: color-mix(in srgb, var(--climate-bg, #0f1014) 94%, transparent);
+  border-bottom: 1px solid var(--climate-border, #2a3038);
+  min-height: var(--topbar-h, 48px);
+  height: var(--topbar-h, 48px);
+}
+
+body.climate-system-shell .topbar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-right: 0.35rem;
+}
+
+body.climate-system-shell .topbar-brand img {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: block;
+}
+
+body.climate-system-shell .topbar-brand-name {
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.14em;
+  color: var(--climate-text);
+  background: none;
+  -webkit-background-clip: unset;
+  background-clip: unset;
+}
+
+body.climate-system-shell .card,
+body.climate-system-shell .panel,
+body.climate-system-shell .stat-card {
+  background: var(--climate-panel, #161a20);
+  border: 1px solid var(--climate-border, #2a3038);
+  border-radius: var(--radius, 6px);
+  box-shadow: none;
+}
+
+body.climate-system-shell a.stat-card-link:hover,
+body.climate-system-shell .card:hover {
+  box-shadow: none;
+  border-color: var(--climate-border-soft, #343b46);
+  background: color-mix(in srgb, var(--climate-panel) 94%, white 6%);
+}
+
+/* Match reference: attention cards use border tint only — no outer glow */
+body.climate-system-shell a.stat-card-tasks.severity-attention,
+body.climate-system-shell a.stat-card-tasks.urgency-alert {
+  background: var(--climate-panel, #161a20);
+  border-color: var(--accent-border);
+  box-shadow: inset 0 0 0 1px var(--accent-soft);
+}
+
+body.climate-system-shell a.stat-card-tasks.urgency-attention:hover,
+body.climate-system-shell a.stat-card-tasks.urgency-alert:hover {
+  background: color-mix(in srgb, var(--climate-panel) 92%, var(--workspace-accent) 8%);
+  border-color: var(--accent-border-strong);
+  box-shadow: inset 0 0 0 1px var(--accent-soft);
+}
+
+body.climate-system-shell .btn-primary {
+  background: var(--workspace-accent, var(--accent-metallic));
+  border-color: var(--accent-border-strong);
+  color: #fff;
+  box-shadow: none;
+}
+
+body.climate-system-shell .btn-primary:hover {
+  filter: brightness(1.06);
+}
+
+body.climate-system-shell .badge-env {
+  border-color: color-mix(in srgb, var(--climate-arctic) 35%, transparent);
+  background: color-mix(in srgb, var(--climate-arctic) 10%, transparent);
+  color: var(--climate-arctic-bright, #5ec0ea);
+}
+
+/* AI assistant panel — same dark brand surfaces */
+body.climate-system-shell .ad-host,
+body.climate-system-shell .ad-panel {
+  background: var(--climate-panel, #161a20);
+  border-left-color: var(--climate-border, #2a3038);
+}
+
+body.climate-system-shell .ad-header,
+body.climate-system-shell .ad-composer,
+body.climate-system-shell .ad-tabs {
+  background: var(--climate-bg-elevated, #0b0d12);
+  border-color: var(--climate-border, #2a3038);
+}
+
+body.climate-system-shell .ad-tab.is-active {
+  border-bottom-color: var(--workspace-accent, var(--climate-coral));
+}
+
+body.climate-system-shell .ad-send,
+body.climate-system-shell .ad-msg-user {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+}
+
+body.climate-system-shell .activity-rail {
+  background: var(--climate-bg-elevated, #0b0d12);
+  border-left-color: var(--climate-border, #2a3038);
+}
+
+body.climate-system-shell .activity-rail-btn.is-active {
+  box-shadow: inset 2px 0 0 var(--workspace-accent, var(--climate-arctic));
+}
+
+/* Collapsed sidebar: keep circular mark only */
+body.climate-system-shell.app-shell.is-sidebar-collapsed .brand-text {
+  display: none;
+}
+body.climate-system-shell.app-shell.is-sidebar-collapsed .brand-mark {
+  margin: 0 auto;
+}

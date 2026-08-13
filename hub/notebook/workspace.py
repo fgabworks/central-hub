@@ -72,11 +72,44 @@ def apply_workspace_cookie(response: Response, workspace: str) -> Response:
 
 
 def dashboard_endpoint(workspace: str) -> str:
+    """Actual dashboard route for a workspace (not the primary landing)."""
     return (
         "personal_dashboard"
         if normalize_workspace(workspace) == "personal"
         else "work_dashboard"
     )
+
+
+def primary_endpoint(workspace: str) -> str:
+    """Shared primary surface: Code Workspace for both VANTA and ARCTIC."""
+    return (
+        "personal_climate"
+        if normalize_workspace(workspace) == "personal"
+        else "work_climate"
+    )
+
+
+# Preserve equivalent sections when switching VANTA ↔ ARCTIC.
+_WORKSPACE_SECTION_PAIRS = {
+    "work_climate": "personal_climate",
+    "personal_climate": "work_climate",
+    "work_dashboard": "personal_dashboard",
+    "personal_dashboard": "work_dashboard",
+    "work_notebook": "personal_notebook",
+    "personal_notebook": "work_notebook",
+}
+
+
+def counterpart_endpoint(endpoint: str | None, target_workspace: str) -> str:
+    """Map current section to the other workspace; else fall back to Code Workspace."""
+    target = normalize_workspace(target_workspace)
+    mapped = _WORKSPACE_SECTION_PAIRS.get(endpoint or "")
+    if mapped:
+        if target == "personal" and mapped.startswith("personal"):
+            return mapped
+        if target == "work" and mapped.startswith("work"):
+            return mapped
+    return primary_endpoint(target)
 
 
 def notebook_endpoint(workspace: str) -> str:

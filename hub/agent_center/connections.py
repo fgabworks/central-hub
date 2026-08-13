@@ -21,6 +21,9 @@ PUBLIC_STATES = {
 # Account-backed coding CLIs surfaced in Settings / AiriX compact panel.
 CODING_CLI_PROVIDER_IDS = ("codex", "claude-code", "cursor-agent")
 
+PREF_DEFAULT_PROVIDER = "coding_default_provider"
+PREF_DEFAULT_MODEL_PREFIX = "coding_default_model:"
+
 _STATUS_TTL = float(os.getenv("CENTRAL_HUB_AI_CONNECTION_CACHE_TTL", "60"))
 
 
@@ -53,7 +56,7 @@ class AgentConnectionRegistry:
                 return self._cached_or_placeholder(adapter, saved)
 
         if saved.get("disconnected"):
-            status = self._base_payload(adapter, "authentication_required", "Signed out in Central Hub")
+            status = self._base_payload(adapter, "authentication_required", "Disconnected from Central Hub")
             # Keep install/version facts when possible without implying authenticated.
             if hasattr(adapter, "resolve_executable"):
                 try:
@@ -107,20 +110,100 @@ class AgentConnectionRegistry:
         self._status_cache.set(cache_key, status)
         return dict(status)
 
-    def list_coding_clis(self, *, refresh: bool = False, probe: bool = True) -> list[dict[str, Any]]:
+    def list_coding_clis(
+        self, *, refresh: bool = False, probe: bool = True, include_models: bool = False
+    ) -> list[dict[str, Any]]:
         """Compact status rows for Codex / Claude Code / Cursor Agent."""
         rows = []
         for agent_id in CODING_CLI_PROVIDER_IDS:
             if agent_id not in self.adapters:
                 continue
-            rows.append(self.get(agent_id, refresh=refresh, probe=probe))
+            row = self.get(agent_id, refresh=refresh, probe=probe)
+            if include_models and row.get("state") == "connected":
+                try:
+                    details = self.models(agent_id, mode="ask", refresh=False)
+                    row["models"] = list(details.get("models") or [])
+                    row["model_details"] = list(details.get("model_details") or [])
+                    row["models_source"] = details.get("models_source") or "none"
+                    row["models_error"] = str(details.get("error") or "")
+                except Exception as exc:  # noqa: BLE001
+                    row["models"] = []
+                    row["model_details"] = []
+                    row["models_source"] = "error"
+                    row["models_error"] = redact_text(str(exc), limit=240)
+            else:
+                row.setdefault("models", [])
+                row.setdefault("model_details", [])
+                row.setdefault("models_source", "none")
+                row.setdefault("models_error", "")
+            rows.append(row)
         return rows
+
+    def coding_defaults(self) -> dict[str, Any]:
+        provider = self.store.get_pref(PREF_DEFAULT_PROVIDER, "").strip()
+        if provider not in CODING_CLI_PROVIDER_IDS:
+            provider = ""
+        models: dict[str, str] = {}
+        for agent_id in CODING_CLI_PROVIDER_IDS:
+            models[agent_id] = self.store.get_pref(f"{PREF_DEFAULT_MODEL_PREFIX}{agent_id}", "").strip()
+        return {
+            "default_provider": provider,
+            "default_models": models,
+            "providers": list(CODING_CLI_PROVIDER_IDS),
+        }
+
+    def set_coding_defaults(
+        self,
+        *,
+        default_provider: str | None = None,
+        default_models: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        if default_provider is not None:
+            value = str(default_provider or "").strip()
+            if value and value not in CODING_CLI_PROVIDER_IDS:
+                raise ValueError("Unknown default coding provider")
+            self.store.set_pref(PREF_DEFAULT_PROVIDER, value)
+        if default_models:
+            for agent_id, model in default_models.items():
+                if agent_id not in CODING_CLI_PROVIDER_IDS:
+                    raise ValueError(f"Unknown coding provider: {agent_id}")
+                self.store.set_pref(f"{PREF_DEFAULT_MODEL_PREFIX}{agent_id}", str(model or "").strip())
+        if self.audit:
+            self.audit(
+                action="AI_CODING_DEFAULTS_UPDATE",
+                detail={"defaults": self.coding_defaults()},
+            )
+        return self.coding_defaults()
 
     def action(self, agent_id: str, action: str) -> dict[str, Any]:
         adapter = self._adapter(agent_id)
         normalized = "reconnect" if action in {"reauthenticate", "re-auth", "reauth"} else action
         if normalized == "sign-out":
             normalized = "disconnect"
+        if normalized in {"refresh-status", "refresh_status", "status"}:
+            self._status_cache.invalidate(f"status:{agent_id}")
+            connection = self.get(agent_id, refresh=True, probe=True)
+            if connection.get("state") == "connected":
+                try:
+                    details = self.models(agent_id, mode="ask", refresh=True)
+                    connection["models"] = list(details.get("models") or [])
+                    connection["model_details"] = list(details.get("model_details") or [])
+                    connection["models_source"] = details.get("models_source") or "none"
+                    connection["models_error"] = str(details.get("error") or "")
+                except Exception as exc:  # noqa: BLE001
+                    connection["models"] = []
+                    connection["models_error"] = redact_text(str(exc), limit=240)
+            result = {
+                "ok": connection.get("state") == "connected",
+                "state": connection.get("state"),
+                "detail": connection.get("detail") or "Status refreshed",
+            }
+            if self.audit:
+                self.audit(
+                    action="AI_CONNECTION_ACTION",
+                    detail={"provider_id": agent_id, "operation": "refresh-status", "ok": bool(result.get("ok"))},
+                )
+            return {"result": result, "connection": connection}
         if normalized not in {"connect", "reconnect", "test", "refresh-models", "disconnect"}:
             raise ValueError("Unsupported connection action")
         try:
@@ -138,6 +221,7 @@ class AgentConnectionRegistry:
                     "state": "error" if error else "connected",
                     "detail": error or f"Loaded {len(details.get('models') or [])} models",
                     "models": details.get("models") or [],
+                    "model_details": details.get("model_details") or [],
                 }
             else:
                 result = adapter.test_connection()
@@ -160,7 +244,22 @@ class AgentConnectionRegistry:
                 action="AI_CONNECTION_ACTION",
                 detail={"provider_id": agent_id, "operation": normalized, "ok": bool(result.get("ok"))},
             )
-        return {"result": result, "connection": self.get(agent_id, refresh=normalized != "disconnect")}
+        connection = self.get(agent_id, refresh=normalized != "disconnect")
+        if connection.get("state") == "connected" or normalized == "refresh-models":
+            models = list(result.get("models") or [])
+            if models:
+                connection["models"] = models
+                connection["model_details"] = list(result.get("model_details") or [])
+            elif connection.get("state") == "connected":
+                try:
+                    details = self.models(agent_id, mode="ask", refresh=normalized == "refresh-models")
+                    connection["models"] = list(details.get("models") or [])
+                    connection["model_details"] = list(details.get("model_details") or [])
+                    connection["models_source"] = details.get("models_source") or "none"
+                    connection["models_error"] = str(details.get("error") or "")
+                except Exception:  # noqa: BLE001
+                    connection.setdefault("models", [])
+        return {"result": result, "connection": connection}
 
     def models(self, agent_id: str, *, mode: str, refresh: bool = False) -> dict[str, Any]:
         adapter = self._adapter(agent_id)
@@ -245,6 +344,13 @@ class AgentConnectionRegistry:
         status["authentication_method"] = getattr(adapter, "authentication_method", "")
         status["credential_storage"] = getattr(adapter, "credential_storage", "Provider-managed")
         status["account_label"] = redact_text(str(status.get("account_label") or ""), limit=160)
+        exe_path = str(status.get("executable_path") or "")
+        if not exe_path and hasattr(adapter, "resolve_executable"):
+            try:
+                exe_path = str(adapter.resolve_executable() or "")
+            except Exception:  # noqa: BLE001
+                exe_path = ""
+        status["executable_path"] = redact_text(exe_path, limit=240)
         commands = status.get("cli_commands")
         if not commands and hasattr(adapter, "_cli_command_candidates"):
             try:
@@ -261,6 +367,10 @@ class AgentConnectionRegistry:
             except Exception:  # noqa: BLE001
                 help_text = ""
         status["install_help"] = help_text
+        status.setdefault("models", [])
+        status.setdefault("model_details", [])
+        status.setdefault("models_source", "none")
+        status.setdefault("models_error", "")
         status["summary_label"] = _summary_label(status)
         status["primary_action"] = _primary_action(status)
         return status
@@ -287,6 +397,8 @@ class AgentConnectionRegistry:
             "error_code": "",
             "cli_commands": [],
             "install_help": "",
+            "executable_path": "",
+            "models": [],
             "summary_label": "",
             "primary_action": "connect",
         }

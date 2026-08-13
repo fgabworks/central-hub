@@ -60,6 +60,23 @@ class AgentCenterStore:
             )
         return self.get_connection(agent_id)
 
+    def get_pref(self, key: str, default: str = "") -> str:
+        with self.db.connect() as conn:
+            row = conn.execute("SELECT value FROM agent_prefs WHERE key=?", (key,)).fetchone()
+        if not row:
+            return default
+        return str(row["value"] or default)
+
+    def set_pref(self, key: str, value: str) -> None:
+        with self.db.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO agent_prefs(key, value, updated_at) VALUES (?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
+                """,
+                (key, str(value or ""), _now()),
+            )
+
     # --- prompts ---
     def list_prompts(self, *, profile_id: str = "okarun") -> list[dict[str, Any]]:
         with self.db.connect() as conn:

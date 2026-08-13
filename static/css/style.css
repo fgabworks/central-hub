@@ -90,7 +90,8 @@ code, .mono { font-family: var(--mono); font-size: 12px; }
   box-sizing: border-box;
 }
 .app-shell.is-ad-open:not(.is-ad-mobile).has-activity-rail {
-  padding-right: calc(var(--activity-rail-w, 48px) + var(--ad-width, 400px));
+  /* --ad-active-width tracks compact or maximized dock width (set by assistant_dock.js). */
+  padding-right: calc(var(--activity-rail-w, 48px) + var(--ad-active-width, var(--ad-width, 400px)));
 }
 .app-shell.is-ad-open.is-ad-minimized:not(.is-ad-mobile).has-activity-rail {
   padding-right: calc(var(--activity-rail-w, 48px) + 48px);
@@ -550,7 +551,7 @@ code, .mono { font-family: var(--mono); font-size: 12px; }
   white-space: nowrap;
 }
 
-/* Shared page header â€” 48px title row; optional 36px tabs row */
+/* Shared page header ? 48px title row; optional 36px tabs row */
 .section-header-shell {
   margin: 0 0 8px;
 }
@@ -4570,6 +4571,37 @@ body.qn-maximized .qn-history[open] {
   border-radius: 8px;
 }
 
+.connection-defaults {
+  margin-bottom: 0.85rem;
+}
+
+.coding-defaults-form {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.65rem;
+}
+
+.coding-defaults-form label {
+  display: grid;
+  gap: 0.2rem;
+  font-size: 12px;
+}
+
+.connection-models {
+  margin: 0.35rem 0 0.65rem;
+  font-size: 12px;
+}
+
+.connection-models strong {
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+.connection-executable {
+  word-break: break-all;
+  font-size: 11px;
+}
+
 .ai-provider-compact {
   overflow-x: auto;
 }
@@ -5677,7 +5709,8 @@ body.qn-maximized .qn-history[open] {
   height: min(var(--wc-height, 280px), 70vh);
 }
 .app-shell.is-ad-open:not(.is-ad-mobile):not(.is-ad-minimized) .wc-host {
-  right: calc(var(--activity-rail-w, 48px) + var(--ad-width, 400px));
+  /* Horizontal inset only ? console height / maximize state stay independent of assistant. */
+  right: calc(var(--activity-rail-w, 48px) + var(--ad-active-width, var(--ad-width, 400px)));
 }
 .app-shell.is-ad-open.is-ad-minimized:not(.is-ad-mobile) .wc-host {
   right: calc(var(--activity-rail-w, 48px) + 48px);
@@ -7901,7 +7934,7 @@ body.qn-maximized .qn-history[open] {
   .mc-carry-row { flex-direction: column; align-items: stretch; }
 }
 
-/* TODAY Mission Control â€” daily task execution panel */
+/* TODAY Mission Control ? daily task execution panel */
 .panel-mission-widget.mc-command {
   display: block;
   border: 1px solid rgba(59, 130, 246, 0.42);
@@ -8285,15 +8318,16 @@ body.qn-maximized .qn-history[open] {
   .mc-command-meta { justify-content: flex-start; }
 }
 
-/* ——— ARCTIC (CLIMATE / Personal) — charcoal + crimson control center ——— */
+/* ??? ARCTIC (CLIMATE / Personal) ? cyan-lean accents on shared dark surfaces ??? */
 .arctic-shell {
-  --crimson: #8b0000;
-  --burgundy: #5c060c;
-  --accent-ring: rgba(139, 0, 0, 0.35);
-  --accent-border: rgba(139, 0, 0, 0.45);
-  --accent-soft: rgba(139, 0, 0, 0.22);
-  --accent-text: #fecaca;
-  --accent-metallic: linear-gradient(180deg, #8b0000, #5c060c);
+  --crimson: var(--climate-arctic-deep, #0a7fb8);
+  --burgundy: #075e8a;
+  --accent-ring: rgba(61, 193, 255, 0.32);
+  --accent-border: rgba(61, 193, 255, 0.48);
+  --accent-soft: rgba(61, 193, 255, 0.16);
+  --accent-text: #b6e7ff;
+  --accent-metallic: var(--climate-arctic-deep, #0a7fb8);
+  --workspace-accent: var(--climate-arctic, #3dc1ff);
 }
 .arctic-grid {
   display: grid;
@@ -8433,7 +8467,7 @@ table.data tr.is-selected td { background: var(--accent-soft); }
   .arctic-detail-pane { position: static; }
 }
 
-/* ——— Official References (Work Notebook) ——— */
+/* ??? Official References (Work Notebook) ??? */
 .nb-refs-shell {
   display: grid;
   grid-template-columns: 200px minmax(0, 1fr) minmax(260px, 320px);

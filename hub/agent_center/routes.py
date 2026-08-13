@@ -49,21 +49,63 @@ def register_agent_center_routes(app: Flask) -> None:
     @app.get("/system/ai-connections")
     def ai_connections():
         # Instant cached/placeholder status; JS refreshes providers in the background.
-        connections = _svc().connections.list(probe=False)
-        _audit("AI_CONNECTIONS_VIEW", detail={"providers": len(connections), "cached": True})
-        return render_template("ai_connections.html", connections=connections)
+        coding = _svc().connections.list_coding_clis(probe=False, include_models=False)
+        others = [
+            row
+            for row in _svc().connections.list(probe=False)
+            if row.get("id") not in {"codex", "claude-code", "cursor-agent"}
+        ]
+        defaults = _svc().connections.coding_defaults()
+        _audit(
+            "AI_CONNECTIONS_VIEW",
+            detail={"coding": len(coding), "other": len(others), "cached": True},
+        )
+        return render_template(
+            "ai_connections.html",
+            connections=coding,
+            other_connections=others,
+            coding_defaults=defaults,
+        )
 
     @app.get("/api/ai-connections")
     def api_ai_connections():
         refresh = request.args.get("refresh") == "1"
+        coding_only = request.args.get("coding") == "1"
+        include_models = request.args.get("models") == "1"
+        if coding_only:
+            rows = _svc().connections.list_coding_clis(
+                refresh=refresh,
+                probe=True if refresh else request.args.get("probe", "0") == "1",
+                include_models=include_models,
+            )
+        else:
+            rows = _svc().connections.list(
+                refresh=refresh,
+                probe=True if refresh else request.args.get("probe", "0") == "1",
+            )
         return jsonify(
             {
-                "connections": _svc().connections.list(
-                    refresh=refresh,
-                    probe=True if refresh else request.args.get("probe", "0") == "1",
-                )
+                "connections": rows,
+                "coding_defaults": _svc().connections.coding_defaults(),
             }
         )
+
+    @app.get("/api/ai-connections/coding-defaults")
+    def api_ai_coding_defaults_get():
+        return jsonify({"ok": True, "defaults": _svc().connections.coding_defaults()})
+
+    @app.put("/api/ai-connections/coding-defaults")
+    @require_owner
+    def api_ai_coding_defaults_put():
+        payload = request.get_json(silent=True) or {}
+        try:
+            defaults = _svc().connections.set_coding_defaults(
+                default_provider=payload.get("default_provider"),
+                default_models=payload.get("default_models"),
+            )
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+        return jsonify({"ok": True, "defaults": defaults})
 
     @app.post("/api/ai-connections/<agent_id>/<action>")
     @require_owner

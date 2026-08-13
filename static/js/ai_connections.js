@@ -3,8 +3,14 @@
 
   var fetchFn = (window.HubPerf && window.HubPerf.dedupeFetch) || fetch;
 
-  function yn(value) {
-    return value ? "Yes" : "No";
+  function ynInstalled(value) {
+    return value ? "Installed" : "Not Installed";
+  }
+
+  function ynConnected(connection) {
+    return connection.authenticated && connection.state === "connected"
+      ? "Connected"
+      : "Not Connected";
   }
 
   function syncActions(row, connection) {
@@ -16,6 +22,8 @@
     var connected = connection.state === "connected";
     var id = connection.id || row.getAttribute("data-provider-id") || "";
     var compact = !!row.closest("#ai-provider-compact");
+    var codingPage = !!document.getElementById("ai-connections") &&
+      document.getElementById("ai-connections").getAttribute("data-coding") === "1";
     var sm = compact ? " btn-sm" : "";
     var html = "";
     if (!installed) {
@@ -23,13 +31,27 @@
         '<button type="button" class="btn btn-primary' +
         sm +
         '" data-action="install_help">Install help</button>';
-    } else if (connected) {
-        html +=
-        '<button type="button" class="btn btn-primary' +
+      html +=
+        '<button type="button" class="btn' +
         sm +
-        '" data-action="test">' +
-        (compact ? "Test" : "Test Connection") +
-        "</button>";
+        '" data-action="refresh-status">Refresh Status</button>';
+    } else if (connected) {
+      html +=
+        '<button type="button" class="btn' +
+        sm +
+        '" data-action="refresh-status">Refresh Status</button>';
+      if (!compact) {
+        html +=
+          '<button type="button" class="btn" data-action="refresh-models">Refresh Models</button>';
+      }
+      if (!codingPage) {
+        html +=
+          '<button type="button" class="btn btn-primary' +
+          sm +
+          '" data-action="test">' +
+          (compact ? "Test" : "Test Connection") +
+          "</button>";
+      }
       html +=
         '<button type="button" class="btn' +
         sm +
@@ -37,7 +59,9 @@
       html +=
         '<button type="button" class="btn' +
         sm +
-        '" data-action="disconnect">Sign out</button>';
+        '" data-action="disconnect">' +
+        (codingPage || compact ? "Disconnect" : "Sign out") +
+        "</button>";
     } else {
       html +=
         '<button type="button" class="btn btn-primary' +
@@ -46,19 +70,48 @@
       html +=
         '<button type="button" class="btn' +
         sm +
-        '" data-action="test">' +
-        (compact ? "Test" : "Test Connection") +
-        "</button>";
-      if (!compact) {
+        '" data-action="refresh-status">Refresh Status</button>';
+      if (!codingPage && !compact) {
         html +=
-          '<button type="button" class="btn" data-action="disconnect">Sign out</button>';
+          '<button type="button" class="btn" data-action="test">Test Connection</button>';
       }
+      html +=
+        '<button type="button" class="btn' +
+        sm +
+        '" data-action="disconnect">' +
+        (codingPage || compact ? "Disconnect" : "Sign out") +
+        "</button>";
     }
-    if (id !== "codex" && installed && !compact) {
+    if (id !== "codex" && installed && !compact && !codingPage) {
       html +=
         '<button type="button" class="btn" data-action="refresh-models">Refresh Models</button>';
     }
     actions.innerHTML = html;
+  }
+
+  function renderModels(row, connection) {
+    var list = row.querySelector(".connection-models-list");
+    if (!list) return;
+    var models = connection.models || [];
+    if (models.length) {
+      list.textContent = models.join(", ");
+    } else if (connection.models_error) {
+      list.textContent = connection.models_error;
+    } else if (connection.state === "connected") {
+      list.textContent = "No models reported — try Refresh Models";
+    } else {
+      list.textContent = "Connect, then Refresh Status / Refresh Models";
+    }
+    var datalist = document.getElementById(
+      "models-" + (connection.id || row.getAttribute("data-provider-id") || "")
+    );
+    if (datalist) {
+      datalist.innerHTML = models
+        .map(function (m) {
+          return "<option value=\"" + String(m).replace(/"/g, "&quot;") + "\"></option>";
+        })
+        .join("");
+    }
   }
 
   function render(row, connection, result) {
@@ -77,6 +130,7 @@
     var available = row.querySelector(".connection-available");
     var version = row.querySelector(".connection-version");
     var cli = row.querySelector(".connection-cli");
+    var executable = row.querySelector(".connection-executable");
     var compact = !!row.closest("#ai-provider-compact");
     if (status) {
       status.textContent = connection.summary_label || connection.status || "Error";
@@ -91,7 +145,7 @@
       }
       detail.textContent = text;
     }
-    if (account) account.textContent = connection.account_label || "Not exposed";
+    if (account) account.textContent = connection.account_label || "—";
     if (last)
       last.textContent =
         connection.last_check || connection.last_successful_check || "Never";
@@ -100,12 +154,15 @@
         ? connection.installed
           ? "Installed"
           : "Missing"
-        : yn(connection.installed);
-    if (authenticated) authenticated.textContent = yn(connection.authenticated);
-    if (available) available.textContent = yn(connection.available);
+        : ynInstalled(connection.installed);
+    if (authenticated) authenticated.textContent = ynConnected(connection);
+    if (available) available.textContent = connection.available ? "Yes" : "No";
     if (version) version.textContent = connection.version || "—";
     if (cli)
       cli.textContent = (connection.cli_commands || []).join(", ") || "—";
+    if (executable)
+      executable.textContent = connection.executable_path || "—";
+    renderModels(row, connection);
     syncActions(row, connection);
   }
 
@@ -126,7 +183,7 @@
   function runAction(row, action) {
     var provider = row.getAttribute("data-provider-id");
     if (action === "install_help") {
-      fetchFn("/api/ai-connections?refresh=1", { credentials: "same-origin" })
+      fetchFn("/api/ai-connections?refresh=1&coding=1", { credentials: "same-origin" })
         .then(function (response) {
           return response.json();
         })
@@ -141,7 +198,7 @@
         });
       return;
     }
-    fetch(
+    return fetch(
       "/api/ai-connections/" +
         encodeURIComponent(provider) +
         "/" +
@@ -167,7 +224,12 @@
   }
 
   function refreshAll() {
-    return fetchFn("/api/ai-connections?refresh=1", { credentials: "same-origin" })
+    var codingRoot = document.getElementById("ai-connections");
+    var coding = codingRoot && codingRoot.getAttribute("data-coding") === "1";
+    var url = coding
+      ? "/api/ai-connections?refresh=1&coding=1&models=1"
+      : "/api/ai-connections?refresh=1";
+    return fetchFn(url, { credentials: "same-origin" })
       .then(function (response) {
         return response.json();
       })
@@ -193,14 +255,56 @@
           if (!button || !row.contains(button)) return;
           var action = button.getAttribute("data-action");
           button.disabled = true;
-          Promise.resolve(runAction(row, action)).then(function () {
+          Promise.resolve(runAction(row, action)).finally(function () {
             button.disabled = false;
           });
         });
       });
   }
 
+  function bindDefaultsForm() {
+    var form = document.getElementById("coding-defaults-form");
+    if (!form || form._aiBound) return;
+    form._aiBound = true;
+    var status = document.getElementById("coding-defaults-status");
+    form.addEventListener("submit", function (event) {
+      event.preventDefault();
+      var provider = document.getElementById("coding-default-provider");
+      var models = {};
+      form.querySelectorAll("[data-default-model-for]").forEach(function (label) {
+        var id = label.getAttribute("data-default-model-for");
+        var input = label.querySelector("input");
+        if (id && input) models[id] = input.value.trim();
+      });
+      if (status) status.textContent = "Saving…";
+      fetch("/api/ai-connections/coding-defaults", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          default_provider: provider ? provider.value : "",
+          default_models: models,
+        }),
+      })
+        .then(function (response) {
+          return response.json().then(function (data) {
+            if (!response.ok || !data.ok) {
+              throw new Error(data.error || "Save failed");
+            }
+            return data;
+          });
+        })
+        .then(function () {
+          if (status) status.textContent = "Saved";
+        })
+        .catch(function (error) {
+          if (status) status.textContent = error.message;
+        });
+    });
+  }
+
   bindRows(document);
+  bindDefaultsForm();
   if (window.HubPerf && window.HubPerf.whenVisible) window.HubPerf.whenVisible(refreshAll);
   else refreshAll();
 
@@ -208,7 +312,7 @@
   var compact = document.getElementById("ai-provider-compact");
   if (compact) {
     bindRows(compact);
-    fetchFn("/api/ai-connections?refresh=1", { credentials: "same-origin" })
+    fetchFn("/api/ai-connections?refresh=1&coding=1", { credentials: "same-origin" })
       .then(function (r) {
         return r.json();
       })
@@ -218,25 +322,7 @@
             'tr[data-provider-id="' + connection.id + '"]'
           );
           if (!row) return;
-          var status = row.querySelector(".connection-status");
-          if (status) {
-            status.textContent =
-              connection.summary_label || connection.status || "Error";
-            status.className =
-              "status-pill connection-status status-" +
-              String(connection.state || "error").replace(/_/g, "-");
-          }
-          var installed = row.querySelector(".connection-installed");
-          if (installed)
-            installed.textContent = connection.installed ? "Installed" : "Missing";
-          var version = row.querySelector(".connection-version");
-          if (version) version.textContent = connection.version || "—";
-          var last = row.querySelector(".connection-last-check");
-          if (last)
-            last.textContent =
-              connection.last_check ||
-              connection.last_successful_check ||
-              "Never";
+          render(row, connection, connection);
           var detail = compact.querySelector(
             '[data-provider-detail="' + connection.id + '"] .connection-detail'
           );

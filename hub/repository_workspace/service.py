@@ -86,9 +86,11 @@ class RepositoryWorkspaceService:
             raise WorkspaceSecurityError(UNAVAILABLE_MESSAGE, code="unavailable")
         return Path(info["root"])
 
-    def tree(self, repo: Repository) -> dict[str, Any]:
+    def tree(
+        self, repo: Repository, *, include_excluded: bool = False
+    ) -> dict[str, Any]:
         files, _, git, _ = self._require(repo)
-        tree = files.build_tree()
+        tree = files.build_tree(include_excluded=include_excluded)
         if git.is_git_repo():
             status = git.summary()
             by_path = {f["path"]: f["category"] for f in status["files"]}

@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}{{ climate.context_label }} · CLIMATE{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/climate.css') }}?v=11">
+{% endblock %}
+{% block content %}
+<div class="climate-shell" id="climate-shell"
+     data-workspace="{{ climate.workspace }}"
+     data-api-root="/api/climate/{{ climate.workspace }}"
+     data-bootstrap='{{ climate|tojson }}'>
+  <header class="climate-titlebar">
+    <div class="climate-brand">
+      <img class="climate-brand-mark" src="{{ url_for('static', filename='img/climate-mark.png') }}" width="20" height="20" alt="">
+      <span><strong>CLIMATE</strong><small>{{ climate.context_label }}</small></span>
+    </div>
+    <div class="climate-scope-controls" aria-label="Active coding scope">
+      <label>Repository
+        <select id="climate-repository"{% if not climate.repositories %} disabled{% endif %}>
+          {% if not climate.repositories %}<option value="">No connected repositories</option>{% endif %}
+          {% for repo in climate.repositories %}
+          <option value="{{ repo.id }}" data-branch="{{ repo.branch or '' }}"
+                  {% if repo.id == climate.active_repository_id %}selected{% endif %}
+                  {% if not repo.available %}disabled{% endif %}>{{ repo.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Branch
+        <select id="climate-branch" disabled><option>{{ (climate.repositories|selectattr('id', 'equalto', climate.active_repository_id)|map(attribute='branch')|first) or '—' }}</option></select>
+      </label>
+      <label>Provider
+        <select id="climate-provider"></select>
+      </label>
+      <label>Model
+        <select id="climate-model"><option value="">Select model</option></select>
+      </label>
+    </div>
+    <div class="climate-title-actions">
+      <button class="climate-icon-btn is-run" id="climate-send-top" title="Send prompt (Ctrl+Enter)" aria-label="Send prompt">▷</button>
+      <button class="climate-icon-btn" id="climate-cancel-top" title="Cancel active run" aria-label="Cancel active run">□</button>
+      <button class="climate-icon-btn" id="climate-save" title="Save active file (Ctrl+S)" aria-label="Save active file">⚡</button>
+      <button class="climate-icon-btn" id="climate-toggle-left" title="Toggle Explorer" aria-label="Toggle Explorer">◧</button>
+      <button class="climate-icon-btn" id="climate-toggle-bottom" title="Toggle bottom panel" aria-label="Toggle bottom panel">▰</button>
+      <button class="climate-icon-btn" id="climate-toggle-ai" title="Toggle AI coding panel" aria-label="Toggle AI coding panel">✦</button>
+      <button class="climate-icon-btn" id="climate-maximize-ai" title="Maximize AI panel" aria-label="Maximize AI panel" aria-pressed="false">□</button>
+    </div>
+  </header>
+
+  <div class="climate-workbench" id="climate-workbench">
+    <aside class="climate-explorer" id="climate-explorer">
+      <div class="climate-pane-title"><span>EXPLORER</span><button id="climate-refresh-tree" title="Refresh">↻</button></div>
+      <div class="climate-search-row">
+        <input type="search" id="climate-search" placeholder="Search repository" aria-label="Search repository">
+        <button id="climate-search-run" title="Search">⌕</button>
+      </div>
+      <div class="climate-context-note"><span id="climate-context-count">0</span> files selected for AI context</div>
+      <label class="climate-excluded-toggle"><input type="checkbox" id="climate-show-excluded"> Show excluded files</label>
+      <div class="climate-tree" id="climate-tree" role="tree"></div>
+      <div class="climate-search-results" id="climate-search-results" hidden></div>
+      <div class="climate-explorer-sections">
+        <button>› OUTLINE</button><button>› TIMELINE</button><button>› REPOSITORIES</button>
+      </div>
+    </aside>
+    <div class="climate-sash climate-sash-left" data-resize="left" role="separator" aria-label="Resize Explorer"></div>
+
+    <main class="climate-center">
+      <nav class="climate-tabs" id="climate-tabs" aria-label="Open files">
+        <div class="climate-empty-tab">Open a file from Explorer</div>
+      </nav>
+      <div class="climate-breadcrumb" id="climate-breadcrumb"><span>Open a file from Explorer</span><span class="climate-spacer"></span><button title="Split editor">◫</button><button title="More actions">•••</button></div>
+      <section class="climate-editor-host" id="climate-editor-host">
+        <div class="climate-welcome" id="climate-welcome">
+          <img class="climate-welcome-logo" src="{{ url_for('static', filename='img/climate-mark.png') }}" alt="" width="40" height="40">
+          <h1>CLIMATE</h1>
+          <p>{{ climate.context_label }}</p>
+          <span>Open a repository file to begin.</span>
+        </div>
+        <textarea id="climate-editor-fallback" spellcheck="false" aria-label="Code editor"></textarea>
+      </section>
+      <div class="climate-sash climate-sash-bottom" data-resize="bottom" role="separator" aria-label="Resize diagnostics"></div>
+      <section class="climate-bottom" id="climate-bottom">
+        <nav class="climate-bottom-tabs" aria-label="Diagnostics panels">
+          <button class="is-active" data-panel="problems">Problems <span class="count">0</span></button>
+          <button data-panel="output">Output</button>
+          <button data-panel="tests">Tests</button>
+          <button data-panel="git">Git</button>
+          <span class="climate-spacer"></span>
+          <button id="climate-bottom-close" title="Close panel">×</button>
+        </nav>
+        <div class="climate-bottom-body mono" id="climate-bottom-body">No problems detected by CLIMATE.</div>
+      </section>
+    </main>
+
+    <div class="climate-sash climate-sash-right" data-resize="right" role="separator" aria-label="Resize AI panel"></div>
+    <aside class="climate-ai" id="climate-ai">
+      <button type="button" class="climate-ai-rail" id="climate-ai-expand" title="Expand AI Assistant" aria-label="Expand AI Assistant">✦</button>
+      <div class="climate-ai-full">
+      <header class="climate-chat-header">
+        <div class="climate-chat-topline">
+          <span class="climate-chat-label">AI ASSISTANT</span>
+          <button type="button" class="climate-token-pill" id="climate-token-pill" title="Session usage" aria-expanded="false">
+            <span aria-hidden="true">◈</span>
+            <span id="climate-token-label">0 tokens</span>
+          </button>
+          <span class="climate-provider-state" id="climate-provider-state"><i class="climate-provider-state-dot" aria-hidden="true"></i><span class="climate-provider-state-text">Checking</span></span>
+          <button type="button" class="climate-chat-new-btn" id="climate-chat-new" title="New Chat"><span class="climate-chat-new-icon" aria-hidden="true">+</span><span class="climate-chat-new-label">New Chat</span></button>
+          <button type="button" class="climate-icon-btn climate-chat-secondary" id="climate-chat-history" title="History" aria-label="History">◷</button>
+          <button type="button" class="climate-icon-btn" id="climate-chat-menu" title="More" aria-label="More options">⋯</button>
+          <button type="button" class="climate-icon-btn climate-chat-close" id="climate-ai-close" title="Close AI panel" aria-label="Close AI panel">×</button>
+        </div>
+        <div class="climate-chat-title-row">
+          <div class="climate-chat-title" id="climate-chat-title" title="New chat">New chat</div>
+          <button type="button" class="climate-icon-btn climate-chat-secondary" id="climate-chat-rename" title="Rename chat" aria-label="Rename chat">✎</button>
+        </div>
+        <div class="climate-chat-popover climate-usage-popover" id="climate-usage-panel" hidden>
+          <div class="climate-usage-head">
+            <strong>SESSION USAGE</strong>
+            <span id="climate-usage-since">—</span>
+          </div>
+          <div class="climate-usage-total" id="climate-usage-total">0</div>
+          <div class="climate-usage-grid">
+            <div><i class="is-input"></i>Input <b id="climate-usage-input">0</b></div>
+            <div><i class="is-output"></i>Output <b id="climate-usage-output">0</b></div>
+            <div><i class="is-cached"></i>Cached <b id="climate-usage-cached">0</b></div>
+          </div>
+          <div class="climate-usage-section">By provider</div>
+          <div class="climate-usage-providers" id="climate-usage-providers"></div>
+          <div class="climate-usage-foot">
+            <span>Current run <b id="climate-usage-run">0</b></span>
+            <span id="climate-usage-source">unavailable</span>
+          </div>
+        </div>
+        <div class="climate-chat-popover" id="climate-chat-history-panel" hidden>
+          <div class="climate-chat-popover-title">History</div>
+          <div id="climate-chat-history-list"></div>
+        </div>
+        <div class="climate-chat-popover climate-chat-menu-panel" id="climate-chat-menu-panel" hidden>
+          <button type="button" data-chat-menu="new">New Chat</button>
+          <button type="button" data-chat-menu="history">History</button>
+          <button type="button" data-chat-menu="rename">Rename chat</button>
+          <button type="button" data-chat-menu="context">Context settings</button>
+          <button type="button" data-chat-menu="clear">Clear messages</button>
+        </div>
+      </header>
+
+      <div class="climate-ai-feed" id="climate-ai-feed" aria-live="polite">
+        <div class="climate-ai-empty"><strong>CLIMATE coding chat</strong><span>Ask about the active repository. Provider protocol stays in Details.</span></div>
+      </div>
+
+      <div class="climate-chat-composer" id="climate-chat-composer">
+        <div class="climate-compose-box">
+          <textarea id="climate-prompt" placeholder="Ask a follow-up…" rows="3" aria-label="Ask a follow-up"></textarea>
+          <div class="climate-compose-toolbar">
+            <button type="button" class="climate-compose-tool" id="climate-ctx-mention" title="Context">@</button>
+            <button type="button" class="climate-compose-tool" id="climate-ctx-files" title="Related files">#</button>
+            <button type="button" class="climate-compose-tool" id="climate-ctx-attach" title="Attachments">⧉</button>
+            <span class="climate-spacer"></span>
+            <button type="button" class="climate-btn climate-btn-ghost" id="climate-cancel" hidden>Cancel</button>
+            <button type="button" class="climate-send-fab" id="climate-send" title="Send" aria-label="Send">➤</button>
+          </div>
+        </div>
+        <div class="climate-chat-footer-controls">
+          <label class="climate-chat-pill" title="Provider">
+            <i class="climate-chat-pill-dot" id="climate-provider-dot" aria-hidden="true"></i>
+            <select id="climate-provider-panel" aria-label="Provider"></select>
+          </label>
+          <label class="climate-chat-pill climate-chat-pill-model" title="Model">
+            <select id="climate-model-panel" aria-label="Model"><option value="">Select model</option></select>
+          </label>
+          <button type="button" class="climate-compose-tool" id="climate-model-refresh" title="Refresh models">↻</button>
+        </div>
+        <div class="climate-context-popover" id="climate-context-panel" hidden>
+          <div class="climate-field-label">CONTEXT</div>
+          <label><input type="checkbox" id="climate-current-file" checked><span>Current File<small id="climate-current-file-name">No file open</small></span></label>
+          <label><input type="checkbox" id="climate-selection" checked><span>Selected Code<small id="climate-selection-meta">No selection</small></span></label>
+          <label><input type="checkbox" id="climate-selected-files"><span>Related Files<small><b id="climate-related-count">0</b> selected</small></span></label>
+          <label><input type="checkbox" id="climate-repo-context"><span>Repository Context<small>Active repository only</small></span></label>
+        </div>
+      </div>
+
+      <div id="climate-provider-cards" class="climate-provider-cards" hidden aria-hidden="true"></div>
+      <div class="climate-proposal-actions" id="climate-proposal-actions" hidden>
+        <button class="climate-btn" id="climate-reject">Undo All</button>
+        <button class="climate-btn" id="climate-accept">Keep All</button>
+        <button class="climate-btn climate-btn-primary" id="climate-review">Review Changes</button>
+      </div>
+      </div>
+    </aside>
+  </div>
+  <footer class="climate-statusbar">
+    <span id="climate-status">Ready</span><span class="climate-spacer"></span>
+    <span id="climate-git-summary">Git —</span><span>Ln <b id="climate-line">1</b>, Col <b id="climate-column">1</b></span><span>Spaces: 4</span><span>UTF-8</span><span>LF</span><span id="climate-language">Plain Text</span>
+  </footer>
+
+  <dialog class="climate-dialog" id="climate-save-dialog">
+    <form method="dialog"><h2>Review changes before save</h2><pre id="climate-save-diff" class="mono"></pre><div><button value="cancel" class="climate-btn">Cancel</button><button value="confirm" class="climate-btn climate-btn-primary" id="climate-confirm-save">Confirm save</button></div></form>
+  </dialog>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
+<script src="{{ url_for('static', filename='js/climate.js') }}?v=7"></script>
+{% endblock %}

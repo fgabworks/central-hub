@@ -1,0 +1,50 @@
+{
+  "label": "before-v2",
+  "base": "http://127.0.0.1:8091",
+  "checks": {
+    "initial": {
+      "url": "http://127.0.0.1:8091/work/climate",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "sidebar": {
+        "x": 0,
+        "y": 0,
+        "w": 170,
+        "h": 900
+      },
+      "content": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 852
+      },
+      "ai": {
+        "x": 1032,
+        "y": 100,
+        "w": 360,
+        "h": 774
+      },
+      "aiStructure": {
+        "title": "AI ASSISTANT",
+        "conversationTitle": "New chat",
+        "hasNewChat": true,
+        "hasHistory": true,
+        "hasMenu": true,
+        "hasProviderCards": true,
+        "providerCardsVisible": false,
+        "composerPlaceholder": "Ask a follow-up…",
+        "composerNearBottom": true,
+        "providerSelectNearComposer": true,
+        "messageCount": 0,
+        "hasYouLabel": false,
+        "hasUndoKeepReview": true,
+        "hasDetailsDiagnostics": false,
+        "rawEventLeak": false,
+        "feedTextSample": "CLIMATE coding chatAsk a follow-up about the active repository. Raw provider events stay in Details."
+      },
+      "workbenchClasses": "climate-workbench"
+    }
+  }
+}

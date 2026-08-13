@@ -2,14 +2,45 @@
 {% block title %}AI Connections - {{ app_name }}{% endblock %}
 {% block content %}
 {% set sh_title = "AI Connections" %}
-{% set sh_info = "Connect provider tools once, then select them from Aira or AiriX." %}
+{% set sh_info = "Manage CLIMATE coding providers once, then select them in Code Workspace." %}
 {% include "partials/section_header.html" %}
 
 <div class="agent-safety" role="status">
-  Credentials remain in provider-managed CLI storage or server environment variables. Central Hub never accepts passwords, browser cookies, private sessions, or API keys on this page.
+  Credentials remain in provider-managed CLI storage. CLIMATE never accepts passwords, browser cookies, private sessions, or API keys on this page.
 </div>
 
-<div class="connections-list" id="ai-connections">
+<section class="card connection-defaults" id="coding-defaults" data-defaults='{{ coding_defaults|tojson }}'>
+  <div class="connection-main">
+    <div>
+      <h2>CLIMATE coding defaults</h2>
+      <p class="muted">Used when Code Workspace has no manual provider/model selection yet. Manual selection remains authoritative.</p>
+    </div>
+  </div>
+  <form class="coding-defaults-form builder-form" id="coding-defaults-form">
+    <label><span>Default Coding Provider</span>
+      <select name="default_provider" id="coding-default-provider">
+        <option value="">— none —</option>
+        {% for item in connections %}
+        <option value="{{ item.id }}" {% if coding_defaults.default_provider == item.id %}selected{% endif %}>{{ item.label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% for item in connections %}
+    <label data-default-model-for="{{ item.id }}"><span>Default Model · {{ item.label }}</span>
+      <input type="text" name="default_model_{{ item.id }}" value="{{ coding_defaults.default_models.get(item.id, '') }}" placeholder="Exact model id or leave blank" list="models-{{ item.id }}">
+      <datalist id="models-{{ item.id }}">
+        {% for model in item.models or [] %}
+        <option value="{{ model }}"></option>
+        {% endfor %}
+      </datalist>
+    </label>
+    {% endfor %}
+    <button type="submit" class="btn btn-primary">Save defaults</button>
+    <span class="muted coding-defaults-status" id="coding-defaults-status" aria-live="polite"></span>
+  </form>
+</section>
+
+<div class="connections-list" id="ai-connections" data-coding="1">
   {% for item in connections %}
   <section class="connection-row card" data-provider-id="{{ item.id }}">
     <div class="connection-main">
@@ -20,39 +51,69 @@
       <span class="status-pill connection-status status-{{ item.state|replace('_', '-') }}">{{ item.summary_label or item.status }}</span>
     </div>
     <dl class="connection-facts">
-      <div><dt>Installed</dt><dd class="connection-installed">{{ 'Yes' if item.installed else 'No' }}</dd></div>
-      <div><dt>Authenticated</dt><dd class="connection-authenticated">{{ 'Yes' if item.authenticated else 'No' }}</dd></div>
+      <div><dt>Installed</dt><dd class="connection-installed">{{ 'Installed' if item.installed else 'Not Installed' }}</dd></div>
+      <div><dt>Connected</dt><dd class="connection-authenticated">{{ 'Connected' if item.authenticated and item.state == 'connected' else 'Not Connected' }}</dd></div>
       <div><dt>Available</dt><dd class="connection-available">{{ 'Yes' if item.available else 'No' }}</dd></div>
       <div><dt>Version</dt><dd class="connection-version">{{ item.version or '—' }}</dd></div>
+      <div><dt>Executable</dt><dd class="connection-executable mono">{{ item.executable_path or '—' }}</dd></div>
+      <div><dt>CLI</dt><dd class="connection-cli">{{ item.cli_commands|join(', ') if item.cli_commands else '—' }}</dd></div>
+      <div><dt>Account</dt><dd class="connection-account">{{ item.account_label or '—' }}</dd></div>
       <div><dt>Last Checked</dt><dd class="connection-last-check">{{ item.last_check or 'Never' }}</dd></div>
-      <div><dt>CLI commands</dt><dd class="connection-cli">{{ item.cli_commands|join(', ') if item.cli_commands else '—' }}</dd></div>
-      <div><dt>Account</dt><dd class="connection-account">{{ item.account_label or 'Not exposed' }}</dd></div>
       <div><dt>Credential storage</dt><dd>{{ item.credential_storage }}</dd></div>
     </dl>
     <p class="connection-detail">{{ item.detail }}{% if item.install_help and not item.installed %} — {{ item.install_help }}{% endif %}</p>
-    <details>
-      <summary>View Capabilities</summary>
-      <pre class="agent-pre connection-capabilities">{{ item.capabilities|tojson(indent=2) }}</pre>
-    </details>
+    <div class="connection-models">
+      <strong>Models</strong>
+      <p class="muted connection-models-list">{% if item.models %}{{ item.models|join(', ') }}{% else %}Connect, then Refresh Status / Refresh Models{% endif %}</p>
+    </div>
     <div class="connection-actions">
       {% if not item.installed %}
       <button type="button" class="btn btn-primary" data-action="install_help">Install help</button>
+      <button type="button" class="btn" data-action="refresh-status">Refresh Status</button>
       {% elif item.state == 'connected' %}
+      <button type="button" class="btn" data-action="refresh-status">Refresh Status</button>
+      <button type="button" class="btn" data-action="refresh-models">Refresh Models</button>
       <button type="button" class="btn" data-action="reauthenticate">Re-authenticate</button>
-      <button type="button" class="btn btn-primary" data-action="test">Test Connection</button>
-      <button type="button" class="btn" data-action="disconnect">Sign out</button>
+      <button type="button" class="btn" data-action="disconnect">Disconnect</button>
       {% else %}
       <button type="button" class="btn btn-primary" data-action="connect">Connect</button>
-      <button type="button" class="btn" data-action="test">Test Connection</button>
-      <button type="button" class="btn" data-action="disconnect">Sign out</button>
-      {% endif %}
-      {% if item.id != 'codex' and item.installed %}
-      <button type="button" class="btn" data-action="refresh-models">Refresh Models</button>
+      <button type="button" class="btn" data-action="refresh-status">Refresh Status</button>
+      <button type="button" class="btn" data-action="disconnect">Disconnect</button>
       {% endif %}
     </div>
   </section>
   {% endfor %}
 </div>
+
+{% if other_connections %}
+<details class="card" style="margin-top:0.85rem;padding:0.85rem 1rem">
+  <summary>Other AI providers ({{ other_connections|length }})</summary>
+  <div class="connections-list" id="ai-connections-other" style="margin-top:0.75rem">
+    {% for item in other_connections %}
+    <section class="connection-row card" data-provider-id="{{ item.id }}">
+      <div class="connection-main">
+        <div>
+          <h2>{{ item.label }}</h2>
+          <p class="muted">{{ item.authentication_method }}</p>
+        </div>
+        <span class="status-pill connection-status status-{{ item.state|replace('_', '-') }}">{{ item.summary_label or item.status }}</span>
+      </div>
+      <p class="connection-detail">{{ item.detail }}</p>
+      <div class="connection-actions">
+        {% if item.state == 'connected' %}
+        <button type="button" class="btn btn-primary" data-action="test">Test Connection</button>
+        <button type="button" class="btn" data-action="disconnect">Sign out</button>
+        {% else %}
+        <button type="button" class="btn btn-primary" data-action="connect">Connect</button>
+        <button type="button" class="btn" data-action="test">Test Connection</button>
+        {% endif %}
+      </div>
+    </section>
+    {% endfor %}
+  </div>
+</details>
+{% endif %}
+
 <script src="{{ url_for('static', filename='js/hub_perf.js') }}?v=perf-1"></script>
-<script src="{{ url_for('static', filename='js/ai_connections.js') }}?v=cli-conn-2" defer></script>
+<script src="{{ url_for('static', filename='js/ai_connections.js') }}?v=cli-conn-3" defer></script>
 {% endblock %}

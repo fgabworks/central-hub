@@ -1,0 +1,514 @@
+{
+  "label": "theme-after",
+  "base": "http://127.0.0.1:8080",
+  "pages": {
+    "/work": {
+      "url": "http://127.0.0.1:8080/work",
+      "bodyClass": "climate-system-shell theme-work",
+      "tokens": {
+        "--climate-bg": "#0a0a0c",
+        "--climate-bg-elevated": "#101014",
+        "--climate-panel": "#141417",
+        "--climate-panel-2": "#1a1a1f",
+        "--climate-border": "#2c313a",
+        "--climate-text": "#f0f2f5",
+        "--charcoal": "#0a0a0c",
+        "--panel": "#141417",
+        "--panel-2": "#1a1a1f",
+        "--border": "#2c313a",
+        "--text": "#f0f2f5",
+        "--crimson": "#d94a3f",
+        "--workspace-accent": "#f46e63",
+        "--accent-border": "rgba(244, 110, 99, 0.48)",
+        "--accent-soft": "rgba(244, 110, 99, 0.18)",
+        "--accent-metallic": "#d94a3f",
+        "--success": "#22c55e",
+        "--warning": "#f59e0b"
+      },
+      "samples": {
+        "body": {
+          "sel": "body",
+          "bg": "rgb(10, 10, 12)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 1440,
+          "h": 1406
+        },
+        "appShell": {
+          "sel": ".app-shell",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 1440,
+          "h": 1406
+        },
+        "sidebar": {
+          "sel": ".sidebar",
+          "bg": "rgb(16, 16, 20)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 170,
+          "h": 900
+        },
+        "topbar": {
+          "sel": ".topbar",
+          "bg": "color(srgb 0.0627451 0.0627451 0.0784314 / 0.92)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 1222,
+          "h": 54
+        },
+        "content": {
+          "sel": ".content",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 1222,
+          "h": 1352
+        },
+        "card": {
+          "sel": ".card, .panel, .stat-card",
+          "bg": "rgb(20, 20, 23)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(44, 49, 58)",
+          "w": 228,
+          "h": 90
+        },
+        "climateShell": null,
+        "climateExplorer": null,
+        "climateCenter": null,
+        "climateAi": null,
+        "workspaceActive": {
+          "sel": ".workspace-btn.is-active",
+          "bg": "rgba(244, 110, 99, 0.18)",
+          "color": "rgb(255, 201, 195)",
+          "border": "rgba(244, 110, 99, 0.48)",
+          "w": 76,
+          "h": 36
+        },
+        "navActive": {
+          "sel": ".nav-link.is-active",
+          "bg": "rgb(30, 30, 36)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 157,
+          "h": 32
+        },
+        "brandMark": {
+          "sel": ".brand-mark",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(255, 255, 255)",
+          "border": "rgba(61, 193, 255, 0.2)",
+          "w": 22,
+          "h": 22
+        }
+      }
+    },
+    "/personal": {
+      "url": "http://127.0.0.1:8080/personal",
+      "bodyClass": "climate-system-shell theme-personal",
+      "tokens": {
+        "--climate-bg": "#0a0a0c",
+        "--climate-bg-elevated": "#101014",
+        "--climate-panel": "#141417",
+        "--climate-panel-2": "#1a1a1f",
+        "--climate-border": "#2c313a",
+        "--climate-text": "#f0f2f5",
+        "--charcoal": "#0a0a0c",
+        "--panel": "#141417",
+        "--panel-2": "#1a1a1f",
+        "--border": "#2c313a",
+        "--text": "#f0f2f5",
+        "--crimson": "#0a7fb8",
+        "--workspace-accent": "#3dc1ff",
+        "--accent-border": "rgba(61, 193, 255, 0.48)",
+        "--accent-soft": "rgba(61, 193, 255, 0.16)",
+        "--accent-metallic": "#0a7fb8",
+        "--success": "#22c55e",
+        "--warning": "#f59e0b"
+      },
+      "samples": {
+        "body": {
+          "sel": "body",
+          "bg": "rgb(10, 10, 12)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 1440,
+          "h": 900
+        },
+        "appShell": {
+          "sel": ".app-shell",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 1440,
+          "h": 900
+        },
+        "sidebar": {
+          "sel": ".sidebar",
+          "bg": "rgb(16, 16, 20)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 170,
+          "h": 900
+        },
+        "topbar": {
+          "sel": ".topbar",
+          "bg": "color(srgb 0.0627451 0.0627451 0.0784314 / 0.92)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 1222,
+          "h": 54
+        },
+        "content": {
+          "sel": ".content",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 1222,
+          "h": 817
+        },
+        "card": {
+          "sel": ".card, .panel, .stat-card",
+          "bg": "rgb(20, 20, 23)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(44, 49, 58)",
+          "w": 287,
+          "h": 90
+        },
+        "climateShell": null,
+        "climateExplorer": null,
+        "climateCenter": null,
+        "climateAi": null,
+        "workspaceActive": {
+          "sel": ".workspace-btn.is-active",
+          "bg": "rgba(61, 193, 255, 0.16)",
+          "color": "rgb(182, 231, 255)",
+          "border": "rgba(61, 193, 255, 0.48)",
+          "w": 76,
+          "h": 36
+        },
+        "navActive": {
+          "sel": ".nav-link.is-active",
+          "bg": "rgb(30, 30, 36)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 157,
+          "h": 32
+        },
+        "brandMark": {
+          "sel": ".brand-mark",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(255, 255, 255)",
+          "border": "rgba(61, 193, 255, 0.2)",
+          "w": 22,
+          "h": 22
+        }
+      }
+    },
+    "/work/climate": {
+      "url": "http://127.0.0.1:8080/work/climate",
+      "bodyClass": "climate-system-shell theme-work enable-motion underline-links",
+      "tokens": {
+        "--climate-bg": "#0a0a0c",
+        "--climate-bg-elevated": "#101014",
+        "--climate-panel": "#141417",
+        "--climate-panel-2": "#1a1a1f",
+        "--climate-border": "#2c313a",
+        "--climate-text": "#f0f2f5",
+        "--charcoal": "#0a0a0c",
+        "--panel": "#141417",
+        "--panel-2": "#1a1a1f",
+        "--border": "#2c313a",
+        "--text": "#f0f2f5",
+        "--crimson": "#d94a3f",
+        "--workspace-accent": "#f46e63",
+        "--accent-border": "rgba(244, 110, 99, 0.48)",
+        "--accent-soft": "rgba(244, 110, 99, 0.18)",
+        "--accent-metallic": "#d94a3f",
+        "--success": "#22c55e",
+        "--warning": "#f59e0b"
+      },
+      "samples": {
+        "body": {
+          "sel": "body",
+          "bg": "rgb(10, 10, 12)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 1440,
+          "h": 900
+        },
+        "appShell": {
+          "sel": ".app-shell",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 1440,
+          "h": 900
+        },
+        "sidebar": {
+          "sel": ".sidebar",
+          "bg": "rgb(16, 16, 20)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 170,
+          "h": 900
+        },
+        "topbar": {
+          "sel": ".topbar",
+          "bg": "color(srgb 0.0627451 0.0627451 0.0784314 / 0.92)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 0,
+          "h": 0
+        },
+        "content": {
+          "sel": ".content",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 1270,
+          "h": 899
+        },
+        "card": null,
+        "climateShell": {
+          "sel": ".climate-shell",
+          "bg": "rgb(10, 10, 12)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 1270,
+          "h": 899
+        },
+        "climateExplorer": {
+          "sel": ".climate-explorer",
+          "bg": "rgb(20, 20, 23)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 200,
+          "h": 821
+        },
+        "climateCenter": {
+          "sel": ".climate-center",
+          "bg": "rgb(10, 10, 12)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 770,
+          "h": 821
+        },
+        "climateAi": {
+          "sel": ".climate-ai",
+          "bg": "rgb(20, 20, 23)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 292,
+          "h": 821
+        },
+        "workspaceActive": {
+          "sel": ".workspace-btn.is-active",
+          "bg": "rgba(244, 110, 99, 0.18)",
+          "color": "rgb(255, 201, 195)",
+          "border": "rgba(244, 110, 99, 0.48)",
+          "w": 76,
+          "h": 36
+        },
+        "navActive": {
+          "sel": ".nav-link.is-active",
+          "bg": "rgb(30, 30, 36)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 157,
+          "h": 32
+        },
+        "brandMark": {
+          "sel": ".brand-mark",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(255, 255, 255)",
+          "border": "rgba(61, 193, 255, 0.2)",
+          "w": 0,
+          "h": 0
+        }
+      }
+    },
+    "/personal/climate": {
+      "url": "http://127.0.0.1:8080/personal/climate",
+      "bodyClass": "climate-system-shell theme-personal enable-motion underline-links",
+      "tokens": {
+        "--climate-bg": "#0a0a0c",
+        "--climate-bg-elevated": "#101014",
+        "--climate-panel": "#141417",
+        "--climate-panel-2": "#1a1a1f",
+        "--climate-border": "#2c313a",
+        "--climate-text": "#f0f2f5",
+        "--charcoal": "#0a0a0c",
+        "--panel": "#141417",
+        "--panel-2": "#1a1a1f",
+        "--border": "#2c313a",
+        "--text": "#f0f2f5",
+        "--crimson": "#0a7fb8",
+        "--workspace-accent": "#3dc1ff",
+        "--accent-border": "rgba(61, 193, 255, 0.48)",
+        "--accent-soft": "rgba(61, 193, 255, 0.16)",
+        "--accent-metallic": "#0a7fb8",
+        "--success": "#22c55e",
+        "--warning": "#f59e0b"
+      },
+      "samples": {
+        "body": {
+          "sel": "body",
+          "bg": "rgb(10, 10, 12)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 1440,
+          "h": 900
+        },
+        "appShell": {
+          "sel": ".app-shell",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 1440,
+          "h": 900
+        },
+        "sidebar": {
+          "sel": ".sidebar",
+          "bg": "rgb(16, 16, 20)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 170,
+          "h": 900
+        },
+        "topbar": {
+          "sel": ".topbar",
+          "bg": "color(srgb 0.0627451 0.0627451 0.0784314 / 0.92)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 0,
+          "h": 0
+        },
+        "content": {
+          "sel": ".content",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 1270,
+          "h": 899
+        },
+        "card": null,
+        "climateShell": {
+          "sel": ".climate-shell",
+          "bg": "rgb(10, 10, 12)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 1270,
+          "h": 899
+        },
+        "climateExplorer": {
+          "sel": ".climate-explorer",
+          "bg": "rgb(20, 20, 23)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 200,
+          "h": 821
+        },
+        "climateCenter": {
+          "sel": ".climate-center",
+          "bg": "rgb(10, 10, 12)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 770,
+          "h": 821
+        },
+        "climateAi": {
+          "sel": ".climate-ai",
+          "bg": "rgb(20, 20, 23)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 292,
+          "h": 821
+        },
+        "workspaceActive": {
+          "sel": ".workspace-btn.is-active",
+          "bg": "rgba(61, 193, 255, 0.16)",
+          "color": "rgb(182, 231, 255)",
+          "border": "rgba(61, 193, 255, 0.48)",
+          "w": 76,
+          "h": 36
+        },
+        "navActive": {
+          "sel": ".nav-link.is-active",
+          "bg": "rgb(30, 30, 36)",
+          "color": "rgb(240, 242, 245)",
+          "border": "rgb(240, 242, 245)",
+          "w": 157,
+          "h": 32
+        },
+        "brandMark": {
+          "sel": ".brand-mark",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(255, 255, 255)",
+          "border": "rgba(61, 193, 255, 0.2)",
+          "w": 0,
+          "h": 0
+        }
+      }
+    }
+  },
+  "diff": {
+    "surfaceSame": true,
+    "surfacePairs": {
+      "--climate-bg": {
+        "vanta": "#0a0a0c",
+        "arctic": "#0a0a0c"
+      },
+      "--climate-panel": {
+        "vanta": "#141417",
+        "arctic": "#141417"
+      },
+      "--climate-panel-2": {
+        "vanta": "#1a1a1f",
+        "arctic": "#1a1a1f"
+      },
+      "--climate-border": {
+        "vanta": "#2c313a",
+        "arctic": "#2c313a"
+      },
+      "--charcoal": {
+        "vanta": "#0a0a0c",
+        "arctic": "#0a0a0c"
+      },
+      "--panel": {
+        "vanta": "#141417",
+        "arctic": "#141417"
+      },
+      "--border": {
+        "vanta": "#2c313a",
+        "arctic": "#2c313a"
+      },
+      "--text": {
+        "vanta": "#f0f2f5",
+        "arctic": "#f0f2f5"
+      }
+    },
+    "accentPairs": {
+      "--workspace-accent": {
+        "vanta": "#f46e63",
+        "arctic": "#3dc1ff"
+      },
+      "--crimson": {
+        "vanta": "#d94a3f",
+        "arctic": "#0a7fb8"
+      },
+      "--accent-border": {
+        "vanta": "rgba(244, 110, 99, 0.48)",
+        "arctic": "rgba(61, 193, 255, 0.48)"
+      },
+      "--accent-soft": {
+        "vanta": "rgba(244, 110, 99, 0.18)",
+        "arctic": "rgba(61, 193, 255, 0.16)"
+      }
+    },
+    "bodyBgSame": true,
+    "sidebarBgSame": true,
+    "panelBgSame": true
+  }
+}

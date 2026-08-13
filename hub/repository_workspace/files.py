@@ -10,6 +10,7 @@ from typing import Any
 from hub.repository_workspace.security import (
     WorkspaceSecurityError,
     is_blocked_secret,
+    is_generated_dir,
     is_supported_text_path,
     language_for,
     looks_binary,
@@ -40,7 +41,12 @@ class RepositoryFiles:
         self.root = repo_root.resolve()
         self.settings = settings
 
-    def build_tree(self, *, max_entries: int | None = None) -> dict[str, Any]:
+    def build_tree(
+        self,
+        *,
+        max_entries: int | None = None,
+        include_excluded: bool = False,
+    ) -> dict[str, Any]:
         limit = max_entries or self.settings.max_tree_entries
         depth_limit = self.settings.max_tree_depth
         truncated = False
@@ -65,14 +71,19 @@ class RepositoryFiles:
                     break
                 name = child.name
                 if child.is_dir():
-                    if should_skip_dir(name):
+                    if name.lower().startswith(".git"):
+                        continue
+                    if should_skip_dir(name) and not include_excluded:
                         continue
                     # Skip secret dirs entirely
                     try:
                         rel = relative_posix(self.root, child)
                     except ValueError:
                         continue
-                    if is_blocked_secret(rel):
+                    safe_rel = Path(
+                        *(part for part in Path(rel).parts if not is_generated_dir(part))
+                    )
+                    if is_blocked_secret(safe_rel):
                         continue
                     count += 1
                     node = {
@@ -87,7 +98,10 @@ class RepositoryFiles:
                         rel = relative_posix(self.root, child)
                     except ValueError:
                         continue
-                    if is_blocked_secret(rel):
+                    safe_rel = Path(
+                        *(part for part in Path(rel).parts if not is_generated_dir(part))
+                    )
+                    if is_blocked_secret(safe_rel):
                         continue
                     count += 1
                     entries.append(

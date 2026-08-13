@@ -7,6 +7,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -46,6 +47,7 @@ class FakeProvider:
             "state": self.state, "detail": f"state={self.state}", "installed": True,
             "available": self.state == "connected", "account_label": "safe-account",
             "authenticated": self.state == "connected", "version": "1.0.0",
+            "executable_path": self.descriptor.executable or self.descriptor.id,
             "cli_commands": [self.descriptor.executable or self.descriptor.id],
         }
 
@@ -185,17 +187,34 @@ class AiConnectionsTests(unittest.TestCase):
         page = client.get("/system/ai-connections")
         self.assertEqual(page.status_code, 200)
         self.assertIn(b"AI Connections", page.data)
-        self.assertIn(b"Test Connection", page.data)
+        self.assertIn(b"Refresh Status", page.data)
+        self.assertIn(b"Default Coding Provider", page.data)
         personal = client.get("/personal/aira")
-        self.assertIn(b"AI Connections", personal.data)
+        self.assertIn(b"/system/ai-connections", personal.data)
+        self.assertIn(b">Connections<", personal.data)
+
+    def test_refresh_status_and_coding_defaults(self):
+        refreshed = self.registry.action("codex", "refresh-status")
+        self.assertEqual(refreshed["connection"]["state"], "connected")
+        self.assertIn("codex-dynamic-a", refreshed["connection"].get("models") or [])
+        defaults = self.registry.set_coding_defaults(
+            default_provider="claude-code",
+            default_models={"claude-code": "claude-sonnet", "codex": "codex-mini"},
+        )
+        self.assertEqual(defaults["default_provider"], "claude-code")
+        self.assertEqual(defaults["default_models"]["claude-code"], "claude-sonnet")
+        self.assertEqual(self.registry.coding_defaults()["default_models"]["codex"], "codex-mini")
+        with self.assertRaises(ValueError):
+            self.registry.set_coding_defaults(default_provider="not-a-provider")
 
     def test_provider_switching_is_preserved_per_run(self):
         service = AgentCenterService(
             Registry(repositories=[], defaults=RegistryDefaults()),
             store=self.store, adapters=[self.codex, self.claude], timeout_seconds=10,
         )
-        first = service.start_run({"profile_id": "aira", "agent_id": "codex", "model": "codex-dynamic-a", "mode": "ask", "prompt": "first"})
-        second = service.start_run({"profile_id": "aira", "agent_id": "claude-code", "model": "claude-code-dynamic-b", "mode": "review", "prompt": "second"})
+        with patch.object(service, "resolve_repository_ids", return_value=[]):
+            first = service.start_run({"profile_id": "aira", "agent_id": "codex", "model": "codex-dynamic-a", "mode": "ask", "prompt": "first"})
+            second = service.start_run({"profile_id": "aira", "agent_id": "claude-code", "model": "claude-code-dynamic-b", "mode": "review", "prompt": "second"})
         deadline = time.time() + 5
         while time.time() < deadline:
             if service.get_run(first["id"], profile_id="aira")["status"] in {"completed", "failed"} and service.get_run(second["id"], profile_id="aira")["status"] in {"completed", "failed"}:

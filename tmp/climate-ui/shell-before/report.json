@@ -1,0 +1,986 @@
+{
+  "label": "before",
+  "base": "http://127.0.0.1:8081",
+  "pages": {
+    "work_dashboard": {
+      "url": "http://127.0.0.1:8081/work",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "scroll": {
+        "x": 0,
+        "y": 0
+      },
+      "bodyBg": "rgb(13, 15, 18)",
+      "appShell": {
+        "x": 0,
+        "y": 0,
+        "w": 1440,
+        "h": 1400,
+        "right": 1440,
+        "bottom": 1400
+      },
+      "appShellPadL": "170px",
+      "appShellPadR": "48px",
+      "appShellClasses": "app-shell has-activity-rail has-ad-dock",
+      "sidebar": {
+        "x": 0,
+        "y": 0,
+        "w": 170,
+        "h": 900,
+        "right": 170,
+        "bottom": 900
+      },
+      "sidebarW": 170,
+      "sidebarBrand": {
+        "x": 0,
+        "y": 0,
+        "w": 169,
+        "h": 48,
+        "right": 169,
+        "bottom": 48
+      },
+      "sidebarBrandDisplay": "flex",
+      "workspaceSwitcher": {
+        "x": 0,
+        "y": 48,
+        "w": 169,
+        "h": 48,
+        "right": 169,
+        "bottom": 96
+      },
+      "topbar": {
+        "x": 170,
+        "y": 0,
+        "w": 1222,
+        "h": 48,
+        "right": 1392,
+        "bottom": 48
+      },
+      "topbarDisplay": "flex",
+      "topbarH": 48,
+      "mainColumn": {
+        "x": 170,
+        "y": 0,
+        "w": 1222,
+        "h": 1400,
+        "right": 1392,
+        "bottom": 1400
+      },
+      "content": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 1352,
+        "right": 1392,
+        "bottom": 1400
+      },
+      "contentPad": "17.5px 18.9px 28px",
+      "climateShell": null,
+      "climateTitlebar": null,
+      "firstNav": "Code Workspace",
+      "navCount": 14
+    },
+    "work_climate": {
+      "url": "http://127.0.0.1:8081/work/climate",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "scroll": {
+        "x": 0,
+        "y": 0
+      },
+      "bodyBg": "rgb(13, 15, 18)",
+      "appShell": {
+        "x": 0,
+        "y": 0,
+        "w": 1440,
+        "h": 900,
+        "right": 1440,
+        "bottom": 900
+      },
+      "appShellPadL": "170px",
+      "appShellPadR": "0px",
+      "appShellClasses": "app-shell",
+      "sidebar": {
+        "x": 0,
+        "y": 0,
+        "w": 170,
+        "h": 900,
+        "right": 170,
+        "bottom": 900
+      },
+      "sidebarW": 170,
+      "sidebarBrand": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0,
+        "right": 0,
+        "bottom": 0
+      },
+      "sidebarBrandDisplay": "none",
+      "workspaceSwitcher": {
+        "x": 0,
+        "y": 0,
+        "w": 169,
+        "h": 48,
+        "right": 169,
+        "bottom": 48
+      },
+      "topbar": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0,
+        "right": 0,
+        "bottom": 0
+      },
+      "topbarDisplay": "none",
+      "topbarH": 0,
+      "mainColumn": {
+        "x": 170,
+        "y": 0,
+        "w": 1270,
+        "h": 899,
+        "right": 1440,
+        "bottom": 899
+      },
+      "content": {
+        "x": 170,
+        "y": 0,
+        "w": 1270,
+        "h": 899,
+        "right": 1440,
+        "bottom": 899
+      },
+      "contentPad": "0px",
+      "climateShell": {
+        "x": 170,
+        "y": 0,
+        "w": 1270,
+        "h": 899,
+        "right": 1440,
+        "bottom": 899
+      },
+      "climateTitlebar": {
+        "x": 170,
+        "y": 0,
+        "w": 1270,
+        "h": 52,
+        "right": 1440,
+        "bottom": 52
+      },
+      "firstNav": "Code Workspace",
+      "navCount": 14
+    },
+    "personal_dashboard": {
+      "url": "http://127.0.0.1:8081/personal",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "scroll": {
+        "x": 0,
+        "y": 0
+      },
+      "bodyBg": "rgb(13, 15, 18)",
+      "appShell": {
+        "x": 0,
+        "y": 0,
+        "w": 1440,
+        "h": 900,
+        "right": 1440,
+        "bottom": 900
+      },
+      "appShellPadL": "170px",
+      "appShellPadR": "48px",
+      "appShellClasses": "app-shell has-activity-rail has-ad-dock",
+      "sidebar": {
+        "x": 0,
+        "y": 0,
+        "w": 170,
+        "h": 900,
+        "right": 170,
+        "bottom": 900
+      },
+      "sidebarW": 170,
+      "sidebarBrand": {
+        "x": 0,
+        "y": 0,
+        "w": 169,
+        "h": 48,
+        "right": 169,
+        "bottom": 48
+      },
+      "sidebarBrandDisplay": "flex",
+      "workspaceSwitcher": {
+        "x": 0,
+        "y": 48,
+        "w": 169,
+        "h": 48,
+        "right": 169,
+        "bottom": 96
+      },
+      "topbar": {
+        "x": 170,
+        "y": 0,
+        "w": 1222,
+        "h": 48,
+        "right": 1392,
+        "bottom": 48
+      },
+      "topbarDisplay": "flex",
+      "topbarH": 48,
+      "mainColumn": {
+        "x": 170,
+        "y": 0,
+        "w": 1222,
+        "h": 865,
+        "right": 1392,
+        "bottom": 865
+      },
+      "content": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 817,
+        "right": 1392,
+        "bottom": 865
+      },
+      "contentPad": "17.5px 18.9px 28px",
+      "climateShell": null,
+      "climateTitlebar": null,
+      "firstNav": "Dashboard",
+      "navCount": 13
+    },
+    "personal_climate": {
+      "url": "http://127.0.0.1:8081/personal/climate",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "scroll": {
+        "x": 0,
+        "y": 0
+      },
+      "bodyBg": "rgb(13, 15, 18)",
+      "appShell": {
+        "x": 0,
+        "y": 0,
+        "w": 1440,
+        "h": 900,
+        "right": 1440,
+        "bottom": 900
+      },
+      "appShellPadL": "170px",
+      "appShellPadR": "0px",
+      "appShellClasses": "app-shell",
+      "sidebar": {
+        "x": 0,
+        "y": 0,
+        "w": 170,
+        "h": 900,
+        "right": 170,
+        "bottom": 900
+      },
+      "sidebarW": 170,
+      "sidebarBrand": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0,
+        "right": 0,
+        "bottom": 0
+      },
+      "sidebarBrandDisplay": "none",
+      "workspaceSwitcher": {
+        "x": 0,
+        "y": 0,
+        "w": 169,
+        "h": 48,
+        "right": 169,
+        "bottom": 48
+      },
+      "topbar": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0,
+        "right": 0,
+        "bottom": 0
+      },
+      "topbarDisplay": "none",
+      "topbarH": 0,
+      "mainColumn": {
+        "x": 170,
+        "y": 0,
+        "w": 1270,
+        "h": 899,
+        "right": 1440,
+        "bottom": 899
+      },
+      "content": {
+        "x": 170,
+        "y": 0,
+        "w": 1270,
+        "h": 899,
+        "right": 1440,
+        "bottom": 899
+      },
+      "contentPad": "0px",
+      "climateShell": {
+        "x": 170,
+        "y": 0,
+        "w": 1270,
+        "h": 899,
+        "right": 1440,
+        "bottom": 899
+      },
+      "climateTitlebar": {
+        "x": 170,
+        "y": 0,
+        "w": 1270,
+        "h": 52,
+        "right": 1440,
+        "bottom": 52
+      },
+      "firstNav": "Dashboard",
+      "navCount": 13
+    }
+  },
+  "diffs": {
+    "work_dashboard_vs_climate": [
+      {
+        "path": "sidebarBrand.w",
+        "before": 169,
+        "after": 0
+      },
+      {
+        "path": "sidebarBrand.h",
+        "before": 48,
+        "after": 0
+      },
+      {
+        "path": "sidebarBrand.right",
+        "before": 169,
+        "after": 0
+      },
+      {
+        "path": "sidebarBrand.bottom",
+        "before": 48,
+        "after": 0
+      },
+      {
+        "path": "sidebarBrandDisplay",
+        "before": "flex",
+        "after": "none"
+      },
+      {
+        "path": "workspaceSwitcher.y",
+        "before": 48,
+        "after": 0
+      },
+      {
+        "path": "workspaceSwitcher.bottom",
+        "before": 96,
+        "after": 48
+      },
+      {
+        "path": "topbar.x",
+        "before": 170,
+        "after": 0
+      },
+      {
+        "path": "topbar.w",
+        "before": 1222,
+        "after": 0
+      },
+      {
+        "path": "topbar.h",
+        "before": 48,
+        "after": 0
+      },
+      {
+        "path": "topbar.right",
+        "before": 1392,
+        "after": 0
+      },
+      {
+        "path": "topbar.bottom",
+        "before": 48,
+        "after": 0
+      },
+      {
+        "path": "topbarDisplay",
+        "before": "flex",
+        "after": "none"
+      },
+      {
+        "path": "contentOrigin.y",
+        "before": 48,
+        "after": 0
+      },
+      {
+        "path": "contentW",
+        "before": 1222,
+        "after": 1270
+      },
+      {
+        "path": "appShellPadR",
+        "before": "48px",
+        "after": "0px"
+      }
+    ],
+    "personal_dashboard_vs_climate": [
+      {
+        "path": "sidebarBrand.w",
+        "before": 169,
+        "after": 0
+      },
+      {
+        "path": "sidebarBrand.h",
+        "before": 48,
+        "after": 0
+      },
+      {
+        "path": "sidebarBrand.right",
+        "before": 169,
+        "after": 0
+      },
+      {
+        "path": "sidebarBrand.bottom",
+        "before": 48,
+        "after": 0
+      },
+      {
+        "path": "sidebarBrandDisplay",
+        "before": "flex",
+        "after": "none"
+      },
+      {
+        "path": "workspaceSwitcher.y",
+        "before": 48,
+        "after": 0
+      },
+      {
+        "path": "workspaceSwitcher.bottom",
+        "before": 96,
+        "after": 48
+      },
+      {
+        "path": "topbar.x",
+        "before": 170,
+        "after": 0
+      },
+      {
+        "path": "topbar.w",
+        "before": 1222,
+        "after": 0
+      },
+      {
+        "path": "topbar.h",
+        "before": 48,
+        "after": 0
+      },
+      {
+        "path": "topbar.right",
+        "before": 1392,
+        "after": 0
+      },
+      {
+        "path": "topbar.bottom",
+        "before": 48,
+        "after": 0
+      },
+      {
+        "path": "topbarDisplay",
+        "before": "flex",
+        "after": "none"
+      },
+      {
+        "path": "contentOrigin.y",
+        "before": 48,
+        "after": 0
+      },
+      {
+        "path": "contentW",
+        "before": 1222,
+        "after": 1270
+      },
+      {
+        "path": "appShellPadR",
+        "before": "48px",
+        "after": "0px"
+      }
+    ]
+  },
+  "roundTrip": {
+    "vanta": {
+      "dash1": {
+        "sidebar": {
+          "x": 0,
+          "y": 0,
+          "w": 170,
+          "h": 900,
+          "right": 170,
+          "bottom": 900
+        },
+        "sidebarBrand": {
+          "x": 0,
+          "y": 0,
+          "w": 169,
+          "h": 48,
+          "right": 169,
+          "bottom": 48
+        },
+        "sidebarBrandDisplay": "flex",
+        "workspaceSwitcher": {
+          "x": 0,
+          "y": 48,
+          "w": 169,
+          "h": 48,
+          "right": 169,
+          "bottom": 96
+        },
+        "topbar": {
+          "x": 170,
+          "y": 0,
+          "w": 1222,
+          "h": 48,
+          "right": 1392,
+          "bottom": 48
+        },
+        "topbarDisplay": "flex",
+        "contentOrigin": {
+          "x": 170,
+          "y": 48
+        },
+        "contentW": 1222,
+        "appShellPadL": "170px",
+        "appShellPadR": "48px",
+        "viewport": {
+          "w": 1440,
+          "h": 900
+        },
+        "bodyBg": "rgb(13, 15, 18)",
+        "firstNav": "Code Workspace"
+      },
+      "code": {
+        "sidebar": {
+          "x": 0,
+          "y": 0,
+          "w": 170,
+          "h": 900,
+          "right": 170,
+          "bottom": 900
+        },
+        "sidebarBrand": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0,
+          "right": 0,
+          "bottom": 0
+        },
+        "sidebarBrandDisplay": "none",
+        "workspaceSwitcher": {
+          "x": 0,
+          "y": 0,
+          "w": 169,
+          "h": 48,
+          "right": 169,
+          "bottom": 48
+        },
+        "topbar": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0,
+          "right": 0,
+          "bottom": 0
+        },
+        "topbarDisplay": "none",
+        "contentOrigin": {
+          "x": 170,
+          "y": 0
+        },
+        "contentW": 1270,
+        "appShellPadL": "170px",
+        "appShellPadR": "0px",
+        "viewport": {
+          "w": 1440,
+          "h": 900
+        },
+        "bodyBg": "rgb(13, 15, 18)",
+        "firstNav": "Code Workspace"
+      },
+      "dash2": {
+        "sidebar": {
+          "x": 0,
+          "y": 0,
+          "w": 170,
+          "h": 900,
+          "right": 170,
+          "bottom": 900
+        },
+        "sidebarBrand": {
+          "x": 0,
+          "y": 0,
+          "w": 169,
+          "h": 48,
+          "right": 169,
+          "bottom": 48
+        },
+        "sidebarBrandDisplay": "flex",
+        "workspaceSwitcher": {
+          "x": 0,
+          "y": 48,
+          "w": 169,
+          "h": 48,
+          "right": 169,
+          "bottom": 96
+        },
+        "topbar": {
+          "x": 170,
+          "y": 0,
+          "w": 1222,
+          "h": 48,
+          "right": 1392,
+          "bottom": 48
+        },
+        "topbarDisplay": "flex",
+        "contentOrigin": {
+          "x": 170,
+          "y": 48
+        },
+        "contentW": 1222,
+        "appShellPadL": "170px",
+        "appShellPadR": "48px",
+        "viewport": {
+          "w": 1440,
+          "h": 900
+        },
+        "bodyBg": "rgb(13, 15, 18)",
+        "firstNav": "Code Workspace"
+      },
+      "dashVsCode": [
+        {
+          "path": "sidebarBrand.w",
+          "before": 169,
+          "after": 0
+        },
+        {
+          "path": "sidebarBrand.h",
+          "before": 48,
+          "after": 0
+        },
+        {
+          "path": "sidebarBrand.right",
+          "before": 169,
+          "after": 0
+        },
+        {
+          "path": "sidebarBrand.bottom",
+          "before": 48,
+          "after": 0
+        },
+        {
+          "path": "sidebarBrandDisplay",
+          "before": "flex",
+          "after": "none"
+        },
+        {
+          "path": "workspaceSwitcher.y",
+          "before": 48,
+          "after": 0
+        },
+        {
+          "path": "workspaceSwitcher.bottom",
+          "before": 96,
+          "after": 48
+        },
+        {
+          "path": "topbar.x",
+          "before": 170,
+          "after": 0
+        },
+        {
+          "path": "topbar.w",
+          "before": 1222,
+          "after": 0
+        },
+        {
+          "path": "topbar.h",
+          "before": 48,
+          "after": 0
+        },
+        {
+          "path": "topbar.right",
+          "before": 1392,
+          "after": 0
+        },
+        {
+          "path": "topbar.bottom",
+          "before": 48,
+          "after": 0
+        },
+        {
+          "path": "topbarDisplay",
+          "before": "flex",
+          "after": "none"
+        },
+        {
+          "path": "contentOrigin.y",
+          "before": 48,
+          "after": 0
+        },
+        {
+          "path": "contentW",
+          "before": 1222,
+          "after": 1270
+        },
+        {
+          "path": "appShellPadR",
+          "before": "48px",
+          "after": "0px"
+        }
+      ],
+      "dashRoundTrip": []
+    },
+    "arctic": {
+      "dash1": {
+        "sidebar": {
+          "x": 0,
+          "y": 0,
+          "w": 170,
+          "h": 900,
+          "right": 170,
+          "bottom": 900
+        },
+        "sidebarBrand": {
+          "x": 0,
+          "y": 0,
+          "w": 169,
+          "h": 48,
+          "right": 169,
+          "bottom": 48
+        },
+        "sidebarBrandDisplay": "flex",
+        "workspaceSwitcher": {
+          "x": 0,
+          "y": 48,
+          "w": 169,
+          "h": 48,
+          "right": 169,
+          "bottom": 96
+        },
+        "topbar": {
+          "x": 170,
+          "y": 0,
+          "w": 1222,
+          "h": 48,
+          "right": 1392,
+          "bottom": 48
+        },
+        "topbarDisplay": "flex",
+        "contentOrigin": {
+          "x": 170,
+          "y": 48
+        },
+        "contentW": 1222,
+        "appShellPadL": "170px",
+        "appShellPadR": "48px",
+        "viewport": {
+          "w": 1440,
+          "h": 900
+        },
+        "bodyBg": "rgb(13, 15, 18)",
+        "firstNav": "Dashboard"
+      },
+      "code": {
+        "sidebar": {
+          "x": 0,
+          "y": 0,
+          "w": 170,
+          "h": 900,
+          "right": 170,
+          "bottom": 900
+        },
+        "sidebarBrand": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0,
+          "right": 0,
+          "bottom": 0
+        },
+        "sidebarBrandDisplay": "none",
+        "workspaceSwitcher": {
+          "x": 0,
+          "y": 0,
+          "w": 169,
+          "h": 48,
+          "right": 169,
+          "bottom": 48
+        },
+        "topbar": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0,
+          "right": 0,
+          "bottom": 0
+        },
+        "topbarDisplay": "none",
+        "contentOrigin": {
+          "x": 170,
+          "y": 0
+        },
+        "contentW": 1270,
+        "appShellPadL": "170px",
+        "appShellPadR": "0px",
+        "viewport": {
+          "w": 1440,
+          "h": 900
+        },
+        "bodyBg": "rgb(13, 15, 18)",
+        "firstNav": "Dashboard"
+      },
+      "dash2": {
+        "sidebar": {
+          "x": 0,
+          "y": 0,
+          "w": 170,
+          "h": 900,
+          "right": 170,
+          "bottom": 900
+        },
+        "sidebarBrand": {
+          "x": 0,
+          "y": 0,
+          "w": 169,
+          "h": 48,
+          "right": 169,
+          "bottom": 48
+        },
+        "sidebarBrandDisplay": "flex",
+        "workspaceSwitcher": {
+          "x": 0,
+          "y": 48,
+          "w": 169,
+          "h": 48,
+          "right": 169,
+          "bottom": 96
+        },
+        "topbar": {
+          "x": 170,
+          "y": 0,
+          "w": 1222,
+          "h": 48,
+          "right": 1392,
+          "bottom": 48
+        },
+        "topbarDisplay": "flex",
+        "contentOrigin": {
+          "x": 170,
+          "y": 48
+        },
+        "contentW": 1222,
+        "appShellPadL": "170px",
+        "appShellPadR": "48px",
+        "viewport": {
+          "w": 1440,
+          "h": 900
+        },
+        "bodyBg": "rgb(13, 15, 18)",
+        "firstNav": "Dashboard"
+      },
+      "dashVsCode": [
+        {
+          "path": "sidebarBrand.w",
+          "before": 169,
+          "after": 0
+        },
+        {
+          "path": "sidebarBrand.h",
+          "before": 48,
+          "after": 0
+        },
+        {
+          "path": "sidebarBrand.right",
+          "before": 169,
+          "after": 0
+        },
+        {
+          "path": "sidebarBrand.bottom",
+          "before": 48,
+          "after": 0
+        },
+        {
+          "path": "sidebarBrandDisplay",
+          "before": "flex",
+          "after": "none"
+        },
+        {
+          "path": "workspaceSwitcher.y",
+          "before": 48,
+          "after": 0
+        },
+        {
+          "path": "workspaceSwitcher.bottom",
+          "before": 96,
+          "after": 48
+        },
+        {
+          "path": "topbar.x",
+          "before": 170,
+          "after": 0
+        },
+        {
+          "path": "topbar.w",
+          "before": 1222,
+          "after": 0
+        },
+        {
+          "path": "topbar.h",
+          "before": 48,
+          "after": 0
+        },
+        {
+          "path": "topbar.right",
+          "before": 1392,
+          "after": 0
+        },
+        {
+          "path": "topbar.bottom",
+          "before": 48,
+          "after": 0
+        },
+        {
+          "path": "topbarDisplay",
+          "before": "flex",
+          "after": "none"
+        },
+        {
+          "path": "contentOrigin.y",
+          "before": 48,
+          "after": 0
+        },
+        {
+          "path": "contentW",
+          "before": 1222,
+          "after": 1270
+        },
+        {
+          "path": "appShellPadR",
+          "before": "48px",
+          "after": "0px"
+        }
+      ],
+      "dashRoundTrip": []
+    }
+  }
+}

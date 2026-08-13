@@ -1,0 +1,662 @@
+{
+  "label": "after",
+  "base": "http://127.0.0.1:8090",
+  "pages": {
+    "work_dashboard": {
+      "url": "http://127.0.0.1:8090/work",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "scroll": {
+        "x": 0,
+        "y": 0
+      },
+      "bodyBg": "rgb(13, 15, 18)",
+      "appShell": {
+        "x": 0,
+        "y": 0,
+        "w": 1440,
+        "h": 1400,
+        "right": 1440,
+        "bottom": 1400
+      },
+      "appShellPadL": "170px",
+      "appShellPadR": "48px",
+      "appShellClasses": "app-shell has-activity-rail has-ad-dock",
+      "sidebar": {
+        "x": 0,
+        "y": 0,
+        "w": 170,
+        "h": 900,
+        "right": 170,
+        "bottom": 900
+      },
+      "sidebarW": 170,
+      "sidebarBrand": {
+        "x": 0,
+        "y": 0,
+        "w": 169,
+        "h": 48,
+        "right": 169,
+        "bottom": 48
+      },
+      "sidebarBrandDisplay": "flex",
+      "workspaceSwitcher": {
+        "x": 0,
+        "y": 48,
+        "w": 169,
+        "h": 48,
+        "right": 169,
+        "bottom": 96
+      },
+      "topbar": {
+        "x": 170,
+        "y": 0,
+        "w": 1222,
+        "h": 48,
+        "right": 1392,
+        "bottom": 48
+      },
+      "topbarDisplay": "flex",
+      "topbarH": 48,
+      "mainColumn": {
+        "x": 170,
+        "y": 0,
+        "w": 1222,
+        "h": 1400,
+        "right": 1392,
+        "bottom": 1400
+      },
+      "content": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 1352,
+        "right": 1392,
+        "bottom": 1400
+      },
+      "contentPad": "17.5px 18.9px 28px",
+      "climateShell": null,
+      "climateTitlebar": null,
+      "firstNav": "Code Workspace",
+      "navCount": 14
+    },
+    "work_climate": {
+      "url": "http://127.0.0.1:8090/work/climate",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "scroll": {
+        "x": 0,
+        "y": 0
+      },
+      "bodyBg": "rgb(13, 15, 18)",
+      "appShell": {
+        "x": 0,
+        "y": 0,
+        "w": 1440,
+        "h": 900,
+        "right": 1440,
+        "bottom": 900
+      },
+      "appShellPadL": "170px",
+      "appShellPadR": "48px",
+      "appShellClasses": "app-shell has-activity-rail",
+      "sidebar": {
+        "x": 0,
+        "y": 0,
+        "w": 170,
+        "h": 900,
+        "right": 170,
+        "bottom": 900
+      },
+      "sidebarW": 170,
+      "sidebarBrand": {
+        "x": 0,
+        "y": 0,
+        "w": 169,
+        "h": 48,
+        "right": 169,
+        "bottom": 48
+      },
+      "sidebarBrandDisplay": "flex",
+      "workspaceSwitcher": {
+        "x": 0,
+        "y": 48,
+        "w": 169,
+        "h": 48,
+        "right": 169,
+        "bottom": 96
+      },
+      "topbar": {
+        "x": 170,
+        "y": 0,
+        "w": 1222,
+        "h": 48,
+        "right": 1392,
+        "bottom": 48
+      },
+      "topbarDisplay": "flex",
+      "topbarH": 48,
+      "mainColumn": {
+        "x": 170,
+        "y": 0,
+        "w": 1222,
+        "h": 900,
+        "right": 1392,
+        "bottom": 900
+      },
+      "content": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 852,
+        "right": 1392,
+        "bottom": 900
+      },
+      "contentPad": "0px",
+      "climateShell": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 852,
+        "right": 1392,
+        "bottom": 900
+      },
+      "climateTitlebar": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 52,
+        "right": 1392,
+        "bottom": 100
+      },
+      "firstNav": "Code Workspace",
+      "navCount": 14
+    },
+    "personal_dashboard": {
+      "url": "http://127.0.0.1:8090/personal",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "scroll": {
+        "x": 0,
+        "y": 0
+      },
+      "bodyBg": "rgb(13, 15, 18)",
+      "appShell": {
+        "x": 0,
+        "y": 0,
+        "w": 1440,
+        "h": 900,
+        "right": 1440,
+        "bottom": 900
+      },
+      "appShellPadL": "170px",
+      "appShellPadR": "48px",
+      "appShellClasses": "app-shell has-activity-rail has-ad-dock",
+      "sidebar": {
+        "x": 0,
+        "y": 0,
+        "w": 170,
+        "h": 900,
+        "right": 170,
+        "bottom": 900
+      },
+      "sidebarW": 170,
+      "sidebarBrand": {
+        "x": 0,
+        "y": 0,
+        "w": 169,
+        "h": 48,
+        "right": 169,
+        "bottom": 48
+      },
+      "sidebarBrandDisplay": "flex",
+      "workspaceSwitcher": {
+        "x": 0,
+        "y": 48,
+        "w": 169,
+        "h": 48,
+        "right": 169,
+        "bottom": 96
+      },
+      "topbar": {
+        "x": 170,
+        "y": 0,
+        "w": 1222,
+        "h": 48,
+        "right": 1392,
+        "bottom": 48
+      },
+      "topbarDisplay": "flex",
+      "topbarH": 48,
+      "mainColumn": {
+        "x": 170,
+        "y": 0,
+        "w": 1222,
+        "h": 865,
+        "right": 1392,
+        "bottom": 865
+      },
+      "content": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 817,
+        "right": 1392,
+        "bottom": 865
+      },
+      "contentPad": "17.5px 18.9px 28px",
+      "climateShell": null,
+      "climateTitlebar": null,
+      "firstNav": "Code Workspace",
+      "navCount": 13
+    },
+    "personal_climate": {
+      "url": "http://127.0.0.1:8090/personal/climate",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "scroll": {
+        "x": 0,
+        "y": 0
+      },
+      "bodyBg": "rgb(13, 15, 18)",
+      "appShell": {
+        "x": 0,
+        "y": 0,
+        "w": 1440,
+        "h": 900,
+        "right": 1440,
+        "bottom": 900
+      },
+      "appShellPadL": "170px",
+      "appShellPadR": "48px",
+      "appShellClasses": "app-shell has-activity-rail",
+      "sidebar": {
+        "x": 0,
+        "y": 0,
+        "w": 170,
+        "h": 900,
+        "right": 170,
+        "bottom": 900
+      },
+      "sidebarW": 170,
+      "sidebarBrand": {
+        "x": 0,
+        "y": 0,
+        "w": 169,
+        "h": 48,
+        "right": 169,
+        "bottom": 48
+      },
+      "sidebarBrandDisplay": "flex",
+      "workspaceSwitcher": {
+        "x": 0,
+        "y": 48,
+        "w": 169,
+        "h": 48,
+        "right": 169,
+        "bottom": 96
+      },
+      "topbar": {
+        "x": 170,
+        "y": 0,
+        "w": 1222,
+        "h": 48,
+        "right": 1392,
+        "bottom": 48
+      },
+      "topbarDisplay": "flex",
+      "topbarH": 48,
+      "mainColumn": {
+        "x": 170,
+        "y": 0,
+        "w": 1222,
+        "h": 900,
+        "right": 1392,
+        "bottom": 900
+      },
+      "content": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 852,
+        "right": 1392,
+        "bottom": 900
+      },
+      "contentPad": "0px",
+      "climateShell": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 852,
+        "right": 1392,
+        "bottom": 900
+      },
+      "climateTitlebar": {
+        "x": 170,
+        "y": 48,
+        "w": 1222,
+        "h": 52,
+        "right": 1392,
+        "bottom": 100
+      },
+      "firstNav": "Code Workspace",
+      "navCount": 13
+    }
+  },
+  "diffs": {
+    "work_dashboard_vs_climate": [],
+    "personal_dashboard_vs_climate": []
+  },
+  "roundTrip": {
+    "vanta": {
+      "dash1": {
+        "sidebar": {
+          "x": 0,
+          "y": 0,
+          "w": 170,
+          "h": 900,
+          "right": 170,
+          "bottom": 900
+        },
+        "sidebarBrand": {
+          "x": 0,
+          "y": 0,
+          "w": 169,
+          "h": 48,
+          "right": 169,
+          "bottom": 48
+        },
+        "sidebarBrandDisplay": "flex",
+        "workspaceSwitcher": {
+          "x": 0,
+          "y": 48,
+          "w": 169,
+          "h": 48,
+          "right": 169,
+          "bottom": 96
+        },
+        "topbar": {
+          "x": 170,
+          "y": 0,
+          "w": 1222,
+          "h": 48,
+          "right": 1392,
+          "bottom": 48
+        },
+        "topbarDisplay": "flex",
+        "contentOrigin": {
+          "x": 170,
+          "y": 48
+        },
+        "contentW": 1222,
+        "appShellPadL": "170px",
+        "appShellPadR": "48px",
+        "viewport": {
+          "w": 1440,
+          "h": 900
+        },
+        "bodyBg": "rgb(13, 15, 18)",
+        "firstNav": "Code Workspace"
+      },
+      "code": {
+        "sidebar": {
+          "x": 0,
+          "y": 0,
+          "w": 170,
+          "h": 900,
+          "right": 170,
+          "bottom": 900
+        },
+        "sidebarBrand": {
+          "x": 0,
+          "y": 0,
+          "w": 169,
+          "h": 48,
+          "right": 169,
+          "bottom": 48
+        },
+        "sidebarBrandDisplay": "flex",
+        "workspaceSwitcher": {
+          "x": 0,
+          "y": 48,
+          "w": 169,
+          "h": 48,
+          "right": 169,
+          "bottom": 96
+        },
+        "topbar": {
+          "x": 170,
+          "y": 0,
+          "w": 1222,
+          "h": 48,
+          "right": 1392,
+          "bottom": 48
+        },
+        "topbarDisplay": "flex",
+        "contentOrigin": {
+          "x": 170,
+          "y": 48
+        },
+        "contentW": 1222,
+        "appShellPadL": "170px",
+        "appShellPadR": "48px",
+        "viewport": {
+          "w": 1440,
+          "h": 900
+        },
+        "bodyBg": "rgb(13, 15, 18)",
+        "firstNav": "Code Workspace"
+      },
+      "dash2": {
+        "sidebar": {
+          "x": 0,
+          "y": 0,
+          "w": 170,
+          "h": 900,
+          "right": 170,
+          "bottom": 900
+        },
+        "sidebarBrand": {
+          "x": 0,
+          "y": 0,
+          "w": 169,
+          "h": 48,
+          "right": 169,
+          "bottom": 48
+        },
+        "sidebarBrandDisplay": "flex",
+        "workspaceSwitcher": {
+          "x": 0,
+          "y": 48,
+          "w": 169,
+          "h": 48,
+          "right": 169,
+          "bottom": 96
+        },
+        "topbar": {
+          "x": 170,
+          "y": 0,
+          "w": 1222,
+          "h": 48,
+          "right": 1392,
+          "bottom": 48
+        },
+        "topbarDisplay": "flex",
+        "contentOrigin": {
+          "x": 170,
+          "y": 48
+        },
+        "contentW": 1222,
+        "appShellPadL": "170px",
+        "appShellPadR": "48px",
+        "viewport": {
+          "w": 1440,
+          "h": 900
+        },
+        "bodyBg": "rgb(13, 15, 18)",
+        "firstNav": "Code Workspace"
+      },
+      "dashVsCode": [],
+      "dashRoundTrip": []
+    },
+    "arctic": {
+      "dash1": {
+        "sidebar": {
+          "x": 0,
+          "y": 0,
+          "w": 170,
+          "h": 900,
+          "right": 170,
+          "bottom": 900
+        },
+        "sidebarBrand": {
+          "x": 0,
+          "y": 0,
+          "w": 169,
+          "h": 48,
+          "right": 169,
+          "bottom": 48
+        },
+        "sidebarBrandDisplay": "flex",
+        "workspaceSwitcher": {
+          "x": 0,
+          "y": 48,
+          "w": 169,
+          "h": 48,
+          "right": 169,
+          "bottom": 96
+        },
+        "topbar": {
+          "x": 170,
+          "y": 0,
+          "w": 1222,
+          "h": 48,
+          "right": 1392,
+          "bottom": 48
+        },
+        "topbarDisplay": "flex",
+        "contentOrigin": {
+          "x": 170,
+          "y": 48
+        },
+        "contentW": 1222,
+        "appShellPadL": "170px",
+        "appShellPadR": "48px",
+        "viewport": {
+          "w": 1440,
+          "h": 900
+        },
+        "bodyBg": "rgb(13, 15, 18)",
+        "firstNav": "Code Workspace"
+      },
+      "code": {
+        "sidebar": {
+          "x": 0,
+          "y": 0,
+          "w": 170,
+          "h": 900,
+          "right": 170,
+          "bottom": 900
+        },
+        "sidebarBrand": {
+          "x": 0,
+          "y": 0,
+          "w": 169,
+          "h": 48,
+          "right": 169,
+          "bottom": 48
+        },
+        "sidebarBrandDisplay": "flex",
+        "workspaceSwitcher": {
+          "x": 0,
+          "y": 48,
+          "w": 169,
+          "h": 48,
+          "right": 169,
+          "bottom": 96
+        },
+        "topbar": {
+          "x": 170,
+          "y": 0,
+          "w": 1222,
+          "h": 48,
+          "right": 1392,
+          "bottom": 48
+        },
+        "topbarDisplay": "flex",
+        "contentOrigin": {
+          "x": 170,
+          "y": 48
+        },
+        "contentW": 1222,
+        "appShellPadL": "170px",
+        "appShellPadR": "48px",
+        "viewport": {
+          "w": 1440,
+          "h": 900
+        },
+        "bodyBg": "rgb(13, 15, 18)",
+        "firstNav": "Code Workspace"
+      },
+      "dash2": {
+        "sidebar": {
+          "x": 0,
+          "y": 0,
+          "w": 170,
+          "h": 900,
+          "right": 170,
+          "bottom": 900
+        },
+        "sidebarBrand": {
+          "x": 0,
+          "y": 0,
+          "w": 169,
+          "h": 48,
+          "right": 169,
+          "bottom": 48
+        },
+        "sidebarBrandDisplay": "flex",
+        "workspaceSwitcher": {
+          "x": 0,
+          "y": 48,
+          "w": 169,
+          "h": 48,
+          "right": 169,
+          "bottom": 96
+        },
+        "topbar": {
+          "x": 170,
+          "y": 0,
+          "w": 1222,
+          "h": 48,
+          "right": 1392,
+          "bottom": 48
+        },
+        "topbarDisplay": "flex",
+        "contentOrigin": {
+          "x": 170,
+          "y": 48
+        },
+        "contentW": 1222,
+        "appShellPadL": "170px",
+        "appShellPadR": "48px",
+        "viewport": {
+          "w": 1440,
+          "h": 900
+        },
+        "bodyBg": "rgb(13, 15, 18)",
+        "firstNav": "Code Workspace"
+      },
+      "dashVsCode": [],
+      "dashRoundTrip": []
+    }
+  }
+}

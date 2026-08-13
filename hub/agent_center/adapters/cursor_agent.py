@@ -20,7 +20,8 @@ class CursorAgentAdapter(BaseCliAdapter):
             word in text.lower() for word in ("not logged", "unauthenticated", "login required")
         ):
             return {"state": "connected", "detail": "Cursor Agent authenticated"}
-        return {"state": "authentication_required", "detail": "Cursor Agent authentication required"}
+        reason = text[:240] if text else "Cursor Agent authentication required"
+        return {"state": "authentication_required", "detail": reason}
 
     def _login_argv(self, executable: str) -> list[str]:
         return [executable, "login"]
