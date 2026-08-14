@@ -39,6 +39,9 @@ vm.runInContext([
   "escapeHtml",
   "formatElapsed",
   "collectActivityFiles",
+  "isSearchCommand",
+  "isReadCommand",
+  "commandFailed",
   "providerInvestigationFiles",
   "renderActivityComplete",
 ].map(functionSource).join("\n"), context);
@@ -50,11 +53,17 @@ const providerFiles = context.providerInvestigationFiles({
       type: "command_execution",
       name: "rg -n ANC pkg/scoring.py",
       status: "completed",
-      detail: "pkg/scoring.py:42:def derive_anc():",
+      detail: "pkg/scoring.py:42:def derive_anc():\npkg/other.py:1:child helper",
+    },
+    {
+      type: "command_execution",
+      name: "Get-Content pkg\\anc.py",
+      status: "completed",
+      detail: "def anc():\n    return 1\n",
     },
   ],
 });
-assert.deepEqual(Array.from(providerFiles).sort(), ["pkg/anc.py", "pkg/scoring.py"]);
+assert.deepEqual(Array.from(providerFiles).sort(), ["pkg/anc.py"]);
 
 const candidates = Array.from({ length: 21 }, (_, index) => `candidate-${index}.py`);
 const completedActivity = context.renderActivityComplete({
@@ -64,10 +73,14 @@ const completedActivity = context.renderActivityComplete({
   elapsedMs: 1000,
   sources: candidates,
   filesInspected: 2,
+  searchMatchedFiles: 308,
   activity: { explore: { count: 21 }, steps: [] },
 });
 assert.match(completedActivity, /Explored 2 files/);
 assert.doesNotMatch(completedActivity, /Explored 21 files/);
+assert.doesNotMatch(completedActivity, /Explored 308 files/);
+assert.match(completedActivity, /308 search matches/);
+assert.match(completedActivity, /21 candidate sources/);
 
 const candidatesOnly = context.renderActivityComplete({
   id: "anc-preflight-only",

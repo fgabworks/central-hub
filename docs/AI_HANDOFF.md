@@ -4,7 +4,33 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**CLIMATE Token Efficiency (manual Direct Codex comparison) (2026-08-14)**
+**CLIMATE investigation targeting + inspect telemetry (2026-08-14)**
+
+Repository ASK runs now rank exact domain concepts/acronyms/aliases (FIC, CH_FIC,
+FIC_STATUS, immunization) above generic leftovers such as `child`. Resolver
+search prefers phrase → acronym → module, then a stdlib AST hint pass. ASK
+instructions tell Codex to investigate progressively, bound `rg` output, and
+avoid PowerShell-invalid globs (`tests *.py`, `lookup/test_*`). Failed searches
+are not counted as inspections. `Explored N files` is files actually opened/read.
+Candidate sources, search-matched files, and tool calls are separate metrics.
+Token Efficiency uses the same inspected-file definition. Graphify is **not**
+adopted; a local read-only AST helper is optional hints only.
+
+Prior: **CLIMATE ASK logic-answer formatting (2026-08-14)**
+
+Implementation / indicator / scoring / eligibility / threshold questions now get a
+decision-oriented answer outline: core rule, compact table, one example, edge cases,
+household roll-up, exact `path/file.py` — `function_name` traces, then a one-line
+summary. This is presentation only. `hub/climate/logic_format.py` detects the user
+Task (not source snippets) and injects ASK instructions in
+`ClimateCodingAdapter.execute`; `humanize_answer` may reorder recognizable
+markdown/`Label:` sections and exact-line-dedupe. It does not invent thresholds,
+DEs, tables, or a one-line summary, and it leaves insufficient-evidence answers
+unchanged. EDIT mode and unrelated prompts are not forced into this structure.
+Repo investigation, scoring, source selection, citations, and provider execution
+are unchanged.
+
+Prior: **CLIMATE Token Efficiency (manual Direct Codex comparison) (2026-08-14)**
 
 Completed Codex runs can store an immutable benchmark snapshot (raw user prompt,
 repo, commit SHA, model, reasoning/config, Codex version, read-only, CLIMATE

@@ -10,6 +10,7 @@ from typing import Any
 from hub.agent_center.redact import redact_text
 from hub.climate.coding import ClimateCodingAdapter, ClimateCodingError, classify_task_mode
 from hub.climate.codex_limits import get_codex_rate_limits_service
+from hub.climate.investigation_metrics import summarize_tool_activity
 from hub.climate.preflight import make_blocked_run, resolve_climate_context
 from hub.climate.token_efficiency import TokenEfficiencyService
 from hub.registry.models import Registry, Repository
@@ -288,6 +289,7 @@ class ClimateService:
                 "diagnostics": dict(preflight.diagnostics),
             },
             "sources": list(dict.fromkeys(list(preflight.source_files) + selected_files + ([current_file] if current_file else []))),
+            "user_prompt": prompt,
         }
         result["provider_invoked"] = True
         result["preflight"] = self._run_meta[str(result["id"])]["preflight"]
@@ -395,9 +397,19 @@ class ClimateService:
                 if p and p not in sources:
                     sources.append(p)
         result["sources"] = sources[:24]
+        investigation = investigation_diagnostics(result, meta)
+        result["investigation"] = investigation
+        result["files_inspected"] = investigation.get("files_inspected")
+        result["search_matched_files"] = investigation.get("search_matched_files")
+        result["tool_calls"] = investigation.get("tool_calls")
+        inv_log = investigation.get("log") or ""
+        logs = str(result.get("logs") or "")
+        if inv_log and "[climate_investigation]" not in logs:
+            result["logs"] = (logs + ("\n\n" if logs else "") + inv_log).strip()
         if str(result.get("provider") or result.get("agent_id") or "") == "codex":
             result["token_efficiency"] = self._token_efficiency_payload(ws, run_id, result)
         return result
+
     def cancel(self, workspace: str, run_id: str) -> dict[str, Any]:
         ws = normalize_workspace(workspace)
         self._require_run_scope(ws, run_id)
@@ -878,3 +890,57 @@ class ClimateService:
         except (OSError, subprocess.SubprocessError):
             return None
         return proc.stdout.strip() or "HEAD"
+
+
+def investigation_diagnostics(result: dict[str, Any], meta: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Compact ASK investigation stats. Raw command output stays in tool_activity/logs only."""
+    meta = meta or {}
+    preflight = dict(meta.get("preflight") or result.get("preflight") or {})
+    diagnostics = dict(preflight.get("diagnostics") or {})
+    summary = summarize_tool_activity(
+        list(result.get("tool_activity") or []),
+        str(result.get("logs") or ""),
+    )
+    usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
+    started = result.get("started_at") or result.get("created_at")
+    finished = result.get("finished_at")
+    elapsed = None
+    try:
+        if started is not None and finished is not None:
+            elapsed = max(0, int(finished) - int(started))
+            if elapsed > 10_000_000:
+                elapsed = elapsed // 1000
+    except (TypeError, ValueError):
+        elapsed = None
+    payload = {
+        "candidate_sources": len(list(meta.get("sources") or result.get("sources") or [])),
+        "authoritative_candidates": list(diagnostics.get("authoritative_sources") or [])[:16],
+        "resolver_queries": list(diagnostics.get("resolver_queries") or [])[:16],
+        "domain_terms": dict(diagnostics.get("domain_terms") or {}),
+        "search_commands": summary.public().get("search_commands") or [],
+        "successful_searches": summary.successful_searches,
+        "failed_searches": summary.failed_searches,
+        "invalid_windows_globs": summary.invalid_windows_globs,
+        "search_matched_files": summary.search_matched_files,
+        "files_inspected": summary.files_inspected,
+        "inspected_paths": list(summary.inspected_paths[:16]),
+        "tool_calls": summary.tool_calls,
+        "provider_tokens": usage.get("total_tokens"),
+        "elapsed_ms": elapsed if elapsed is not None else result.get("runtime_ms"),
+    }
+    payload["log"] = "\n".join([
+        "[climate_investigation]",
+        f"candidate_sources={payload['candidate_sources']}",
+        f"authoritative_candidates={','.join(payload['authoritative_candidates']) or '(none)'}",
+        f"resolver_queries={','.join(str(q) for q in payload['resolver_queries']) or '(none)'}",
+        f"successful_searches={payload['successful_searches']}",
+        f"failed_searches={payload['failed_searches']}",
+        f"invalid_windows_globs={payload['invalid_windows_globs']}",
+        f"search_matched_files={payload['search_matched_files'] if payload['search_matched_files'] is not None else 'n/a'}",
+        f"files_inspected={payload['files_inspected'] if payload['files_inspected'] is not None else 'n/a'}",
+        f"tool_calls={payload['tool_calls'] if payload['tool_calls'] is not None else 'n/a'}",
+        f"provider_tokens={payload['provider_tokens'] if payload['provider_tokens'] is not None else 'n/a'}",
+        f"elapsed_ms={payload['elapsed_ms'] if payload['elapsed_ms'] is not None else 'n/a'}",
+    ])
+    return payload
+

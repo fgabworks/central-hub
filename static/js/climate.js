@@ -941,17 +941,35 @@
     });
     return files;
   }
+  function isSearchCommand(cmd) {
+    return /(?:^|[^\w-])(?:rg(?:\.exe)?|ripgrep|grep|git\s+grep|findstr|select-string)\b/i.test(String(cmd || ""));
+  }
+  function isReadCommand(cmd) {
+    var text = String(cmd || "");
+    if (isSearchCommand(text)) return false;
+    return /(?:^|[^\w-])(?:get-content|gc|cat|sed|less|more|head|tail|nl|type)\b/i.test(text);
+  }
+  function commandFailed(item) {
+    var status = String((item && item.status) || "").toLowerCase();
+    if (status === "failed" || status === "error" || status === "errored") return true;
+    return /cannot find path|wildcard|parameter cannot be found|is not recognized|no such file/i.test(String((item && item.detail) || ""));
+  }
   function providerInvestigationFiles(run) {
-    var evidence = [];
+    var files = [];
+    function add(path) {
+      collectActivityFiles(String(path || "").replace(/\\/g, "/")).forEach(function (p) {
+        if (files.indexOf(p) < 0) files.push(p);
+      });
+    }
     ((run && run.tool_activity) || []).forEach(function (item) {
       if (!item || item.type !== "command_execution") return;
-      evidence.push(String(item.name || ""));
-      evidence.push(String(item.detail || ""));
+      if (!isReadCommand(item.name) || commandFailed(item)) return;
+      add(item.name);
     });
     String((run && run.logs) || "").split(/\r?\n/).forEach(function (line) {
-      if (/^\[tool\]/i.test(line)) evidence.push(line);
+      if (/^\[tool\]/i.test(line) && isReadCommand(line) && !isSearchCommand(line)) add(line);
     });
-    return collectActivityFiles(evidence.join("\n").replace(/\\/g, "/"));
+    return files;
   }
   /**
    * Build activity steps from runtime/tool log evidence only — never invent unseen steps.
@@ -960,10 +978,14 @@
     opts = opts || {};
     var blob = String(source || "");
     var running = !!opts.running;
-    var files = collectActivityFiles(blob);
-    var exploreMatch = blob.match(/Explor(?:ing|ed)\s+(\d+)\s+files?/i);
-    var exploreCount = exploreMatch ? parseInt(exploreMatch[1], 10) : files.length;
-    if (isNaN(exploreCount)) exploreCount = files.length;
+    var readLines = blob.split(/\r?\n/).filter(function (line) {
+      return /\[tool\].*(?:get-content|gc|cat|sed|type)\b/i.test(line) || /Reading repository file/i.test(line);
+    });
+    var files = collectActivityFiles(readLines.join("\n"));
+    var exploreCount = (typeof opts.filesInspected === "number" && isFinite(opts.filesInspected) && opts.filesInspected >= 0)
+      ? opts.filesInspected
+      : files.length;
+    if (isNaN(exploreCount) || exploreCount < 0) exploreCount = files.length;
     var steps = [];
     function has(re) { return re.test(blob); }
     function addStep(id, label) {
@@ -1211,7 +1233,9 @@
       ["Output", te.climate && te.climate.output, te.direct && te.direct.usage && te.direct.usage.output_tokens, "tokens"],
       ["Total", te.climate && te.climate.total, te.direct && te.direct.usage && te.direct.usage.total_tokens, "tokens"],
       ["Runtime", te.climate && te.climate.runtime_ms, te.direct && te.direct.runtime_ms, "runtime"],
-      ["Files actually inspected", te.climate && te.climate.files_inspected, te.direct && te.direct.files_inspected, "count"]
+      ["Files actually inspected", te.climate && te.climate.files_inspected, te.direct && te.direct.files_inspected, "count"],
+      ["Search-matched files", te.climate && te.climate.search_matched_files, te.direct && te.direct.search_matched_files, "count"],
+      ["Tool calls", te.climate && te.climate.tool_calls, te.direct && te.direct.tool_executions, "count"]
     ];
     rows.forEach(function (row) {
       var kind = row[3];
@@ -1227,7 +1251,7 @@
     html += '<tr><th>Candidate sources</th><td>' + escapeHtml(te.climate && te.climate.source_candidates != null ? String(te.climate.source_candidates) : "Unavailable") + "</td><td>—</td></tr>";
     html += '<tr><th>CLIMATE session</th><td>' + escapeHtml(te.climate && te.climate.session_reused ? "Resumed" : (te.climate && te.climate.session_fresh ? "Fresh" : "Unavailable")) + '</td><td>Fresh ephemeral</td></tr>';
     html += "</tbody></table>";
-    html += '<p class="climate-te-legend">Cached portion is a subset of Input, not an extra addend. Candidate sources are Context Resolver hints. Files actually inspected come from provider tool activity. Preflight estimate is local and is not provider usage. Missing fields stay Unavailable.</p>';
+    html += '<p class="climate-te-legend">Cached portion is a subset of Input, not an extra addend. Candidate sources are Context Resolver hints. Search-matched files are unique paths in successful repository search output. Files actually inspected are files whose contents were opened/read. Failed commands are not inspections. Preflight estimate is local and is not provider usage. Missing fields stay Unavailable.</p>';
     html += "</details>";
     return html;
   }
@@ -1255,6 +1279,14 @@
       parts.push("Worked for " + formatElapsed(msg.elapsedMs));
     }
     if (exploreCount > 0) parts.push("Explored " + exploreCount + " file" + (exploreCount === 1 ? "" : "s"));
+    var searchMatches = Number(msg.searchMatchedFiles);
+    if (isFinite(searchMatches) && searchMatches > 0 && searchMatches !== exploreCount) {
+      parts.push(searchMatches + " search match" + (searchMatches === 1 ? "" : "es"));
+    }
+    var candidateCount = (msg.sources || []).length;
+    if (candidateCount > 0 && candidateCount !== exploreCount) {
+      parts.push(candidateCount + " candidate source" + (candidateCount === 1 ? "" : "s"));
+    }
     if (isEdit && testsRan > 0) parts.push("Ran " + testsRan + " test" + (testsRan === 1 ? "" : "s"));
     if (isEdit && (activity.explore || activity.steps || testsRan || exploreCount)) {
       parts.push(issues + " issue" + (issues === 1 ? "" : "s") + " found");
@@ -2040,7 +2072,8 @@
           diagnostics: preflightDiagnostics,
           activity: parseActivityEvidence(prefLog + "\n" + (data.run.logs || ""), {
             running: data.run.provider_invoked !== false && data.run.status === "running",
-            startedAt: Date.now()
+            startedAt: Date.now(),
+            filesInspected: data.run.files_inspected
           }),
           sources: data.run.sources || [],
           text: data.run.provider_invoked === false ? (data.run.answer || "") : "",
@@ -2134,7 +2167,8 @@
       diagnostics: parsed.diagnostics || (streaming && streaming.diagnostics) || "",
       activity: frozen,
       sources: sources,
-      filesInspected: providerInvestigationFiles(run).length,
+      filesInspected: (run && run.files_inspected != null) ? Number(run.files_inspected) : providerInvestigationFiles(run).length,
+      searchMatchedFiles: run && run.search_matched_files,
       proposal: null,
       changedFiles: [],
       elapsedMs: elapsedMs,
@@ -2170,7 +2204,8 @@
         running: !terminal,
         startedAt: streaming && streaming.startedAt,
         hasAnswer: !!(parsed.text && parsed.text.length > 20),
-        hasProposal: !!(data.run.proposal) && taskMode === "edit"
+        hasProposal: !!(data.run.proposal) && taskMode === "edit",
+        filesInspected: data.run.files_inspected
       });
       if (data.run.logs && data.run.logs !== state.streamText) {
         state.streamText = data.run.logs;
@@ -2241,7 +2276,8 @@
         hasAnswer: !!(finalParsed.text),
         hasProposal: !!proposal,
         tests: tests,
-        status: data.run.status
+        status: data.run.status,
+        filesInspected: data.run.files_inspected
       });
       var sources = collectSources({ sources: data.run.sources || (streaming && streaming.sources) || [] }, data.run, finalActivity);
       if (session) {
@@ -2266,7 +2302,8 @@
         summary: summary,
         changedFiles: files,
         sources: sources,
-        filesInspected: providerInvestigationFiles(data.run).length,
+        filesInspected: (data.run.files_inspected != null) ? Number(data.run.files_inspected) : providerInvestigationFiles(data.run).length,
+        searchMatchedFiles: data.run.search_matched_files,
         tests: tests,
         lines: lines,
         proposal: proposal,

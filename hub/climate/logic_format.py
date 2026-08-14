@@ -42,9 +42,13 @@ _SECTION_ALIASES = {
     "eligibility + edge cases": "edge_cases",
     "edge cases": "edge_cases",
     "eligibility": "edge_cases",
+    "missing dates": "edge_cases",
+    "missing dates fallback": "edge_cases",
+    "missing required dates": "edge_cases",
     "household/member roll-up": "rollup",
     "household roll-up": "rollup",
     "member roll-up": "rollup",
+    "household": "rollup",
     "eligibility and roll-up": "rollup",
     "exact implementation files/functions": "implementation",
     "exact implementation": "implementation",
@@ -70,7 +74,8 @@ _LOGIC_RE = re.compile(
     r"\bexplain how\b.{0,80}\bderiv|"
     r"\bderivation of\b|"
     r"\bcore rule\b|"
-    r"explain (?:this |the )?(?:indicator|scoring|eligibility|threshold)"
+    r"\bimplementation logic\b|"
+    r"explain (?:this |the )?(?:implementation|indicator|scoring|eligibility|threshold)"
     r")",
     re.I | re.S,
 )
@@ -80,7 +85,12 @@ _INSUFFICIENT_RE = re.compile(
     re.I,
 )
 
-_HEADING_RE = re.compile(r"^(#{1,3})\s+(.+?)\s*$", re.M)
+_PACKET_TASK_RE = re.compile(
+    r"Task:\n(.*?)(?:\n(?:Confidence:|Repository access:))",
+    re.S,
+)
+_MD_HEADING_RE = re.compile(r"^(#{1,3})\s+(.+?)\s*$")
+_LABEL_RE = re.compile(r"^(.+?):\s*$")
 _SOURCE_TRACE_RE = re.compile(
     r"`([^`]+)`\s+[—–-]\s+`([^`]+)`",
 )
@@ -128,7 +138,9 @@ def is_logic_explanation_prompt(text: str) -> bool:
     blob = str(text or "").strip()
     if not blob:
         return False
-    return bool(_LOGIC_RE.search(blob))
+    match = _PACKET_TASK_RE.search(blob)
+    task = match.group(1).strip() if match else blob
+    return bool(_LOGIC_RE.search(task))
 
 
 def logic_explanation_instructions() -> str:
@@ -162,33 +174,67 @@ def format_logic_explanation(answer: str) -> str:
 
 
 def _split_sections(text: str) -> tuple[str, dict[str, str], list[tuple[str, str]]]:
-    matches = list(_HEADING_RE.finditer(text))
-    if not matches:
+    marks = _section_marks(text)
+    if not marks:
         return "", {}, []
     title = ""
     mapped: dict[str, str] = {}
     leftover: list[tuple[str, str]] = []
-    preamble = text[: matches[0].start()].strip()
-    first_heading = matches[0].group(2).strip()
-    first_key = _alias(first_heading)
+    preamble = text[: marks[0][0]].strip()
+    if preamble:
+        leftover.append(("", preamble))
     start_index = 0
-    if not first_key and re.search(r"\blogic\b", first_heading, re.I):
+    first_heading = marks[0][2]
+    first_is_title = marks[0][4]
+    if first_is_title:
         title = first_heading
         start_index = 1
-        if preamble:
-            leftover.append(("", preamble))
-    elif preamble:
-        leftover.append(("", preamble))
-    for i, match in enumerate(matches[start_index:], start=start_index):
-        heading = match.group(2).strip()
-        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
-        body = text[match.end():end].strip()
-        key = _alias(heading)
+        title_end = marks[1][0] if len(marks) > 1 else len(text)
+        title_body = text[marks[0][1]:title_end].strip()
+        if title_body:
+            leftover.append(("", title_body))
+    for i, mark in enumerate(marks[start_index:], start=start_index):
+        _start, line_end, heading, key, _is_title = mark
+        end = marks[i + 1][0] if i + 1 < len(marks) else len(text)
+        body = text[line_end:end].strip()
         if key:
             mapped[key] = _merge_bodies(mapped.get(key), body)
         else:
             leftover.append((heading, body))
     return title, mapped, leftover
+
+
+def _section_marks(text: str) -> list[tuple[int, int, str, str, bool]]:
+    marks: list[tuple[int, int, str, str, bool]] = []
+    pos = 0
+    for line in text.splitlines(keepends=True):
+        heading, key, is_title, is_mark = _classify_line(line.strip())
+        if is_mark:
+            marks.append((pos, pos + len(line), heading, key, is_title))
+        pos += len(line)
+    return marks
+
+
+def _classify_line(stripped: str) -> tuple[str, str, bool, bool]:
+    if not stripped or stripped.startswith("|"):
+        return "", "", False, False
+    md = _MD_HEADING_RE.match(stripped)
+    if md:
+        heading = md.group(2).strip().rstrip(":")
+        key = _alias(heading)
+        is_title = not key and bool(re.search(r"\blogic\b", heading, re.I))
+        return heading, key, is_title, True
+    label = _LABEL_RE.match(stripped)
+    if label:
+        heading = _strip_markup(label.group(1))
+        key = _alias(heading)
+        if key:
+            return heading, key, False, True
+    return "", "", False, False
+
+
+def _strip_markup(value: str) -> str:
+    return re.sub(r"^[*_`]+|[*_`]+$", "", str(value or "").strip())
 
 
 def _alias(heading: str) -> str:

@@ -192,7 +192,12 @@ class ClimateCodingAdapter:
                 ),
                 (
                     "Safe read-only search, file/symbol/reference/import/test/git inspection commands "
-                    "are allowed. Do not modify files or repository state and do not run destructive commands."
+                    "are allowed. Do not modify files or repository state and do not run destructive commands. "
+                    "Search progressively: exact symbol/acronym/phrase, then likely modules, then "
+                    "definitions/references, then open the authoritative files. Bound rg output "
+                    "(`--max-count`, `--glob '*.py'`). On Windows/PowerShell do not use shell globs "
+                    "such as `tests *.py` or `lookup/test_immunization*`; use rg `--glob` or explicit "
+                    "paths. A failed command is not a successful inspection."
                     if repository_investigation
                     else "Do not apply edits or execute commands."
                 ),

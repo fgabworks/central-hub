@@ -22,6 +22,8 @@ from hub.agent_center.models import (
 )
 from hub.agent_center.secrets import is_secret_path
 from hub.climate.coding import classify_task_mode
+from hub.climate.domain_query import extract_domain_query, identifier_matches_query, score_source
+from hub.climate.repo_graph import concept_file_hints
 from hub.registry.models import Repository
 
 _TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_\-]{2,}")
@@ -508,20 +510,33 @@ def _is_code_path(path: str) -> bool:
 
 
 def _domain_tokens(prompt: str) -> set[str]:
-    return {token for token in _tokens(prompt) if token not in _PROMPT_NOISE}
+    query = extract_domain_query(prompt)
+    needles = {t.lower() for t in (*query.acronyms, *query.aliases, *query.strong) if t}
+    if needles:
+        return needles
+    return {token for token in _tokens(prompt) if token not in _PROMPT_NOISE and token not in query.weak}
 
 
-def _identifier_matches_domain(value: str, domain: set[str]) -> bool:
+def _identifier_matches_domain(value: str, domain: set[str] | None = None, *, prompt: str = "") -> bool:
+    if prompt:
+        return identifier_matches_query(value, extract_domain_query(prompt))
     parts = {part for part in re.split(r"[^a-z0-9]+", str(value or "").lower()) if part}
-    return any(token in parts for token in domain)
+    return any(token in parts for token in (domain or set()))
+
+
+def _authority_question(prompt: str) -> bool:
+    if _implementation_question(prompt):
+        return True
+    query = extract_domain_query(prompt)
+    return bool(query.phrases or query.acronyms)
 
 
 def _qualify_source_rows(
     source_rows: list[dict[str, Any]], *, prompt: str
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Rank candidates and identify executable implementation authority."""
-    implementation = _implementation_question(prompt)
-    domain = _domain_tokens(prompt)
+    authority = _authority_question(prompt)
+    query = extract_domain_query(prompt)
     qualified: list[dict[str, Any]] = []
     diagnostics: list[dict[str, Any]] = []
     for row in source_rows:
@@ -530,17 +545,17 @@ def _qualify_source_rows(
         symbols = list(dict.fromkeys(_SYMBOL.findall(content)))[:24]
         relevant_symbols = [
             symbol for symbol in symbols
-            if _identifier_matches_domain(symbol, domain)
+            if identifier_matches_query(symbol, query)
         ]
         code = _is_code_path(path)
         test = _is_test_path(path)
-        path_domain_match = _identifier_matches_domain(path, domain)
+        path_domain_match = identifier_matches_query(path, query)
         score = int(row.get("score") or 0)
         rank_score = score
         accepted = False
         reason = "supporting_candidate"
 
-        if implementation:
+        if authority:
             if test:
                 rank_score -= 10
                 reason = "test_support_only"
@@ -680,10 +695,12 @@ def resolve_climate_context(
     activity.append(f"Instructions loaded: {len(instruction_files)}")
 
     tokens = _tokens(prompt)
+    domain_query = extract_domain_query(prompt)
     source_rows: list[dict[str, Any]] = []
     seen_paths: set[str] = set()
     expansion_terms: list[str] = []
     expansion_paths: list[str] = []
+    resolver_queries: list[str] = []
 
     def _add_source(path: str, content: str, *, reason: str, score: int = 1) -> None:
         rel = path.replace("\\", "/").lstrip("/")
@@ -714,7 +731,7 @@ def resolve_climate_context(
                 if data.get("binary") or data.get("error"):
                     continue
                 content = str(data.get("content") or "")
-                score = 40 + _score_text(path + "\n" + content[:1500], tokens)
+                score = 40 + score_source(path, content, domain_query)
                 _add_source(path, content, reason="selected", score=score)
 
             if repository_intelligence is not None and workspace == "work":
@@ -742,6 +759,28 @@ def resolve_climate_context(
                     if summary:
                         _add_source(path, summary, reason="ri-summary", score=int(item.get("score") or 3))
 
+            if root is not None:
+                try:
+                    for hint in concept_file_hints(root, prompt, limit=8):
+                        path = str(hint.get("path") or "")
+                        if not path or path in seen_paths:
+                            continue
+                        try:
+                            data = repository_workspace.preview(repo, path)
+                        except Exception:  # noqa: BLE001
+                            continue
+                        if data.get("binary") or data.get("error"):
+                            continue
+                        content = str(data.get("content") or "")
+                        _add_source(
+                            path,
+                            content,
+                            reason=str(hint.get("reason") or "graph"),
+                            score=int(hint.get("score") or 12) + score_source(path, content, domain_query),
+                        )
+                except Exception:  # noqa: BLE001
+                    pass
+
         if expand:
             for path in expansion_paths[:24]:
                 if path in seen_paths:
@@ -753,34 +792,37 @@ def resolve_climate_context(
                 if data.get("binary") or data.get("error"):
                     continue
                 content = str(data.get("content") or "")
-                score = 16 + _score_text(path + "\n" + content[:3000], tokens)
+                score = 16 + score_source(path, content, domain_query)
                 _add_source(path, content, reason="expand:reference", score=score)
 
-        query_terms = expansion_terms[:4] if expand else sorted(tokens, key=len, reverse=True)[:6]
-        queries = []
-        if query_terms:
-            if not expand:
-                queries.append(" ".join(query_terms[:3]))
         if expand:
+            query_terms = expansion_terms[:4] or domain_query.search_terms()[:6]
+        else:
+            query_terms = domain_query.search_terms()[:8] or sorted(tokens, key=len, reverse=True)[:4]
+        queries: list[str] = []
+        if not expand:
+            queries.extend(query_terms[:5])
+        else:
             queries.extend(query_terms[:4])
             for sym in _SYMBOL.findall(prompt or ""):
                 queries.append(sym)
             if current_file:
                 queries.append(Path(current_file).stem)
+        queries = [q for q in dict.fromkeys(queries) if str(q).strip()]
+        resolver_queries.extend(queries)
 
         for search_q in queries:
-            if not str(search_q).strip():
-                continue
             for mode_name in ("filename", "content"):
                 try:
                     result = repository_workspace.search(repo, q=str(search_q), mode=mode_name)
                 except Exception:  # noqa: BLE001
                     continue
                 matches = list(result.get("matches") or [])
-                if _implementation_question(prompt):
+                if _authority_question(prompt):
                     matches.sort(key=lambda match: (
                         0 if _is_code_path(str(match.get("path") or "")) and not _is_test_path(str(match.get("path") or "")) else 1,
-                        0 if _identifier_matches_domain(str(match.get("path") or ""), _domain_tokens(prompt)) else 1,
+                        0 if identifier_matches_query(str(match.get("path") or ""), domain_query) else 1,
+                        -score_source(str(match.get("path") or ""), "", domain_query),
                         str(match.get("path") or ""),
                     ))
                 unique_matches: list[dict[str, Any]] = []
@@ -791,7 +833,8 @@ def resolve_climate_context(
                         continue
                     unique_match_paths.add(match_path)
                     unique_matches.append(match)
-                for match in unique_matches[:MAX_SEARCH_HITS]:
+                hit_limit = 8 if not expand else MAX_SEARCH_HITS
+                for match in unique_matches[:hit_limit]:
                     path = str(match.get("path") or "")
                     if not path or path in seen_paths:
                         continue
@@ -802,7 +845,7 @@ def resolve_climate_context(
                     if data.get("binary") or data.get("error"):
                         continue
                     content = str(data.get("content") or "")
-                    score = _score_text(path + "\n" + content[:2000], tokens)
+                    score = score_source(path, content, domain_query)
                     if score <= 0 and mode_name == "content" and not expand:
                         continue
                     reason = f"{'expand' if expand else 'search'}:{mode_name}"
@@ -862,7 +905,7 @@ def resolve_climate_context(
 
     expanded = False
     initial_evidence_weak = confidence != "high" or (
-        _implementation_question(prompt)
+        _authority_question(prompt)
         and not _has_primary_implementation(authoritative_rows, prompt=prompt)
     )
     if initial_evidence_weak:
@@ -877,7 +920,9 @@ def resolve_climate_context(
         for blob in expansion_blobs:
             path_candidates.extend(_PATH_REFERENCE.findall(blob))
             symbols = _SYMBOL.findall(blob) + _BACKTICK_SYMBOL.findall(blob)
-            term_candidates.extend(symbol for symbol in symbols if _identifier_matches_domain(symbol, domain))
+            term_candidates.extend(
+                symbol for symbol in symbols if identifier_matches_query(symbol, domain_query)
+            )
         for token in sorted(domain):
             term_candidates.extend((f"derive_{token}", f"{token}_score", f"{token}_rule", token))
         unique_terms = list(dict.fromkeys(term_candidates))
@@ -950,6 +995,13 @@ def resolve_climate_context(
             "candidates_found": len(qualification),
             "authoritative_sources": authoritative_paths,
             "qualification": qualification,
+            "domain_terms": {
+                "phrases": list(domain_query.phrases),
+                "acronyms": list(domain_query.acronyms),
+                "aliases": list(domain_query.aliases)[:16],
+                "strong": list(domain_query.strong),
+            },
+            "resolver_queries": list(dict.fromkeys(resolver_queries))[:16],
             "confidence": result.confidence,
             "expanded_search": expanded,
             "context_chars": 0,
@@ -1029,7 +1081,12 @@ def resolve_climate_context(
             parts.append(
                 "ASK/EXPLAIN constraints: investigate the repository as needed with safe read-only "
                 "search, file/symbol/reference/import/test/git inspection commands. Do not modify "
-                "files or repository state. Cite the exact implementation paths/functions you verify."
+                "files or repository state. Cite the exact implementation paths/functions you verify. "
+                "Investigate progressively: exact symbol/acronym/phrase, then likely modules, then "
+                "definitions/references, then open authoritative files; broaden only if evidence is "
+                "insufficient. Prefer bounded rg (`--max-count`, `--glob '*.py'`). On Windows/"
+                "PowerShell do not pass shell globs such as `tests *.py` or `lookup/test_*`; use "
+                "rg `--glob` or explicit paths. A failed command is not a successful inspection."
             )
         else:
             parts.append(
@@ -1075,6 +1132,13 @@ def resolve_climate_context(
             "candidates_found": len(qualification),
             "authoritative_sources": authoritative_paths,
             "qualification": qualification,
+            "domain_terms": {
+                "phrases": list(domain_query.phrases),
+                "acronyms": list(domain_query.acronyms),
+                "aliases": list(domain_query.aliases)[:16],
+                "strong": list(domain_query.strong),
+            },
+            "resolver_queries": list(dict.fromkeys(resolver_queries))[:16],
             "context_chars": len(packet),
             "context_tokens_est": _estimate_tokens(len(packet)),
             "provider_invoked": True,

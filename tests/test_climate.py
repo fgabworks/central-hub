@@ -218,6 +218,30 @@ class ClimateServiceTests(unittest.TestCase):
         self.assertIn("ANC Binary is 1 when compliant", result["answer"])
         self.assertNotIn('"edits"', result["answer"])
 
+    def test_ask_logic_result_reorders_sections(self):
+        run = self.service.execute(
+            "work", "work-repo", provider="codex", model="m",
+            prompt="Give me the logic of the PNC. Cite the exact implementation files/functions. Do not edit anything.",
+        )
+        self.assertEqual(self.coding.calls[-1]["task_mode"], "ask")
+        raw = (
+            "## PNC Logic\n\n"
+            "Exact implementation files/functions:\n"
+            "`lookup/convergence/derive_pnc_four.py` — `derive`\n\n"
+            "Core rule:\n"
+            "- 2025 Q3–Q4 → pass with at least 2 Yes out of 4 checks\n\n"
+            "### In one line\n"
+            "PNC uses a period-specific Yes-count for eligible members.\n"
+        )
+        self.coding._answers[run["id"]] = {
+            "status": "completed", "answer": raw, "logs": "", "usage": {},
+            "provider": "codex", "model": "m",
+        }
+        result = self.service.result("work", run["id"])
+        self.assertLess(result["answer"].index("Core rule:"), result["answer"].index("Exact implementation"))
+        self.assertIn("`lookup/convergence/derive_pnc_four.py` — `derive`", result["answer"])
+        self.assertIn("### In one line", result["answer"])
+
     def test_edit_mode_stages_reviewed_proposal(self):
         run = self.service.execute(
             "work", "work-repo", provider="codex", model="m",

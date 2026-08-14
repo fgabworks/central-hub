@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-14 (CLIMATE Token Efficiency).
+Last verified: 2026-08-14 (CLIMATE investigation targeting).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -46,6 +46,17 @@ current tree. Token Efficiency labels Candidate Sources separately from files
 the provider actually inspected. A resumed CLIMATE Codex session is not a
 same-context comparison against fresh Direct `--ephemeral`; the Context Resolver
 packet is a few hundred estimated tokens, not hundreds of thousands.
+ASK questions about implementation, indicator, scoring, eligibility, or threshold
+logic get a presentation-only outline (core rule → table → example → edge cases →
+roll-up → exact files/functions → one-line summary). Investigation, scoring,
+citations, and provider execution are unchanged; unrelated prompts keep normal
+prose. A conservative post-process only reorders recognizable sections and does
+not invent tables, thresholds, or a one-line summary.
+Context Resolver search prefers exact phrases, acronyms, aliases, and symbols
+over generic tokens. `Explored N files` counts files whose contents were
+opened/read, not rg hit paths or resolver candidates. Search-matched files and
+candidate sources are labeled separately. Codex ASK still investigates the
+approved repository independently when local hints are weak.
 
 VANTA and ARCTIC repository/run/proposal scopes are server-isolated; repositories tagged
 `personal`/`arctic` belong only to ARCTIC and all others default to VANTA. AiriX Tool

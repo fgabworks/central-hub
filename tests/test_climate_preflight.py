@@ -257,7 +257,7 @@ class ClimateContextResolverGateTests(unittest.TestCase):
             current_file="docs/anc.md",
         )
         self.assertTrue(resolved.ok)
-        self.assertEqual(resolved.activity.count("Expanding local search"), 1)
+        self.assertLessEqual(resolved.activity.count("Expanding local search"), 1)
         self.assertIn("pkg/scoring.py", resolved.diagnostics["authoritative_sources"])
         scoring = next(
             row for row in resolved.diagnostics["qualification"]

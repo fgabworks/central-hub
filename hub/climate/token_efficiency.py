@@ -26,6 +26,7 @@ from hub.agent_center.codex_safety import (
     git_status_snapshot,
 )
 from hub.agent_center.redact import redact_text
+from hub.climate.investigation_metrics import summarize_tool_activity
 from hub.settings import ROOT_DIR
 
 STATUS_NOT_MEASURED = "Not measured"
@@ -125,35 +126,8 @@ def git_head(repo: Path) -> str:
 
 
 def count_files_inspected(tool_activity: list[dict[str, Any]] | None, logs: str = "") -> int | None:
-    if tool_activity is None and not logs:
-        return None
-    blob = "\n".join(
-        str(item.get("name") or "") + "\n" + str(item.get("detail") or "")
-        for item in (tool_activity or [])
-        if isinstance(item, dict)
-    )
-    blob = blob + "\n" + str(logs or "")
-    paths: set[str] = set()
-    for match in re.finditer(
-        r"(?:[A-Za-z]:)?[\\/]?(?:[\w.-]+[\\/])+[\w.-]+\.[A-Za-z0-9]+",
-        blob.replace("\\", "/"),
-    ):
-        path = match.group(0).lstrip("/")
-        if any(part in path.lower() for part in ("windows/system32", "program files")):
-            continue
-        paths.add(path)
-    commands = [
-        item
-        for item in (tool_activity or [])
-        if isinstance(item, dict) and item.get("type") == "command_execution"
-    ]
-    if paths:
-        return len(paths)
-    if commands:
-        return len(commands)
-    if tool_activity is not None:
-        return 0
-    return None
+    """Unique files whose contents were explicitly opened/read. Search hits do not count."""
+    return summarize_tool_activity(tool_activity, logs).files_inspected
 
 
 def runtime_ms(started_at: str | None, finished_at: str | None) -> int | None:
@@ -289,6 +263,7 @@ class TokenEfficiencyService:
                     "usage",
                     "runtime_ms",
                     "files_inspected",
+                    "search_matched_files",
                     "tool_executions",
                     "success",
                     "git_unchanged",
@@ -309,6 +284,8 @@ class TokenEfficiencyService:
                 "output": (snapshot.get("climate_usage") or {}).get("output_tokens"),
                 "runtime_ms": snapshot.get("runtime_ms"),
                 "files_inspected": snapshot.get("files_inspected"),
+                "search_matched_files": snapshot.get("search_matched_files"),
+                "tool_calls": snapshot.get("tool_calls"),
                 "preflight_tokens_est": snapshot.get("context_tokens_est"),
                 "context_packet_chars": snapshot.get("context_packet_chars"),
                 "source_candidates": snapshot.get("source_candidates"),
@@ -459,7 +436,10 @@ class TokenEfficiencyService:
         snapshot = dict(record.get("snapshot") or {})
         snapshot["climate_usage"] = usage_from_provider(usage)
         snapshot["runtime_ms"] = runtime_ms(started_at, finished_at)
-        snapshot["files_inspected"] = count_files_inspected(tool_activity, logs)
+        summary = summarize_tool_activity(tool_activity, logs)
+        snapshot["files_inspected"] = summary.files_inspected
+        snapshot["search_matched_files"] = summary.search_matched_files
+        snapshot["tool_calls"] = summary.tool_calls
         if session_reused is not None:
             snapshot["session_reused"] = bool(session_reused)
             snapshot["session_fresh"] = not bool(session_reused)
@@ -857,12 +837,9 @@ class TokenEfficiencyService:
         snapshot = dict(record.get("snapshot") or {})
         raw_usage = getattr(accumulator, "raw_usage", None) if accumulator else None
         usage = usage_from_provider(raw_usage if isinstance(raw_usage, dict) else None)
-        files = count_files_inspected(accumulator.tool_activity if accumulator else None)
-        tools = None
-        if accumulator is not None:
-            tools = len(
-                [row for row in accumulator.tool_activity if row.get("type") == "command_execution"]
-            )
+        summary = summarize_tool_activity(accumulator.tool_activity if accumulator else None)
+        files = summary.files_inspected
+        tools = summary.tool_calls
         elapsed_ms = int(max(0.0, (time.monotonic() - started_monotonic) * 1000))
         if git_unchanged is None and before is not None:
             try:
@@ -888,6 +865,7 @@ class TokenEfficiencyService:
             "usage": usage,
             "runtime_ms": elapsed_ms,
             "files_inspected": files,
+            "search_matched_files": summary.search_matched_files,
             "tool_executions": tools,
             "success": bool(success) if success is not None else final_status == STATUS_MEASURED,
             "git_unchanged": git_unchanged,
