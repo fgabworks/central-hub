@@ -428,6 +428,7 @@ class AgentCenterService:
                 or payload.get("on_demand_skills")
                 or payload.get("tool_runtime")
             ),
+            repository_investigation=bool(payload.get("repository_investigation")),
         )
         preview["tools"] = {
             "enabled": selected_tools,

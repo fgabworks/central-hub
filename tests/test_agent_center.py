@@ -231,6 +231,35 @@ class AgentCenterTests(unittest.TestCase):
         self.assertIn("files", preview)
         self.assertTrue(preview["packed_prompt_chars"] > 0)
 
+    def test_native_repository_investigation_distinguishes_hub_tools(self):
+        native = self.svc.preview_context(
+            {
+                "profile_id": "okarun",
+                "repository_ids": ["demo-repo"],
+                "mode": "ask",
+                "prompt": "Explain the implementation",
+                "tool_ids": [],
+                "repository_investigation": True,
+            }
+        )
+        self.assertEqual(native["tools"]["enabled"], [])
+        self.assertNotIn("Enabled read-only tools: none.", native["packed_prompt"])
+        self.assertIn("Hub tools: none.", native["packed_prompt"])
+        self.assertIn("Native Codex read-only repository search", native["packed_prompt"])
+
+        packet_only = self.svc.preview_context(
+            {
+                "profile_id": "okarun",
+                "repository_ids": ["demo-repo"],
+                "mode": "ask",
+                "prompt": "Explain the supplied packet",
+                "tool_ids": [],
+                "bounded_evidence_only": True,
+            }
+        )
+        self.assertIn("Enabled read-only tools: none.", packet_only["packed_prompt"])
+        self.assertNotIn("Native Codex read-only repository search", packet_only["packed_prompt"])
+
     def test_run_cancel_error_and_unavailable(self):
         # Unavailable agent → status unavailable, no process
         run = self.svc.start_run(

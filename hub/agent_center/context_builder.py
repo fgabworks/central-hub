@@ -68,6 +68,7 @@ def build_context_preview(
     repository_knowledge: dict[str, Any] | None = None,
     bounded_evidence_only: bool = False,
     lean_tool_runtime: bool = False,
+    repository_investigation: bool = False,
 ) -> dict[str, Any]:
     mode = normalize_mode(mode)
     prompt = (prompt or "")[:MAX_PROMPT_CHARS]
@@ -153,6 +154,7 @@ def build_context_preview(
         grounding_rules=grounding_rules,
         evidence_packet_text=evidence_packet_text,
         repository_knowledge=repository_knowledge,
+        repository_investigation=repository_investigation,
     )
     included = _included_sources(profile, roots, selected_tools or [])
     if evidence_packet and isinstance(evidence_packet, dict):
@@ -225,6 +227,7 @@ def _pack_prompt(
     grounding_rules: str = "",
     evidence_packet_text: str = "",
     repository_knowledge: dict[str, Any] | None = None,
+    repository_investigation: bool = False,
 ) -> str:
     parts = [
         f"Mode: {mode_label(mode)} (read-only).",
@@ -235,8 +238,17 @@ def _pack_prompt(
         parts.extend([
             f"Assistant profile: {profile.name} ({profile.title}).",
             profile.instructions,
-            "Enabled read-only tools: " + (", ".join(selected_tools or []) or "none") + ".",
         ])
+        if repository_investigation:
+            parts.append(
+                "Hub tools: " + (", ".join(selected_tools or []) or "none") + ". "
+                "Native Codex read-only repository search/file/symbol/reference/git inspection "
+                "is allowed in the approved workspace."
+            )
+        else:
+            parts.append(
+                "Enabled read-only tools: " + (", ".join(selected_tools or []) or "none") + "."
+            )
     if grounding_rules:
         parts.append("\n" + grounding_rules.strip())
     if evidence_packet_text:

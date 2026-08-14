@@ -312,6 +312,7 @@ class ClimateTaskModeUnitTests(unittest.TestCase):
         self.assertIn("ASK / EXPLAIN", center.payload["prompt"])
         self.assertNotIn('{"edits":[{"path"', center.payload["prompt"])
         self.assertEqual(center.payload["files"], {})
+        self.assertEqual(center.payload["tool_ids"], [])
         self.assertTrue(center.payload["repository_investigation"])
         self.assertEqual(center.payload["conversation_id"], "conversation-1")
         self.assertIn("independently search", center.payload["prompt"])

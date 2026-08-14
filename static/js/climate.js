@@ -841,7 +841,23 @@
       add(p);
       return _;
     });
+    String(blob || "").replace(/(^|[^A-Za-z0-9_./\-])([A-Za-z0-9_.\-]+\.(?:py|js|ts|tsx|jsx|css|html|md|json|ya?ml|toml|sql|sh|ps1))\b/gi, function (_, prefix, p) {
+      add(p);
+      return _;
+    });
     return files;
+  }
+  function providerInvestigationFiles(run) {
+    var evidence = [];
+    ((run && run.tool_activity) || []).forEach(function (item) {
+      if (!item || item.type !== "command_execution") return;
+      evidence.push(String(item.name || ""));
+      evidence.push(String(item.detail || ""));
+    });
+    String((run && run.logs) || "").split(/\r?\n/).forEach(function (line) {
+      if (/^\[tool\]/i.test(line)) evidence.push(line);
+    });
+    return collectActivityFiles(evidence.join("\n").replace(/\\/g, "/"));
   }
   /**
    * Build activity steps from runtime/tool log evidence only — never invent unseen steps.
@@ -1001,11 +1017,8 @@
       hasProposal: !!(msg.proposal && msg.proposal.state === "pending"),
       status: msg.status
     });
-    var exploreCount = (msg.sources || []).length
-      || (activity.explore && activity.explore.count)
-      || (msg.changedFiles || []).length
-      || msg.filesInspected
-      || 0;
+    // Candidates/sources are preflight hints, not proof that the provider read a file.
+    var exploreCount = msg.filesInspected || 0;
     var testsRan = activity.testsRan || (msg.tests && msg.tests.count) || 0;
     if (!testsRan && msg.tests && msg.tests.label) {
       var tm = String(msg.tests.label).match(/(\d+)/);
@@ -1876,7 +1889,7 @@
       diagnostics: parsed.diagnostics || (streaming && streaming.diagnostics) || "",
       activity: frozen,
       sources: sources,
-      filesInspected: Math.max(sources.length, (frozen && frozen.explore && frozen.explore.count) || 0),
+      filesInspected: providerInvestigationFiles(run).length,
       proposal: null,
       changedFiles: [],
       elapsedMs: elapsedMs,
@@ -1995,7 +2008,7 @@
         summary: summary,
         changedFiles: files,
         sources: sources,
-        filesInspected: Math.max(sources.length, files.length, (finalActivity.explore && finalActivity.explore.count) || 0),
+        filesInspected: providerInvestigationFiles(data.run).length,
         tests: tests,
         lines: lines,
         proposal: proposal,

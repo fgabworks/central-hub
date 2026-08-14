@@ -468,6 +468,7 @@ class CodexServiceOkarunTests(unittest.TestCase):
                 "prompt": "Explain the exact internal implementation of xyzzy",
                 "repository_ids": ["demo"],
                 "model": "__provider_default__",
+                "tool_ids": [],
                 "bounded_evidence_only": True,
                 "repository_investigation": True,
                 "evidence_packet": {
@@ -479,6 +480,9 @@ class CodexServiceOkarunTests(unittest.TestCase):
         self.assertNotIn("cannot verify", str(run.get("answer") or "").lower())
         self.assertIn(run["status"], {"queued", "running", "completed"})
         self.assertIn("starting hints", run["packed_prompt"])
+        self.assertNotIn("Enabled read-only tools: none.", run["packed_prompt"])
+        self.assertIn("Hub tools: none.", run["packed_prompt"])
+        self.assertIn("Native Codex read-only repository search", run["packed_prompt"])
         deadline = time.time() + 5
         while time.time() < deadline:
             current = self.service.get_run(run["id"], profile_id="okarun")
