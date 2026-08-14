@@ -207,14 +207,14 @@ body > .climate-dd-menu .climate-dd-option.is-disabled {
 .climate-brand { display:flex; align-items:center; gap:8px; min-width:215px; letter-spacing:.04em; }.climate-brand>span:last-child { color:var(--cl-muted); letter-spacing:0; }.climate-mark,.climate-welcome-mark { display:grid; place-items:center; background:var(--cl-panel-2); color:var(--cl-text); font-weight:800; }.climate-mark { width:20px;height:20px;border-radius:4px; }
 .climate-scope-controls { display:flex; align-items:center; gap:6px; flex:1; min-width:0; }.climate-scope-controls label,.climate-ai-controls label { display:flex; align-items:center; gap:6px; color:var(--cl-muted); }.climate-scope-controls select,.climate-ai-controls select { color:var(--cl-text); background:var(--cl-panel-2); border:1px solid var(--cl-border); border-radius:3px; height:26px; padding:0 24px 0 7px; max-width:230px; }
 .climate-title-actions { display:flex; gap:2px; }.climate-icon-btn,.climate-pane-title button,.climate-search-row button { border:0;background:transparent;color:var(--cl-muted);height:26px;min-width:27px;cursor:pointer; }.climate-icon-btn:hover,.climate-pane-title button:hover,.climate-search-row button:hover { color:white;background:var(--cl-panel-2); }
-.climate-workbench { --left:230px;--right:360px;--bottom:190px; min-width:0;min-height:0;display:grid;grid-template-columns:var(--left) 4px minmax(260px,1fr) 4px minmax(340px, var(--right));background:var(--cl-bg); }
+.climate-workbench { --left:230px;--right:360px;--bottom:190px; min-width:0;min-height:0;height:100%;overflow:hidden;display:grid;grid-template-rows:minmax(0,1fr);grid-template-columns:var(--left) 4px minmax(260px,1fr) 4px minmax(340px, var(--right));background:var(--cl-bg); }
 .climate-explorer,.climate-ai,.climate-bottom { min-width:0;min-height:0;background:var(--cl-panel); }.climate-explorer { display:flex;flex-direction:column;border-right:1px solid var(--cl-border); }.climate-ai { display:flex;flex-direction:column;border-left:1px solid var(--cl-border); }
 .climate-pane-title { height:34px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;color:var(--cl-muted);font-size:10px;letter-spacing:.12em;border-bottom:1px solid var(--cl-border);background:var(--cl-bg-elevated); }.climate-provider-state { letter-spacing:0;text-transform:none;font-size:10px;color:var(--cl-muted); }.climate-provider-state.is-ok { color:var(--success,#22c55e); }.climate-provider-state.is-error { color:#f08b87; }
 .climate-search-row { display:flex;padding:7px;border-bottom:1px solid var(--cl-border); }.climate-search-row input { min-width:0;flex:1;height:25px;background:var(--cl-bg); border:1px solid var(--cl-border);border-radius:3px;color:var(--cl-text);padding:0 7px; }.climate-context-note { color:var(--cl-muted);font-size:10px;padding:5px 8px;border-bottom:1px solid var(--cl-border); }
 .climate-tree,.climate-search-results { overflow:auto;flex:1;padding:4px 0; }.climate-tree details>summary { cursor:pointer;padding:3px 7px;white-space:nowrap; }.climate-file-row { display:flex;align-items:center;width:100%;height:23px;border:0;background:transparent;color:var(--cl-text);text-align:left;cursor:pointer;white-space:nowrap; }.climate-file-row:hover,.climate-file-row.is-active { background:var(--cl-panel-2); }.climate-file-row.is-active { color:white;box-shadow:inset 2px 0 var(--cl-accent); }.climate-file-row input { margin:0 5px 0 0;accent-color:var(--cl-accent); }.climate-file-name { overflow:hidden;text-overflow:ellipsis; }.climate-git-mark { margin-left:auto;padding-right:7px;color:var(--warning,#f59e0b); }
 .climate-sash { position:relative;background:var(--cl-bg);z-index:4; }.climate-sash:hover,.climate-sash.is-dragging { background:var(--cl-accent); }.climate-sash-left,.climate-sash-right { cursor:col-resize; }.climate-sash-bottom { cursor:row-resize;height:4px; }
-.climate-center { min-width:0;min-height:0;display:grid;grid-template-rows:34px minmax(140px,1fr) 4px var(--bottom);background:var(--cl-bg); }.climate-tabs { display:flex;overflow-x:auto;background:var(--cl-bg-elevated);border-bottom:1px solid var(--cl-border); }.climate-empty-tab { color:var(--cl-muted);padding:9px 12px; }.climate-tab { display:flex;align-items:center;gap:7px;max-width:210px;padding:0 8px 0 11px;border:0;border-right:1px solid var(--cl-border);background:var(--cl-panel);color:var(--cl-muted);cursor:pointer; }.climate-tab.is-active { color:white;background:var(--cl-bg);border-top:1px solid var(--cl-accent); }.climate-tab-name { overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }.climate-tab-dirty { color:var(--cl-accent); }.climate-tab-close { color:var(--cl-muted);padding:2px 3px;border-radius:2px; }.climate-tab-close:hover { background:var(--cl-panel-2);color:white; }
-.climate-editor-host { position:relative;min-width:0;min-height:0; }.climate-editor-host>.monaco-editor { position:absolute!important;inset:0; }.climate-welcome { position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--cl-muted); }.climate-welcome h1 { color:var(--cl-text);letter-spacing:.18em;margin:14px 0 2px;font-size:24px; }.climate-welcome p { color:var(--cl-accent);margin:0 0 16px;text-transform:uppercase;letter-spacing:.16em; }.climate-welcome-mark { width:54px;height:54px;border-radius:12px;font-size:28px;opacity:.8; }.climate-editor-host textarea { position:absolute;inset:0;width:100%;height:100%;resize:none;border:0;outline:0;background:var(--cl-bg);color:var(--cl-text);padding:12px;font:12px/1.55 Consolas,"Courier New",monospace;tab-size:4;display:none; }
+.climate-center { min-width:0;min-height:0;overflow:hidden;display:grid;grid-template-rows:34px minmax(140px,1fr) 4px var(--bottom);background:var(--cl-bg); }.climate-tabs { display:flex;overflow-x:auto;background:var(--cl-bg-elevated);border-bottom:1px solid var(--cl-border); }.climate-empty-tab { color:var(--cl-muted);padding:9px 12px; }.climate-tab { display:flex;align-items:center;gap:7px;max-width:210px;padding:0 8px 0 11px;border:0;border-right:1px solid var(--cl-border);background:var(--cl-panel);color:var(--cl-muted);cursor:pointer; }.climate-tab.is-active { color:white;background:var(--cl-bg);border-top:1px solid var(--cl-accent); }.climate-tab-name { overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }.climate-tab-dirty { color:var(--cl-accent); }.climate-tab-close { color:var(--cl-muted);padding:2px 3px;border-radius:2px; }.climate-tab-close:hover { background:var(--cl-panel-2);color:white; }
+.climate-editor-host { position:relative;min-width:0;min-height:0;height:100%;overflow:hidden; }.climate-editor-host>.monaco-editor { position:absolute!important;inset:0; }.climate-welcome { position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--cl-muted); }.climate-welcome h1 { color:var(--cl-text);letter-spacing:.18em;margin:14px 0 2px;font-size:24px; }.climate-welcome p { color:var(--cl-accent);margin:0 0 16px;text-transform:uppercase;letter-spacing:.16em; }.climate-welcome-mark { width:54px;height:54px;border-radius:12px;font-size:28px;opacity:.8; }.climate-editor-host textarea { position:absolute;inset:0;width:100%;height:100%;resize:none;border:0;outline:0;background:var(--cl-bg);color:var(--cl-text);padding:12px;font:12px/1.55 Consolas,"Courier New",monospace;tab-size:4;display:none; }
 .climate-bottom { overflow:hidden;border-top:1px solid var(--cl-border); }.climate-bottom-tabs { height:31px;display:flex;align-items:center;border-bottom:1px solid var(--cl-border); }.climate-bottom-tabs button { align-self:stretch;border:0;border-bottom:1px solid transparent;background:transparent;color:var(--cl-muted);padding:0 10px;cursor:pointer; }.climate-bottom-tabs button.is-active { color:white;border-color:var(--cl-accent); }.climate-bottom-tabs .count { padding:0 4px;border-radius:8px;background:var(--cl-panel-2); }.climate-spacer { flex:1; }.climate-bottom-body { height:calc(100% - 31px);overflow:auto;padding:8px 10px;white-space:pre-wrap;color:var(--cl-muted); }
 .climate-ai-controls { display:grid;grid-template-columns:1fr;gap:6px;padding:8px;border-bottom:1px solid var(--cl-border); }.climate-ai-controls label { justify-content:space-between; }.climate-ai-controls select { width:215px;max-width:68%; }.climate-context-chips { display:flex;flex-wrap:wrap;gap:4px;padding:7px;border-bottom:1px solid var(--cl-border); }.climate-context-chips label { display:flex;gap:4px;align-items:center;background:var(--cl-panel-2);color:var(--cl-muted);padding:3px 6px;border:1px solid var(--cl-border);border-radius:3px; }.climate-context-chips input { margin:0;accent-color:var(--cl-accent); }
 .climate-ai-feed { flex:1;overflow:auto;padding:10px;white-space:pre-wrap;word-break:break-word; }.climate-ai-empty { height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:7px;color:var(--cl-muted); }.climate-ai-empty strong { color:var(--cl-text); }.climate-ai-message { margin-bottom:10px;padding:8px;border:1px solid var(--cl-border);border-radius:4px;background:var(--cl-panel); }.climate-ai-message.is-user { border-color:var(--accent-border); }.climate-ai-message.is-error { border-color:#75413e;color:#f0aaa6; }.climate-ai-message pre { overflow:auto;background:var(--cl-bg);padding:7px;border:1px solid var(--cl-border); }
@@ -272,7 +272,7 @@ body > .climate-dd-menu .climate-dd-option.is-disabled {
 .climate-title-actions .climate-icon-btn { height:30px; min-width:30px; border-radius:4px; font-size:16px; }
 .climate-title-actions .is-run { color:var(--cl-accent); }
 
-.climate-workbench { --left:200px; --right:360px; --bottom:160px; grid-template-columns:var(--left) 4px minmax(300px,1fr) 4px minmax(340px, var(--right)); }
+.climate-workbench { --left:200px; --right:360px; --bottom:160px; height:100%; overflow:hidden; grid-template-rows:minmax(0,1fr); grid-template-columns:var(--left) 4px minmax(300px,1fr) 4px minmax(340px, var(--right)); }
 .climate-activity { display:flex; flex-direction:column; align-items:stretch; background:var(--cl-bg-elevated); border-right:1px solid var(--cl-border); }
 .climate-activity button { position:relative; height:45px; border:0; background:transparent; color:var(--cl-muted); font-size:20px; cursor:pointer; }
 .climate-activity button:hover { color:var(--cl-text); background:var(--cl-panel); }
@@ -314,7 +314,7 @@ body > .climate-dd-menu .climate-dd-option.is-disabled {
 }
 .climate-file-row.is-active { background: var(--cl-panel-2); box-shadow: inset 2px 0 var(--cl-accent); color: #fff; }
 
-.climate-center { grid-template-rows:36px 28px minmax(140px,1fr) 4px var(--bottom); background:var(--cl-bg); }
+.climate-center { overflow:hidden; grid-template-rows:36px 28px minmax(0,1fr) 4px var(--bottom); background:var(--cl-bg); }
 .climate-tabs { background:var(--cl-bg-elevated); }
 .climate-tab { min-width:145px; max-width:220px; background:var(--cl-panel); }
 .climate-tab.is-active { background:var(--cl-bg); border-top:2px solid var(--cl-accent); }
@@ -322,6 +322,7 @@ body > .climate-dd-menu .climate-dd-option.is-disabled {
 .climate-breadcrumb span:first-child { overflow:hidden; text-overflow:ellipsis; }
 .climate-breadcrumb button { border:0; background:transparent; color:var(--cl-muted); cursor:pointer; }
 .climate-editor-host,.climate-editor-host textarea { background:var(--cl-bg); }
+.climate-editor-host { height:100%; overflow:hidden; }
 
 .climate-bottom { background:var(--cl-panel); border-color:var(--cl-border); display:flex; flex-direction:column; min-height:0; }
 .climate-bottom-tabs { height:34px; flex:0 0 auto; background:var(--cl-bg-elevated); }
@@ -412,7 +413,7 @@ body > .climate-dd-menu .climate-dd-option.is-disabled {
 /* Maximized width is applied via JS (--right ≈ 40–45% of workbench). */
 .climate-excluded-toggle { display:flex; align-items:center; gap:6px; padding:5px 8px; border-bottom:1px solid var(--cl-border); color:var(--cl-muted); font-size:10px; }
 .climate-excluded-toggle input { margin:0; accent-color:var(--cl-accent); }
-.climate-center.is-bottom-closed { grid-template-rows:36px 28px minmax(140px,1fr) 0 0; }
+.climate-center.is-bottom-closed { grid-template-rows:36px 28px minmax(0,1fr) 0 0; }
 
 /* CLIMATE AI chat — mockup conversation UI (panel-only; shell unchanged). */
 .climate-ai {
@@ -1907,11 +1908,16 @@ button.climate-activity-step-label {
 .climate-monaco {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 .climate-monaco .monaco-editor,
 .climate-editor-host>.monaco-editor {
   position: absolute !important;
   inset: 0;
+  width: 100% !important;
+  height: 100% !important;
 }
 .climate-monaco[hidden],
 .climate-md-preview[hidden],
@@ -1919,6 +1925,8 @@ button.climate-activity-step-label {
 .climate-md-preview {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
   overflow: auto;
   padding: 18px 22px 40px;
   background: var(--cl-bg);
@@ -1975,26 +1983,26 @@ button.climate-activity-step-label {
 }
 .climate-md h1 {
   font-size: 1.5em;
-  margin: 1.05em 0 0.45em;
+  margin: 1.15em 0 0.5em;
   padding-bottom: 0.22em;
   border-bottom: 1px solid var(--cl-border);
 }
 .climate-md h2 {
   font-size: 1.28em;
-  margin: 1.28em 0 0.42em;
-  padding-bottom: 0.16em;
+  margin: 1.42em 0 0.52em;
+  padding-bottom: 0.18em;
   border-bottom: 1px solid color-mix(in srgb, var(--cl-border) 80%, transparent);
 }
-.climate-md h3 { font-size: 1.12em; margin: 1.15em 0 0.36em; }
-.climate-md h4 { font-size: 1.02em; margin: 1.05em 0 0.32em; color: #d7dce2; }
+.climate-md h3 { font-size: 1.12em; margin: 1.28em 0 0.44em; }
+.climate-md h4 { font-size: 1.02em; margin: 1.15em 0 0.38em; color: #d7dce2; }
 .climate-md h5,
-.climate-md h6 { font-size: 0.94em; margin: 0.95em 0 0.3em; color: var(--cl-muted); }
+.climate-md h6 { font-size: 0.94em; margin: 1.05em 0 0.34em; color: var(--cl-muted); }
 .climate-md p { margin: 0.52em 0 0.82em; }
 .climate-md ul,
-.climate-md ol { margin: 0.42em 0 0.88em; padding-left: 1.4em; }
-.climate-md li { margin: 0.22em 0; }
+.climate-md ol { margin: 0.48em 0 0.92em; padding-left: 1.45em; }
+.climate-md li { margin: 0.32em 0; line-height: 1.55; }
 .climate-md li > ul,
-.climate-md li > ol { margin: 0.2em 0 0.3em; }
+.climate-md li > ol { margin: 0.22em 0 0.34em; }
 .climate-md blockquote {
   margin: 0.65em 0;
   padding: 0.2em 0 0.2em 0.9em;
@@ -2011,6 +2019,7 @@ button.climate-activity-step-label {
 .climate-md code {
   font-family: var(--cl-font-tech);
   font-size: 0.86em;
+  font-weight: 500;
   background: color-mix(in srgb, var(--cl-panel-2) 80%, #000);
   border: 1px solid var(--cl-border);
   border-radius: 4px;
@@ -2022,20 +2031,20 @@ button.climate-uid {
   display: inline;
   font-family: var(--cl-font-tech);
   font-size: 0.86em;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.35;
-  padding: 0.04em 0.4em;
-  margin: 0 0.06em;
+  padding: 0.06em 0.42em;
+  margin: 0 0.08em;
   border-radius: 4px;
-  border: 1px solid color-mix(in srgb, var(--cl-accent) 52%, var(--cl-border));
-  background: color-mix(in srgb, var(--cl-accent) 22%, var(--cl-panel-2));
-  color: #d8f6ff;
+  border: 1px solid color-mix(in srgb, var(--cl-accent) 62%, var(--cl-border));
+  background: color-mix(in srgb, var(--cl-accent) 26%, var(--cl-panel-2));
+  color: #e7fbff;
   cursor: pointer;
   white-space: nowrap;
   vertical-align: baseline;
   height: auto;
   min-width: 0;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.02em;
 }
 button.climate-uid:hover {
   background: color-mix(in srgb, var(--cl-accent) 30%, var(--cl-panel-2));
@@ -2053,6 +2062,33 @@ button.climate-uid.is-copied::after {
   font-family: var(--cl-font-ui);
   color: #b7f0d0;
   letter-spacing: 0;
+}
+button.climate-file-ref {
+  display: inline;
+  font-family: var(--cl-font-tech);
+  font-size: 0.86em;
+  font-weight: 600;
+  line-height: 1.35;
+  padding: 0.04em 0.4em;
+  margin: 0 0.06em;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, #93c5fd 45%, var(--cl-border));
+  background: color-mix(in srgb, #3b82f6 16%, var(--cl-panel-2));
+  color: #dbeafe;
+  cursor: pointer;
+  white-space: break-spaces;
+  vertical-align: baseline;
+  height: auto;
+  min-width: 0;
+  text-align: left;
+}
+button.climate-file-ref:hover {
+  background: color-mix(in srgb, #3b82f6 26%, var(--cl-panel-2));
+  color: #f8fbff;
+}
+.climate-file-ref-sep {
+  opacity: 0.7;
+  font-weight: 500;
 }
 .climate-md-code {
   position: relative;
@@ -2098,28 +2134,34 @@ button.climate-uid.is-copied::after {
 .climate-md-copy:hover { color: var(--cl-text); background: var(--cl-panel-2); }
 .climate-md-table-wrap {
   max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
+  overflow-y: hidden;
   margin: 0.7em 0 1em;
+  scrollbar-width: thin;
+  word-break: normal;
 }
 .climate-md table {
   border-collapse: collapse;
   width: max-content;
   min-width: 100%;
+  table-layout: auto;
   font-size: 12.5px;
   line-height: 1.45;
 }
 .climate-md th,
 .climate-md td {
   border: 1px solid var(--cl-border);
-  padding: 7px 10px;
+  padding: 8px 12px;
   text-align: left;
   vertical-align: top;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+  word-break: normal;
+  white-space: nowrap;
 }
 .climate-md th {
   background: var(--cl-panel-2);
   font-weight: 650;
-  white-space: nowrap;
 }
 .climate-md td { background: color-mix(in srgb, var(--cl-panel) 55%, transparent); }
 .climate-md input[type="checkbox"] {

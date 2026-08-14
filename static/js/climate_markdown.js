@@ -128,15 +128,99 @@
     return String(html || "").replace(/<[^>]+>/g, "");
   }
 
+  var FILE_EXT = "py|pyi|js|mjs|cjs|ts|tsx|jsx|json|ya?ml|md|markdown|html?|css|scss|sql|toml|ini|cfg|conf|xml|sh|bash|bat|ps1|go|rs|java|kt|c|h|cpp|hpp|cs|php|vue|r|rb|txt|csv";
+  var FILE_PATH_RE = new RegExp(
+    "^(?:[A-Za-z0-9_.-]+[\\/])+[A-Za-z0-9_.-]+\\.(?:" + FILE_EXT + ")$",
+    "i"
+  );
+  var FILE_IN_TEXT_RE = new RegExp(
+    "(?:^|[^A-Za-z0-9_./\\\\])((?:[A-Za-z0-9_.-]+[\\/])+[A-Za-z0-9_.-]+\\.(?:" + FILE_EXT + "))" +
+      "(?:(?::(\\d+))|(?:\\s*(?:[—–−]|--|[-:])\\s+([A-Za-z_][A-Za-z0-9_]*)))?",
+    "g"
+  );
+
   function isDhis2Uid(value) {
     var text = String(value || "").trim();
     if (!/^[A-Za-z][A-Za-z0-9]{10}$/.test(text)) return false;
     return /[0-9]/.test(text);
   }
 
+  function isSymbolName(value) {
+    var text = String(value || "").trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(text)) return false;
+    if (text.length < 2 || text.length > 80) return false;
+    return !isDhis2Uid(text);
+  }
+
+  function isRepoFilePath(value) {
+    var text = String(value || "").trim().replace(/\\/g, "/");
+    if (!text || /:\/\//.test(text) || text.charAt(0) === "/" || text.charAt(0) === ".") return false;
+    return FILE_PATH_RE.test(text);
+  }
+
+  function parseFileRef(value) {
+    var text = decodeEntities(String(value || "")).trim().replace(/\\/g, "/");
+    if (!text) return null;
+    var pair = text.match(/^(.+?)\s*(?:[—–−]|--|[-:])\s+([A-Za-z_][A-Za-z0-9_]*)$/);
+    var path = text;
+    var symbol = "";
+    var line = 0;
+    if (pair && isRepoFilePath(pair[1])) {
+      path = pair[1].trim();
+      symbol = pair[2];
+    }
+    var lined = path.match(/^(.+):(\d+)$/);
+    if (lined && isRepoFilePath(lined[1])) {
+      path = lined[1];
+      line = parseInt(lined[2], 10) || 0;
+    }
+    var coded = path.match(/^(.+):([A-Za-z_][A-Za-z0-9_]*)$/);
+    if (coded && isRepoFilePath(coded[1]) && isSymbolName(coded[2])) {
+      path = coded[1];
+      symbol = coded[2];
+    }
+    if (!isRepoFilePath(path)) return null;
+    if (symbol && !isSymbolName(symbol)) symbol = "";
+    return { path: path, symbol: symbol || "", line: line || 0 };
+  }
+
   function uidChip(uid) {
     return '<button type="button" class="climate-uid" data-uid-copy title="Copy UID" aria-label="Copy UID">' +
       escapeHtml(uid) + "</button>";
+  }
+
+  function fileRefChip(path, symbol, line) {
+    var ref = parseFileRef(path) || { path: path, symbol: "", line: 0 };
+    path = ref.path;
+    symbol = symbol || ref.symbol || "";
+    line = Number(line || ref.line || 0) || 0;
+    var label = escapeHtml(path);
+    if (symbol) label += '<span class="climate-file-ref-sep"> — </span>' + escapeHtml(symbol);
+    else if (line) label += '<span class="climate-file-ref-sep">:</span>' + escapeHtml(String(line));
+    var title = "Open " + path + (symbol ? " · " + symbol : (line ? ":" + line : ""));
+    return '<button type="button" class="climate-file-ref" data-open-file="' + escapeHtml(path) + '"' +
+      (symbol ? ' data-open-symbol="' + escapeHtml(symbol) + '"' : "") +
+      (line ? ' data-open-line="' + escapeHtml(String(line)) + '"' : "") +
+      ' title="' + escapeHtml(title) + '">' + label + "</button>";
+  }
+
+  function matchTrailingSymbol(html, from) {
+    var slice = String(html || "").slice(from);
+    var match = /^(\s*(?:—|–|−|&mdash;|&ndash;|&minus;|&amp;mdash;|--|[-:])\s*)(?:<code\b[^>]*>)([^<]+)(?:<\/code>)/i.exec(slice);
+    if (!match) return null;
+    var symbol = decodeEntities(stripTags(match[2])).trim();
+    if (!isSymbolName(symbol)) return null;
+    return { symbol: symbol, end: from + match[0].length };
+  }
+
+  function decorateFilePlainText(text) {
+    FILE_IN_TEXT_RE.lastIndex = 0;
+    return String(text || "").replace(FILE_IN_TEXT_RE, function (full, path, line, symbol, offset) {
+      var prefix = full.slice(0, full.indexOf(path));
+      var ref = parseFileRef(path);
+      if (!ref) return full;
+      return prefix + fileRefChip(ref.path, symbol || "", line ? parseInt(line, 10) : 0);
+    });
   }
 
   function isPathishChar(ch) {
@@ -217,6 +301,61 @@
     return out;
   }
 
+  function decorateFileRefs(html) {
+    var source = String(html || "");
+    var out = "";
+    var i = 0;
+    while (i < source.length) {
+      if (source.charAt(i) !== "<") {
+        var next = source.indexOf("<", i);
+        if (next < 0) next = source.length;
+        out += decorateFilePlainText(source.slice(i, next));
+        i = next;
+        continue;
+      }
+      var gt = source.indexOf(">", i);
+      if (gt < 0) {
+        out += source.slice(i);
+        break;
+      }
+      var tag = source.slice(i, gt + 1);
+      var nameMatch = /^<\/?\s*([A-Za-z][A-Za-z0-9]*)/.exec(tag);
+      var name = nameMatch ? nameMatch[1].toLowerCase() : "";
+      var closing = /^<\//.test(tag);
+      if (!closing && (name === "pre" || name === "a" || name === "button")) {
+        var skipped = findCloseTag(source, gt + 1, name);
+        if (!skipped) {
+          out += source.slice(i);
+          break;
+        }
+        out += source.slice(i, skipped.end);
+        i = skipped.end;
+        continue;
+      }
+      if (!closing && name === "code") {
+        var codeClose = findCloseTag(source, gt + 1, name);
+        if (!codeClose) {
+          out += source.slice(i);
+          break;
+        }
+        var inner = decodeEntities(stripTags(source.slice(gt + 1, codeClose.innerEnd))).trim();
+        var ref = parseFileRef(inner);
+        if (ref) {
+          var trail = matchTrailingSymbol(source, codeClose.end);
+          out += fileRefChip(ref.path, trail ? trail.symbol : ref.symbol, ref.line);
+          i = trail ? trail.end : codeClose.end;
+          continue;
+        }
+        out += source.slice(i, codeClose.end);
+        i = codeClose.end;
+        continue;
+      }
+      out += tag;
+      i = gt + 1;
+    }
+    return out;
+  }
+
   function render(text) {
     configureMarked();
     var source = String(text == null ? "" : text);
@@ -228,6 +367,7 @@
     html = wrapCodeBlocks(html);
     html = highlightHtml(html);
     html = decorateUids(html);
+    html = decorateFileRefs(html);
     return html;
   }
 
@@ -290,7 +430,11 @@
     enhance: enhance,
     mount: mount,
     isDhis2Uid: isDhis2Uid,
+    isRepoFilePath: isRepoFilePath,
+    isSymbolName: isSymbolName,
+    parseFileRef: parseFileRef,
     decorateUids: decorateUids,
+    decorateFileRefs: decorateFileRefs,
     ALLOWED_TAGS: ALLOWED_TAGS,
     ALLOWED_ATTR: ALLOWED_ATTR
   };

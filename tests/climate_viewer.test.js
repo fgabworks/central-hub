@@ -95,8 +95,31 @@ assert.equal(binary.content, "");
 assert.equal(binary.unavailable, true);
 
 const capture = functionSource("captureActive");
-assert.match(capture, /return;/);
-assert.doesNotMatch(capture, /tab\.content = editorValue/);
+assert.match(capture, /saveTabViewState\(currentTab\(\)\)/);
+assert.doesNotMatch(capture, /tab\.content\s*=/);
+assert.doesNotMatch(capture, /editorValue\(\)/);
+
+const layoutSrc = functionSource("layoutEditor");
+assert.match(layoutSrc, /editor\.layout\(\{\s*width:\s*width,\s*height:\s*height\s*\}\)/);
+assert.match(source, /function scheduleEditorLayout\(/);
+assert.match(source, /window\.addEventListener\("resize"/);
+assert.match(source, /scheduleEditorLayout\(\)/);
+assert.match(source, /saveViewState\(\)/);
+assert.match(source, /restoreViewState\(/);
+assert.match(source, /vertical:\s*"visible"/);
+assert.match(source, /alwaysConsumeMouseWheel:\s*true/);
+assert.doesNotMatch(source, /if\s*\(editor\)\s*editor\.layout\(\)/);
+assert.doesNotMatch(source, /if\(editor\)editor\.layout\(\)/);
+
+const css = fs.readFileSync("static/css/climate.css", "utf8");
+assert.match(css, /\.climate-editor-host\s*\{[^}]*overflow:\s*hidden/);
+assert.match(css, /\.climate-monaco\s*\{[^}]*overflow:\s*hidden/);
+assert.match(css, /\.climate-monaco\s*\{[^}]*height:\s*100%/);
+assert.match(css, /\.climate-md-preview\s*\{[^}]*overflow:\s*auto/);
+assert.match(css, /\.climate-center\s*\{[^}]*overflow:\s*hidden/);
+assert.match(css, /grid-template-rows:\s*36px\s+28px\s+minmax\(0,\s*1fr\)/);
+assert.match(html, /climate\.css.*\?v=33/);
+assert.match(html, /climate\.js.*\?v=28/);
 
 assert.match(source, /readOnly:\s*true/);
 assert.match(source, /domReadOnly:\s*true/);
@@ -113,5 +136,27 @@ assert.match(html, /climate-monaco/);
 assert.match(html, /climate-file-empty/);
 assert.match(html, /Source<\/button>/);
 assert.match(html, /Preview<\/button>/);
+
+assert.match(source, /function findSymbolLine\(/);
+assert.match(source, /function locateSymbolInRepo\(/);
+assert.match(source, /search\?mode=content/);
+assert.match(source, /data-open-symbol/);
+assert.match(source, /closest\("\[data-open-file\]"\)/);
+
+const findCtx = {};
+vm.createContext(findCtx);
+vm.runInContext(
+  functionSource("normalizeRepoPath") + functionSource("findSymbolLine") + functionSource("pickSearchLine"),
+  findCtx
+);
+const sample = "import x\n\ndef helper():\n    return 1\n\ndef anc_trimester_rule_summary(ctx):\n    return ctx\n";
+assert.equal(findCtx.findSymbolLine(sample, "anc_trimester_rule_summary"), 6);
+assert.equal(findCtx.findSymbolLine(sample, "helper"), 3);
+assert.equal(findCtx.findSymbolLine("print(anc_trimester_rule_summary)\n", "anc_trimester_rule_summary"), 1);
+assert.equal(findCtx.findSymbolLine(sample, "missing_fn"), 0);
+assert.equal(findCtx.pickSearchLine([
+  { path: "lookup/a.py", line: 9, snippet: "def anc_trimester_rule_summary(ctx):" },
+  { path: "other.py", line: 2, snippet: "anc_trimester_rule_summary" }
+], "lookup/a.py", "anc_trimester_rule_summary"), 9);
 
 console.log("CLIMATE read-only viewer JS: OK");

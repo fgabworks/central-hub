@@ -141,15 +141,56 @@ const preChunk = html.match(/<pre[\s\S]*?<\/pre>/)[0];
 assert.match(preChunk, /JV4XSWHKnaU/);
 assert.doesNotMatch(preChunk, /climate-uid|data-uid-copy/);
 
-assert.match(html, /<code>lookup\/convergence\/derive_anc\.py<\/code>/);
+assert.match(html, /data-open-file="lookup\/convergence\/derive_anc\.py"/);
+assert.match(html, /data-open-symbol="derive_anc_score"/);
 assert.match(html, /<code>derive_anc_score<\/code>/);
 assert.doesNotMatch(html, /data-uid-copy[^>]*>lookup\/convergence\/derive_anc\.py/);
 assert.doesNotMatch(html, /data-uid-copy[^>]*>derive_anc_score/);
+assert.doesNotMatch(preChunk, /climate-file-ref|data-open-file/);
+
+assert.equal(ctx.ClimateMarkdown.isRepoFilePath("lookup/convergence/anc_timing.py"), true);
+assert.equal(ctx.ClimateMarkdown.isRepoFilePath("https://example.com/a.py"), false);
+assert.equal(ctx.ClimateMarkdown.isRepoFilePath("derive_anc_score"), false);
+const parsed = ctx.ClimateMarkdown.parseFileRef("lookup/convergence/anc_timing.py — anc_trimester_rule_summary");
+assert.equal(parsed.path, "lookup/convergence/anc_timing.py");
+assert.equal(parsed.symbol, "anc_trimester_rule_summary");
+assert.equal(parsed.line, 0);
+assert.equal(ctx.ClimateMarkdown.parseFileRef("lookup/foo.py").path, "lookup/foo.py");
+assert.equal(ctx.ClimateMarkdown.parseFileRef("lookup/foo.py:42").line, 42);
+
+const pair = ctx.ClimateMarkdown.render("`lookup/convergence/anc_timing.py` — `anc_trimester_rule_summary`");
+assert.match(pair, /data-open-file="lookup\/convergence\/anc_timing\.py"/);
+assert.match(pair, /data-open-symbol="anc_trimester_rule_summary"/);
+assert.equal((pair.match(/data-open-file=/g) || []).length, 1);
+
+const fileOnly = ctx.ClimateMarkdown.render("Open `hub/climate/file_view.py` next.");
+assert.match(fileOnly, /data-open-file="hub\/climate\/file_view\.py"/);
+assert.doesNotMatch(fileOnly, /data-open-symbol/);
 
 const falsePositives = ctx.ClimateMarkdown.render(
   "Keep description application information and `derive_anc_score` plus CH_FIC."
 );
 assert.doesNotMatch(falsePositives, /data-uid-copy/);
+assert.doesNotMatch(falsePositives, /data-open-file/);
+
+assert.match(html, /climate-md-table-wrap/);
+
+const css = fs.readFileSync("static/css/climate.css", "utf8");
+assert.match(css, /\.climate-md h2 \{[^}]*margin:\s*1\.42em 0 0\.52em/);
+assert.match(css, /\.climate-md h3 \{[^}]*margin:\s*1\.28em 0 0\.44em/);
+assert.match(css, /\.climate-md li \{[^}]*margin:\s*0\.32em 0/);
+assert.match(css, /\.climate-md-table-wrap\s*\{[^}]*overflow-x:\s*auto/);
+assert.match(css, /\.climate-md-table-wrap\s*\{[^}]*min-width:\s*0/);
+assert.match(css, /\.climate-md table\s*\{[^}]*width:\s*max-content/);
+assert.match(css, /\.climate-md th,\s*\.climate-md td\s*\{[^}]*padding:\s*8px 12px/);
+assert.match(css, /\.climate-md th,\s*\.climate-md td\s*\{[^}]*white-space:\s*nowrap/);
+assert.match(css, /\.climate-md th,\s*\.climate-md td\s*\{[^}]*overflow-wrap:\s*normal/);
+assert.match(css, /\.climate-md code \{[^}]*#d5dbe2/);
+assert.match(css, /button\.climate-uid \{[^}]*var\(--cl-accent\)/);
+assert.match(css, /button\.climate-uid \{[^}]*white-space:\s*nowrap/);
+assert.match(css, /button\.climate-uid \{[^}]*font-weight:\s*700/);
+assert.match(css, /button\.climate-file-ref \{[^}]*#3b82f6|#dbeafe/);
+assert.doesNotMatch(css, /\.climate-md td \{[^}]*overflow-wrap:\s*anywhere/);
 
 const climateJs = fs.readFileSync("static/js/climate.js", "utf8");
 assert.match(climateJs, /climate-md/);

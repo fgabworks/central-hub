@@ -182,7 +182,7 @@
     workbench.style.setProperty("--right", width + "px");
     rememberUsableAiWidth(width);
     syncAiMaximizeChrome();
-    if (editor) editor.layout();
+    scheduleEditorLayout();
   }
   function collapseAiPanel(fromWidth) {
     if (fromWidth && fromWidth >= AI_MIN) rememberUsableAiWidth(fromWidth);
@@ -193,7 +193,7 @@
     workbench.style.setProperty("--right", AI_RAIL + "px");
     delete workbench.dataset.prevRight;
     syncAiMaximizeChrome();
-    if (editor) editor.layout();
+    scheduleEditorLayout();
   }
   function expandAiPanel() {
     var prev = parseInt(workbench.dataset.aiPrevRight || workbench.dataset.prevRight || AI_DEFAULT, 10);
@@ -229,7 +229,7 @@
     workbench.style.setProperty("--right", restore + "px");
     rememberUsableAiWidth(restore);
     syncAiMaximizeChrome();
-    if (editor) editor.layout();
+    scheduleEditorLayout();
   }
   function languageId(language, path) {
     var name = String(path || "").split("/").pop() || "";
@@ -327,6 +327,37 @@
   }
   function currentTab() { return state.tabs.find(function (tab) { return tab.path === state.active; }) || null; }
   function editorValue() { return editor ? editor.getValue() : fallback.value; }
+  function layoutEditor() {
+    if (!editor) return;
+    var el = monacoHost;
+    if (!el || el.hidden) return;
+    var width = el.clientWidth;
+    var height = el.clientHeight;
+    if (width > 0 && height > 0) editor.layout({ width: width, height: height });
+    else editor.layout();
+  }
+  function scheduleEditorLayout() {
+    requestAnimationFrame(function () {
+      layoutEditor();
+      requestAnimationFrame(layoutEditor);
+    });
+  }
+  function saveTabViewState(tab) {
+    if (!tab) return;
+    if (editor && monacoHost && !monacoHost.hidden) {
+      try { tab.viewState = editor.saveViewState(); } catch (_) {}
+    }
+    if (mdPreview && !mdPreview.hidden) tab.previewScroll = mdPreview.scrollTop;
+  }
+  function restoreTabViewState(tab) {
+    if (!tab) return;
+    if (editor && tab.viewState) {
+      try { editor.restoreViewState(tab.viewState); } catch (_) {}
+    }
+    if (mdPreview && !mdPreview.hidden && typeof tab.previewScroll === "number") {
+      mdPreview.scrollTop = tab.previewScroll;
+    }
+  }
   function setEditorValue(value, language, path) {
     var text = value == null ? "" : String(value);
     var lang = languageId(language, path);
@@ -395,13 +426,15 @@
         mdPreview.hidden = false;
         mdPreview.innerHTML = renderMarkdownHtml(tab.content || "");
         enhanceMarkdown(mdPreview);
+        restoreTabViewState(tab);
       }
       return;
     }
     if (editor && monacoHost) {
       monacoHost.hidden = false;
       setEditorValue(tab.content, tab.language, tab.path);
-      editor.layout();
+      restoreTabViewState(tab);
+      scheduleEditorLayout();
     } else {
       fallback.style.display = "block";
       fallback.readOnly = true;
@@ -423,7 +456,7 @@
     if (fileReadonly) fileReadonly.hidden = !tab;
   }
   function captureActive() {
-    return;
+    saveTabViewState(currentTab());
   }
   function renderTabs() {
     if (!state.tabs.length) { tabsEl.innerHTML = '<div class="climate-empty-tab">Open a file from Explorer</div>'; return; }
@@ -449,12 +482,16 @@
     renderTabs(); savePrefs();
     if (state.active) activateTab(state.active); else { if (editor) editor.setModel(null); hideEditorSurfaces(); fallback.value=""; welcome.hidden=false; if (fileReadonly) fileReadonly.hidden=true; updateBreadcrumb(null); }
   }
-  function openFile(path, line, column) {
+  function openFile(path, line, column, symbol) {
+    path = normalizeRepoPath(path);
+    if (!path) return;
+    if (state.active && state.active !== path) captureActive();
     var existing = state.tabs.find(function (tab) { return tab.path === path; });
     if (!existing) {
       existing = {path:path,content:"",original:"",language:"plaintext",loaded:false,dirty:false,binary:false,unavailable:false,empty:false,error:"",viewMode:"source"};
       state.tabs.push(existing);
     }
+    if (symbol || line) existing.viewMode = "source";
     state.active = path;
     state.fileOpenSeq = (state.fileOpenSeq || 0) + 1;
     var seq = state.fileOpenSeq;
@@ -462,7 +499,19 @@
     function afterOpen() {
       if (!shouldShowFileResponse(state.active, path)) return;
       activateTab(path);
-      if (!existing.binary && !existing.unavailable && existing.viewMode !== "preview") revealEditorLine(line, column);
+      if (existing.binary || existing.unavailable) return;
+      var n = Number(line) || 0;
+      var col = Number(column) || 1;
+      if (!n && symbol) n = findSymbolLine(existing.content, symbol);
+      if (n) {
+        revealEditorLine(n, col);
+        return;
+      }
+      if (symbol) {
+        locateSymbolInRepo(path, symbol);
+        return;
+      }
+      if (editor) editor.focus();
     }
     if (existing.loaded) return afterOpen();
     jsonFetch(endpoint("/repositories/"+encodeURIComponent(repoId())+"/file?path="+encodeURIComponent(path))).then(function (data) {
@@ -495,7 +544,58 @@
     editor.revealLineInCenter(n);
     editor.focus();
   }
+  function normalizeRepoPath(path) {
+    return String(path || "").replace(/\\/g, "/").replace(/^\/+/, "").trim();
+  }
+  function findSymbolLine(content, symbol) {
+    var name = String(symbol || "").trim();
+    if (!name || content == null || content === "") return 0;
+    var escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    var lines = String(content).split(/\r?\n/);
+    var defRe = new RegExp(
+      "^\\s*(?:(?:public|private|protected|internal|static|async|export|abstract|sealed)\\s+)*(?:def|function|class|interface|type|enum|fn|const|let|var)\\s+" + escaped + "\\b"
+    );
+    var assignRe = new RegExp("^\\s*" + escaped + "\\s*[=:(]");
+    var i;
+    for (i = 0; i < lines.length; i++) {
+      if (defRe.test(lines[i]) || assignRe.test(lines[i])) return i + 1;
+    }
+    var wordRe = new RegExp("\\b" + escaped + "\\b");
+    for (i = 0; i < lines.length; i++) {
+      if (wordRe.test(lines[i])) return i + 1;
+    }
+    return 0;
+  }
+  function pickSearchLine(matches, path, symbol) {
+    var rel = normalizeRepoPath(path);
+    var name = String(symbol || "").trim();
+    var hits = (matches || []).filter(function (row) {
+      return row && normalizeRepoPath(row.path) === rel && row.line;
+    });
+    if (!hits.length) return 0;
+    if (name) {
+      var defRe = new RegExp("\\b(?:def|function|class|fn)\\s+" + name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b");
+      var def = hits.find(function (row) { return defRe.test(row.snippet || ""); });
+      if (def) return Number(def.line) || 0;
+    }
+    return Number(hits[0].line) || 0;
+  }
+  function locateSymbolInRepo(path, symbol) {
+    if (!symbol || !repoId()) {
+      if (editor) editor.focus();
+      return;
+    }
+    jsonFetch(endpoint("/repositories/" + encodeURIComponent(repoId()) + "/search?mode=content&q=" + encodeURIComponent(symbol))).then(function (data) {
+      if (!shouldShowFileResponse(state.active, path)) return;
+      var n = pickSearchLine(data.matches, path, symbol);
+      if (n) revealEditorLine(n, 1);
+      else if (editor) editor.focus();
+    }).catch(function () {
+      if (editor) editor.focus();
+    });
+  }
   function activateTab(path) {
+    if (state.active && state.active !== path) captureActive();
     state.active = path;
     var tab = currentTab(); renderTabs(); savePrefs();
     if (!tab) return;
@@ -513,6 +613,7 @@
   function setFileViewMode(mode) {
     var tab = currentTab();
     if (!tab || !isMarkdownPath(tab.path, tab.language)) return;
+    captureActive();
     tab.viewMode = mode === "preview" ? "preview" : "source";
     showFileSurface(tab);
   }
@@ -1814,9 +1915,6 @@
     }
     feed.innerHTML = session.messages.map(function (msg) { return renderChatMessage(msg); }).join("");
     enhanceMarkdown(feed);
-    feed.querySelectorAll("[data-open-file]").forEach(function (button) {
-      button.addEventListener("click", function () { openFile(button.getAttribute("data-open-file")); });
-    });
     feed.querySelectorAll("[data-chat-action]").forEach(function (button) {
       button.addEventListener("click", function () {
         var action = button.getAttribute("data-chat-action");
@@ -3040,7 +3138,7 @@
           if (kind === "bottom") {
             workbench.style.setProperty("--bottom", Math.max(90, Math.min(420, bottom - e.clientY + startY)) + "px");
           }
-          if (editor) editor.layout();
+          layoutEditor();
         }
         function up() {
           sash.classList.remove("is-dragging");
@@ -3069,6 +3167,7 @@
         wordWrap:"off",
         readOnly:true,
         domReadOnly:true,
+        scrollbar:{ vertical:"visible", horizontal:"auto", verticalScrollbarSize:12, horizontalScrollbarSize:12, alwaysConsumeMouseWheel:true },
         renderWhitespace:"selection",
         padding:{top:8},
         tabSize:4,
@@ -3199,7 +3298,18 @@
   fallback.addEventListener("select",function(){var text=currentSelection();document.getElementById("climate-selection-meta").textContent=text?text.split("\n").length+" line(s)":"No selection";});
   document.addEventListener("keydown",function(e){var key=e.key.toLowerCase();if((e.ctrlKey||e.metaKey)&&key==="s"){e.preventDefault();saveFile();}else if((e.ctrlKey||e.metaKey)&&key==="b"){e.preventDefault();document.getElementById("climate-toggle-left").click();}else if((e.ctrlKey||e.metaKey)&&key==="j"){e.preventDefault();document.getElementById("climate-toggle-bottom").click();}else if((e.ctrlKey||e.metaKey)&&key==="p"){e.preventDefault();workbench.classList.remove("is-left-closed");document.getElementById("climate-search").focus();}else if((e.ctrlKey||e.metaKey)&&e.shiftKey&&key==="a"){e.preventDefault();workbench.classList.remove("is-ai-closed");promptEl.focus();}});
   fallback.readOnly = true;
-  document.querySelectorAll(".climate-bottom-tabs [data-panel]").forEach(function(btn){btn.addEventListener("click",function(){switchPanel(btn.dataset.panel);});});document.getElementById("climate-bottom-close").addEventListener("click",function(){center.classList.add("is-bottom-closed");if(editor)editor.layout();savePrefs();});
+  shell.addEventListener("click", function (event) {
+    var btn = event.target.closest("[data-open-file]");
+    if (!btn || !shell.contains(btn)) return;
+    event.preventDefault();
+    openFile(
+      btn.getAttribute("data-open-file"),
+      btn.getAttribute("data-open-line"),
+      1,
+      btn.getAttribute("data-open-symbol")
+    );
+  });
+  document.querySelectorAll(".climate-bottom-tabs [data-panel]").forEach(function(btn){btn.addEventListener("click",function(){switchPanel(btn.dataset.panel);});});document.getElementById("climate-bottom-close").addEventListener("click",function(){center.classList.add("is-bottom-closed");scheduleEditorLayout();savePrefs();});
   var outputChannel=document.getElementById("climate-output-channel");
   if(outputChannel) outputChannel.addEventListener("change",function(){state.outputChannel=outputChannel.value;savePrefs();renderOutputPane();});
   var outputClear=document.getElementById("climate-output-clear");
@@ -3222,10 +3332,10 @@
       workbench.classList.remove("is-ai-collapsed");
     }
     syncAiMaximizeChrome();
-    if(editor)editor.layout();
+    scheduleEditorLayout();
     savePrefs();
   });
-  document.getElementById("climate-toggle-bottom").addEventListener("click",function(){center.classList.toggle("is-bottom-closed");if(editor)editor.layout();savePrefs();});
+  document.getElementById("climate-toggle-bottom").addEventListener("click",function(){center.classList.toggle("is-bottom-closed");scheduleEditorLayout();savePrefs();});
   var maximizeAiBtn=document.getElementById("climate-maximize-ai");
   if(maximizeAiBtn){
     maximizeAiBtn.addEventListener("click",function(){
@@ -3238,7 +3348,7 @@
         workbench.classList.add("is-ai-maximized");
         workbench.classList.remove("is-ai-collapsed");
         syncAiMaximizeChrome();
-        if(editor)editor.layout();
+        scheduleEditorLayout();
       }
       savePrefs();
     });
@@ -3249,7 +3359,7 @@
     workbench.classList.remove("is-ai-maximized");
     workbench.classList.remove("is-ai-collapsed");
     syncAiMaximizeChrome();
-    if(editor)editor.layout();
+    scheduleEditorLayout();
     savePrefs();
   });
   var expandAiBtn=document.getElementById("climate-ai-expand");
@@ -3260,14 +3370,14 @@
       promptEl.focus();
     });
   }
-  document.getElementById("climate-toggle-left").addEventListener("click",function(){workbench.classList.toggle("is-left-closed");if(editor)editor.layout();savePrefs();});
-  document.querySelectorAll("[data-activity]").forEach(function(button){button.addEventListener("click",function(){var activity=button.dataset.activity;if(activity==="explorer"){workbench.classList.remove("is-left-closed");}else if(activity==="search"){workbench.classList.remove("is-left-closed");document.getElementById("climate-search").focus();}else if(activity==="git"||activity==="tests"){switchPanel(activity);}else if(activity==="ai"){workbench.classList.remove("is-ai-closed");if(workbench.classList.contains("is-ai-collapsed"))expandAiPanel();promptEl.focus();fetchCodexRateLimits({ refresh: false });}else{setStatus("Workspace settings remain in CLIMATE Settings.");}document.querySelectorAll("[data-activity]").forEach(function(item){item.classList.toggle("is-active",item===button);});if(editor)editor.layout();savePrefs();});});
+  document.getElementById("climate-toggle-left").addEventListener("click",function(){workbench.classList.toggle("is-left-closed");scheduleEditorLayout();savePrefs();});
+  document.querySelectorAll("[data-activity]").forEach(function(button){button.addEventListener("click",function(){var activity=button.dataset.activity;if(activity==="explorer"){workbench.classList.remove("is-left-closed");}else if(activity==="search"){workbench.classList.remove("is-left-closed");document.getElementById("climate-search").focus();}else if(activity==="git"||activity==="tests"){switchPanel(activity);}else if(activity==="ai"){workbench.classList.remove("is-ai-closed");if(workbench.classList.contains("is-ai-collapsed"))expandAiPanel();promptEl.focus();fetchCodexRateLimits({ refresh: false });}else{setStatus("Workspace settings remain in CLIMATE Settings.");}document.querySelectorAll("[data-activity]").forEach(function(item){item.classList.toggle("is-active",item===button);});scheduleEditorLayout();savePrefs();});});
   window.addEventListener("beforeunload",function(e){captureActive();if(state.tabs.some(function(tab){return tab.dirty;})){e.preventDefault();e.returnValue="";}});
   window.addEventListener("resize", function () {
     if (workbench.classList.contains("is-ai-maximized") && !workbench.classList.contains("is-ai-collapsed") && !workbench.classList.contains("is-ai-closed")) {
       syncAiMaximizeChrome();
-      if (editor) editor.layout();
     }
+    scheduleEditorLayout();
   });
   loadPrefs();normalizeAiPanelState();syncAiMaximizeChrome();renderTabs();renderProviders();enhanceProviderModelDropdowns();loadChatStore();loadTree();loadGit();setupResize();initMonaco();if(state.active)openFile(state.active);
   switchPanel(state.panel,{ keepClosed: center.classList.contains("is-bottom-closed") });

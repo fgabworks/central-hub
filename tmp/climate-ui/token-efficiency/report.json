@@ -1,6 +1,175 @@
 {
-  "ok": false,
+  "ok": true,
   "evaluatePostsBeforeClick": 0,
-  "states": {},
-  "error": "browserType.launch: Executable doesn't exist at C:\\Users\\fjdga\\AppData\\Local\\Temp\\cursor-sandbox-cache\\ce935697fef796cd851cbb389bb1c730\\playwright\\chromium_headless_shell-1234\\chrome-headless-shell-win64\\chrome-headless-shell.exe\n╔════════════════════════════════════════════════════════════╗\n║ Looks like Playwright was just installed or updated.       ║\n║ Please run the following command to download new browsers: ║\n║                                                            ║\n║     npx playwright install                                 ║\n║                                                            ║\n║ <3 Playwright Team                                         ║\n╚════════════════════════════════════════════════════════════╝"
+  "states": {
+    "1366x768:not-measured": {
+      "ok": true,
+      "checks": [
+        true,
+        true,
+        true
+      ],
+      "jsonlLeak": false,
+      "text": "Token Efficiency Not measured CLIMATE run total 493,229 Preflight estimate 527 Direct baseline Not measured Benchmark details Evaluate Token Savings",
+      "shot": "tmp\\climate-ui\\token-efficiency\\1366x768-not-measured.png"
+    },
+    "1366x768:measuring": {
+      "ok": true,
+      "checks": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "jsonlLeak": false,
+      "text": "Token Efficiency ● Measuring CLIMATE Run total 708,792 Preflight estimate 553 DIRECT Fresh read-only benchmark running… 44s Same repo · commit · model · read-only Benchmark details Cancel",
+      "shot": "tmp\\climate-ui\\token-efficiency\\1366x768-measuring.png"
+    },
+    "1366x768:measured": {
+      "ok": true,
+      "checks": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "jsonlLeak": false,
+      "text": "Token Efficiency ✓ Measured CLIMATE DIRECT Total 493,229 654,900 Provider runtime 2m 3m Files inspected 8 21 Saved 161,671 tokens (-24.7%) CLIMATE used 24.7% fewer provider tokens Difference −161,671 Change −24.7% Relative usage 0.75× Direct CLIMATE and Direct were both fresh provider sessions. Benchmark details",
+      "shot": "tmp\\climate-ui\\token-efficiency\\1366x768-measured.png"
+    },
+    "1366x768:negative": {
+      "ok": true,
+      "checks": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "jsonlLeak": false,
+      "text": "Token Efficiency ✓ Measured CLIMATE DIRECT Total 708,792 280,908 Provider runtime 42s 1m 6s Files inspected 2 4 Used 427,884 more tokens (+152.3%) CLIMATE used 2.52× Direct provider usage Difference +427,884 Change +152.3% Relative usage 2.52× Direct CLIMATE resumed a prior Codex session; Direct was a fresh ephemeral run. CLIMATE provider totals include accumulated prior-turn context. Benchmark de",
+      "shot": "tmp\\climate-ui\\token-efficiency\\1366x768-negative.png"
+    },
+    "1366x768:unavailable": {
+      "ok": true,
+      "checks": [
+        true
+      ],
+      "jsonlLeak": false,
+      "text": "Token Efficiency Benchmark unavailable CLIMATE run total 493,229 Preflight estimate 527 Direct baseline Benchmark unavailable This run was recorded without a commit SHA. Re-run the prompt on the current commit to enable a measured comparison. Benchmark details Evaluate Token Savings",
+      "shot": "tmp\\climate-ui\\token-efficiency\\1366x768-unavailable.png"
+    },
+    "1366x768:not-comparable": {
+      "ok": true,
+      "checks": [
+        true,
+        true
+      ],
+      "jsonlLeak": false,
+      "text": "Token Efficiency Not comparable CLIMATE run total 493,229 Preflight estimate 527 Direct baseline Not comparable Benchmark cannot be reproduced: repository commit has changed. Benchmark details Evaluate Token Savings",
+      "shot": "tmp\\climate-ui\\token-efficiency\\1366x768-not-comparable.png"
+    },
+    "1366x768:large": {
+      "ok": true,
+      "checks": [
+        true
+      ],
+      "jsonlLeak": false,
+      "text": "Token Efficiency ✓ Measured CLIMATE DIRECT Total 4,932,290 6,549,000 Provider runtime Unavailable Unavailable Files inspected 8 21 Saved 1,616,710 tokens (-24.7%) CLIMATE used 24.7% fewer provider tokens Difference −1,616,710 Change −24.7% Relative usage 0.75× Direct Benchmark details",
+      "shot": "tmp\\climate-ui\\token-efficiency\\1366x768-large.png"
+    },
+    "1366x768:click-evaluate": {
+      "ok": true,
+      "evaluatePosts": 1
+    },
+    "1600x900:not-measured": {
+      "ok": true,
+      "checks": [
+        true,
+        true,
+        true
+      ],
+      "jsonlLeak": false,
+      "text": "Token Efficiency Not measured CLIMATE run total 493,229 Preflight estimate 527 Direct baseline Not measured Benchmark details Evaluate Token Savings",
+      "shot": "tmp\\climate-ui\\token-efficiency\\1600x900-not-measured.png"
+    },
+    "1600x900:measuring": {
+      "ok": true,
+      "checks": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "jsonlLeak": false,
+      "text": "Token Efficiency ● Measuring CLIMATE Run total 708,792 Preflight estimate 553 DIRECT Fresh read-only benchmark running… 47s Same repo · commit · model · read-only Benchmark details Cancel",
+      "shot": "tmp\\climate-ui\\token-efficiency\\1600x900-measuring.png"
+    },
+    "1600x900:measured": {
+      "ok": true,
+      "checks": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "jsonlLeak": false,
+      "text": "Token Efficiency ✓ Measured CLIMATE DIRECT Total 493,229 654,900 Provider runtime 2m 3m Files inspected 8 21 Saved 161,671 tokens (-24.7%) CLIMATE used 24.7% fewer provider tokens Difference −161,671 Change −24.7% Relative usage 0.75× Direct CLIMATE and Direct were both fresh provider sessions. Benchmark details",
+      "shot": "tmp\\climate-ui\\token-efficiency\\1600x900-measured.png"
+    },
+    "1600x900:negative": {
+      "ok": true,
+      "checks": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "jsonlLeak": false,
+      "text": "Token Efficiency ✓ Measured CLIMATE DIRECT Total 708,792 280,908 Provider runtime 42s 1m 6s Files inspected 2 4 Used 427,884 more tokens (+152.3%) CLIMATE used 2.52× Direct provider usage Difference +427,884 Change +152.3% Relative usage 2.52× Direct CLIMATE resumed a prior Codex session; Direct was a fresh ephemeral run. CLIMATE provider totals include accumulated prior-turn context. Benchmark de",
+      "shot": "tmp\\climate-ui\\token-efficiency\\1600x900-negative.png"
+    },
+    "1600x900:unavailable": {
+      "ok": true,
+      "checks": [
+        true
+      ],
+      "jsonlLeak": false,
+      "text": "Token Efficiency Benchmark unavailable CLIMATE run total 493,229 Preflight estimate 527 Direct baseline Benchmark unavailable This run was recorded without a commit SHA. Re-run the prompt on the current commit to enable a measured comparison. Benchmark details Evaluate Token Savings",
+      "shot": "tmp\\climate-ui\\token-efficiency\\1600x900-unavailable.png"
+    },
+    "1600x900:not-comparable": {
+      "ok": true,
+      "checks": [
+        true,
+        true
+      ],
+      "jsonlLeak": false,
+      "text": "Token Efficiency Not comparable CLIMATE run total 493,229 Preflight estimate 527 Direct baseline Not comparable Benchmark cannot be reproduced: repository commit has changed. Benchmark details Evaluate Token Savings",
+      "shot": "tmp\\climate-ui\\token-efficiency\\1600x900-not-comparable.png"
+    },
+    "1600x900:large": {
+      "ok": true,
+      "checks": [
+        true
+      ],
+      "jsonlLeak": false,
+      "text": "Token Efficiency ✓ Measured CLIMATE DIRECT Total 4,932,290 6,549,000 Provider runtime Unavailable Unavailable Files inspected 8 21 Saved 1,616,710 tokens (-24.7%) CLIMATE used 24.7% fewer provider tokens Difference −1,616,710 Change −24.7% Relative usage 0.75× Direct Benchmark details",
+      "shot": "tmp\\climate-ui\\token-efficiency\\1600x900-large.png"
+    },
+    "1600x900:click-evaluate": {
+      "ok": true,
+      "evaluatePosts": 1
+    }
+  },
+  "error": ""
 }

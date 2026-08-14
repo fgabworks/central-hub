@@ -4,7 +4,32 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**CLIMATE read-only viewer blank-file fix (2026-08-15)**
+**CLIMATE Markdown chat readability polish (2026-08-15)**
+
+Chat Markdown stays compact. Section headings and lists have a little more
+air, table cells have slightly more padding, and wide tables scroll
+horizontally instead of wrapping/crushing. UID chips, inline code, and
+file/function chips stay visually distinct. Raw `msg.text` is unchanged.
+
+Prior: **CLIMATE clickable file/function references (2026-08-15)**
+
+AI answers turn repository path traces such as
+`` `lookup/convergence/anc_timing.py` — `anc_trimester_rule_summary` ``
+into in-chat buttons. Clicking one opens the current repository’s read-only
+Monaco viewer, focuses the editor, and jumps near the named function when
+that symbol can be found in the file (or via content search). File-only
+paths still open the file. Markdown, UID chips, Sources/Details, and
+read-only mode are unchanged.
+
+Prior: **CLIMATE read-only Monaco long-file scroll (2026-08-15)**
+
+The main editor host is a bounded box (`overflow: hidden`, `minmax(0,1fr)`).
+Monaco fills that remaining area and lays out from the host size, including
+after bottom-panel resize and window resize. Long files scroll from first to
+last line via Monaco’s own scrollbar. Markdown Preview still scrolls
+independently. View state is saved per tab. The viewer stays read-only.
+
+Prior: **CLIMATE read-only viewer blank-file fix (2026-08-15)**
 
 Opening a repository text file no longer shows an empty Monaco buffer.
 `captureActive()` was copying the current editor value (Monaco's default

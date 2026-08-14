@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-14 (CLIMATE Markdown chat + read-only file viewer).
+Last verified: 2026-08-15 (CLIMATE Markdown chat readability polish).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -8,7 +8,7 @@ Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](doc
 **CLIMATE Code Workspace v1** is implemented at `/work/climate` (VANTA) and
 `/personal/climate` (ARCTIC). It reuses the guarded Repository Workspace file/Git
 services and existing Agent Center CLI adapters/runner. The IDE shell provides a
-read-only Monaco file viewer (textarea fallback), Explorer/search, multiple tabs,
+read-only Monaco file viewer that fills the remaining editor area and scrolls long files (textarea fallback); AI answers link repository path/function traces into that viewer, Explorer/search, multiple tabs,
 Markdown Source | Preview, persisted per-workspace/repository tabs/layout, Git
 status/diff, resizable panels, and Problems | Output | Debug Console | Terminal |
 Ports (Tests and Git remain secondary). Opening a file does not write it; the
