@@ -26,6 +26,9 @@ from hub.workspace_console.terminal.security import (
     scrub_child_env,
     verify_ws_ticket,
 )
+from hub.workspace_console.terminal.pty_backend import (
+    normalize_conpty_newlines,
+)
 from hub.workspace_console.terminal.settings import TerminalSettings
 
 
@@ -413,6 +416,20 @@ class TerminalRouteTests(unittest.TestCase):
         # Public layout helpers for diagnostics/tests
         self.assertIn("getLayoutState", term_js)
         self.assertIn("isSplitEnabled", term_js)
+        self.assertIn("convertEol", term_js)
+        self.assertIn("windowsMode", term_js)
+        self.assertIn("tabShortLabel", term_js)
+        self.assertIn("getBufferText", term_js)
+        self.assertNotIn("term.write(data)", term_js)
+
+
+class ConptyNewlineTests(unittest.TestCase):
+    def test_lone_lf_gets_cr_without_touching_crlf_or_lone_cr(self):
+        self.assertEqual(normalize_conpty_newlines(b"one\ntwo"), b"one\r\ntwo")
+        self.assertEqual(normalize_conpty_newlines(b"one\r\ntwo"), b"one\r\ntwo")
+        self.assertEqual(normalize_conpty_newlines(b"\r"), b"\r")
+        self.assertEqual(normalize_conpty_newlines(b"ok"), b"ok")
+        self.assertEqual(normalize_conpty_newlines(b""), b"")
 
 
 class TerminalConsoleRegressionTests(unittest.TestCase):

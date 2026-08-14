@@ -152,6 +152,32 @@ def register_climate_routes(app: Flask) -> None:
             lambda repo: _svc().repository_workspace.diff(repo, path),
         )
 
+    @app.get("/api/climate/<workspace>/repositories/<repo_id>/ports")
+    def api_climate_ports(workspace: str, repo_id: str):
+        try:
+            payload = _svc().ports(workspace, repo_id)
+            terms = app.config.get("WC_TERMINALS")
+            if terms is not None and payload.get("ports") is not None:
+                payload["ports"] = terms.annotate_ports(list(payload["ports"]))
+                for row in payload["ports"]:
+                    if row.get("terminal_owned") or row.get("terminal_session_id"):
+                        row["source"] = "terminal"
+                        row["session"] = row.get("terminal_name") or row.get("terminal_session_id") or row.get("session")
+                    elif row.get("terminal_name") and not row.get("session"):
+                        row["session"] = row.get("terminal_name")
+                    row.pop("can_stop", None)
+            payload["count"] = len(payload.get("ports") or [])
+            return jsonify({"ok": True, **payload})
+        except (ClimateCodingError, WorkspaceSecurityError) as exc:
+            return _error(exc)
+
+    @app.get("/api/climate/<workspace>/repositories/<repo_id>/debug")
+    def api_climate_debug(workspace: str, repo_id: str):
+        try:
+            return jsonify(_svc().debug(workspace, repo_id))
+        except (ClimateCodingError, WorkspaceSecurityError) as exc:
+            return _error(exc)
+
     @app.post("/api/climate/<workspace>/repositories/<repo_id>/runs")
     def api_climate_execute(workspace: str, repo_id: str):
         payload = request.get_json(silent=True) or {}

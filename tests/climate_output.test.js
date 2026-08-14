@@ -91,3 +91,29 @@ assert.equal(
 );
 
 console.log("CLIMATE provider exploration count JS: OK");
+
+vm.runInContext([
+  "filterOutputLines",
+  "parseDiagnosticLines",
+].map(functionSource).join("\n"), context);
+
+assert.equal(
+  context.filterOutputLines("[thread.started]\n{\"type\":\"turn.started\"}\nhello from climate"),
+  "hello from climate",
+);
+assert.equal(context.filterOutputLines("{\"type\":\"item.completed\"}"), "");
+assert.doesNotMatch(context.filterOutputLines("thread.started\nprovider stderr"), /thread\.started/);
+
+const diags = context.parseDiagnosticLines(
+  'File "pkg/app.py", line 12, in <module>\nSyntaxError: invalid syntax\nok.py:4:1: error: missing comma\n[thread.started]',
+  "runtime",
+);
+assert.equal(diags[0].path, "pkg/app.py");
+assert.equal(diags[0].line, 12);
+assert.equal(diags[0].source, "runtime");
+assert.equal(diags[1].path, "ok.py");
+assert.equal(diags[1].line, 4);
+assert.equal(diags[1].severity, "error");
+assert.equal(diags.length, 2);
+
+console.log("CLIMATE bottom panel output/problems JS: OK");

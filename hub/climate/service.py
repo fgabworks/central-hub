@@ -7,12 +7,18 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import Any
 
+from hub.agent_center.redact import redact_text
 from hub.climate.coding import ClimateCodingAdapter, ClimateCodingError, classify_task_mode
 from hub.climate.codex_limits import get_codex_rate_limits_service
 from hub.climate.preflight import make_blocked_run, resolve_climate_context
 from hub.registry.models import Registry, Repository
+from hub.repository_workspace.ports import port_listeners
+from hub.repository_workspace.process_manager import ACTIVE_STATUSES
 from hub.repository_workspace.security import WorkspaceSecurityError
 from hub.repository_workspace.service import RepositoryWorkspaceService
+
+MAX_CLIMATE_PORTS = 80
+MAX_DEBUG_LOG_LINES = 200
 
 
 def normalize_workspace(value: str) -> str:
@@ -448,6 +454,186 @@ class ClimateService:
             raise ClimateCodingError("Proposal is no longer pending", code="proposal_closed")
         proposal.state = "rejected"
         return {"ok": True, "state": proposal.state, "applied": []}
+
+    def ports(self, workspace: str, repository_id: str) -> dict[str, Any]:
+        """Read-only local listener discovery for the selected CLIMATE repository."""
+        repo = self.require_repo(workspace, repository_id)
+        rows = self.repository_workspace.summarize_local_processes([repo])
+        ports: list[dict[str, Any]] = []
+        seen: set[tuple[int, int]] = set()
+
+        def append_port(
+            *,
+            port: int,
+            pid: int,
+            process: str,
+            source: str,
+            repository_id_value: str = "",
+            repository_name: str = "",
+            run_id: str = "",
+            session: str = "",
+            managed_by_hub: bool = False,
+        ) -> None:
+            key = (int(port), int(pid or 0))
+            if key in seen or int(port) <= 0:
+                return
+            seen.add(key)
+            ports.append(
+                {
+                    "port": int(port),
+                    "pid": int(pid or 0) or None,
+                    "process": redact_text(str(process or ""), limit=200),
+                    "source": source,
+                    "session": session,
+                    "repository_id": repository_id_value,
+                    "repository_name": repository_name,
+                    "run_id": run_id,
+                    "managed_by_hub": bool(managed_by_hub),
+                    "open_url": f"http://127.0.0.1:{int(port)}",
+                }
+            )
+
+        for row in rows:
+            port = row.get("port")
+            if not port:
+                continue
+            source = "run-profile" if (row.get("managed_by_hub") or row.get("run_id")) else "repository"
+            append_port(
+                port=int(port),
+                pid=int(row.get("pid") or 0),
+                process=str(row.get("command_redacted") or row.get("executable") or ""),
+                source=source,
+                repository_id_value=str(row.get("repo_id") or repo.id),
+                repository_name=str(row.get("repository_name") or repo.name),
+                run_id=str(row.get("run_id") or ""),
+                session=str(row.get("profile_id") or row.get("run_id") or ""),
+                managed_by_hub=bool(row.get("managed_by_hub")),
+            )
+
+        hub_by_pid: dict[int, Any] = {}
+        for run in self.repository_workspace.processes.list_runs(repo_id=repo.id, refresh=False):
+            if run.status not in ACTIVE_STATUSES or not run.pid:
+                continue
+            hub_by_pid[int(run.pid)] = run
+            if run.port:
+                append_port(
+                    port=int(run.port),
+                    pid=int(run.pid),
+                    process=" ".join(str(part) for part in (run.argv_redacted or [])[:6])
+                    or (run.executable_path or "hub run"),
+                    source="run-profile",
+                    repository_id_value=repo.id,
+                    repository_name=repo.name,
+                    run_id=str(run.run_id or ""),
+                    session=str(run.profile_id or run.run_id or ""),
+                    managed_by_hub=True,
+                )
+
+        pid_rows = {int(row.get("pid") or 0): row for row in rows if row.get("pid")}
+        extra = 0
+        try:
+            listeners = port_listeners()
+        except Exception:  # noqa: BLE001
+            listeners = {}
+        for port, pids in sorted(listeners.items()):
+            if int(port) < 1024:
+                continue
+            for pid in pids:
+                key = (int(port), int(pid or 0))
+                if key in seen:
+                    continue
+                match = pid_rows.get(int(pid))
+                run = hub_by_pid.get(int(pid))
+                if match:
+                    source = "run-profile" if (match.get("managed_by_hub") or match.get("run_id")) else "repository"
+                    append_port(
+                        port=int(port),
+                        pid=int(pid),
+                        process=str(match.get("command_redacted") or match.get("executable") or ""),
+                        source=source,
+                        repository_id_value=str(match.get("repo_id") or repo.id),
+                        repository_name=str(match.get("repository_name") or repo.name),
+                        run_id=str(match.get("run_id") or ""),
+                        session=str(match.get("profile_id") or match.get("run_id") or ""),
+                        managed_by_hub=bool(match.get("managed_by_hub")),
+                    )
+                elif run is not None:
+                    append_port(
+                        port=int(port),
+                        pid=int(pid),
+                        process=" ".join(str(part) for part in (run.argv_redacted or [])[:6])
+                        or (run.executable_path or "hub run"),
+                        source="run-profile",
+                        repository_id_value=repo.id,
+                        repository_name=repo.name,
+                        run_id=str(run.run_id or ""),
+                        session=str(run.profile_id or run.run_id or ""),
+                        managed_by_hub=True,
+                    )
+                else:
+                    extra += 1
+                    if extra > 60:
+                        continue
+                    append_port(
+                        port=int(port),
+                        pid=int(pid),
+                        process=f"pid {pid}",
+                        source="local",
+                    )
+
+        ports = ports[:MAX_CLIMATE_PORTS]
+        return {
+            "ok": True,
+            "count": len(ports),
+            "ports": ports,
+            "discovery": "read-only",
+            "forwarding": False,
+        }
+
+    def debug(self, workspace: str, repository_id: str) -> dict[str, Any]:
+        """Active hub-managed run-profile console — not a debugger and not a PTY."""
+        repo = self.require_repo(workspace, repository_id)
+        runs = self.repository_workspace.processes.list_runs(repo_id=repo.id, refresh=True)
+        active = [run for run in runs if run.status in ACTIVE_STATUSES]
+        if not active:
+            return {
+                "ok": True,
+                "active": False,
+                "message": "No active debug session",
+                "session": None,
+                "logs": [],
+                "evaluate": False,
+            }
+        active.sort(key=lambda run: str(run.started_at or ""), reverse=True)
+        run = active[0]
+        public = run.to_public() if hasattr(run, "to_public") else {}
+        logs: list[dict[str, str]] = []
+        try:
+            chunk = self.repository_workspace.read_logs(repo, run.run_id, offset=0, limit=MAX_DEBUG_LOG_LINES)
+            for line in chunk.get("lines") or []:
+                text = str(line)
+                stream = "stderr" if text.startswith("[ERR]") else "stdout"
+                logs.append({"stream": stream, "text": redact_text(text, limit=2000)})
+        except Exception as exc:  # noqa: BLE001
+            logs.append({"stream": "stderr", "text": redact_text(str(exc), limit=400)})
+        return {
+            "ok": True,
+            "active": True,
+            "message": "",
+            "evaluate": False,
+            "session": {
+                "run_id": public.get("run_id") or run.run_id,
+                "profile_id": public.get("profile_id") or run.profile_id,
+                "status": public.get("status") or run.status,
+                "pid": public.get("pid") or run.pid,
+                "port": public.get("port") or run.port,
+                "local_url": public.get("local_url") or "",
+                "started_at": public.get("started_at") or run.started_at,
+                "error": public.get("error") or run.error or "",
+                "cwd": public.get("cwd") or getattr(run, "cwd", "") or "",
+            },
+            "logs": logs,
+        }
 
     def _require_run_scope(self, workspace: str, run_id: str) -> None:
         scope = self._run_scope.get(run_id)

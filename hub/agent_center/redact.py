@@ -46,6 +46,14 @@ def classify_provider_error(message: str | None) -> dict[str, Any]:
     if not raw.strip():
         return {"code": "execution_error", "detail": "Execution failed"}
     if (
+        "code-mode-host" in lower
+        or "installation incomplete" in lower
+    ):
+        return {
+            "code": "incomplete_cli",
+            "detail": "Codex installation incomplete: codex-code-mode-host.exe is missing",
+        }
+    if (
         ("not found" in lower and ("codex" in lower or "executable" in lower))
         or "no such file" in lower
         or "is not installed" in lower

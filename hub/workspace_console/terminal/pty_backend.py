@@ -16,6 +16,24 @@ class PtyClosed(Exception):
     """PTY process has exited or been closed."""
 
 
+def normalize_conpty_newlines(data: bytes) -> bytes:
+    """Insert CR before lone LF so xterm starts the next line at column 0.
+
+    ConPTY/pywinpty often emits Unix LF without CR. Preserve existing CRLF and
+    lone CR (cursor-to-start). Do not invent prompts or echo input.
+    """
+    if not data or b"\n" not in data:
+        return data
+    out = bytearray()
+    prev = 0
+    for byte in data:
+        if byte == 0x0A and prev != 0x0D:
+            out.append(0x0D)
+        out.append(byte)
+        prev = byte
+    return bytes(out)
+
+
 @dataclass
 class PtyLaunch:
     argv: list[str]
@@ -90,8 +108,10 @@ class WinConPty(BasePty):
         if chunk is None:
             return b""
         if isinstance(chunk, bytes):
-            return chunk
-        return str(chunk).encode("utf-8", errors="replace")
+            raw = chunk
+        else:
+            raw = str(chunk).encode("utf-8", errors="replace")
+        return normalize_conpty_newlines(raw)
 
     def resize(self, cols: int, rows: int) -> None:
         if self._closed:

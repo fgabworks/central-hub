@@ -1310,7 +1310,165 @@ body > .climate-dd-menu .climate-dd-option.is-disabled {
   height: 100%;
   overflow: hidden;
 }
-.climate-wc-terminal .wc-term-toolbar { flex: 0 0 auto; }
+.climate-wc-terminal .wc-term-toolbar {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  height: 28px;
+  padding: 0 8px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--cl-border);
+  background: var(--cl-bg-elevated);
+}
+.climate-wc-terminal .wc-term-field {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+.climate-wc-terminal .wc-field-label,
+.climate-wc-terminal .wc-term-toolbar .wc-field-label {
+  font-size: 10px;
+  line-height: 1;
+  color: var(--cl-muted);
+  letter-spacing: 0.01em;
+}
+.climate-wc-terminal .wc-term-select-wrap {
+  gap: 4px;
+}
+.climate-wc-terminal .wc-term-status-dot {
+  width: 6px;
+  height: 6px;
+}
+.climate-wc-terminal .wc-term-toolbar select,
+.climate-wc-terminal .wc-term-toolbar .wc-control {
+  height: 22px;
+  min-height: 22px;
+  max-height: 22px;
+  padding: 0 6px;
+  font-size: 11px;
+  line-height: 20px;
+  border-radius: 3px;
+  background: var(--cl-panel-2);
+  color: var(--cl-text);
+  border: 1px solid var(--cl-border);
+}
+.climate-wc-terminal .wc-term-repo-select {
+  min-width: 7.5rem;
+  max-width: 11rem;
+  width: 10rem;
+}
+.climate-wc-terminal .wc-term-shell-select {
+  min-width: 5.5rem;
+  max-width: 7.5rem;
+  width: 6.5rem;
+}
+.climate-wc-terminal .wc-term-toolbar .btn.btn-sm,
+.climate-wc-terminal .wc-term-toolbar .wc-control-btn {
+  height: 22px;
+  min-height: 22px;
+  max-height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+  line-height: 1;
+  border-radius: 3px;
+  border: 1px solid var(--cl-border);
+  background: var(--cl-panel-2);
+  color: var(--cl-text);
+  box-shadow: none;
+}
+.climate-wc-terminal .wc-term-toolbar .btn.btn-sm:hover:not(:disabled),
+.climate-wc-terminal .wc-term-toolbar .wc-control-btn:hover:not(:disabled) {
+  background: var(--climate-panel-3, #1e1e24);
+  color: #fff;
+}
+.climate-wc-terminal .wc-term-toolbar .btn.btn-primary {
+  background: color-mix(in srgb, var(--workspace-accent, var(--cl-accent)) 82%, #000);
+  border-color: color-mix(in srgb, var(--workspace-accent, var(--cl-accent)) 70%, var(--cl-border));
+  color: #fff;
+}
+.climate-wc-terminal .wc-term-toolbar .btn.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.climate-wc-terminal .wc-term-toolbar .btn.btn-danger {
+  background: transparent;
+  border-color: color-mix(in srgb, #f87171 35%, var(--cl-border));
+  color: #f0aaa6;
+}
+.climate-wc-terminal .wc-term-toolbar .btn.btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, #f87171 16%, transparent);
+  color: #fecaca;
+  filter: none;
+}
+.climate-wc-terminal .wc-term-toolbar .btn:focus-visible,
+.climate-wc-terminal .wc-term-toolbar select:focus-visible,
+.climate-wc-terminal .wc-term-tab:focus-visible {
+  outline: 1px solid var(--workspace-accent, var(--cl-accent));
+  outline-offset: 1px;
+}
+.climate-wc-terminal .wc-term-session-tabs {
+  flex: 1 1 auto;
+  min-width: 4.5rem;
+  height: 22px;
+  min-height: 22px;
+  gap: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+.climate-wc-terminal .wc-term-session-tabs::-webkit-scrollbar { height: 4px; }
+.climate-wc-terminal .wc-term-tab {
+  height: 22px;
+  min-height: 22px;
+  max-height: 22px;
+  max-width: 9.5rem;
+  padding: 0 6px;
+  gap: 4px;
+  font-size: 11px;
+  border-radius: 3px 3px 0 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--cl-muted);
+}
+.climate-wc-terminal .wc-term-tab.is-active {
+  background: var(--cl-bg);
+  color: var(--cl-text);
+  border-color: var(--cl-border);
+  border-bottom-color: var(--cl-bg);
+}
+.climate-wc-terminal .wc-term-tab:hover {
+  color: var(--cl-text);
+  background: var(--cl-panel-2);
+}
+.climate-wc-terminal .wc-term-tab-label {
+  max-width: 7.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.climate-wc-terminal .wc-term-tab-close {
+  font-size: 12px;
+  opacity: 0.65;
+  padding: 0;
+}
+.climate-wc-terminal .wc-term-tab-close:hover { opacity: 1; color: #fff; }
+.climate-wc-terminal .wc-term-dot {
+  width: 6px;
+  height: 6px;
+}
+.climate-wc-terminal .wc-term-quick-add {
+  min-width: 22px;
+  width: 22px;
+  padding: 0;
+}
+.climate-wc-terminal .wc-term-actions {
+  gap: 4px;
+  margin-left: 0;
+}
 .climate-wc-terminal .wc-term-stage {
   flex: 1 1 auto;
   min-height: 0;
@@ -1320,6 +1478,7 @@ body > .climate-dd-menu .climate-dd-option.is-disabled {
   min-height: 0;
   overflow: auto;
 }
+.climate-wc-terminal .wc-xterm { padding: 2px 4px; }
 
 /* Live provider activity — mockup-matched progress (panel-only). */
 .climate-chat-status-pill {

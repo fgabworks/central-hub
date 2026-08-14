@@ -22,6 +22,11 @@ _FORBIDDEN_ARGV = {
 
 _FORBIDDEN_APPROVALS = {"never"}  # automatic approvals are not allowed in hub MVP
 
+CODEX_CODE_MODE_HOST_WIN = "codex-code-mode-host.exe"
+INCOMPLETE_CODEX_HOST_DETAIL = (
+    "Codex installation incomplete: codex-code-mode-host.exe is missing"
+)
+
 
 def codex_home() -> Path:
     raw = (os.environ.get("CODEX_HOME") or "").strip()
@@ -30,25 +35,117 @@ def codex_home() -> Path:
     return Path.home() / ".codex"
 
 
-def discover_codex_executable(configured: str = "codex") -> str | None:
-    """Resolve Codex from PATH or the known local install dir. Never accept arbitrary paths."""
-    name = (configured or "codex").strip() or "codex"
-    if Path(name).name != name:
-        # Config must be a bare executable name, not a user-supplied absolute path.
+def windows_codex_host_path(executable: str | Path) -> Path:
+    return Path(executable).expanduser().parent / CODEX_CODE_MODE_HOST_WIN
+
+
+def is_complete_codex_runtime(executable: str | Path, *, windows: bool | None = None) -> bool:
+    """Windows native Codex needs code-mode-host beside the CLI; Unix is unchanged."""
+    path = Path(executable)
+    if not path.is_file():
+        return False
+    if (os.name == "nt") if windows is None else windows:
+        return windows_codex_host_path(path).is_file()
+    return True
+
+
+def windows_official_codex_executable() -> Path | None:
+    """Official Windows standalone installer — no username hardcoded."""
+    if os.name != "nt":
         return None
+    local = (os.environ.get("LOCALAPPDATA") or "").strip()
+    if not local:
+        return None
+    return Path(local) / "Programs" / "OpenAI" / "Codex" / "bin" / "codex.exe"
+
+
+def _codex_search_order(configured: str) -> list[tuple[str, Path]]:
+    """PATH, then official standalone, then portable home installs. sandbox-bin last."""
     from hub.agent_center.adapters.base import which_executable
 
+    name = (configured or "codex").strip() or "codex"
+    ordered: list[tuple[str, Path]] = []
     found = which_executable(name)
     if found:
-        return found
+        ordered.append(("path", Path(found)))
+    official = windows_official_codex_executable()
+    if official is not None:
+        ordered.append(("official_standalone", official))
     home = codex_home()
-    for candidate in (
-        home / ".sandbox-bin" / ("codex.exe" if os.name == "nt" else "codex"),
-        home / "bin" / ("codex.exe" if os.name == "nt" else "codex"),
-    ):
-        if candidate.is_file():
-            return str(candidate.resolve())
-    return None
+    exe_name = "codex.exe" if os.name == "nt" else "codex"
+    ordered.append(("codex_home_bin", home / "bin" / exe_name))
+    ordered.append(("sandbox_bin", home / ".sandbox-bin" / exe_name))
+    return ordered
+
+
+def inspect_codex_installation(configured: str = "codex") -> dict[str, Any]:
+    """Resolve a usable Codex CLI. PATH wins; incomplete Windows installs are skipped."""
+    name = (configured or "codex").strip() or "codex"
+    missing = {
+        "executable": None,
+        "installed": False,
+        "complete": False,
+        "error_code": "missing_cli",
+        "detail": "Codex CLI is not installed or not discoverable",
+        "incomplete_path": "",
+        "source": "",
+        "host_path": "",
+        "runtime_health": "missing",
+    }
+    if Path(name).name != name:
+        # Config must be a bare executable name, not a user-supplied absolute path.
+        return missing
+
+    windows = os.name == "nt"
+    seen: set[str] = set()
+    incomplete_path = ""
+    incomplete_source = ""
+    for source, candidate in _codex_search_order(name):
+        try:
+            resolved = candidate.expanduser().resolve(strict=False)
+        except OSError:
+            continue
+        key = str(resolved).replace("\\", "/").lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        if not resolved.is_file():
+            continue
+        if is_complete_codex_runtime(resolved, windows=windows):
+            display = str(candidate.expanduser())
+            host_display = str(Path(display).parent / CODEX_CODE_MODE_HOST_WIN) if windows else ""
+            return {
+                "executable": display,
+                "installed": True,
+                "complete": True,
+                "error_code": "",
+                "detail": "",
+                "incomplete_path": "",
+                "source": source,
+                "host_path": host_display,
+                "runtime_health": "ok",
+            }
+        if not incomplete_path:
+            incomplete_path = str(candidate.expanduser())
+            incomplete_source = source
+    if incomplete_path and windows:
+        return {
+            "executable": None,
+            "installed": True,
+            "complete": False,
+            "error_code": "incomplete_cli",
+            "detail": INCOMPLETE_CODEX_HOST_DETAIL,
+            "incomplete_path": incomplete_path,
+            "source": incomplete_source,
+            "host_path": str(Path(incomplete_path).parent / CODEX_CODE_MODE_HOST_WIN),
+            "runtime_health": "incomplete_host",
+        }
+    return {**missing, "incomplete_path": incomplete_path, "source": incomplete_source}
+
+
+def discover_codex_executable(configured: str = "codex") -> str | None:
+    """Resolve Codex from PATH or the known local install dir. Never accept arbitrary paths."""
+    return inspect_codex_installation(configured).get("executable") or None
 
 
 def assert_safe_codex_argv(argv: list[str], *, require_ephemeral: bool = True) -> None:

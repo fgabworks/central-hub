@@ -367,6 +367,10 @@ class AgentConnectionRegistry:
             except Exception:  # noqa: BLE001
                 help_text = ""
         status["install_help"] = help_text
+        status.setdefault("runtime_health", "")
+        status.setdefault("runtime_complete", False)
+        status.setdefault("discovery_source", "")
+        status.setdefault("host_path", "")
         status.setdefault("models", [])
         status.setdefault("model_details", [])
         status.setdefault("models_source", "none")

@@ -95,7 +95,7 @@
           </td>
         </tr>
         <tr class="ai-provider-detail-row" data-provider-detail="{{ item.id }}">
-          <td colspan="6" class="connection-detail muted">{{ item.detail }}{% if item.install_help and not item.installed %} — {{ item.install_help }}{% endif %}{% if item.executable_path %} · {{ item.executable_path }}{% endif %}</td>
+          <td colspan="6" class="connection-detail muted">{{ item.detail }}{% if item.install_help and not item.installed %} — {{ item.install_help }}{% endif %}{% if item.executable_path %} · {{ item.executable_path }}{% endif %}{% if item.runtime_health %} · runtime {{ item.runtime_health }}{% endif %}</td>
         </tr>
       {% endfor %}
       </tbody>

@@ -107,7 +107,12 @@
     return null;
   }
 
+  function isWindowsHost() {
+    return /Win/i.test(navigator.platform || "") || /Windows/i.test(navigator.userAgent || "");
+  }
+
   function createView(slot, hostEl) {
+    var win = isWindowsHost();
     var term = new global.Terminal({
       cursorBlink: true,
       fontSize: 13,
@@ -115,6 +120,10 @@
       theme: { background: "#0e1116", foreground: "#d7dde5" },
       scrollback: 5000,
       allowProposedApi: true,
+      // ConPTY/pywinpty often emits LF without CR; LF must also return to column 0.
+      convertEol: win,
+      windowsMode: win,
+      windowsPty: win ? { backend: "conpty" } : {},
     });
     var Fit = FitCtor();
     var fit = Fit ? new Fit() : null;
@@ -372,6 +381,15 @@
     return shellLabel(s.shell) + " — " + (s.repository_name || s.repository_id || "repo");
   }
 
+  function tabShortLabel(s) {
+    var raw = String((s && s.name) || "").trim();
+    if (raw) {
+      var cut = raw.indexOf(" — ");
+      return cut > 0 ? raw.slice(0, cut) : raw;
+    }
+    return shellLabel(s && s.shell);
+  }
+
   function updatePaneTitles() {
     var titleA = $("wc-term-title-a");
     var titleB = $("wc-term-title-b");
@@ -482,7 +500,7 @@
       var alive = s.alive || s.status === "running";
       btn.innerHTML =
         '<span class="wc-term-tab-label">' +
-        escapeHtml(tabLabel(s)) +
+        escapeHtml(tabShortLabel(s)) +
         "</span>" +
         (alive ? '<span class="wc-term-dot" title="running" aria-hidden="true"></span>' : "") +
         '<span class="wc-term-tab-close" data-close="' +
@@ -1009,6 +1027,17 @@
     },
     getSessions: function () {
       return state.sessions.slice();
+    },
+    getBufferText: function (slot) {
+      var view = state.views[slot || state.activePane] || state.views.a;
+      if (!view || !view.term || !view.term.buffer) return "";
+      var buf = view.term.buffer.active;
+      var lines = [];
+      for (var i = 0; i < buf.length; i++) {
+        var line = buf.getLine(i);
+        if (line) lines.push(line.translateToString(true));
+      }
+      return lines.join("\n").replace(/[ \t]+\n/g, "\n").replace(/\s+$/g, "");
     },
     /** Test/helper: snapshot layout flags without touching the DOM heavily. */
     getLayoutState: function () {

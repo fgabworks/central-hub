@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-14 (VANTA native Codex repository investigation).
+Last verified: 2026-08-14 (Windows Codex standalone discovery).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -10,7 +10,11 @@ Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](doc
 services and existing Agent Center CLI adapters/runner. The IDE shell provides Monaco
 (textarea fallback), Explorer/search, safe preview-confirm save, multiple tabs,
 persisted per-workspace/repository tabs/layout, Git status/diff, resizable panels, and
-Problems | Output | Tests | Git. Its provider-neutral coding adapter exposes Codex,
+Problems | Output | Debug Console | Terminal | Ports (Tests and Git remain secondary).
+Problems shows real editor/save/runtime diagnostics; Output uses channelled CLIMATE
+runtime logs without raw provider protocol; Debug Console shows hub-managed run-profile
+stdout/stderr or “No active debug session”; Terminal reuses the repository-scoped PTY;
+Ports is read-only local listener discovery. Its provider-neutral coding adapter exposes Codex,
 Claude Code, and Cursor Agent availability/model discovery/exact selection/cancel/result
 without owning credentials or provider argv. AI runs remain read-only; replacement edits
 are parsed as proposals and require Accept/Reject with base-content conflict checks.
@@ -265,7 +269,10 @@ plus Claude Code / Cursor Agent / Codex CLIs. Provider accounts are managed at
 `/system/ai-connections`; Aira and AiriX are profiles, never providers.
 OpenAI and Grok models come from the provider model-list endpoint; Codex MVP uses the
 authenticated Codex default model only (`__provider_default__`, no discovery yet) via
-read-only JSONL `codex exec` runs at the approved repo cwd. Non-conversation runs stay
+read-only JSONL `codex exec` runs at the approved repo cwd. Windows discovery prefers PATH,
+then `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin`, and requires sibling
+`codex-code-mode-host.exe` (incomplete `.sandbox-bin` is skipped).
+Non-conversation runs stay
 ephemeral; same-conversation VANTA runs use official explicit `codex exec resume <UUID>`
 continuation while retaining `--sandbox read-only`. Cursor uses
 `agent models`. Claude Code currently exposes only its provider default because its
@@ -450,7 +457,8 @@ Phase 3+ (MCP, browser, scheduler, shell/`run_command`, write tools, workflow ed
 CLI native tool loops) stays deferred.
 
 **Interactive repository terminal is implemented** (PTY + WebSocket + xterm.js).
-See [SECURITY.md](SECURITY.md).
+Windows ConPTY lone LF is normalized to CRLF so PowerShell prompts stay on their own
+line. CLIMATE’s Terminal toolbar is a compact VS Code-like row. See [SECURITY.md](SECURITY.md).
 
 Next development target: **DHIS2 Standard Reports** (credentialed HTML viewer / library polish).
 DHIS2 Standard Report Manager Phase 2+ (replacement / design write-back) is **not** started.

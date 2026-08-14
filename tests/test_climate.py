@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from hub.climate.coding import ClimateCodingAdapter, ClimateCodingError, classify_task_mode
 from hub.climate.service import ClimateService
@@ -260,6 +261,79 @@ class ClimateServiceTests(unittest.TestCase):
         self.assertTrue(public["large_diff"])
         self.assertIn("Large or destructive", public["warning"])
 
+    def test_ports_are_read_only_and_workspace_isolated(self):
+        rows = [{
+            "port": 8080,
+            "pid": 4321,
+            "command_redacted": "python app.py",
+            "executable": "python",
+            "repo_id": "work-repo",
+            "repository_name": "Work",
+            "managed_by_hub": True,
+            "detection_reasons": ["hub_tracked"],
+            "confidence": "high",
+            "run_id": "run-1",
+            "profile_id": "web",
+            "stoppable": True,
+            "view_only": False,
+        }]
+        with mock.patch.object(self.repo_service, "summarize_local_processes", return_value=rows):
+            with mock.patch.object(self.repo_service.processes, "list_runs", return_value=[]):
+                with mock.patch("hub.climate.service.port_listeners", return_value={8080: [4321], 9999: [99]}):
+                    payload = self.service.ports("work", "work-repo")
+        self.assertTrue(payload["ok"])
+        self.assertFalse(payload["forwarding"])
+        ports = {row["port"]: row for row in payload["ports"]}
+        self.assertEqual(ports[8080]["source"], "run-profile")
+        self.assertEqual(ports[8080]["pid"], 4321)
+        self.assertEqual(ports[8080]["open_url"], "http://127.0.0.1:8080")
+        self.assertNotIn("can_stop", ports[8080])
+        self.assertEqual(ports[9999]["source"], "local")
+        with self.assertRaises(ClimateCodingError) as ctx:
+            self.service.ports("personal", "work-repo")
+        self.assertEqual(ctx.exception.code, "workspace_isolation")
+
+    def test_debug_reports_inactive_or_real_run_session(self):
+        with mock.patch.object(self.repo_service.processes, "list_runs", return_value=[]):
+            idle = self.service.debug("work", "work-repo")
+        self.assertFalse(idle["active"])
+        self.assertEqual(idle["message"], "No active debug session")
+        self.assertFalse(idle["evaluate"])
+        run = mock.Mock()
+        run.status = "running"
+        run.run_id = "run-9"
+        run.profile_id = "web"
+        run.pid = 111
+        run.port = 5000
+        run.started_at = "2026-08-14T00:00:00+00:00"
+        run.error = ""
+        run.cwd = str(self.work)
+        run.to_public.return_value = {
+            "run_id": "run-9",
+            "profile_id": "web",
+            "status": "running",
+            "pid": 111,
+            "port": 5000,
+            "local_url": "http://127.0.0.1:5000",
+            "started_at": run.started_at,
+            "error": "",
+            "cwd": str(self.work),
+        }
+        with mock.patch.object(self.repo_service.processes, "list_runs", return_value=[run]):
+            with mock.patch.object(
+                self.repo_service, "read_logs",
+                return_value={"lines": ["[OUT] hello", "[ERR] boom"]},
+            ):
+                payload = self.service.debug("work", "work-repo")
+        self.assertTrue(payload["active"])
+        self.assertEqual(payload["session"]["pid"], 111)
+        self.assertEqual(payload["logs"][0]["stream"], "stdout")
+        self.assertEqual(payload["logs"][1]["stream"], "stderr")
+        self.assertFalse(payload["evaluate"])
+        with self.assertRaises(ClimateCodingError) as ctx:
+            self.service.debug("personal", "work-repo")
+        self.assertEqual(ctx.exception.code, "workspace_isolation")
+
 
 class ClimateTaskModeUnitTests(unittest.TestCase):
     def test_classify_ask_vs_edit(self):
@@ -350,6 +424,10 @@ class ClimateUiContractTests(unittest.TestCase):
             'id="climate-breadcrumb"', 'data-panel="problems"',
             'data-panel="output"', 'data-panel="tests"', 'data-panel="git"',
             'data-panel="terminal"',
+            'data-panel="debug"',
+            'data-panel="ports"',
+            'climate-output-channel',
+            'climate-pane-problems',
             'climate-terminal-panel',
             'wc_terminal.js',
             'wc-xterm-a',
@@ -376,6 +454,15 @@ class ClimateUiContractTests(unittest.TestCase):
         self.assertIn("collapseAiPanel", script)
         self.assertIn("ensureClimateTerminal", script)
         self.assertIn("WCTerminal", script)
+        self.assertIn("filterOutputLines", script)
+        self.assertIn("parseDiagnosticLines", script)
+        self.assertIn("showBottomPane", script)
+        self.assertIn("No problems detected", script)
+        self.assertIn("No active debug session", script)
+        self.assertIn("panel: state.panel", script)
+        self.assertIn("/ports", script)
+        self.assertIn("/debug", script)
+        self.assertNotIn("Evaluate expression", script)
         self.assertIn("clamp(480px, 45vw, 720px)", script)
         css = (root / "static" / "css" / "climate.css").read_text(encoding="utf-8")
         self.assertIn("font-weight: 400", css)
@@ -412,6 +499,10 @@ class ClimateUiContractTests(unittest.TestCase):
         self.assertNotIn("climate-activity-planning", script)
         self.assertIn("climate-activity-progress", css)
         self.assertIn("prefers-reduced-motion", css)
+        self.assertIn(".climate-wc-terminal .wc-term-toolbar", css)
+        self.assertIn("height: 28px", css)
+        self.assertIn("tabShortLabel", (root / "static" / "js" / "wc_terminal.js").read_text(encoding="utf-8"))
+        self.assertIn("convertEol", (root / "static" / "js" / "wc_terminal.js").read_text(encoding="utf-8"))
         self.assertIn("positionClimateDropdownMenu", script)
         self.assertIn("is-portal", script)
         self.assertIn("openClimateDropdown", script)

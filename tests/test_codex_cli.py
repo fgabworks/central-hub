@@ -19,11 +19,14 @@ from hub.agent_center.adapters.base import AgentDescriptor
 from hub.agent_center.adapters.codex import CodexAdapter
 from hub.agent_center.codex_jsonl import CodexJsonlAccumulator
 from hub.agent_center.codex_safety import (
+    INCOMPLETE_CODEX_HOST_DETAIL,
     assert_git_unchanged,
     assert_safe_codex_argv,
     discover_codex_executable,
+    inspect_codex_installation,
     git_status_snapshot,
     resolve_approved_repo_cwd,
+    windows_official_codex_executable,
 )
 from hub.agent_center.db import AgentCenterDb
 from hub.agent_center.redact import classify_provider_error, redact_text
@@ -46,8 +49,17 @@ def _descriptor(executable: str = "codex") -> AgentDescriptor:
 class CodexDetectionTests(unittest.TestCase):
     def test_detect_missing_cli(self):
         adapter = CodexAdapter(_descriptor("codex-missing-xyz"))
-        with mock.patch("hub.agent_center.adapters.codex.discover_codex_executable", return_value=None):
-            status = adapter.connection_status()
+        missing = {
+            "executable": None,
+            "installed": False,
+            "complete": False,
+            "error_code": "missing_cli",
+            "detail": "Codex CLI is not installed or not discoverable",
+            "incomplete_path": "",
+        }
+        with mock.patch("hub.agent_center.adapters.codex.inspect_codex_installation", return_value=missing):
+            with mock.patch("hub.agent_center.adapters.codex.discover_codex_executable", return_value=None):
+                status = adapter.connection_status()
         self.assertEqual(status["state"], "unavailable")
         self.assertFalse(status["installed"])
         self.assertEqual(status["error_code"], "missing_cli")
@@ -145,6 +157,160 @@ class CodexArgvSafetyTests(unittest.TestCase):
         self.assertIsNone(discover_codex_executable(r"C:\evil\codex.exe"))
         self.assertIsNone(discover_codex_executable("../codex"))
 
+    def test_sandbox_read_only_safety_not_weakened(self):
+        adapter = CodexAdapter(_descriptor())
+        adapter.resolve_executable = lambda: r"C:\safe\codex.exe"
+        argv = adapter.build_argv(
+            mode="ask",
+            prompt="hello",
+            model="__provider_default__",
+            cwd=r"C:\repos\demo",
+            prompt_file=r"C:\tmp\prompt.txt",
+        )
+        self.assertIn("--sandbox", argv)
+        self.assertEqual(argv[argv.index("--sandbox") + 1], "read-only")
+        self.assertNotIn("workspace-write", argv)
+        self.assertNotIn("--yolo", argv)
+        self.assertNotIn("--full-auto", argv)
+        assert_safe_codex_argv(argv)
+
+
+def _touch(path: Path) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"")
+    return path
+
+
+class CodexWindowsRuntimeDiscoveryTests(unittest.TestCase):
+    def test_path_codex_with_host_is_selected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            on_path = _touch(root / "path" / "codex.exe")
+            _touch(on_path.parent / "codex-code-mode-host.exe")
+            local = root / "Local"
+            official = _touch(local / "Programs" / "OpenAI" / "Codex" / "bin" / "codex.exe")
+            _touch(official.parent / "codex-code-mode-host.exe")
+            stale = _touch(root / "home" / ".sandbox-bin" / "codex.exe")
+            with mock.patch("hub.agent_center.codex_safety.os.name", "nt"):
+                with mock.patch("hub.agent_center.codex_safety.codex_home", return_value=root / "home"):
+                    with mock.patch.dict("os.environ", {"LOCALAPPDATA": str(local)}, clear=False):
+                        with mock.patch(
+                            "hub.agent_center.adapters.base.which_executable",
+                            return_value=str(on_path),
+                        ):
+                            selected = discover_codex_executable("codex")
+                            inspection = inspect_codex_installation("codex")
+            self.assertEqual(Path(selected).resolve(), on_path.resolve())
+            self.assertNotEqual(Path(selected).resolve(), official.resolve())
+            self.assertNotEqual(Path(selected).resolve(), stale.resolve())
+            self.assertEqual(inspection["source"], "path")
+            self.assertEqual(inspection["runtime_health"], "ok")
+
+    def test_official_standalone_selected_when_path_stale(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            local = root / "Local"
+            official = _touch(local / "Programs" / "OpenAI" / "Codex" / "bin" / "codex.exe")
+            _touch(official.parent / "codex-code-mode-host.exe")
+            stale = _touch(root / "home" / ".sandbox-bin" / "codex.exe")
+            with mock.patch("hub.agent_center.codex_safety.os.name", "nt"):
+                with mock.patch("hub.agent_center.codex_safety.codex_home", return_value=root / "home"):
+                    with mock.patch.dict("os.environ", {"LOCALAPPDATA": str(local)}, clear=False):
+                        with mock.patch(
+                            "hub.agent_center.adapters.base.which_executable",
+                            return_value=str(stale),
+                        ):
+                            selected = discover_codex_executable("codex")
+                            inspection = inspect_codex_installation("codex")
+            self.assertEqual(Path(selected).resolve(), official.resolve())
+            self.assertEqual(inspection["source"], "official_standalone")
+            self.assertEqual(inspection["runtime_health"], "ok")
+            self.assertTrue(inspection["complete"])
+            self.assertEqual(
+                Path(selected).resolve(),
+                (local / "Programs" / "OpenAI" / "Codex" / "bin" / "codex.exe").resolve(),
+            )
+
+    def test_stale_sandbox_bin_without_host_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            stale = _touch(home / ".sandbox-bin" / "codex.exe")
+            local = Path(tmp) / "LocalEmpty"
+            local.mkdir()
+            with mock.patch("hub.agent_center.codex_safety.os.name", "nt"):
+                with mock.patch("hub.agent_center.codex_safety.codex_home", return_value=home):
+                    with mock.patch.dict("os.environ", {"LOCALAPPDATA": str(local)}, clear=False):
+                        with mock.patch(
+                            "hub.agent_center.adapters.base.which_executable",
+                            return_value=str(stale),
+                        ):
+                            selected = discover_codex_executable("codex")
+                            inspection = inspect_codex_installation("codex")
+            self.assertIsNone(selected)
+            self.assertEqual(inspection["error_code"], "incomplete_cli")
+            self.assertEqual(inspection["detail"], INCOMPLETE_CODEX_HOST_DETAIL)
+            self.assertEqual(inspection["runtime_health"], "incomplete_host")
+            self.assertTrue(inspection["installed"])
+            self.assertEqual(Path(inspection["incomplete_path"]).resolve(), stale.resolve())
+            adapter = CodexAdapter(_descriptor())
+            adapter.resolve_executable = lambda: None
+            with mock.patch(
+                "hub.agent_center.adapters.codex.inspect_codex_installation",
+                return_value=inspection,
+            ):
+                status = adapter.connection_status()
+            self.assertEqual(status["state"], "unavailable")
+            self.assertFalse(status["available"])
+            self.assertEqual(status["error_code"], "incomplete_cli")
+            self.assertEqual(status["detail"], INCOMPLETE_CODEX_HOST_DETAIL)
+            self.assertEqual(status["runtime_health"], "incomplete_host")
+            self.assertIn("sandbox-bin", status["executable_path"].replace("\\", "/"))
+
+    def test_fallback_with_host_is_allowed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            fallback = _touch(home / "bin" / "codex.exe")
+            _touch(fallback.parent / "codex-code-mode-host.exe")
+            _touch(home / ".sandbox-bin" / "codex.exe")
+            local = Path(tmp) / "LocalEmpty"
+            local.mkdir()
+            with mock.patch("hub.agent_center.codex_safety.os.name", "nt"):
+                with mock.patch("hub.agent_center.codex_safety.codex_home", return_value=home):
+                    with mock.patch.dict("os.environ", {"LOCALAPPDATA": str(local)}, clear=False):
+                        with mock.patch(
+                            "hub.agent_center.adapters.base.which_executable",
+                            return_value=None,
+                        ):
+                            selected = discover_codex_executable("codex")
+                            inspection = inspect_codex_installation("codex")
+            self.assertEqual(Path(selected).resolve(), fallback.resolve())
+            self.assertEqual(inspection["source"], "codex_home_bin")
+            self.assertEqual(inspection["runtime_health"], "ok")
+
+    def test_official_path_uses_localappdata_not_username(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            local = Path(tmp) / "LocalApp"
+            with mock.patch("hub.agent_center.codex_safety.os.name", "nt"):
+                with mock.patch.dict("os.environ", {"LOCALAPPDATA": str(local)}, clear=False):
+                    path = windows_official_codex_executable()
+            self.assertEqual(
+                path,
+                local / "Programs" / "OpenAI" / "Codex" / "bin" / "codex.exe",
+            )
+
+    def test_posix_sandbox_bin_without_host_still_allowed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            fallback = _touch(home / ".sandbox-bin" / "codex")
+            with mock.patch("hub.agent_center.codex_safety.os.name", "posix"):
+                with mock.patch("hub.agent_center.codex_safety.codex_home", return_value=home):
+                    with mock.patch(
+                        "hub.agent_center.adapters.base.which_executable",
+                        return_value=None,
+                    ):
+                        selected = discover_codex_executable("codex")
+            self.assertEqual(Path(selected).resolve(), fallback.resolve())
+
 
 class CodexPathJailTests(unittest.TestCase):
     def test_invalid_repository_paths(self):
@@ -192,6 +358,17 @@ class CodexRedactionTests(unittest.TestCase):
         self.assertNotIn("supersecret", text)
         self.assertNotIn("abc123", text)
         self.assertIn("[redacted]", text)
+
+    def test_classifies_missing_code_mode_host(self):
+        classified = classify_provider_error(
+            "failed to spawn code-mode host .codex/.sandbox-bin/codex-code-mode-host.exe: "
+            "The system cannot find the file specified. (os error 2)"
+        )
+        self.assertEqual(classified["code"], "incomplete_cli")
+        self.assertEqual(
+            classified["detail"],
+            "Codex installation incomplete: codex-code-mode-host.exe is missing",
+        )
 
 
 class CodexRunnerLifecycleTests(unittest.TestCase):
@@ -547,6 +724,8 @@ class CodexUiFactsTests(unittest.TestCase):
         self.assertIn(b"Installed", page.data)
         self.assertIn(b"Connected", page.data)
         self.assertIn(b"Version", page.data)
+        self.assertIn(b"Executable", page.data)
+        self.assertIn(b"Runtime health", page.data)
         self.assertIn(b"Last Checked", page.data)
         self.assertIn(b"Refresh Status", page.data)
         self.assertIn(b"Default Coding Provider", page.data)

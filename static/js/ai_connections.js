@@ -162,6 +162,18 @@
       cli.textContent = (connection.cli_commands || []).join(", ") || "—";
     if (executable)
       executable.textContent = connection.executable_path || "—";
+    var runtime = row.querySelector(".connection-runtime-health");
+    if (runtime) {
+      var health = connection.runtime_health || "—";
+      if (connection.discovery_source) health = health + " · " + connection.discovery_source;
+      runtime.textContent = health;
+    }
+    if (detail && connection.executable_path && String(detail.textContent || "").indexOf(connection.executable_path) < 0) {
+      detail.textContent = (detail.textContent ? detail.textContent + " · " : "") + connection.executable_path;
+    }
+    if (detail && connection.runtime_health && String(detail.textContent || "").indexOf("runtime ") < 0) {
+      detail.textContent = (detail.textContent ? detail.textContent + " · " : "") + "runtime " + connection.runtime_health;
+    }
     renderModels(row, connection);
     syncActions(row, connection);
   }

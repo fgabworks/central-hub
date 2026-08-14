@@ -9,11 +9,15 @@ from typing import Any
 
 from hub.agent_center.adapters.cli_common import BaseCliAdapter, _safe_cli_env
 from hub.agent_center.codex_safety import (
+    INCOMPLETE_CODEX_HOST_DETAIL,
     assert_git_unchanged,
     assert_safe_codex_argv,
     discover_codex_executable,
+    inspect_codex_installation,
+    is_complete_codex_runtime,
     git_status_snapshot,
     resolve_approved_repo_cwd,
+    windows_codex_host_path,
 )
 from hub.agent_center.redact import classify_provider_error, redact_text
 
@@ -27,6 +31,40 @@ class CodexAdapter(BaseCliAdapter):
 
     def resolve_executable(self) -> str | None:
         return discover_codex_executable(self.descriptor.executable or "codex")
+
+    def _runtime_diagnostics(self, exe: str | None = None) -> dict[str, Any]:
+        import os
+
+        inspection = inspect_codex_installation(self.descriptor.executable or "codex")
+        chosen = str(exe or inspection.get("executable") or "")
+        complete = bool(chosen) and is_complete_codex_runtime(chosen)
+        source = str(inspection.get("source") or "")
+        if chosen and inspection.get("executable"):
+            try:
+                if Path(chosen).resolve() != Path(str(inspection.get("executable"))).resolve():
+                    source = "resolved"
+            except OSError:
+                source = "resolved"
+        elif chosen and not inspection.get("executable"):
+            source = source or "resolved"
+        health = "ok" if complete else str(
+            inspection.get("runtime_health")
+            or inspection.get("error_code")
+            or ("incomplete_host" if chosen else "missing")
+        )
+        host = str(inspection.get("host_path") or "")
+        if chosen:
+            try:
+                host = str(windows_codex_host_path(chosen)) if os.name == "nt" else ""
+            except OSError:
+                pass
+        return {
+            "executable_path": chosen or str(inspection.get("incomplete_path") or ""),
+            "runtime_complete": complete,
+            "runtime_health": health,
+            "discovery_source": source,
+            "host_path": host,
+        }
 
     def capabilities(self) -> dict[str, Any]:
         caps = super().capabilities()
@@ -69,21 +107,29 @@ class CodexAdapter(BaseCliAdapter):
     def connection_status(self, *, force_refresh: bool = False) -> dict[str, Any]:
         exe = self.resolve_executable()
         if not exe:
+            inspection = inspect_codex_installation(self.descriptor.executable or "codex")
+            incomplete = inspection.get("error_code") == "incomplete_cli"
             return {
                 "state": "unavailable",
-                "detail": "Codex CLI is not installed or not discoverable",
-                "error_code": "missing_cli",
-                "installed": False,
+                "detail": (
+                    str(inspection.get("detail") or "").strip()
+                    or (INCOMPLETE_CODEX_HOST_DETAIL if incomplete else "Codex CLI is not installed or not discoverable")
+                ),
+                "error_code": str(inspection.get("error_code") or "missing_cli"),
+                "installed": bool(inspection.get("installed")),
                 "authenticated": False,
                 "version": "",
                 "available": False,
                 "cli_commands": ["codex"],
                 "install_help": (
                     "Install the Codex CLI (`codex`) and use Connect to run official `codex login`. "
-                    "Codex uses the authenticated Codex/ChatGPT account — separate from OPENAI_API_KEY billing."
+                    "Codex uses the authenticated Codex/ChatGPT account — separate from OPENAI_API_KEY billing. "
+                    "On Windows the official `codex.exe` must sit beside `codex-code-mode-host.exe`."
                 ),
+                **self._runtime_diagnostics(),
             }
         version = self._detect_version(exe)
+        runtime = self._runtime_diagnostics(exe)
         try:
             result = self._run_probe([exe, "login", "status"], timeout=20.0)
         except subprocess.TimeoutExpired:
@@ -95,6 +141,7 @@ class CodexAdapter(BaseCliAdapter):
                 "authenticated": False,
                 "version": version,
                 "available": False,
+                **runtime,
             }
         except OSError as exc:
             classified = classify_provider_error(str(exc))
@@ -106,6 +153,7 @@ class CodexAdapter(BaseCliAdapter):
                 "authenticated": False,
                 "version": version,
                 "available": False,
+                **runtime,
             }
 
         text = (result.stdout or result.stderr or "").strip()
@@ -120,6 +168,7 @@ class CodexAdapter(BaseCliAdapter):
                 "version": version,
                 "available": True,
                 "account_label": _account_label_from_status(text),
+                **runtime,
             }
         if "quota" in lower or "rate limit" in lower:
             classified = classify_provider_error(text)
@@ -131,6 +180,7 @@ class CodexAdapter(BaseCliAdapter):
                 "authenticated": False,
                 "version": version,
                 "available": False,
+                **runtime,
             }
         return {
             "state": "authentication_required",
@@ -140,6 +190,7 @@ class CodexAdapter(BaseCliAdapter):
             "authenticated": False,
             "version": version,
             "available": False,
+            **runtime,
         }
 
     def test_connection(self) -> dict[str, Any]:
@@ -204,11 +255,16 @@ class CodexAdapter(BaseCliAdapter):
 
         exe = self.resolve_executable()
         if not exe:
+            inspection = inspect_codex_installation(self.descriptor.executable or "codex")
+            incomplete = inspection.get("error_code") == "incomplete_cli"
             return {
                 "ok": False,
                 "state": "unavailable",
-                "detail": "Codex CLI is not installed or not discoverable",
-                "error_code": "missing_cli",
+                "detail": (
+                    str(inspection.get("detail") or "").strip()
+                    or (INCOMPLETE_CODEX_HOST_DETAIL if incomplete else "Codex CLI is not installed or not discoverable")
+                ),
+                "error_code": str(inspection.get("error_code") or "missing_cli"),
             }
         argv = self._login_argv(exe)
         flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0) if os.name == "nt" else 0

@@ -358,6 +358,10 @@ class ClimateCodingAdapter:
             "authenticated": bool(row.get("authenticated")),
             "available": bool(row.get("available")),
             "executable_path": row.get("executable_path") or "",
+            "runtime_health": row.get("runtime_health") or "",
+            "runtime_complete": bool(row.get("runtime_complete")),
+            "discovery_source": row.get("discovery_source") or "",
+            "host_path": row.get("host_path") or "",
             "account_label": row.get("account_label") or "",
             "capabilities": dict(row.get("capabilities") or {}),
         }

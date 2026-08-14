@@ -49,7 +49,14 @@
     codexRateLimitsPromise: null,
     stopRequested: false,
     pollTimer: null,
-    runActive: false
+    runActive: false,
+    problems: [],
+    outputChannel: "climate",
+    output: { climate: [], runs: [], git: [], system: [] },
+    testsSummary: "",
+    debugPayload: null,
+    portsPayload: null,
+    bottomPollTimer: null
   };
   var editor = null;
   var monacoReady = false;
@@ -79,6 +86,10 @@
       if (saved.right) workbench.style.setProperty("--right", Math.max(AI_MIN, saved.right) + "px");
       else workbench.style.setProperty("--right", AI_DEFAULT + "px");
       if (saved.bottom) workbench.style.setProperty("--bottom", saved.bottom + "px");
+      if (saved.panel && ["problems","output","debug","terminal","ports","tests","git"].indexOf(saved.panel) >= 0) {
+        state.panel = saved.panel;
+      }
+      if (saved.outputChannel && state.output[saved.outputChannel]) state.outputChannel = saved.outputChannel;
       if (saved.aiPrevRight) workbench.dataset.aiPrevRight = Math.max(AI_MIN, parseInt(saved.aiPrevRight, 10) || AI_DEFAULT) + "px";
       workbench.classList.toggle("is-left-closed", !!saved.leftClosed);
       workbench.classList.toggle("is-ai-closed", !!saved.aiClosed);
@@ -103,6 +114,8 @@
       right: Math.max(AI_MIN, rightPx),
       aiPrevRight: parseInt(workbench.dataset.aiPrevRight, 10) || Math.max(AI_MIN, rightPx),
       bottom: parseInt(css.getPropertyValue("--bottom"), 10) || 190,
+      panel: state.panel,
+      outputChannel: state.outputChannel,
       leftClosed: workbench.classList.contains("is-left-closed"),
       aiClosed: workbench.classList.contains("is-ai-closed"),
       aiCollapsed: workbench.classList.contains("is-ai-collapsed"),
@@ -224,7 +237,9 @@
       var model = window.monaco.editor.getModel(uri) || window.monaco.editor.createModel(value, languageId(language, path), uri);
       if (model.getValue() !== value) model.setValue(value);
       editor.setModel(model);
+      refreshJsonParseProblem(model, path);
     } else fallback.value = value;
+    refreshProblems();
   }
   function captureActive() {
     var tab = currentTab();
@@ -258,16 +273,28 @@
     renderTabs(); savePrefs();
     if (state.active) activateTab(state.active); else { if (editor) editor.setModel(null); fallback.value=""; fallback.style.display="none"; welcome.hidden=false; }
   }
-  function openFile(path) {
+  function openFile(path, line, column) {
     captureActive();
     var existing = state.tabs.find(function (tab) { return tab.path === path; });
     if (!existing) { existing = {path:path,content:"",original:"",language:"plaintext",loaded:false,dirty:false}; state.tabs.push(existing); }
     state.active = path; renderTabs(); savePrefs(); setStatus("Opening " + path + "…");
-    if (existing.loaded) return activateTab(path);
+    function afterOpen() {
+      activateTab(path);
+      revealEditorLine(line, column);
+    }
+    if (existing.loaded) return afterOpen();
     jsonFetch(endpoint("/repositories/"+encodeURIComponent(repoId())+"/file?path="+encodeURIComponent(path))).then(function (data) {
       var file = data.file; existing.content = file.content || ""; existing.original = existing.content; existing.language = file.language || "plaintext"; existing.loaded = true; existing.dirty = false;
-      activateTab(path); setStatus("Opened " + path);
-    }).catch(function (error) { setStatus(error.message); });
+      afterOpen(); setStatus("Opened " + path + (line ? (" :" + line) : ""));
+    }).catch(function (error) { setStatus(error.message); addProblem({ severity:"error", source:"io", path:path, line:1, message:error.message }); });
+  }
+  function revealEditorLine(line, column) {
+    var n = Number(line);
+    if (!n || !editor) return;
+    var pos = { lineNumber: n, column: Number(column) || 1 };
+    editor.setPosition(pos);
+    editor.revealLineInCenter(n);
+    editor.focus();
   }
   function activateTab(path) {
     captureActive(); state.active = path;
@@ -284,6 +311,8 @@
   function markDirty() {
     var tab = currentTab(); if (!tab || !tab.loaded) return;
     tab.content = editorValue(); tab.dirty = tab.content !== tab.original; renderTabs();
+    if (editor && editor.getModel()) refreshJsonParseProblem(editor.getModel(), tab.path);
+    refreshProblems();
   }
   function renderTree(nodes, depth) {
     depth = depth || 0;
@@ -326,12 +355,25 @@
   function saveFile() {
     captureActive(); var tab=currentTab(); if(!tab||!tab.dirty)return;
     jsonFetch(endpoint("/repositories/"+encodeURIComponent(repoId())+"/preview-save"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:tab.path,content:tab.content})}).then(function(data){
+      clearProblemsBySource("save");
       document.getElementById("climate-save-diff").textContent=data.diff||"No changes";document.getElementById("climate-save-dialog").showModal();
-    }).catch(function(error){setStatus(error.message);});
+    }).catch(function(error){
+      setStatus(error.message);
+      addProblem({ severity:"error", source:"save", path:tab.path, line:1, message:error.message });
+      pushOutput("system", error.message);
+    });
   }
   function confirmSave() {
     captureActive(); var tab=currentTab(); if(!tab)return;
-    jsonFetch(endpoint("/repositories/"+encodeURIComponent(repoId())+"/save"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:tab.path,content:tab.content,confirm:true})}).then(function(){tab.original=tab.content;tab.dirty=false;renderTabs();loadTree();loadGit();setStatus("Saved "+tab.path);}).catch(function(error){setStatus(error.message);});
+    jsonFetch(endpoint("/repositories/"+encodeURIComponent(repoId())+"/save"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:tab.path,content:tab.content,confirm:true})}).then(function(){
+      clearProblemsBySource("save");
+      tab.original=tab.content;tab.dirty=false;renderTabs();loadTree();loadGit();setStatus("Saved "+tab.path);
+      pushOutput("git", "Saved "+tab.path);
+    }).catch(function(error){
+      setStatus(error.message);
+      addProblem({ severity:"error", source:"save", path:tab.path, line:1, message:error.message });
+      pushOutput("system", error.message);
+    });
   }
   function loadGit() {
     if(!repoId())return;
@@ -339,7 +381,7 @@
       state.git=data;var count=(data.files||[]).length;gitSummary.textContent=(data.branch||"Git")+(count?" · "+count+" changes":" · clean");
       if(state.panel==="git") renderGitWorkspace(data,state.gitPath);
       var option=repoSelect.options[repoSelect.selectedIndex];branchSelect.innerHTML='<option>'+escapeHtml(data.branch||option&&option.dataset.branch||'—')+'</option>';
-    }).catch(function(error){gitSummary.textContent="Git · "+error.message;});
+    }).catch(function(error){gitSummary.textContent="Git · "+error.message;pushOutput("git", error.message);});
   }
   function diffSides(diff) {
     var before=[],after=[],oldLine=0,newLine=0;
@@ -805,6 +847,47 @@
       body = humanized.text || body;
     }
     return { text: body || "", diagnostics: diag.join("\n") };
+  }
+  function filterOutputLines(text) {
+    var kept = [];
+    String(text || "").split(/\r?\n/).forEach(function (line) {
+      var t = String(line || "");
+      if (!t.trim()) return;
+      if (isRawProviderLine(t) || looksLikeProtocolDump(t) || looksLikeEditsJson(t)) return;
+      kept.push(t);
+    });
+    return kept.join("\n");
+  }
+  function parseDiagnosticLines(text, source) {
+    var rows = [];
+    String(text || "").split(/\r?\n/).forEach(function (line) {
+      var t = String(line || "").trim();
+      if (!t || isRawProviderLine(t) || looksLikeProtocolDump(t)) return;
+      var py = t.match(/File "([^"]+)", line (\d+)/);
+      if (py) {
+        rows.push({
+          path: py[1].replace(/\\/g, "/"),
+          line: Number(py[2]),
+          column: 1,
+          message: t,
+          severity: "error",
+          source: source || "runtime"
+        });
+        return;
+      }
+      var loc = t.match(/^([\w./\\-]+\.\w+):(\d+)(?::(\d+))?:\s*(error|warning|info)[:\s]+(.+)$/i);
+      if (loc) {
+        rows.push({
+          path: loc[1].replace(/\\/g, "/"),
+          line: Number(loc[2]),
+          column: Number(loc[3] || 1),
+          message: loc[5],
+          severity: String(loc[4] || "error").toLowerCase(),
+          source: source || "runtime"
+        });
+      }
+    });
+    return rows;
   }
   function collectSources(msg, run, activity) {
     var files = [];
@@ -1609,7 +1692,11 @@
     if (statusTextEl) statusTextEl.textContent = statusText;
     else providerState.textContent = statusText;
     providerState.className = "climate-provider-state " + (connected ? "is-ok" : "is-error");
-    providerState.title = statusText;
+    var titleBits = [statusText];
+    if (p && p.executable_path) titleBits.push(p.executable_path);
+    if (p && p.runtime_health) titleBits.push("runtime " + p.runtime_health);
+    if (p && p.discovery_source) titleBits.push(p.discovery_source);
+    providerState.title = titleBits.join(" · ");
     if (providerDot) providerDot.className = "climate-chat-pill-dot " + (connected ? "is-ok" : "is-error");
     if (!state.runActive) sendBtn.disabled = !connected;
     var session = activeSession();
@@ -1791,6 +1878,7 @@
       }
       state.runId = data.run.id;
       state.run = data.run;
+      pushOutput("climate", "Run started · " + (data.run.provider || providerSelect.value) + " / " + (data.run.model || modelSelect.value));
       if (data.run && data.run.preflight && data.run.preflight.activity) {
         var prefLog = "[climate_context_resolver]\n" + (data.run.preflight.activity || []).join("\n");
         var preflightDiagnostics = prefLog + ((data.run.logs || "") ? ("\n" + data.run.logs) : "");
@@ -1811,6 +1899,7 @@
           applyUsageFromRun(activeSession(), data.run.provider || providerSelect.value, data.run.usage || {
             total_tokens: 0, usage_source: "exact"
           });
+          if (data.run.answer) pushOutput("climate", data.run.answer);
           finishRun();
           return;
         }
@@ -1818,6 +1907,8 @@
       pollRun();
     }).catch(function (error) {
       upsertAssistantMessage({ status: "failed", text: error.message, role: "error", stopNotice: "" });
+      addProblem({ severity:"error", source:"runtime", path: (currentTab()||{}).path || "", line:1, message:error.message });
+      pushOutput("system", error.message);
       finishRun();
     });
   }
@@ -1956,7 +2047,8 @@
           streaming.activity.explore.elapsedMs = activity.explore.elapsedMs;
         }
       }
-      if (state.panel === "output") bottomBody.textContent = data.run.logs || data.run.answer || "Waiting for output…";
+      if (parsed.text) pushOutput("climate", parsed.text);
+      ingestRunProblems(data.run, parsed);
       if (!terminal) {
         state.pollTimer = window.setTimeout(pollRun, 650);
         return;
@@ -1966,6 +2058,18 @@
       var summary = extractSummary(finalParsed.text, proposal);
       var files = proposal ? changedFilesFrom(proposal, finalParsed.text) : [];
       var tests = testsFromText(finalParsed.text, null);
+      if (tests) {
+        state.testsSummary = tests.label ? (tests.suite ? tests.suite + " · " : "") + tests.label : JSON.stringify(tests);
+        pushOutput("runs", state.testsSummary);
+        renderTestsPane();
+      }
+      ingestRunProblems(data.run, finalParsed);
+      if (finalParsed.text) pushOutput("climate", finalParsed.text);
+      if (data.run.error) {
+        pushOutput("runs", data.run.error);
+        pushOutput("system", data.run.error);
+      }
+      if (data.run.status) pushOutput("climate", "Run " + data.run.status + (data.run.error ? (": " + data.run.error) : ""));
       var lines = lineDeltaFromProposal(proposal);
       var started = Number((streaming && streaming.startedAt) || data.run.created_at || Date.now());
       var finished = Number(data.run.finished_at || Date.now());
@@ -2053,7 +2157,7 @@
     renderChat();
   }
   function renderProposalReview(proposal){
-    state.panel="git";center.classList.remove("is-bottom-closed");document.querySelectorAll(".climate-bottom-tabs [data-panel]").forEach(function(btn){btn.classList.toggle("is-active",btn.dataset.panel==="git");});
+    switchPanel("git", { skipGitRender: true });
     var edits=proposal.edits||[],active=edits[0]||{},sides=diffSides(active.diff||"");
     var warn = proposal.large_diff ? ('<div class="climate-run-warning" role="status">'+escapeHtml(proposal.warning||"Large or destructive replacement detected. Review the diff before Keep All.")+'</div>') : "";
     bottomBody.innerHTML='<div class="climate-git-workspace"><aside class="climate-git-changes"><div class="climate-git-title">Proposed changes <span class="count">'+edits.length+'</span></div>'+edits.map(function(edit,index){return '<button class="climate-git-file '+(index===0?'is-active':'')+'" data-proposal-index="'+index+'"><span>◆</span><span>'+escapeHtml(edit.path)+'</span><b>M</b></button>';}).join('')+'</aside><section class="climate-git-review"><div class="climate-git-review-head"><span>'+escapeHtml(active.path||'Proposed edit')+'</span><select disabled><option>Unified</option></select></div>'+warn+'<div class="climate-diff-split"><div class="climate-diff-column is-before"><h4>Original</h4><pre>'+escapeHtml(sides.before||'No original content')+'</pre></div><div class="climate-diff-column is-after"><h4>Modified</h4><pre>'+escapeHtml(sides.after||'No modified content')+'</pre></div></div><div class="climate-git-actions"><button class="climate-btn" id="climate-reject-bottom">Undo All</button><button class="climate-btn climate-btn-primary" id="climate-accept-bottom">Keep All</button></div></section></div>';
@@ -2083,35 +2187,331 @@
       if(action==="accept"){var tab=currentTab();if(tab){tab.loaded=false;tab.dirty=false;openFile(tab.path);}loadTree();loadGit();}
     }).catch(function(error){appendFeed(error.message,"is-error");});
   }
-  function switchPanel(panel) {
+  function problemId(item) {
+    return [item.source || "", item.path || "", item.line || "", item.column || "", item.message || ""].join("|");
+  }
+  function addProblem(item) {
+    if (!item || !item.message) return;
+    var row = {
+      id: item.id || problemId(item),
+      severity: item.severity || "error",
+      source: item.source || "runtime",
+      path: item.path || "",
+      line: Number(item.line) || 0,
+      column: Number(item.column) || 1,
+      message: String(item.message)
+    };
+    if (state.problems.some(function (p) { return p.id === row.id; })) return;
+    state.problems.push(row);
+    refreshProblems();
+  }
+  function clearProblemsBySource(source) {
+    state.problems = state.problems.filter(function (p) { return p.source !== source; });
+    refreshProblems();
+  }
+  function refreshJsonParseProblem(model, path) {
+    if (!window.monaco || !model) return;
+    var lang = model.getLanguageId ? model.getLanguageId() : "";
+    var owner = "climate-json";
+    if (lang !== "json") {
+      window.monaco.editor.setModelMarkers(model, owner, []);
+      return;
+    }
+    try {
+      JSON.parse(model.getValue() || "");
+      window.monaco.editor.setModelMarkers(model, owner, []);
+    } catch (err) {
+      var line = 1, column = 1;
+      var m = String(err.message || "").match(/position\s+(\d+)/i);
+      if (m) {
+        var pos = model.getPositionAt(Math.max(0, Number(m[1]) - 1));
+        line = pos.lineNumber;
+        column = pos.column;
+      } else {
+        var lm = String(err.message || "").match(/line\s+(\d+)/i);
+        if (lm) line = Number(lm[1]) || 1;
+      }
+      window.monaco.editor.setModelMarkers(model, owner, [{
+        severity: window.monaco.MarkerSeverity.Error,
+        message: String(err.message || "Invalid JSON"),
+        startLineNumber: line,
+        startColumn: column,
+        endLineNumber: line,
+        endColumn: column + 1
+      }]);
+    }
+  }
+  function collectEditorProblems() {
+    var rows = [];
+    if (window.monaco && window.monaco.editor.getModelMarkers) {
+      window.monaco.editor.getModelMarkers({}).forEach(function (marker) {
+        if (!marker || marker.severity < window.monaco.MarkerSeverity.Warning) return;
+        var severity = "info";
+        if (marker.severity >= window.monaco.MarkerSeverity.Error) severity = "error";
+        else if (marker.severity >= window.monaco.MarkerSeverity.Warning) severity = "warning";
+        var res = marker.resource;
+        var path = "";
+        if (res) {
+          var raw = String((res.path || res.fsPath || (res.toString && res.toString()) || "")).replace(/\\/g, "/");
+          raw = raw.replace(/^climate:\/\//, "").replace(/^\/+/, "");
+          var parts = raw.split("/").filter(Boolean);
+          if (parts[0] === workspace) parts.shift();
+          if (parts[0] === repoId()) parts.shift();
+          path = parts.join("/");
+        }
+        rows.push({
+          id: "monaco|" + path + "|" + marker.startLineNumber + "|" + marker.message,
+          severity: severity,
+          source: "editor",
+          path: path,
+          line: marker.startLineNumber || 1,
+          column: marker.startColumn || 1,
+          message: marker.message || "Editor diagnostic"
+        });
+      });
+    } else {
+      state.tabs.forEach(function (tab) {
+        if (!tab.loaded || languageId(tab.language, tab.path) !== "json") return;
+        try { JSON.parse(tab.content || ""); }
+        catch (err) {
+          rows.push({
+            id: "json|" + tab.path + "|" + err.message,
+            severity: "error",
+            source: "editor",
+            path: tab.path,
+            line: 1,
+            column: 1,
+            message: String(err.message || "Invalid JSON")
+          });
+        }
+      });
+    }
+    return rows;
+  }
+  function ingestRunProblems(run, parsed) {
+    clearProblemsBySource("runtime");
+    clearProblemsBySource("test");
+    var blob = [run && run.error, parsed && parsed.text, parsed && parsed.diagnostics].filter(Boolean).join("\n");
+    var filtered = filterOutputLines(blob);
+    parseDiagnosticLines(filtered, run && run.error ? "runtime" : "test").forEach(function (row) {
+      addProblem(row);
+    });
+    if (run && run.error && !parseDiagnosticLines(run.error, "runtime").length) {
+      addProblem({
+        severity: "error",
+        source: "runtime",
+        path: (currentTab() || {}).path || "",
+        line: 1,
+        message: String(run.error)
+      });
+    }
+  }
+  function allProblems() {
+    var seen = {};
+    var rows = collectEditorProblems().concat(state.problems);
+    return rows.filter(function (row) {
+      var id = row.id || problemId(row);
+      if (seen[id]) return false;
+      seen[id] = true;
+      return true;
+    });
+  }
+  function refreshProblems() {
+    var rows = allProblems();
+    var errors = rows.filter(function (r) { return r.severity === "error"; }).length;
+    var warnings = rows.filter(function (r) { return r.severity === "warning"; }).length;
+    var countEl = document.getElementById("climate-problems-count");
+    if (countEl) {
+      countEl.textContent = String(rows.length);
+      countEl.classList.toggle("is-error", errors > 0);
+    }
+    var hint = document.getElementById("climate-problems-hint");
+    if (hint) hint.textContent = errors + " error" + (errors === 1 ? "" : "s") + ", " + warnings + " warning" + (warnings === 1 ? "" : "s");
+    if (state.panel !== "problems") return;
+    var list = document.getElementById("climate-problems-list");
+    if (!list) return;
+    if (!rows.length) {
+      list.innerHTML = '<div class="climate-empty-pane">No problems detected</div>';
+      return;
+    }
+    list.innerHTML = rows.map(function (row) {
+      var loc = (row.path || "") + (row.line ? (":" + row.line) : "");
+      return '<button type="button" class="climate-problem-row is-'+escapeHtml(row.severity)+'" data-path="'+escapeHtml(row.path||"")+'" data-line="'+escapeHtml(row.line||"")+'" data-column="'+escapeHtml(row.column||1)+'"><span class="climate-problem-sev">'+(row.severity==="error"?"●":row.severity==="warning"?"▲":"ℹ")+'</span><span class="climate-problem-main"><strong>'+escapeHtml(row.message)+'</strong><span class="climate-problem-meta">'+escapeHtml((row.source||"")+(loc?" · "+loc:""))+'</span></span></button>';
+    }).join("");
+    list.querySelectorAll("[data-path]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var path = btn.getAttribute("data-path");
+        if (!path) return;
+        openFile(path, Number(btn.getAttribute("data-line") || 0), Number(btn.getAttribute("data-column") || 1));
+      });
+    });
+  }
+  function pushOutput(channel, text, ts) {
+    var cleaned = filterOutputLines(text);
+    if (!cleaned) return;
+    if (!state.output[channel]) channel = "climate";
+    var stamp = ts || new Date().toISOString();
+    var clock;
+    try { clock = new Date(stamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" }); }
+    catch (_) { clock = ""; }
+    var last = state.output[channel][state.output[channel].length - 1];
+    if (last && last.text === cleaned) return;
+    state.output[channel].push({ ts: stamp, clock: clock, text: cleaned });
+    if (state.output[channel].length > 400) state.output[channel] = state.output[channel].slice(-400);
+    if (state.panel === "output" && state.outputChannel === channel) renderOutputPane();
+  }
+  function renderOutputPane() {
+    var log = document.getElementById("climate-output-log");
+    var select = document.getElementById("climate-output-channel");
+    if (select && select.value !== state.outputChannel) select.value = state.outputChannel;
+    if (!log) return;
+    var rows = state.output[state.outputChannel] || [];
+    if (!rows.length) {
+      log.textContent = "No output in this channel yet.";
+      return;
+    }
+    log.textContent = rows.map(function (row) {
+      return (row.clock ? ("[" + row.clock + "] ") : "") + row.text;
+    }).join("\n");
+    log.scrollTop = log.scrollHeight;
+  }
+  function renderTestsPane() {
+    var el = document.getElementById("climate-tests-body");
+    if (!el) return;
+    if (state.testsSummary) {
+      el.textContent = state.testsSummary;
+      return;
+    }
+    el.innerHTML = '<div class="climate-empty-pane">No test run selected. CLIMATE does not expose unrestricted shell execution. Test summaries appear here when a run reports pass/fail counts.</div>';
+  }
+  function renderDebugPane() {
+    var el = document.getElementById("climate-debug-body");
+    if (!el) return;
+    var data = state.debugPayload;
+    if (!data) {
+      el.innerHTML = '<div class="climate-empty-pane">Loading debug session…</div>';
+      return;
+    }
+    if (!data.active || !data.session) {
+      el.innerHTML = '<div class="climate-empty-pane">No active debug session</div>';
+      return;
+    }
+    var session = data.session;
+    var logs = (data.logs || []).map(function (row) {
+      var text = typeof row === "string" ? row : (row.text || "");
+      var stream = (row && row.stream) || "";
+      return (stream ? ("[" + stream + "] ") : "") + text;
+    }).join("\n");
+    el.innerHTML = '<div class="climate-debug-session"><b>'+escapeHtml(session.profile_id || session.run_id || "Run")+'</b> · '+escapeHtml(session.status || "")+(session.pid ? (" · pid "+escapeHtml(session.pid)) : "")+(session.port ? (" · :"+escapeHtml(session.port)) : "")+(session.error ? (" · "+escapeHtml(session.error)) : "")+'</div><pre class="climate-bottom-log mono">'+(logs ? escapeHtml(logs) : "No stdout/stderr yet.")+'</pre>';
+  }
+  function renderPortsPane() {
+    var el = document.getElementById("climate-ports-list");
+    var countEl = document.getElementById("climate-ports-count");
+    var data = state.portsPayload;
+    if (countEl) {
+      var n = data && Array.isArray(data.ports) ? data.ports.length : 0;
+      countEl.textContent = String(n);
+      countEl.hidden = n === 0;
+    }
+    if (state.panel !== "ports" || !el) return;
+    if (!data) {
+      el.innerHTML = '<div class="climate-empty-pane">Loading ports…</div>';
+      return;
+    }
+    if (data.error) {
+      el.innerHTML = '<div class="climate-bottom-error">'+escapeHtml(data.error)+'</div>';
+      return;
+    }
+    var rows = data.ports || [];
+    if (!rows.length) {
+      el.innerHTML = '<div class="climate-empty-pane">No listening ports discovered for this repository.</div>';
+      return;
+    }
+    el.innerHTML = '<table class="climate-ports-table"><thead><tr><th>Port</th><th>Process / PID</th><th>Source</th><th>URL</th><th></th></tr></thead><tbody>'+rows.map(function(row){
+      var url = row.open_url || (row.port ? ("http://127.0.0.1:"+row.port) : "");
+      var proc = (row.process || "") + (row.pid ? (" · "+row.pid) : "");
+      var src = [row.source, row.session, row.terminal_name].filter(Boolean).join(" · ");
+      return '<tr><td>'+escapeHtml(row.port)+'</td><td>'+escapeHtml(proc)+'</td><td>'+escapeHtml(src)+'</td><td>'+(url?'<a href="'+escapeHtml(url)+'" target="_blank" rel="noopener">'+escapeHtml(url)+'</a>':'')+'</td><td>'+(url?'<button type="button" class="climate-btn" data-copy-url="'+escapeHtml(url)+'">Copy</button>':'')+'</td></tr>';
+    }).join("")+'</tbody></table>';
+    el.querySelectorAll("[data-copy-url]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var url = btn.getAttribute("data-copy-url");
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url);
+        setStatus("Copied " + url);
+      });
+    });
+  }
+  function loadDebugPane() {
+    if (!repoId()) {
+      state.debugPayload = { active: false, message: "No active debug session" };
+      renderDebugPane();
+      return;
+    }
+    jsonFetch(endpoint("/repositories/"+encodeURIComponent(repoId())+"/debug")).then(function (data) {
+      state.debugPayload = data;
+      renderDebugPane();
+    }).catch(function (error) {
+      state.debugPayload = { active: false, message: "No active debug session", error: error.message };
+      var el = document.getElementById("climate-debug-body");
+      if (el && state.panel === "debug") el.innerHTML = '<div class="climate-bottom-error">'+escapeHtml(error.message)+'</div><div class="climate-empty-pane">No active debug session</div>';
+    });
+  }
+  function loadPortsPane() {
+    if (!repoId()) {
+      state.portsPayload = { ports: [], count: 0 };
+      renderPortsPane();
+      return;
+    }
+    jsonFetch(endpoint("/repositories/"+encodeURIComponent(repoId())+"/ports")).then(function (data) {
+      state.portsPayload = data;
+      renderPortsPane();
+    }).catch(function (error) {
+      state.portsPayload = { ports: [], error: error.message };
+      renderPortsPane();
+    });
+  }
+  function startBottomPolling() {
+    if (state.bottomPollTimer) window.clearInterval(state.bottomPollTimer);
+    state.bottomPollTimer = window.setInterval(function () {
+      if (center.classList.contains("is-bottom-closed")) return;
+      if (state.panel === "debug") loadDebugPane();
+      if (state.panel === "ports") loadPortsPane();
+      if (state.panel === "problems") refreshProblems();
+    }, state.panel === "debug" ? 3000 : 8000);
+  }
+  function showBottomPane(panel) {
+    document.querySelectorAll(".climate-bottom-pane, #climate-terminal-panel").forEach(function (pane) {
+      var name = pane.getAttribute("data-pane") || (pane.id === "climate-terminal-panel" ? "terminal" : "");
+      pane.hidden = name !== panel;
+    });
+  }
+  function switchPanel(panel, opts) {
+    opts = opts || {};
     state.panel = panel;
-    center.classList.remove("is-bottom-closed");
+    if (!opts.keepClosed) center.classList.remove("is-bottom-closed");
     document.querySelectorAll(".climate-bottom-tabs [data-panel]").forEach(function (btn) {
       btn.classList.toggle("is-active", btn.dataset.panel === panel);
     });
-    var termPanel = document.getElementById("climate-terminal-panel");
+    showBottomPane(panel);
     var showTerm = panel === "terminal";
-    bottomBody.hidden = showTerm;
-    if (termPanel) termPanel.hidden = !showTerm;
     if (window.WCTerminal) {
       window.WCTerminal.setRenderingPaused(!showTerm);
       if (showTerm) {
         ensureClimateTerminal().then(function () {
           if (window.WCTerminal.scheduleFit) window.WCTerminal.scheduleFit();
         });
-        savePrefs();
-        return;
       }
     }
-    if (showTerm) {
-      savePrefs();
-      return;
+    if (panel === "problems") refreshProblems();
+    else if (panel === "output") renderOutputPane();
+    else if (panel === "debug") loadDebugPane();
+    else if (panel === "ports") loadPortsPane();
+    else if (panel === "tests") renderTestsPane();
+    else if (panel === "git" && !opts.skipGitRender) {
+      if (state.git) renderGitWorkspace(state.git, state.gitPath);
+      else loadGit();
     }
-    if (panel === "problems") bottomBody.textContent = "No problems detected by CLIMATE.";
-    else if (panel === "tests") bottomBody.textContent = "No test run selected. CLIMATE v1 does not expose unrestricted shell execution.";
-    else if (panel === "output") bottomBody.textContent = state.run ? (state.run.logs || state.run.answer || "Waiting for output…") : "No AI or repository output yet.";
-    else if (state.git) renderGitWorkspace(state.git, state.gitPath);
-    else loadGit();
+    startBottomPolling();
     savePrefs();
   }
   var climateTermReady = null;
@@ -2200,7 +2600,7 @@
   function initMonaco() {
     if(typeof window.require!=="function"){fallback.style.display=state.active?"block":"none";return;}
     window.require.config({paths:{vs:"https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs"}});
-    window.require(["vs/editor/editor.main"],function(){monacoReady=true;editor=window.monaco.editor.create(document.getElementById("climate-editor-host"),{theme:"vs-dark",automaticLayout:true,fontSize:12,fontFamily:"JetBrains Mono, Cascadia Code, Consolas, monospace",minimap:{enabled:true},scrollBeyondLastLine:false,wordWrap:"off",renderWhitespace:"selection",padding:{top:8},tabSize:4});editor.onDidChangeModelContent(markDirty);editor.onDidChangeCursorPosition(function(e){document.getElementById("climate-line").textContent=e.position.lineNumber;document.getElementById("climate-column").textContent=e.position.column;});editor.onDidChangeCursorSelection(function(e){var count=Math.abs(e.selection.endLineNumber-e.selection.startLineNumber)+1;document.getElementById("climate-selection-meta").textContent=e.selection.isEmpty()?"No selection":count+" line"+(count===1?"":"s");});fallback.style.display="none";if(state.active)activateTab(state.active);});
+    window.require(["vs/editor/editor.main"],function(){monacoReady=true;editor=window.monaco.editor.create(document.getElementById("climate-editor-host"),{theme:"vs-dark",automaticLayout:true,fontSize:12,fontFamily:"JetBrains Mono, Cascadia Code, Consolas, monospace",minimap:{enabled:true},scrollBeyondLastLine:false,wordWrap:"off",renderWhitespace:"selection",padding:{top:8},tabSize:4});editor.onDidChangeModelContent(markDirty);editor.onDidChangeCursorPosition(function(e){document.getElementById("climate-line").textContent=e.position.lineNumber;document.getElementById("climate-column").textContent=e.position.column;});editor.onDidChangeCursorSelection(function(e){var count=Math.abs(e.selection.endLineNumber-e.selection.startLineNumber)+1;document.getElementById("climate-selection-meta").textContent=e.selection.isEmpty()?"No selection":count+" line"+(count===1?"":"s");});try{window.monaco.languages.json.jsonDefaults.setDiagnosticsOptions({validate:true,allowComments:true});}catch(_){ }if(window.monaco.editor.onDidChangeMarkers)window.monaco.editor.onDidChangeMarkers(function(){refreshProblems();});fallback.style.display="none";if(state.active)activateTab(state.active);refreshProblems();});
   }
   repoSelect.addEventListener("change",function(){captureActive();savePrefs();window.location.assign((workspace==="work"?"/work/climate":"/personal/climate")+"?repo="+encodeURIComponent(repoId()));});
   providerSelect.addEventListener("change",function(){if(panelProviderSelect)panelProviderSelect.value=providerSelect.value;selectProvider(providerSelect.value,{refresh:false});});
@@ -2304,6 +2704,16 @@
   document.getElementById("climate-save").addEventListener("click",saveFile);
   document.addEventListener("keydown",function(e){var key=e.key.toLowerCase();if((e.ctrlKey||e.metaKey)&&key==="s"){e.preventDefault();saveFile();}else if((e.ctrlKey||e.metaKey)&&key==="b"){e.preventDefault();document.getElementById("climate-toggle-left").click();}else if((e.ctrlKey||e.metaKey)&&key==="j"){e.preventDefault();document.getElementById("climate-toggle-bottom").click();}else if((e.ctrlKey||e.metaKey)&&key==="p"){e.preventDefault();workbench.classList.remove("is-left-closed");document.getElementById("climate-search").focus();}else if((e.ctrlKey||e.metaKey)&&e.shiftKey&&key==="a"){e.preventDefault();workbench.classList.remove("is-ai-closed");promptEl.focus();}});fallback.addEventListener("input",markDirty);fallback.addEventListener("select",function(){var text=currentSelection();document.getElementById("climate-selection-meta").textContent=text?text.split("\n").length+" line(s)":"No selection";});
   document.querySelectorAll(".climate-bottom-tabs [data-panel]").forEach(function(btn){btn.addEventListener("click",function(){switchPanel(btn.dataset.panel);});});document.getElementById("climate-bottom-close").addEventListener("click",function(){center.classList.add("is-bottom-closed");if(editor)editor.layout();savePrefs();});
+  var outputChannel=document.getElementById("climate-output-channel");
+  if(outputChannel) outputChannel.addEventListener("change",function(){state.outputChannel=outputChannel.value;savePrefs();renderOutputPane();});
+  var outputClear=document.getElementById("climate-output-clear");
+  if(outputClear) outputClear.addEventListener("click",function(){state.output[state.outputChannel]=[];renderOutputPane();});
+  var problemsRefresh=document.getElementById("climate-problems-refresh");
+  if(problemsRefresh) problemsRefresh.addEventListener("click",function(){refreshProblems();});
+  var debugRefresh=document.getElementById("climate-debug-refresh");
+  if(debugRefresh) debugRefresh.addEventListener("click",function(){loadDebugPane();});
+  var portsRefresh=document.getElementById("climate-ports-refresh");
+  if(portsRefresh) portsRefresh.addEventListener("click",function(){loadPortsPane();});
   document.getElementById("climate-toggle-ai").addEventListener("click",function(){
     if(workbench.classList.contains("is-ai-closed")){
       workbench.classList.remove("is-ai-closed");
@@ -2364,5 +2774,6 @@
     }
   });
   loadPrefs();normalizeAiPanelState();syncAiMaximizeChrome();renderTabs();renderProviders();enhanceProviderModelDropdowns();loadChatStore();loadTree();loadGit();setupResize();initMonaco();if(state.active)openFile(state.active);
+  switchPanel(state.panel,{ keepClosed: center.classList.contains("is-bottom-closed") });
   if(!workbench.classList.contains("is-ai-closed")) fetchCodexRateLimits({ refresh: false });
 }());

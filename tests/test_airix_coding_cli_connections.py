@@ -63,9 +63,19 @@ class MissingCliTests(unittest.TestCase):
 
     def test_codex_missing_cli_status(self) -> None:
         adapter = CodexAdapter(_desc("codex", "codex", "codex"))
+        missing = {
+            "executable": None,
+            "installed": False,
+            "complete": False,
+            "error_code": "missing_cli",
+            "detail": "Codex CLI is not installed or not discoverable",
+            "incomplete_path": "",
+        }
         with patch.object(adapter, "resolve_executable", return_value=None):
-            status = adapter.connection_status()
+            with patch("hub.agent_center.adapters.codex.inspect_codex_installation", return_value=missing):
+                status = adapter.connection_status()
         self.assertEqual(status["state"], "unavailable")
+        self.assertEqual(status["error_code"], "missing_cli")
         self.assertIn("OPENAI_API_KEY", status["install_help"])
 
 

@@ -4,7 +4,45 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**VANTA native Codex repository investigation (2026-08-14)**
+**CLIMATE Terminal compact toolbar + ConPTY newlines (2026-08-14)**
+
+CLIMATE Terminal keeps the repo-scoped PTY/WebSocket/xterm path. Windows ConPTY
+output now treats lone LF as CRLF (`convertEol`/`windowsMode` plus backend
+`normalize_conpty_newlines`) so PowerShell prompts start on a new line. The
+toolbar is a compact VS Code-like single row (scoped to `.climate-wc-terminal`).
+
+Prior: **Windows Codex standalone discovery (2026-08-14)**
+
+CLIMATE/Agent Center still prefer PATH, then discover the official Windows standalone
+install at `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin\codex.exe` (no username hardcoded).
+Every Windows candidate is used only when sibling `codex-code-mode-host.exe` exists, so a
+stale `.sandbox-bin` CLI cannot be selected when the hub process has an old PATH.
+Portable `~/.codex/bin` remains valid when complete. Test Connection / diagnostics expose
+the resolved executable, runtime health, and discovery source. Sandbox stays
+`--sandbox read-only`.
+
+Prior: **Windows Codex executable discovery (2026-08-14)**
+
+`discover_codex_executable()` still prefers PATH, then `~/.codex/.sandbox-bin` and
+`~/.codex/bin`. On Windows a candidate is selected only when sibling
+`codex-code-mode-host.exe` is present, so a stale sandbox-bin CLI cannot be invoked.
+Incomplete installs surface `Codex installation incomplete: codex-code-mode-host.exe is missing`
+instead of a later spawn failure. Linux/macOS discovery is unchanged. Sandbox remains
+`--sandbox read-only`. Hub never deletes or rewrites Codex install files.
+
+Prior: **CLIMATE VS Code-like bottom panel (2026-08-14)**
+
+CLIMATE’s bottom panel is Problems | Output | Debug Console | Terminal | Ports, with
+Tests and Git kept as secondary tabs so proposal/diff review still works. Problems
+lists Monaco/JSON/save/runtime diagnostics only and opens the file at line.
+Output is channelled (CLIMATE, Runs/Tests, Git, AI/System), timestamped, clearable, and
+must not show raw Codex/provider protocol. Debug Console reuses hub-managed run-profile
+logs and tells the truth when idle (`No active debug session`); it does not evaluate
+expressions. Terminal is still the repository-scoped PTY/WebSocket (`WCTerminal`) and
+survives tab switches. Ports discovers local listeners via existing process/port APIs,
+annotates terminal/run ownership when known, and never forwards or stops processes.
+
+Prior: **VANTA native Codex repository investigation (2026-08-14)**
 
 For a valid VANTA repository, the local Context Resolver is now an accelerator rather
 than a Codex gate. It still runs at zero tokens, ranks/qualifies likely sources, and
