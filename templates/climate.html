@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{{ climate.context_label }} · CLIMATE{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/climate.css') }}?v=27">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/climate.css') }}?v=30">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/styles/github-dark.min.css">
 {% endblock %}
 {% block content %}
 <div class="climate-shell" id="climate-shell"
@@ -37,7 +38,7 @@
     <div class="climate-title-actions">
       <button class="climate-icon-btn is-run" id="climate-send-top" title="Send prompt (Ctrl+Enter)" aria-label="Send prompt">▷</button>
       <button class="climate-icon-btn is-stop" id="climate-stop-top" title="Stop active run" aria-label="Stop active run" hidden>■</button>
-      <button class="climate-icon-btn" id="climate-save" title="Save active file (Ctrl+S)" aria-label="Save active file">⚡</button>
+      <button class="climate-icon-btn" id="climate-save" title="Read-only viewer" aria-label="Save unavailable" hidden>⚡</button>
       <button class="climate-icon-btn" id="climate-toggle-left" title="Toggle Explorer" aria-label="Toggle Explorer">◧</button>
       <button class="climate-icon-btn" id="climate-toggle-bottom" title="Toggle bottom panel" aria-label="Toggle bottom panel">▰</button>
       <button class="climate-icon-btn" id="climate-toggle-ai" title="Toggle AI coding panel" aria-label="Toggle AI coding panel">✦</button>
@@ -63,15 +64,28 @@
       <nav class="climate-tabs" id="climate-tabs" aria-label="Open files">
         <div class="climate-empty-tab">Open a file from Explorer</div>
       </nav>
-      <div class="climate-breadcrumb" id="climate-breadcrumb"><span>Open a file from Explorer</span><span class="climate-spacer"></span><button title="Split editor">◫</button><button title="More actions">•••</button></div>
+      <div class="climate-breadcrumb" id="climate-breadcrumb">
+        <span class="climate-file-path" id="climate-file-path" title="">Open a file from Explorer</span>
+        <div class="climate-file-modes" id="climate-file-modes" hidden>
+          <button type="button" data-file-mode="source" class="is-active">Source</button>
+          <button type="button" data-file-mode="preview">Preview</button>
+        </div>
+        <span class="climate-file-readonly" hidden id="climate-file-readonly">Read-only</span>
+        <span class="climate-file-empty" hidden id="climate-file-empty">Empty file</span>
+        <span class="climate-spacer"></span>
+      </div>
       <section class="climate-editor-host" id="climate-editor-host">
         <div class="climate-welcome" id="climate-welcome">
           <img class="climate-welcome-logo" src="{{ url_for('static', filename='img/climate-mark.png') }}" alt="" width="40" height="40">
           <h1>CLIMATE</h1>
           <p>{{ climate.context_label }}</p>
           <span>Open a repository file to begin.</span>
+          <small>Click a text or source file in Explorer. Viewing is read-only. Markdown files include Source and Preview.</small>
         </div>
-        <textarea id="climate-editor-fallback" spellcheck="false" aria-label="Code editor"></textarea>
+        <div id="climate-monaco" class="climate-monaco" hidden></div>
+        <div id="climate-md-preview" class="climate-md-preview climate-md" hidden></div>
+        <div id="climate-file-unavailable" class="climate-file-unavailable" hidden>Preview unavailable for this file type</div>
+        <textarea id="climate-editor-fallback" spellcheck="false" readonly aria-label="Code viewer"></textarea>
       </section>
       <div class="climate-sash climate-sash-bottom" data-resize="bottom" role="separator" aria-label="Resize diagnostics"></div>
       <section class="climate-bottom" id="climate-bottom">
@@ -329,7 +343,11 @@
 </div>
 {% endblock %}
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/highlight.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
 <script src="{{ url_for('static', filename='js/wc_terminal.js') }}?v=climate-5"></script>
-<script src="{{ url_for('static', filename='js/climate.js') }}?v=24"></script>
+<script src="{{ url_for('static', filename='js/climate_markdown.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='js/climate.js') }}?v=26"></script>
 {% endblock %}

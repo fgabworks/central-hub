@@ -211,6 +211,46 @@ class SearchCommandTests(unittest.TestCase):
             1,
         )
 
+    def test_get_content_counts_as_inspected_including_powershell_path(self):
+        from hub.climate.investigation_metrics import extract_read_paths
+        self.assertEqual(
+            extract_read_paths("Get-Content -Path derive_fic.py"),
+            ["derive_fic.py"],
+        )
+        self.assertEqual(
+            extract_read_paths("Get-Content -LiteralPath .\\lookup\\immunization\\derive_fic.py"),
+            ["lookup/immunization/derive_fic.py"],
+        )
+        summary = summarize_tool_activity([
+            {
+                "type": "command_execution",
+                "name": "Get-Content -Path derive_fic.py",
+                "status": "completed",
+                "detail": "CH_FIC = '1'\nfrom lookup.child_age_correction import x\n",
+            },
+            {
+                "type": "command_execution",
+                "name": r"powershell -NoProfile -Command Get-Content -LiteralPath lookup\anc.py",
+                "status": "completed",
+                "detail": "def derive_anc():\n    return 1\n",
+            },
+        ])
+        self.assertEqual(summary.files_inspected, 2)
+        self.assertEqual(sorted(summary.inspected_paths), ["derive_fic.py", "lookup/anc.py"])
+
+    def test_search_matches_do_not_count_as_inspected(self):
+        summary = summarize_tool_activity([
+            {
+                "type": "command_execution",
+                "name": "rg -n ANC lookup",
+                "status": "completed",
+                "detail": "lookup/derive_anc.py:1:def derive_anc\nlookup/other.py:4:helper",
+            }
+        ])
+        self.assertEqual(summary.search_matched_files, 2)
+        self.assertEqual(summary.files_inspected, 0)
+        self.assertEqual(summary.inspected_paths, [])
+
 
 class GraphEvalTests(unittest.TestCase):
     def setUp(self):

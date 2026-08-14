@@ -99,7 +99,7 @@ def register_climate_routes(app: Flask) -> None:
         path = str(request.args.get("path") or "")
         return _repo_call(
             workspace, repo_id,
-            lambda repo: {"file": _svc().repository_workspace.preview(repo, path)},
+            lambda repo: {"file": _svc().view_file(workspace, repo_id, path)},
         )
 
     @app.get("/api/climate/<workspace>/repositories/<repo_id>/search")

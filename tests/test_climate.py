@@ -585,5 +585,134 @@ class ClimateUiContractTests(unittest.TestCase):
         self.assertNotIn("{{ workspace_labels[workspace] }} workspace", base)
 
 
+class ClimateReadOnlyViewerTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.work = Path(self.temp.name) / "work"
+        self.work.mkdir()
+        (self.work / "app.py").write_text("value = 1\n", encoding="utf-8")
+        (self.work / "README.md").write_text("# Title\n\nHello.\n", encoding="utf-8")
+        (self.work / "AI_REFERENCE.md").write_text("# Reference\n\nNotes.\n", encoding="utf-8")
+        ref = self.work / "AI_REFERENCE" / "reference-json"
+        ref.mkdir(parents=True)
+        (ref / "data-element.json").write_text('{"id":"deAbc123XYZ","name":"ANC Binary"}\n', encoding="utf-8")
+        (self.work / "empty.txt").write_text("", encoding="utf-8")
+        (self.work / "Dockerfile").write_text("FROM python:3.12\n", encoding="utf-8")
+        (self.work / "config.toml").write_text("a = 1\n", encoding="utf-8")
+        (self.work / ".env.example").write_text("KEY=\n", encoding="utf-8")
+        (self.work / "data.bin").write_bytes(b"\x00\x01\x02\x03")
+        self.registry = Registry([
+            Repository(id="work-repo", name="Work", type="command", enabled=True, local_path=str(self.work)),
+        ])
+        self.repo_service = RepositoryWorkspaceService(WorkspaceSettings())
+        self.service = ClimateService(self.registry, self.repo_service, FakeCodingAdapter())
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def test_json_markdown_python_return_non_empty_content(self):
+        json_file = self.service.view_file("work", "work-repo", "AI_REFERENCE/reference-json/data-element.json")
+        self.assertEqual(json_file["path"], "AI_REFERENCE/reference-json/data-element.json")
+        self.assertFalse(json_file["editable"])
+        self.assertFalse(json_file["binary"])
+        self.assertGreater(len(json_file["content"]), 0)
+        self.assertIn("ANC Binary", json_file["content"])
+        self.assertEqual(json_file["language"], "json")
+
+        md = self.service.view_file("work", "work-repo", "README.md")
+        self.assertGreater(len(md["content"]), 0)
+        self.assertIn("# Title", md["content"])
+        self.assertEqual(md["language"], "markdown")
+        self.assertFalse(md["binary"])
+
+        ref = self.service.view_file("work", "work-repo", "AI_REFERENCE.md")
+        self.assertGreater(len(ref["content"]), 0)
+        self.assertEqual(ref["language"], "markdown")
+
+        py = self.service.view_file("work", "work-repo", "app.py")
+        self.assertGreater(len(py["content"]), 0)
+        self.assertEqual(py["language"], "python")
+
+    def test_as_read_only_file_never_zeros_readable_text(self):
+        from hub.climate.file_view import as_read_only_file
+        kept = as_read_only_file({
+            "path": "app.py",
+            "content": "print(1)\n",
+            "content_html": "print(1)\n",
+            "binary": False,
+            "editable": True,
+            "size": 9,
+            "language": "python",
+        })
+        self.assertEqual(kept["content"], "print(1)\n")
+        self.assertFalse(kept["editable"])
+        self.assertFalse(kept["empty"])
+        empty = as_read_only_file({
+            "path": "empty.txt",
+            "content": "",
+            "binary": False,
+            "size": 0,
+            "language": "plaintext",
+        })
+        self.assertEqual(empty["content"], "")
+        self.assertTrue(empty["empty"])
+        self.assertFalse(empty["binary"])
+
+    def test_empty_file_is_not_binary(self):
+        opened = self.service.view_file("work", "work-repo", "empty.txt")
+        self.assertFalse(opened["binary"])
+        self.assertEqual(opened["content"], "")
+        self.assertTrue(opened["empty"])
+        self.assertFalse(opened["editable"])
+
+    def test_dockerfile_and_env_example_are_text(self):
+        docker = self.service.view_file("work", "work-repo", "Dockerfile")
+        self.assertFalse(docker["binary"])
+        self.assertGreater(len(docker["content"]), 0)
+        env = self.service.view_file("work", "work-repo", ".env.example")
+        self.assertFalse(env["binary"])
+        self.assertGreater(len(env["content"]), 0)
+        self.assertEqual(env["language"], "ini")
+
+    def test_markdown_source_is_raw(self):
+        opened = self.service.view_file("work", "work-repo", "README.md")
+        self.assertEqual(opened["language"], "markdown")
+        self.assertIn("# Title", opened["content"])
+        self.assertFalse(opened["editable"])
+
+    def test_syntax_mode_selection(self):
+        from hub.repository_workspace.security import language_for
+        self.assertEqual(language_for("app.py"), "python")
+        self.assertEqual(language_for("file.tsx"), "tsx")
+        self.assertEqual(language_for("file.jsx"), "jsx")
+        self.assertEqual(language_for("config.toml"), "toml")
+        self.assertEqual(language_for("settings.ini"), "ini")
+        self.assertEqual(language_for(".env.example"), "ini")
+        self.assertEqual(self.service.view_file("work", "work-repo", "config.toml")["language"], "toml")
+        self.assertEqual(self.service.view_file("work", "work-repo", ".env.example")["language"], "ini")
+
+    def test_binary_file_rejected(self):
+        opened = self.service.view_file("work", "work-repo", "data.bin")
+        self.assertTrue(opened["binary"])
+        self.assertEqual(opened["content"], "")
+        self.assertEqual(opened["error"], "Preview unavailable for this file type")
+        self.assertFalse(opened["editable"])
+
+    def test_path_traversal_blocked(self):
+        from hub.repository_workspace.security import WorkspaceSecurityError
+        with self.assertRaises(WorkspaceSecurityError) as ctx:
+            self.service.view_file("work", "work-repo", "../outside.py")
+        self.assertEqual(ctx.exception.code, "path_traversal")
+
+    def test_view_file_does_not_write(self):
+        path = self.work / "app.py"
+        before = path.read_bytes()
+        mtime = path.stat().st_mtime_ns
+        opened = self.service.view_file("work", "work-repo", "app.py")
+        self.assertIn("value = 1", opened["content"])
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(path.stat().st_mtime_ns, mtime)
+
+
 if __name__ == "__main__":
     unittest.main()

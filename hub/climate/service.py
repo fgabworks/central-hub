@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from hub.agent_center.redact import redact_text
+from hub.climate.file_view import as_read_only_file
 from hub.climate.coding import ClimateCodingAdapter, ClimateCodingError, classify_task_mode
 from hub.climate.codex_limits import get_codex_rate_limits_service
 from hub.climate.investigation_metrics import summarize_tool_activity
@@ -92,6 +93,11 @@ class ClimateService:
         if repo.type != "command":
             raise ClimateCodingError("Repository has no local file workspace", code="repository_unavailable")
         return repo
+
+    def view_file(self, workspace: str, repository_id: str, path: str) -> dict[str, Any]:
+        """Read-only file view for the selected approved repository."""
+        repo = self.require_repo(workspace, repository_id)
+        return as_read_only_file(self.repository_workspace.preview(repo, path))
 
     def bootstrap(self, workspace: str, repository_id: str = "") -> dict[str, Any]:
         ws = normalize_workspace(workspace)

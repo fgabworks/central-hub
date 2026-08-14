@@ -13,6 +13,13 @@
   var tabsEl = document.getElementById("climate-tabs");
   var fallback = document.getElementById("climate-editor-fallback");
   var welcome = document.getElementById("climate-welcome");
+  var monacoHost = document.getElementById("climate-monaco");
+  var mdPreview = document.getElementById("climate-md-preview");
+  var fileUnavailable = document.getElementById("climate-file-unavailable");
+  var fileEmptyEl = document.getElementById("climate-file-empty");
+  var filePathEl = document.getElementById("climate-file-path");
+  var fileModes = document.getElementById("climate-file-modes");
+  var fileReadonly = document.getElementById("climate-file-readonly");
   var statusEl = document.getElementById("climate-status");
   var gitSummary = document.getElementById("climate-git-summary");
   var bottomBody = document.getElementById("climate-bottom-body");
@@ -48,6 +55,7 @@
     codexRateLimits: null,
     codexRateLimitsPromise: null,
     stopRequested: false,
+    fileOpenSeq: 0,
     pollTimer: null,
     runActive: false,
     problems: [],
@@ -224,34 +232,204 @@
     if (editor) editor.layout();
   }
   function languageId(language, path) {
-    var map = {python:"python",javascript:"javascript",typescript:"typescript",json:"json",yaml:"yaml",markdown:"markdown",html:"html",css:"css",sql:"sql",shell:"shell"};
+    var name = String(path || "").split("/").pop() || "";
+    var lower = name.toLowerCase();
+    if (lower.endsWith(".env.example")) return "ini";
+    var map = {
+      python: "python", javascript: "javascript", typescript: "typescript",
+      tsx: "typescript", jsx: "javascript", json: "json", yaml: "yaml",
+      markdown: "markdown", html: "html", css: "css", sql: "sql",
+      shell: "shell", powershell: "powershell", toml: "ini", ini: "ini",
+      scss: "scss", xml: "xml", batch: "bat", bash: "shell",
+      dockerfile: "dockerfile", makefile: "plaintext", plaintext: "plaintext"
+    };
     if (map[language]) return map[language];
-    var ext = (path.split(".").pop() || "").toLowerCase();
-    return {py:"python",js:"javascript",ts:"typescript",json:"json",yml:"yaml",yaml:"yaml",md:"markdown",html:"html",css:"css",sql:"sql",ps1:"powershell"}[ext] || "plaintext";
+    var ext = (lower.split(".").pop() || "").toLowerCase();
+    return {
+      py: "python", pyi: "python", js: "javascript", mjs: "javascript", cjs: "javascript",
+      ts: "typescript", tsx: "typescript", jsx: "javascript",
+      json: "json", yml: "yaml", yaml: "yaml", md: "markdown", markdown: "markdown",
+      html: "html", htm: "html", css: "css", scss: "scss", sql: "sql",
+      txt: "plaintext", toml: "ini", ini: "ini", cfg: "ini", conf: "ini",
+      xml: "xml", sh: "shell", bash: "shell", bat: "bat", ps1: "powershell",
+      go: "go", rs: "rust", java: "java", kt: "kotlin", c: "c", h: "c",
+      cpp: "cpp", hpp: "cpp", cs: "csharp", php: "php", vue: "html",
+      r: "r", rb: "ruby", csv: "plaintext", tsv: "plaintext"
+    }[ext] || "plaintext";
+  }
+  function isMarkdownPath(path, language) {
+    var lower = String(path || "").toLowerCase();
+    return language === "markdown" || /\.(md|markdown)$/.test(lower) || languageId(language, path) === "markdown";
+  }
+  function renderMarkdownHtml(text) {
+    if (window.ClimateMarkdown && typeof window.ClimateMarkdown.render === "function") {
+      return window.ClimateMarkdown.render(text);
+    }
+    if (typeof window.renderClimateMarkdown === "function") {
+      return window.renderClimateMarkdown(text);
+    }
+    return "<pre>" + escapeHtml(text) + "</pre>";
+  }
+  function enhanceMarkdown(rootEl) {
+    if (window.ClimateMarkdown && typeof window.ClimateMarkdown.enhance === "function") {
+      window.ClimateMarkdown.enhance(rootEl);
+    }
+  }
+  function applyReadOnlyFile(tab, file) {
+    tab = tab || {};
+    file = file || {};
+    tab.language = file.language || tab.language || "plaintext";
+    tab.dirty = false;
+    tab.loaded = true;
+    if (file.binary) {
+      tab.binary = true;
+      tab.unavailable = true;
+      tab.empty = false;
+      tab.content = "";
+      tab.original = "";
+      tab.error = file.error || "Preview unavailable for this file type";
+      return tab;
+    }
+    tab.binary = false;
+    var content = file.content == null ? "" : String(file.content);
+    var size = Number(file.size);
+    if (file.error && !content) {
+      tab.unavailable = true;
+      tab.empty = false;
+      tab.content = "";
+      tab.original = "";
+      tab.error = /^Unable to read file:/.test(String(file.error))
+        ? String(file.error)
+        : ("Unable to read file: " + file.error);
+      return tab;
+    }
+    tab.unavailable = false;
+    tab.content = content;
+    tab.original = content;
+    tab.empty = content.length === 0 && (!isFinite(size) || size === 0);
+    tab.error = "";
+    if (!tab.viewMode) tab.viewMode = "source";
+    return tab;
+  }
+  function shouldShowFileResponse(activePath, requestedPath) {
+    return String(activePath || "") === String(requestedPath || "");
+  }
+  function logViewerDiag(info) {
+    try { console.debug("[climate-viewer]", info); } catch (_) {}
+  }
+  function monacoUriFor(path) {
+    var rel = String(path || "").replace(/\\/g, "/").replace(/^\/+/, "");
+    return window.monaco.Uri.from({
+      scheme: "climate",
+      authority: encodeURIComponent(String(workspace || "ws")),
+      path: "/" + encodeURIComponent(String(repoId() || "repo")) + "/" + rel.split("/").map(encodeURIComponent).join("/")
+    });
   }
   function currentTab() { return state.tabs.find(function (tab) { return tab.path === state.active; }) || null; }
   function editorValue() { return editor ? editor.getValue() : fallback.value; }
   function setEditorValue(value, language, path) {
-    if (editor) {
-      var uri = window.monaco.Uri.parse("climate://" + workspace + "/" + repoId() + "/" + path);
-      var model = window.monaco.editor.getModel(uri) || window.monaco.editor.createModel(value, languageId(language, path), uri);
-      if (model.getValue() !== value) model.setValue(value);
+    var text = value == null ? "" : String(value);
+    var lang = languageId(language, path);
+    if (editor && window.monaco) {
+      var uri = monacoUriFor(path);
+      var model = window.monaco.editor.getModel(uri);
+      if (!model) {
+        model = window.monaco.editor.createModel(text, lang, uri);
+      } else {
+        if (model.getLanguageId && model.getLanguageId() !== lang && window.monaco.editor.setModelLanguage) {
+          window.monaco.editor.setModelLanguage(model, lang);
+        }
+        if (model.getValue() !== text) model.setValue(text);
+      }
+      editor.updateOptions({ readOnly: true, domReadOnly: true });
       editor.setModel(model);
       refreshJsonParseProblem(model, path);
-    } else fallback.value = value;
+      logViewerDiag({
+        repo: repoId(),
+        path: path,
+        language: lang,
+        contentLength: text.length,
+        monacoUri: String(model.uri),
+        modelLength: model.getValue().length
+      });
+    } else {
+      fallback.value = text;
+      fallback.readOnly = true;
+    }
     refreshProblems();
   }
+  function hideEditorSurfaces() {
+    if (monacoHost) monacoHost.hidden = true;
+    if (mdPreview) { mdPreview.hidden = true; mdPreview.innerHTML = ""; }
+    if (fileUnavailable) fileUnavailable.hidden = true;
+    if (fileEmptyEl) fileEmptyEl.hidden = true;
+    fallback.style.display = "none";
+  }
+  function showFileSurface(tab) {
+    hideEditorSurfaces();
+    if (!tab) return;
+    if (fileReadonly) fileReadonly.hidden = false;
+    if (tab.binary || tab.unavailable) {
+      if (fileUnavailable) {
+        fileUnavailable.hidden = false;
+        fileUnavailable.textContent = tab.error || (tab.binary
+          ? "Preview unavailable for this file type"
+          : "Unable to read file: unknown error");
+      }
+      if (fileModes) fileModes.hidden = true;
+      if (editor) editor.setModel(null);
+      return;
+    }
+    if (fileEmptyEl) fileEmptyEl.hidden = !tab.empty;
+    var markdown = isMarkdownPath(tab.path, tab.language);
+    if (fileModes) {
+      fileModes.hidden = !markdown;
+      if (markdown) {
+        fileModes.querySelectorAll("[data-file-mode]").forEach(function (btn) {
+          btn.classList.toggle("is-active", btn.getAttribute("data-file-mode") === (tab.viewMode || "source"));
+        });
+      }
+    }
+    if (markdown && tab.viewMode === "preview") {
+      if (mdPreview) {
+        mdPreview.hidden = false;
+        mdPreview.innerHTML = renderMarkdownHtml(tab.content || "");
+        enhanceMarkdown(mdPreview);
+      }
+      return;
+    }
+    if (editor && monacoHost) {
+      monacoHost.hidden = false;
+      setEditorValue(tab.content, tab.language, tab.path);
+      editor.layout();
+    } else {
+      fallback.style.display = "block";
+      fallback.readOnly = true;
+      fallback.value = tab.content || "";
+    }
+  }
+  function updateBreadcrumb(tab) {
+    var label = tab ? tab.path : "Open a file from Explorer";
+    if (filePathEl) {
+      filePathEl.textContent = tab ? tab.path.split("/").join(" › ") : "Open a file from Explorer";
+      filePathEl.title = label;
+    } else if (breadcrumb && breadcrumb.querySelector("span")) {
+      breadcrumb.querySelector("span").textContent = tab ? tab.path.split("/").join("  ›  ") : "Open a file from Explorer";
+    }
+    var nameEl = document.getElementById("climate-current-file-name");
+    if (nameEl) nameEl.textContent = tab ? tab.path : "No file open";
+    var langEl = document.getElementById("climate-language");
+    if (langEl) langEl.textContent = tab && !tab.binary ? languageId(tab.language, tab.path) : "Plain Text";
+    if (fileReadonly) fileReadonly.hidden = !tab;
+  }
   function captureActive() {
-    var tab = currentTab();
-    if (!tab || !tab.loaded) return;
-    tab.content = editorValue();
-    tab.dirty = tab.content !== tab.original;
+    return;
   }
   function renderTabs() {
     if (!state.tabs.length) { tabsEl.innerHTML = '<div class="climate-empty-tab">Open a file from Explorer</div>'; return; }
     tabsEl.innerHTML = state.tabs.map(function (tab) {
       var name = tab.path.split("/").pop();
-      return '<button class="climate-tab '+(tab.path===state.active?'is-active':'')+'" data-path="'+escapeHtml(tab.path)+'" title="'+escapeHtml(tab.path)+'"><span class="climate-tab-name">'+escapeHtml(name)+'</span><span class="climate-tab-dirty">'+(tab.dirty?'●':'')+'</span><span class="climate-tab-close" data-close="'+escapeHtml(tab.path)+'">×</span></button>';
+      return '<button class="climate-tab '+(tab.path===state.active?'is-active':'')+'" data-path="'+escapeHtml(tab.path)+'" title="'+escapeHtml(tab.path)+'"><span class="climate-tab-name">'+escapeHtml(name)+'</span><span class="climate-tab-close" data-close="'+escapeHtml(tab.path)+'">×</span></button>';
     }).join("");
     tabsEl.querySelectorAll(".climate-tab").forEach(function (button) {
       button.addEventListener("click", function (event) {
@@ -265,28 +443,49 @@
   }
   function closeTab(path) {
     captureActive();
-    var tab = state.tabs.find(function (item) { return item.path === path; });
-    if (tab && tab.dirty && !window.confirm("Close this file and discard unsaved changes?")) return;
     state.tabs = state.tabs.filter(function (item) { return item.path !== path; });
-    if (window.monaco) { var uri = window.monaco.Uri.parse("climate://"+workspace+"/"+repoId()+"/"+path); var model = window.monaco.editor.getModel(uri); if (model) model.dispose(); }
+    if (window.monaco) { var uri = monacoUriFor(path); var model = window.monaco.editor.getModel(uri); if (model) model.dispose(); }
     if (state.active === path) state.active = (state.tabs[state.tabs.length - 1] || {}).path || "";
     renderTabs(); savePrefs();
-    if (state.active) activateTab(state.active); else { if (editor) editor.setModel(null); fallback.value=""; fallback.style.display="none"; welcome.hidden=false; }
+    if (state.active) activateTab(state.active); else { if (editor) editor.setModel(null); hideEditorSurfaces(); fallback.value=""; welcome.hidden=false; if (fileReadonly) fileReadonly.hidden=true; updateBreadcrumb(null); }
   }
   function openFile(path, line, column) {
-    captureActive();
     var existing = state.tabs.find(function (tab) { return tab.path === path; });
-    if (!existing) { existing = {path:path,content:"",original:"",language:"plaintext",loaded:false,dirty:false}; state.tabs.push(existing); }
-    state.active = path; renderTabs(); savePrefs(); setStatus("Opening " + path + "…");
+    if (!existing) {
+      existing = {path:path,content:"",original:"",language:"plaintext",loaded:false,dirty:false,binary:false,unavailable:false,empty:false,error:"",viewMode:"source"};
+      state.tabs.push(existing);
+    }
+    state.active = path;
+    state.fileOpenSeq = (state.fileOpenSeq || 0) + 1;
+    var seq = state.fileOpenSeq;
+    renderTabs(); savePrefs(); setStatus("Opening " + path + "…");
     function afterOpen() {
+      if (!shouldShowFileResponse(state.active, path)) return;
       activateTab(path);
-      revealEditorLine(line, column);
+      if (!existing.binary && !existing.unavailable && existing.viewMode !== "preview") revealEditorLine(line, column);
     }
     if (existing.loaded) return afterOpen();
     jsonFetch(endpoint("/repositories/"+encodeURIComponent(repoId())+"/file?path="+encodeURIComponent(path))).then(function (data) {
-      var file = data.file; existing.content = file.content || ""; existing.original = existing.content; existing.language = file.language || "plaintext"; existing.loaded = true; existing.dirty = false;
-      afterOpen(); setStatus("Opened " + path + (line ? (" :" + line) : ""));
-    }).catch(function (error) { setStatus(error.message); addProblem({ severity:"error", source:"io", path:path, line:1, message:error.message }); });
+      applyReadOnlyFile(existing, data.file || {});
+      logViewerDiag({
+        repo: repoId(),
+        path: path,
+        status: existing.unavailable ? "error" : "ok",
+        contentLength: (existing.content || "").length,
+        language: existing.language,
+        seq: seq
+      });
+      if (!shouldShowFileResponse(state.active, path)) return;
+      afterOpen();
+      if (existing.unavailable) setStatus(existing.error);
+      else setStatus("Read-only · " + path + (existing.empty ? " · Empty file" : (" · " + (existing.content || "").length + " chars")));
+    }).catch(function (error) {
+      applyReadOnlyFile(existing, { error: error.message, content: "", binary: false });
+      if (!shouldShowFileResponse(state.active, path)) return;
+      afterOpen();
+      setStatus(existing.error || error.message);
+      addProblem({ severity:"error", source:"io", path:path, line:1, message:error.message });
+    });
   }
   function revealEditorLine(line, column) {
     var n = Number(line);
@@ -297,22 +496,25 @@
     editor.focus();
   }
   function activateTab(path) {
-    captureActive(); state.active = path;
+    state.active = path;
     var tab = currentTab(); renderTabs(); savePrefs();
     if (!tab) return;
     if (!tab.loaded) return openFile(path);
-    welcome.hidden = true; fallback.style.display = editor ? "none" : "block";
-    setEditorValue(tab.content, tab.language, tab.path);
-    breadcrumb.querySelector("span:first-child").textContent = tab.path.split("/").join("  ›  ");
-    document.getElementById("climate-current-file-name").textContent = tab.path;
-    document.getElementById("climate-language").textContent = languageId(tab.language, tab.path);
-    highlightTree(); setStatus((tab.dirty ? "Unsaved · " : "") + tab.path);
+    welcome.hidden = true;
+    showFileSurface(tab);
+    updateBreadcrumb(tab);
+    highlightTree();
+    if (tab.unavailable || tab.binary) setStatus(tab.error || "Unavailable · " + tab.path);
+    else setStatus("Read-only · " + tab.path + (tab.empty ? " · Empty file" : (" · " + (tab.content || "").length + " chars")));
   }
   function markDirty() {
-    var tab = currentTab(); if (!tab || !tab.loaded) return;
-    tab.content = editorValue(); tab.dirty = tab.content !== tab.original; renderTabs();
-    if (editor && editor.getModel()) refreshJsonParseProblem(editor.getModel(), tab.path);
-    refreshProblems();
+    return;
+  }
+  function setFileViewMode(mode) {
+    var tab = currentTab();
+    if (!tab || !isMarkdownPath(tab.path, tab.language)) return;
+    tab.viewMode = mode === "preview" ? "preview" : "source";
+    showFileSurface(tab);
   }
   function renderTree(nodes, depth) {
     depth = depth || 0;
@@ -353,27 +555,10 @@
     }).catch(function(error){setStatus(error.message);});
   }
   function saveFile() {
-    captureActive(); var tab=currentTab(); if(!tab||!tab.dirty)return;
-    jsonFetch(endpoint("/repositories/"+encodeURIComponent(repoId())+"/preview-save"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:tab.path,content:tab.content})}).then(function(data){
-      clearProblemsBySource("save");
-      document.getElementById("climate-save-diff").textContent=data.diff||"No changes";document.getElementById("climate-save-dialog").showModal();
-    }).catch(function(error){
-      setStatus(error.message);
-      addProblem({ severity:"error", source:"save", path:tab.path, line:1, message:error.message });
-      pushOutput("system", error.message);
-    });
+    setStatus("Read-only viewer — saving is not available yet.");
   }
   function confirmSave() {
-    captureActive(); var tab=currentTab(); if(!tab)return;
-    jsonFetch(endpoint("/repositories/"+encodeURIComponent(repoId())+"/save"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:tab.path,content:tab.content,confirm:true})}).then(function(){
-      clearProblemsBySource("save");
-      tab.original=tab.content;tab.dirty=false;renderTabs();loadTree();loadGit();setStatus("Saved "+tab.path);
-      pushOutput("git", "Saved "+tab.path);
-    }).catch(function(error){
-      setStatus(error.message);
-      addProblem({ severity:"error", source:"save", path:tab.path, line:1, message:error.message });
-      pushOutput("system", error.message);
-    });
+    setStatus("Read-only viewer — saving is not available yet.");
   }
   function loadGit() {
     if(!repoId())return;
@@ -941,6 +1126,16 @@
     });
     return files;
   }
+  function extractReadPaths(command) {
+    var files = collectActivityFiles(command);
+    String(command || "").replace(/-(?:Literal)?Path\s+(?:"([^"]+)"|'([^']+)'|(\S+))/gi, function (_, a, b, c) {
+      collectActivityFiles(String(a || b || c || "")).forEach(function (p) {
+        if (files.indexOf(p) < 0) files.push(p);
+      });
+      return _;
+    });
+    return files;
+  }
   function isSearchCommand(cmd) {
     return /(?:^|[^\w-])(?:rg(?:\.exe)?|ripgrep|grep|git\s+grep|findstr|select-string)\b/i.test(String(cmd || ""));
   }
@@ -957,14 +1152,14 @@
   function providerInvestigationFiles(run) {
     var files = [];
     function add(path) {
-      collectActivityFiles(String(path || "").replace(/\\/g, "/")).forEach(function (p) {
+      extractReadPaths(String(path || "").replace(/\\/g, "/")).forEach(function (p) {
         if (files.indexOf(p) < 0) files.push(p);
       });
     }
     ((run && run.tool_activity) || []).forEach(function (item) {
-      if (!item || item.type !== "command_execution") return;
-      if (!isReadCommand(item.name) || commandFailed(item)) return;
-      add(item.name);
+      if (!item || (item.type && item.type !== "command_execution")) return;
+      if (!isReadCommand(item.name || item.command) || commandFailed(item)) return;
+      add(item.name || item.command);
     });
     String((run && run.logs) || "").split(/\r?\n/).forEach(function (line) {
       if (/^\[tool\]/i.test(line) && isReadCommand(line) && !isSearchCommand(line)) add(line);
@@ -1198,7 +1393,7 @@
     var toneClass = tone === "savings" ? "is-save" : (tone === "increase" ? "is-cost" : "is-muted");
     var html = '<table class="climate-te-compare"><thead><tr><th></th><th>CLIMATE</th><th>DIRECT</th></tr></thead><tbody>';
     html += '<tr><th>Total</th><td>' + escapeHtml(formatTokenExact(climateTotal)) + '</td><td>' + escapeHtml(formatTokenExact(directTotal)) + '</td></tr>';
-    html += '<tr><th>Runtime</th><td>' + escapeHtml(formatMs(te.climate && te.climate.runtime_ms)) + '</td><td>' + escapeHtml(formatMs(te.direct && te.direct.runtime_ms)) + '</td></tr>';
+    html += '<tr><th>Provider runtime</th><td>' + escapeHtml(formatMs(te.climate && te.climate.runtime_ms)) + '</td><td>' + escapeHtml(formatMs(te.direct && te.direct.runtime_ms)) + '</td></tr>';
     html += '<tr><th>Files inspected</th><td>' + escapeHtml(te.climate && te.climate.files_inspected != null ? String(te.climate.files_inspected) : "Unavailable") + '</td><td>' + escapeHtml(te.direct && te.direct.files_inspected != null ? String(te.direct.files_inspected) : "Unavailable") + '</td></tr>';
     html += '</tbody></table>';
     html += '<div class="climate-te-result ' + toneClass + '">' + escapeHtml(cmp.primary) + '</div>';
@@ -1232,7 +1427,7 @@
       ["↳ Cached portion", te.climate && te.climate.cached_input, te.direct && te.direct.usage && te.direct.usage.cached_input_tokens, "subset"],
       ["Output", te.climate && te.climate.output, te.direct && te.direct.usage && te.direct.usage.output_tokens, "tokens"],
       ["Total", te.climate && te.climate.total, te.direct && te.direct.usage && te.direct.usage.total_tokens, "tokens"],
-      ["Runtime", te.climate && te.climate.runtime_ms, te.direct && te.direct.runtime_ms, "runtime"],
+      ["Provider runtime", te.climate && te.climate.runtime_ms, te.direct && te.direct.runtime_ms, "runtime"],
       ["Files actually inspected", te.climate && te.climate.files_inspected, te.direct && te.direct.files_inspected, "count"],
       ["Search-matched files", te.climate && te.climate.search_matched_files, te.direct && te.direct.search_matched_files, "count"],
       ["Tool calls", te.climate && te.climate.tool_calls, te.direct && te.direct.tool_executions, "count"]
@@ -1251,7 +1446,7 @@
     html += '<tr><th>Candidate sources</th><td>' + escapeHtml(te.climate && te.climate.source_candidates != null ? String(te.climate.source_candidates) : "Unavailable") + "</td><td>—</td></tr>";
     html += '<tr><th>CLIMATE session</th><td>' + escapeHtml(te.climate && te.climate.session_reused ? "Resumed" : (te.climate && te.climate.session_fresh ? "Fresh" : "Unavailable")) + '</td><td>Fresh ephemeral</td></tr>';
     html += "</tbody></table>";
-    html += '<p class="climate-te-legend">Cached portion is a subset of Input, not an extra addend. Candidate sources are Context Resolver hints. Search-matched files are unique paths in successful repository search output. Files actually inspected are files whose contents were opened/read. Failed commands are not inspections. Preflight estimate is local and is not provider usage. Missing fields stay Unavailable.</p>';
+    html += '<p class="climate-te-legend">Cached portion is a subset of Input, not an extra addend. Candidate sources are Context Resolver hints. Search-matched files are unique paths in successful repository search output. Files actually inspected are files whose contents were opened/read. Failed commands are not inspections. Preflight estimate is local and is not provider usage. Missing fields stay Unavailable. Provider runtime is the provider started/finished span; chat End-to-end runtime is the browser wall clock for the CLIMATE run.</p>';
     html += "</details>";
     return html;
   }
@@ -1276,7 +1471,7 @@
     var issues = typeof activity.issues === "number" ? activity.issues : 0;
     var parts = [];
     if (msg.elapsedMs > 0) {
-      parts.push("Worked for " + formatElapsed(msg.elapsedMs));
+      parts.push("End-to-end runtime " + formatElapsed(msg.elapsedMs));
     }
     if (exploreCount > 0) parts.push("Explored " + exploreCount + " file" + (exploreCount === 1 ? "" : "s"));
     var searchMatches = Number(msg.searchMatchedFiles);
@@ -1618,6 +1813,7 @@
       return;
     }
     feed.innerHTML = session.messages.map(function (msg) { return renderChatMessage(msg); }).join("");
+    enhanceMarkdown(feed);
     feed.querySelectorAll("[data-open-file]").forEach(function (button) {
       button.addEventListener("click", function () { openFile(button.getAttribute("data-open-file")); });
     });
@@ -1710,7 +1906,11 @@
       bodyText = cleaned.text || "";
     }
     if (isRunning && (!bodyText || bodyText === "Working…" || bodyText === "Working...")) bodyText = "";
-    var body = escapeHtml(bodyText).replace(/\n/g, "<br>");
+    var body = "";
+    if (bodyText) {
+      if (isUser) body = escapeHtml(bodyText).replace(/\n/g, "<br>");
+      else body = renderMarkdownHtml(bodyText);
+    }
     var files = Array.isArray(msg.changedFiles) ? msg.changedFiles : [];
     var sources = Array.isArray(msg.sources) ? msg.sources : [];
     var tests = testsFromText(msg.text, msg.tests);
@@ -1732,9 +1932,9 @@
     } else if ((isComplete || isStopped) && !showRunCard) {
       html += renderActivityComplete(msg);
     } else if (!isUser && msg.elapsedMs && !showRunCard) {
-      html += '<button type="button" class="climate-chat-elapsed">Worked for ' + escapeHtml(formatElapsed(msg.elapsedMs)) + ' ▾</button>';
+      html += '<button type="button" class="climate-chat-elapsed">End-to-end runtime ' + escapeHtml(formatElapsed(msg.elapsedMs)) + ' ▾</button>';
     }
-    if (body) html += '<div class="climate-chat-text">' + body + '</div>';
+    if (body) html += '<div class="climate-chat-text' + (isUser ? "" : " climate-md") + '">' + body + '</div>';
     if ((isComplete || isStopped) && sources.length) {
       html += '<details class="climate-sources"><summary>Candidate Sources · ' + sources.length + ' file' + (sources.length === 1 ? "" : "s") + '</summary>';
       html += '<ul>' + sources.map(function (path) {
@@ -1748,7 +1948,7 @@
         html += '<div class="climate-run-warning" role="status">' + escapeHtml(msg.proposal.warning || "Large or destructive replacement detected. Review the diff before Keep All.") + '</div>';
       }
       html += '<div class="climate-run-stats">';
-      html += '<div><small>Worked for</small><b>' + escapeHtml(formatElapsed(msg.elapsedMs || 0)) + '</b></div>';
+      html += '<div><small>End-to-end runtime</small><b>' + escapeHtml(formatElapsed(msg.elapsedMs || 0)) + '</b></div>';
       html += '<div><small>Files changed</small><b>' + files.length + '</b></div>';
       html += '<div><small>Tests</small><b class="' + (tests && tests.passed ? "is-ok" : "") + '">' + escapeHtml(tests ? (tests.label || (tests.passed ? "passed" : "—")) : "—") + '</b></div>';
       html += '<div><small>Lines changed</small><b><span class="is-plus">+' + (lines.plus || 0) + '</span> <span class="is-minus">-' + (lines.minus || 0) + '</span></b></div>';
@@ -2854,9 +3054,40 @@
     });
   }
   function initMonaco() {
-    if(typeof window.require!=="function"){fallback.style.display=state.active?"block":"none";return;}
+    var mount = monacoHost || document.getElementById("climate-editor-host");
+    if(typeof window.require!=="function" || !mount){fallback.style.display=state.active?"block":"none";fallback.readOnly=true;return;}
     window.require.config({paths:{vs:"https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs"}});
-    window.require(["vs/editor/editor.main"],function(){monacoReady=true;editor=window.monaco.editor.create(document.getElementById("climate-editor-host"),{theme:"vs-dark",automaticLayout:true,fontSize:12,fontFamily:"JetBrains Mono, Cascadia Code, Consolas, monospace",minimap:{enabled:true},scrollBeyondLastLine:false,wordWrap:"off",renderWhitespace:"selection",padding:{top:8},tabSize:4});editor.onDidChangeModelContent(markDirty);editor.onDidChangeCursorPosition(function(e){document.getElementById("climate-line").textContent=e.position.lineNumber;document.getElementById("climate-column").textContent=e.position.column;});editor.onDidChangeCursorSelection(function(e){var count=Math.abs(e.selection.endLineNumber-e.selection.startLineNumber)+1;document.getElementById("climate-selection-meta").textContent=e.selection.isEmpty()?"No selection":count+" line"+(count===1?"":"s");});try{window.monaco.languages.json.jsonDefaults.setDiagnosticsOptions({validate:true,allowComments:true});}catch(_){ }if(window.monaco.editor.onDidChangeMarkers)window.monaco.editor.onDidChangeMarkers(function(){refreshProblems();});fallback.style.display="none";if(state.active)activateTab(state.active);refreshProblems();});
+    window.require(["vs/editor/editor.main"],function(){
+      monacoReady=true;
+      editor=window.monaco.editor.create(mount,{
+        theme:"vs-dark",
+        automaticLayout:true,
+        fontSize:12,
+        fontFamily:"JetBrains Mono, Cascadia Code, Consolas, monospace",
+        minimap:{enabled:true},
+        scrollBeyondLastLine:false,
+        wordWrap:"off",
+        readOnly:true,
+        domReadOnly:true,
+        renderWhitespace:"selection",
+        padding:{top:8},
+        tabSize:4,
+        contextmenu:true,
+        quickSuggestions:false,
+        suggestOnTriggerCharacters:false,
+        find:{seedSearchStringFromSelection:"selection"},
+        model:null
+      });
+      try { var blank = editor.getModel(); if (blank) blank.dispose(); editor.setModel(null); } catch (_) {}
+      editor.onDidChangeCursorPosition(function(e){document.getElementById("climate-line").textContent=e.position.lineNumber;document.getElementById("climate-column").textContent=e.position.column;});
+      editor.onDidChangeCursorSelection(function(e){var count=Math.abs(e.selection.endLineNumber-e.selection.startLineNumber)+1;document.getElementById("climate-selection-meta").textContent=e.selection.isEmpty()?"No selection":count+" line"+(count===1?"":"s");});
+      try{window.monaco.languages.json.jsonDefaults.setDiagnosticsOptions({validate:true,allowComments:true});}catch(_){ }
+      if(window.monaco.editor.onDidChangeMarkers)window.monaco.editor.onDidChangeMarkers(function(){refreshProblems();});
+      fallback.style.display="none";
+      fallback.readOnly=true;
+      if(state.active)activateTab(state.active);
+      refreshProblems();
+    });
   }
   repoSelect.addEventListener("change",function(){captureActive();savePrefs();window.location.assign((workspace==="work"?"/work/climate":"/personal/climate")+"?repo="+encodeURIComponent(repoId()));});
   providerSelect.addEventListener("change",function(){if(panelProviderSelect)panelProviderSelect.value=providerSelect.value;selectProvider(providerSelect.value,{refresh:false});});
@@ -2956,9 +3187,18 @@
   if(stopTopBtn) stopTopBtn.addEventListener("click", stopRun);
   setRunControls("idle");
   document.getElementById("climate-accept").addEventListener("click",function(){proposalAction("accept");});document.getElementById("climate-reject").addEventListener("click",function(){proposalAction("reject");});
-  document.getElementById("climate-confirm-save").addEventListener("click",function(e){e.preventDefault();document.getElementById("climate-save-dialog").close();confirmSave();});
+  document.getElementById("climate-confirm-save").addEventListener("click",function(e){e.preventDefault();document.getElementById("climate-save-dialog").close();});
   document.getElementById("climate-save").addEventListener("click",saveFile);
-  document.addEventListener("keydown",function(e){var key=e.key.toLowerCase();if((e.ctrlKey||e.metaKey)&&key==="s"){e.preventDefault();saveFile();}else if((e.ctrlKey||e.metaKey)&&key==="b"){e.preventDefault();document.getElementById("climate-toggle-left").click();}else if((e.ctrlKey||e.metaKey)&&key==="j"){e.preventDefault();document.getElementById("climate-toggle-bottom").click();}else if((e.ctrlKey||e.metaKey)&&key==="p"){e.preventDefault();workbench.classList.remove("is-left-closed");document.getElementById("climate-search").focus();}else if((e.ctrlKey||e.metaKey)&&e.shiftKey&&key==="a"){e.preventDefault();workbench.classList.remove("is-ai-closed");promptEl.focus();}});fallback.addEventListener("input",markDirty);fallback.addEventListener("select",function(){var text=currentSelection();document.getElementById("climate-selection-meta").textContent=text?text.split("\n").length+" line(s)":"No selection";});
+  if (fileModes) {
+    fileModes.querySelectorAll("[data-file-mode]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        setFileViewMode(btn.getAttribute("data-file-mode"));
+      });
+    });
+  }
+  fallback.addEventListener("select",function(){var text=currentSelection();document.getElementById("climate-selection-meta").textContent=text?text.split("\n").length+" line(s)":"No selection";});
+  document.addEventListener("keydown",function(e){var key=e.key.toLowerCase();if((e.ctrlKey||e.metaKey)&&key==="s"){e.preventDefault();saveFile();}else if((e.ctrlKey||e.metaKey)&&key==="b"){e.preventDefault();document.getElementById("climate-toggle-left").click();}else if((e.ctrlKey||e.metaKey)&&key==="j"){e.preventDefault();document.getElementById("climate-toggle-bottom").click();}else if((e.ctrlKey||e.metaKey)&&key==="p"){e.preventDefault();workbench.classList.remove("is-left-closed");document.getElementById("climate-search").focus();}else if((e.ctrlKey||e.metaKey)&&e.shiftKey&&key==="a"){e.preventDefault();workbench.classList.remove("is-ai-closed");promptEl.focus();}});
+  fallback.readOnly = true;
   document.querySelectorAll(".climate-bottom-tabs [data-panel]").forEach(function(btn){btn.addEventListener("click",function(){switchPanel(btn.dataset.panel);});});document.getElementById("climate-bottom-close").addEventListener("click",function(){center.classList.add("is-bottom-closed");if(editor)editor.layout();savePrefs();});
   var outputChannel=document.getElementById("climate-output-channel");
   if(outputChannel) outputChannel.addEventListener("change",function(){state.outputChannel=outputChannel.value;savePrefs();renderOutputPane();});

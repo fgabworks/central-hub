@@ -4,7 +4,40 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**CLIMATE investigation targeting + inspect telemetry (2026-08-14)**
+**CLIMATE read-only viewer blank-file fix (2026-08-15)**
+
+Opening a repository text file no longer shows an empty Monaco buffer.
+`captureActive()` was copying the current editor value (Monaco's default
+empty model) onto the tab *after* the file API had filled `content`. The
+viewer is still read-only: it does not write that buffer back, creates or
+reuses a per-path model with the API text, ignores stale fetches for the
+active tab, and distinguishes binary / read errors / genuine empty files.
+
+Prior: **CLIMATE Markdown UID chips + spacing polish (2026-08-15)**
+
+Rendered CLIMATE chat Markdown now highlights standalone likely DHIS2 UIDs
+(11 alphanumeric characters, starting with a letter, containing a digit) as
+compact copyable chips. Decoration runs after marked + DOMPurify on the HTML
+tree and skips fenced `pre` blocks, links, and path-like tokens. Raw `msg.text`
+is unchanged. Heading/paragraph/table spacing is slightly more open, still
+compact for the narrow AI panel.
+
+Prior: **CLIMATE daily IDE: Markdown chat + read-only file viewer (2026-08-14)**
+
+AI chat now renders GFM Markdown with marked + DOMPurify + highlight.js
+(Obsidian-like hierarchy, tables, fenced code with Copy, sanitized HTML). Raw
+`msg.text` is unchanged. Repository Explorer opens text/source files in the
+main Monaco area as **read-only** (line numbers, syntax, find, select/copy,
+tabs). Markdown files have Source | Preview using the same renderer. Binary
+types show `Preview unavailable for this file type`. Path jail is unchanged.
+Save/Git write/commit/push are **not** in this viewer.
+
+`Explored N files` / Files inspected count provider file-read commands,
+including PowerShell `Get-Content` / `-Path`, and still ignore search-hit
+paths. Chat elapsed time is **End-to-end runtime**; Token Efficiency shows
+**Provider runtime** (they measure different clocks).
+
+Prior: **CLIMATE investigation targeting + inspect telemetry (2026-08-14)**
 
 Repository ASK runs now rank exact domain concepts/acronyms/aliases (FIC, CH_FIC,
 FIC_STATUS, immunization) above generic leftovers such as `child`. Resolver

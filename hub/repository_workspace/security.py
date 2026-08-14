@@ -264,6 +264,8 @@ def language_for(path: Path | str) -> str:
         return "makefile"
     if name == "dockerfile" or name.startswith("dockerfile."):
         return "dockerfile"
+    if name.endswith(".env.example"):
+        return "ini"
     mapping = {
         ".md": "markdown",
         ".markdown": "markdown",

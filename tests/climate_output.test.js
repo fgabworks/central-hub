@@ -39,6 +39,7 @@ vm.runInContext([
   "escapeHtml",
   "formatElapsed",
   "collectActivityFiles",
+  "extractReadPaths",
   "isSearchCommand",
   "isReadCommand",
   "commandFailed",
@@ -65,6 +66,30 @@ const providerFiles = context.providerInvestigationFiles({
 });
 assert.deepEqual(Array.from(providerFiles).sort(), ["pkg/anc.py"]);
 
+const getContentPath = context.providerInvestigationFiles({
+  tool_activity: [
+    {
+      type: "command_execution",
+      name: "Get-Content -Path derive_fic.py",
+      status: "completed",
+      detail: "from lookup.child_age_correction import x\n",
+    },
+  ],
+});
+assert.deepEqual(Array.from(getContentPath), ["derive_fic.py"]);
+
+const searchOnly = context.providerInvestigationFiles({
+  tool_activity: [
+    {
+      type: "command_execution",
+      name: "rg -n ANC lookup",
+      status: "completed",
+      detail: "lookup/derive_anc.py:1:def derive_anc\nlookup/other.py:4:helper",
+    },
+  ],
+});
+assert.deepEqual(Array.from(searchOnly), []);
+
 const candidates = Array.from({ length: 21 }, (_, index) => `candidate-${index}.py`);
 const completedActivity = context.renderActivityComplete({
   id: "anc-run",
@@ -77,6 +102,8 @@ const completedActivity = context.renderActivityComplete({
   activity: { explore: { count: 21 }, steps: [] },
 });
 assert.match(completedActivity, /Explored 2 files/);
+assert.match(completedActivity, /End-to-end runtime/);
+assert.doesNotMatch(completedActivity, /Worked for /);
 assert.doesNotMatch(completedActivity, /Explored 21 files/);
 assert.doesNotMatch(completedActivity, /Explored 308 files/);
 assert.match(completedActivity, /308 search matches/);

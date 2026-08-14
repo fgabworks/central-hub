@@ -1,17 +1,20 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-14 (CLIMATE investigation targeting).
+Last verified: 2026-08-14 (CLIMATE Markdown chat + read-only file viewer).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
 
 **CLIMATE Code Workspace v1** is implemented at `/work/climate` (VANTA) and
 `/personal/climate` (ARCTIC). It reuses the guarded Repository Workspace file/Git
-services and existing Agent Center CLI adapters/runner. The IDE shell provides Monaco
-(textarea fallback), Explorer/search, safe preview-confirm save, multiple tabs,
-persisted per-workspace/repository tabs/layout, Git status/diff, resizable panels, and
-Problems | Output | Debug Console | Terminal | Ports (Tests and Git remain secondary).
-Problems shows real editor/save/runtime diagnostics; Output uses channelled CLIMATE
+services and existing Agent Center CLI adapters/runner. The IDE shell provides a
+read-only Monaco file viewer (textarea fallback), Explorer/search, multiple tabs,
+Markdown Source | Preview, persisted per-workspace/repository tabs/layout, Git
+status/diff, resizable panels, and Problems | Output | Debug Console | Terminal |
+Ports (Tests and Git remain secondary). Opening a file does not write it; the
+viewer does not expose save. AI chat renders GFM Markdown (marked + DOMPurify +
+highlight.js) with compact DHIS2 UID chips and does not change provider text. Problems shows real editor/runtime
+diagnostics; Output uses channelled CLIMATE
 runtime logs without raw provider protocol; Debug Console shows hub-managed run-profile
 stdout/stderr or “No active debug session”; Terminal reuses the repository-scoped PTY;
 Ports is read-only local listener discovery. Its provider-neutral coding adapter exposes Codex,
@@ -31,7 +34,10 @@ search/read/trace the approved cwd under `--sandbox read-only` even when local c
 is low. Packed prompts distinguish empty Hub tools from native Codex repository
 inspection; they must not tell Codex that read-only tools are unavailable. Completed
 CLIMATE chrome reports `Explored N files` from provider investigation/read activity
-only — preflight source candidates stay in Sources. The resolver sends compact
+only — including PowerShell `Get-Content` — while search-hit paths stay in search
+matches and preflight source candidates stay in Sources. Chat **End-to-end runtime**
+is the browser wall clock; Token Efficiency **Provider runtime** is the provider
+`started_at`/`finished_at` span. The resolver sends compact
 instruction/skill/path+symbol hints, not duplicated
 source bodies. Packet-only providers retain the evidence gate; calls without enough authoritative
 evidence remain local (`Not enough repository evidence. Model not invoked · 0 tokens`).
@@ -489,7 +495,7 @@ Next development target: **DHIS2 Standard Reports** (credentialed HTML viewer / 
 DHIS2 Standard Report Manager Phase 2+ (replacement / design write-back) is **not** started.
 Optional: more GET-only LP capabilities via YAML; enrichment Phase A completeness.
 Repository Workspace Phase 3+ (commit/push/pull UI and autonomous/unreviewed agent edits)
-stays deferred. CLIMATE v1 supports only explicit safe saves and review-gated full-file
-replacement proposals.
+stays deferred. CLIMATE file viewing is read-only; save/Git write UI is not exposed.
+AI replacement edits still require review-gated Accept/Reject.
 Do **not** enable DHIS2 writes without [docs/DHIS2_SAFETY.md](docs/DHIS2_SAFETY.md).
 Do **not** expand Gmail or Calendar beyond readonly without an explicit safety design.

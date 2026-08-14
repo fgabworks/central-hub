@@ -182,7 +182,7 @@ async function snap(page, label) {
   s = await snap(page, "completed");
   report.states.push(s);
   if (!s.hasComplete) errors.push("completed: missing summary");
-  if (!/Worked for/i.test(s.completeText)) errors.push("completed: missing elapsed");
+  if (!/End-to-end runtime/i.test(s.completeText)) errors.push("completed: missing elapsed");
   if (!/Explored/i.test(s.completeText)) errors.push("completed: missing explored");
   if (!s.hasViewDetails) errors.push("completed: missing View Details");
   if (!s.hasShowChanges) errors.push("completed: missing Show Changes for pending proposal");
