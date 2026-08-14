@@ -401,6 +401,14 @@ class AgentCenterService:
             prompt=str(payload.get("prompt") or ""),
             repository_ids=repos,
         )
+        if bool(payload.get("repository_investigation")) and repos:
+            grounding["grounding_rules"] = (
+                "# Repository-agent grounding\n"
+                f"Approved repository scope: {', '.join(repos)}.\n"
+                "The supplied evidence and likely-source list are starting hints, not a closed packet. "
+                "Independently search, read, and trace the repository before answering. Cite exact "
+                "implementation files/functions. Remain read-only and do not modify repository state."
+            )
         preview = build_context_preview(
             self.registry,
             repository_ids=repos,
@@ -618,11 +626,19 @@ class AgentCenterService:
         )
         payload["evidence_packet"] = grounding.get("evidence_packet")
         payload["grounding_rules"] = grounding.get("grounding_rules")
+        capabilities = adapter.capabilities() if hasattr(adapter, "capabilities") else {}
+        repository_investigation = bool(
+            payload.get("repository_investigation")
+            and resolved_repos
+            and capabilities.get("native_repository_investigation")
+        )
+        payload["repository_investigation"] = repository_investigation
         # Coding CLIs have no Hub tool loop — never send project questions without evidence.
         if (
             grounding.get("required")
             and agent_requires_repository(agent_id)
             and not grounding.get("usable")
+            and not repository_investigation
             and not bool(payload.get("allow_general_knowledge"))
             and not bool((grounding.get("scope") or {}).get("allow_general_knowledge"))
         ):
@@ -816,6 +832,19 @@ class AgentCenterService:
             conversation_id, profile_id=profile.id, summary=prompt[:500]
         )
 
+        provider_session_id = ""
+        persist_session = bool(
+            isinstance(adapter, CodexAdapter) and payload.get("reuse_provider_session")
+        )
+        if persist_session:
+            provider_session_id = self.store.latest_provider_session(
+                conversation_id=conversation_id,
+                profile_id=profile.id,
+                agent_id=agent_id,
+                model=model,
+                repository_ids=list(preview["repository_ids"]),
+            )
+
         run = self.store.create_run(
             {
                 "status": "queued",
@@ -996,13 +1025,26 @@ class AgentCenterService:
             cwd = prompt_dir
 
         try:
-            argv = adapter.build_argv(
-                mode=mode,
-                prompt=packed,
-                model=model,
-                cwd=str(cwd),
-                prompt_file=str(prompt_path),
-            )
+            if isinstance(adapter, CodexAdapter):
+                argv = adapter.build_argv(
+                    mode=mode,
+                    prompt=packed,
+                    model=model,
+                    cwd=str(cwd),
+                    prompt_file=str(prompt_path),
+                    provider_session_id=provider_session_id,
+                    persist_session=persist_session,
+                )
+            else:
+                provider_session_id = ""
+                persist_session = False
+                argv = adapter.build_argv(
+                    mode=mode,
+                    prompt=packed,
+                    model=model,
+                    cwd=str(cwd),
+                    prompt_file=str(prompt_path),
+                )
         except TypeError:
             argv = adapter.build_argv(mode=mode, prompt=packed, model=model, cwd=str(cwd))
         except ValueError as exc:
@@ -1025,7 +1067,7 @@ class AgentCenterService:
                 raise AgentCenterError("Rejected unsafe argv token", code="argv_unsafe")
         if isinstance(adapter, CodexAdapter):
             try:
-                assert_safe_codex_argv(argv)
+                assert_safe_codex_argv(argv, require_ephemeral=not persist_session)
             except ValueError as exc:
                 self.store.update_run(
                     run["id"], status="failed", error=str(exc), finished_at=run["created_at"]
@@ -1052,6 +1094,7 @@ class AgentCenterService:
             stdin_path=stdin_path,
             jsonl=jsonl,
             safety_repo=safety_repo,
+            session_reused=bool(provider_session_id),
         )
         return self.store.get_run(run["id"]) or run
 

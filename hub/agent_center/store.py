@@ -230,6 +230,43 @@ class AgentCenterStore:
             ).fetchall()
         return [public_run(self._run_row(r)) for r in rows]
 
+    def latest_provider_session(
+        self,
+        *,
+        conversation_id: str,
+        profile_id: str,
+        agent_id: str,
+        model: str,
+        repository_ids: list[str],
+    ) -> str:
+        """Return the latest persisted CLI session for the exact conversation/scope."""
+        if not conversation_id:
+            return ""
+        with self.db.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT status, agent_id, model, usage_json, repository_ids_json
+                FROM agent_runs
+                WHERE conversation_id=? AND profile_id=?
+                ORDER BY created_at DESC LIMIT 1
+                """,
+                (conversation_id, profile_id),
+            ).fetchall()
+        expected = list(repository_ids or [])
+        for row in rows:
+            try:
+                if row["status"] != "completed" or row["agent_id"] != agent_id or row["model"] != model:
+                    return ""
+                if json.loads(row["repository_ids_json"] or "[]") != expected:
+                    return ""
+                usage = json.loads(row["usage_json"] or "{}")
+            except (TypeError, ValueError, json.JSONDecodeError):
+                return ""
+            session_id = str((usage or {}).get("provider_session_id") or "").strip()
+            if session_id:
+                return session_id
+        return ""
+
     def update_run(self, run_id: str, **fields: Any) -> dict[str, Any] | None:
         allowed = {
             "status",

@@ -22,10 +22,10 @@ def parse_jsonl_line(line: str) -> dict[str, Any] | None:
 class CodexJsonlAccumulator:
     """Incremental Codex JSONL → messages, tools, usage, errors, final answer."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, session_reused: bool = False) -> None:
         self.messages: list[str] = []
         self.tool_activity: list[dict[str, Any]] = []
-        self.usage: dict[str, Any] = {}
+        self.usage: dict[str, Any] = {"session_reused": bool(session_reused)}
         self.errors: list[str] = []
         self.raw_lines: list[str] = []
         self._final: str = ""
@@ -42,6 +42,12 @@ class CodexJsonlAccumulator:
         item = event.get("item") if isinstance(event.get("item"), dict) else {}
         item_type = str(item.get("type") or "")
 
+        if etype == "thread.started":
+            session_id = str(event.get("thread_id") or event.get("session_id") or "").strip()
+            if session_id:
+                self.usage["provider_session_id"] = session_id
+            return "[thread.started]\n"
+
         if etype in {"error", "turn.failed"}:
             message = _event_error_message(event)
             if message:
@@ -51,7 +57,12 @@ class CodexJsonlAccumulator:
         if etype == "turn.completed":
             usage = event.get("usage") or event.get("token_usage") or {}
             if isinstance(usage, dict) and usage:
-                self.usage = _normalize_usage(usage)
+                retained = {
+                    key: self.usage.get(key)
+                    for key in ("provider_session_id", "session_reused")
+                    if self.usage.get(key) is not None
+                }
+                self.usage = {**_normalize_usage(usage), **retained}
             return "[turn.completed]\n"
 
         if etype.endswith(".completed") or etype in {"item.completed", "item.updated"}:
@@ -91,7 +102,13 @@ class CodexJsonlAccumulator:
             }
             if completed or not any(row.get("name") == entry["name"] and row.get("status") == "started" for row in self.tool_activity):
                 self.tool_activity.append(entry)
-            return f"[tool] {entry['name']} ({status})\n"
+            lower = command.lower()
+            prefix = ""
+            if any(token in lower for token in (" rg ", "rg ", "git grep", "findstr", "select-string")):
+                prefix = "[codex_investigation] Codex searching repository\n"
+            elif any(token in lower for token in ("get-content", " type ", "cat ", "sed -n")):
+                prefix = "[codex_investigation] Reading repository file\n"
+            return prefix + f"[tool] {entry['name']} ({status})\n"
 
         if item_type in {"file_change", "file_changes", "patch"}:
             paths = item.get("paths") or item.get("files") or []

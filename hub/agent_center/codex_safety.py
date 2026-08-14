@@ -51,7 +51,7 @@ def discover_codex_executable(configured: str = "codex") -> str | None:
     return None
 
 
-def assert_safe_codex_argv(argv: list[str]) -> None:
+def assert_safe_codex_argv(argv: list[str], *, require_ephemeral: bool = True) -> None:
     lowered = [part.lower() for part in argv]
     joined = " ".join(lowered)
     for bad in _FORBIDDEN_ARGV:
@@ -71,7 +71,7 @@ def assert_safe_codex_argv(argv: list[str]) -> None:
             raise ValueError("Codex MVP requires --sandbox read-only")
     else:
         raise ValueError("Codex MVP requires --sandbox read-only")
-    if "--ephemeral" not in lowered:
+    if require_ephemeral and "--ephemeral" not in lowered:
         raise ValueError("Codex MVP requires --ephemeral")
     if "--json" not in lowered:
         raise ValueError("Codex MVP requires --json")

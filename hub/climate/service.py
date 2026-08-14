@@ -173,6 +173,11 @@ class ClimateService:
         task_mode = classify_task_mode(prompt, str(payload.get("task_mode") or "") or None)
         handoff = bool(payload.get("handoff"))
         include_repo_context = bool(payload.get("include_repo_context"))
+        can_investigate = bool(
+            self.coding.can_investigate_repository(provider)
+            if hasattr(self.coding, "can_investigate_repository")
+            else provider == "codex"
+        )
 
         preflight = resolve_climate_context(
             workspace=ws,
@@ -188,6 +193,7 @@ class ClimateService:
             include_repo_context=include_repo_context,
             repository_intelligence=self._repository_intelligence() if ws == "work" else None,
             handoff=handoff,
+            repository_agent=can_investigate,
         )
         if not preflight.ok:
             blocked = make_blocked_run(
@@ -226,6 +232,33 @@ class ClimateService:
             reuse_session=bool(payload.get("reuse_session", True)) and not handoff,
             handoff=handoff,
             preflight_log=preflight.activity_log(),
+            evidence_packet={
+                "repository_ids": [repo.id],
+                "tool_results": [],
+                "hits": [
+                    {
+                        "source": "climate_context_resolver",
+                        "repository_id": repo.id,
+                        "path": str(item.get("path") or item.get("file") or ""),
+                        "functions": list(item.get("functions") or item.get("symbols") or []),
+                        "score": int(item.get("score") or 0),
+                    }
+                    for item in list(preflight.diagnostics.get("qualification") or [])
+                    if item.get("accepted")
+                ],
+                "sources": [
+                    f"repository:{repo.id}:{path}"
+                    for path in list(preflight.diagnostics.get("authoritative_sources") or [])
+                ],
+                "usable": bool(preflight.diagnostics.get("authoritative_sources")),
+                "errors": [],
+                "summary": (
+                    f"CLIMATE selected {len(preflight.diagnostics.get('authoritative_sources') or [])} "
+                    "authoritative implementation source(s) locally."
+                ),
+            },
+            conversation_id=str(payload.get("conversation_id") or "").strip(),
+            repository_investigation=can_investigate,
         )
         self._run_scope[str(result["id"])] = (ws, repo.id)
         self._run_meta[str(result["id"])] = {
@@ -233,6 +266,7 @@ class ClimateService:
             "selected_files": selected_files,
             "current_file": current_file,
             "provider_invoked": True,
+            "conversation_id": result.get("conversation_id") or "",
             "preflight": {
                 "ok": True,
                 "activity": list(preflight.activity),
@@ -292,6 +326,11 @@ class ClimateService:
                     f"instruction_files={','.join(preflight_meta.get('instruction_files') or []) or '(none)'}",
                     f"skills_used={','.join(preflight_meta.get('skills_used') or []) or '(none)'}",
                     f"source_files={','.join(preflight_meta.get('source_files') or []) or '(none)'}",
+                    f"candidates_found={(preflight_meta.get('diagnostics') or {}).get('candidates_found') or 0}",
+                    "authoritative_sources=" + (
+                        ",".join((preflight_meta.get("diagnostics") or {}).get("authoritative_sources") or [])
+                        or "(none)"
+                    ),
                     f"context_chars={preflight_meta.get('context_chars') or 0}",
                     f"context_tokens_est={preflight_meta.get('context_tokens_est') or 0}",
                     f"confidence={preflight_meta.get('confidence') or (preflight_meta.get('diagnostics') or {}).get('confidence') or 'n/a'}",
@@ -302,6 +341,15 @@ class ClimateService:
                 if total is None:
                     total = (usage.get("input_tokens") or 0) + (usage.get("output_tokens") or 0)
                 diag_lines.append(f"current_run_tokens={total or 0}")
+                for item in list((preflight_meta.get("diagnostics") or {}).get("qualification") or []):
+                    functions = ",".join(item.get("functions") or item.get("symbols") or []) or "(none)"
+                    diag_lines.append(
+                        "evidence "
+                        f"file={item.get('path') or item.get('file')} "
+                        f"function/symbol={functions} score={item.get('score', 0)} "
+                        f"accepted={'Yes' if item.get('accepted') else 'No'} "
+                        f"reason={item.get('reason') or 'n/a'}"
+                    )
                 pref_log = pref_log + "\n" + "\n".join(diag_lines)
             logs = str(result.get("logs") or "")
             if pref_log and "[climate_context_resolver]" not in logs and "[climate_preflight]" not in logs:

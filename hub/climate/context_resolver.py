@@ -30,6 +30,18 @@ _META_LINE = re.compile(
     r"(?im)^(description|triggers|paths|modes|capabilities|tags)\s*:\s*(.+)$"
 )
 _SYMBOL = re.compile(r"\b(?:def|class|function|const|let|var|interface|type)\s+([A-Za-z_][\w]*)")
+_PATH_REFERENCE = re.compile(
+    r"(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+\.(?:py|js|ts|tsx|jsx|go|rs|java|rb|php|cs))"
+)
+_BACKTICK_SYMBOL = re.compile(r"`([A-Za-z_][A-Za-z0-9_]{3,})`")
+
+_CODE_SUFFIXES = {
+    ".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".java", ".rb", ".php", ".cs",
+}
+_PROMPT_NOISE = {
+    "anything", "cite", "exact", "files", "functions", "give", "implementation",
+    "explain", "logic", "edit", "nothing", "please", "source", "sources", "the", "this",
+}
 
 PROVIDER_INSTRUCTION_FILES = {
     "codex": ("CODEX.md", ".codex.md"),
@@ -38,11 +50,12 @@ PROVIDER_INSTRUCTION_FILES = {
 }
 
 GATE_MESSAGE = "Not enough repository evidence. Model not invoked · 0 tokens."
-MAX_PACKET_CHARS = 24_000
+MAX_PACKET_CHARS = 18_000
 MAX_SKILL_CHARS = 4_000
 MAX_SOURCE_CHARS = 8_000
 MAX_SOURCES = 8
 MAX_SEARCH_HITS = 12
+MAX_CANDIDATES = 64
 
 # Compatibility aliases for older imports/tests.
 CouldNotFindMessage = GATE_MESSAGE
@@ -75,12 +88,23 @@ class ContextResolverResult:
             f"instruction_files={','.join(self.instruction_files) or '(none)'}",
             f"skills_used={','.join(self.skills_used) or '(none)'}",
             f"source_files={','.join(self.source_files) or '(none)'}",
+            f"candidates_found={self.diagnostics.get('candidates_found', 0)}",
+            f"authoritative_sources={','.join(self.diagnostics.get('authoritative_sources') or []) or '(none)'}",
             f"context_chars={self.context_chars}",
             f"context_tokens_est={self.context_tokens_est}",
             f"confidence={self.confidence}",
             f"provider_invoked={'Yes' if self.provider_invoked else 'No'}",
             "current_run_tokens=0",
         ]
+        for item in list(self.diagnostics.get("qualification") or []):
+            functions = ",".join(item.get("functions") or item.get("symbols") or []) or "(none)"
+            diag.append(
+                "evidence "
+                f"file={item.get('path') or item.get('file')} "
+                f"function/symbol={functions} score={item.get('score', 0)} "
+                f"accepted={'Yes' if item.get('accepted') else 'No'} "
+                f"reason={item.get('reason') or 'n/a'}"
+            )
         lines.append("[climate_context_resolver_diagnostics]")
         lines.extend(diag)
         return "\n".join(lines)
@@ -114,6 +138,25 @@ def _clip(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
     return text[: max(0, limit - 1)] + "…"
+
+
+def _source_excerpt(text: str, *, path: str, prompt: str, limit: int = MAX_SOURCE_CHARS) -> str:
+    """Keep the implementation hit, not just the beginning of a large file."""
+    value = str(text or "")
+    if len(value) <= limit:
+        return value
+    lower = value.lower()
+    domain = sorted(_domain_tokens(prompt))
+    needles: list[str] = []
+    if _is_code_path(path):
+        for token in domain:
+            needles.extend((f"def derive_{token}", f"function derive_{token}", f"def {token}_"))
+    needles.extend(domain)
+    position = next((lower.find(needle) for needle in needles if needle and lower.find(needle) >= 0), -1)
+    if position < 0:
+        return _clip(value, limit)
+    start = max(0, position - 900)
+    return _clip(value[start:], limit)
 
 
 def _repo_root(repo: Repository) -> Path | None:
@@ -443,42 +486,140 @@ def select_applicable_instructions(
     return chosen
 
 
-def _authoritative_sources(source_files: list[str], instruction_files: list[str]) -> list[str]:
-    instruction_set = {p.replace("\\", "/").lstrip("/") for p in instruction_files}
-    banned = {n.lower() for n in INSTRUCTION_FILENAMES} | {"skills.md"}
-    out: list[str] = []
-    for path in source_files:
-        rel = path.replace("\\", "/").lstrip("/")
-        name = rel.split("/")[-1].lower()
-        if rel in instruction_set or name in banned or rel.lower() in {"skills.md", "docs/skills.md"}:
-            continue
-        out.append(rel)
-    return out
+def _implementation_question(prompt: str) -> bool:
+    lower = str(prompt or "").lower()
+    return bool(re.search(r"\b(implementation|implement|logic|function|symbol|code|derive[ds]?|scor(?:e|ing))\b", lower))
+
+
+def _is_test_path(path: str) -> bool:
+    rel = str(path or "").replace("\\", "/").lower()
+    name = rel.rsplit("/", 1)[-1]
+    return (
+        "/test" in f"/{rel}"
+        or name.startswith("test_")
+        or name.endswith("_test.py")
+        or ".test." in name
+        or ".spec." in name
+    )
+
+
+def _is_code_path(path: str) -> bool:
+    return Path(str(path or "")).suffix.lower() in _CODE_SUFFIXES
+
+
+def _domain_tokens(prompt: str) -> set[str]:
+    return {token for token in _tokens(prompt) if token not in _PROMPT_NOISE}
+
+
+def _identifier_matches_domain(value: str, domain: set[str]) -> bool:
+    parts = {part for part in re.split(r"[^a-z0-9]+", str(value or "").lower()) if part}
+    return any(token in parts for token in domain)
+
+
+def _qualify_source_rows(
+    source_rows: list[dict[str, Any]], *, prompt: str
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Rank candidates and identify executable implementation authority."""
+    implementation = _implementation_question(prompt)
+    domain = _domain_tokens(prompt)
+    qualified: list[dict[str, Any]] = []
+    diagnostics: list[dict[str, Any]] = []
+    for row in source_rows:
+        path = str(row.get("path") or "")
+        content = str(row.get("content") or "")
+        symbols = list(dict.fromkeys(_SYMBOL.findall(content)))[:24]
+        relevant_symbols = [
+            symbol for symbol in symbols
+            if _identifier_matches_domain(symbol, domain)
+        ]
+        code = _is_code_path(path)
+        test = _is_test_path(path)
+        path_domain_match = _identifier_matches_domain(path, domain)
+        score = int(row.get("score") or 0)
+        rank_score = score
+        accepted = False
+        reason = "supporting_candidate"
+
+        if implementation:
+            if test:
+                rank_score -= 10
+                reason = "test_support_only"
+            elif not code:
+                rank_score -= 6
+                reason = "documentation_support_only"
+            elif relevant_symbols:
+                rank_score += 24 + min(12, len(relevant_symbols) * 3)
+                accepted = True
+                reason = "executable_relevant_symbol"
+            elif path_domain_match and symbols:
+                rank_score += 18
+                accepted = True
+                reason = "executable_path_and_symbols"
+            elif str(row.get("reason") or "") == "selected":
+                rank_score += 14
+                accepted = True
+                reason = "explicit_executable_selection"
+            else:
+                rank_score += 4 if code else 0
+                reason = "executable_without_relevant_symbol"
+        else:
+            accepted = not test
+            reason = "relevant_source" if accepted else "test_support_only"
+            rank_score += 8 if code else 0
+
+        enriched = {
+            **row,
+            "rank_score": rank_score,
+            "symbols": symbols,
+            "relevant_symbols": relevant_symbols,
+            "authoritative": accepted,
+            "qualification_reason": reason,
+        }
+        if accepted:
+            qualified.append(enriched)
+        diagnostics.append({
+            "path": path,
+            "file": path,
+            "functions": relevant_symbols or symbols[:6],
+            "symbols": relevant_symbols or symbols[:6],
+            "score": rank_score,
+            "accepted": accepted,
+            "reason": reason,
+            "retrieval_reason": str(row.get("reason") or ""),
+        })
+
+    qualified.sort(key=lambda row: (-int(row.get("rank_score") or 0), str(row.get("path") or "")))
+    diagnostics.sort(key=lambda row: (-int(row.get("score") or 0), str(row.get("path") or "")))
+    return qualified, diagnostics
 
 
 def _confidence(
     *,
-    has_instructions: bool,
-    authoritative: list[str],
-    source_rows: list[dict[str, Any]],
-    skills_used: list[dict[str, Any]],
+    authoritative_rows: list[dict[str, Any]],
 ) -> str:
-    if not has_instructions:
-        return "low"
-    auth = set(authoritative)
-    strong = [
-        row for row in source_rows
-        if row.get("path") in auth and (
-            int(row.get("score") or 0) >= 10
-            or str(row.get("reason") or "") in {"selected", "expand:symbol", "expand:content"}
-            or str(row.get("reason") or "").startswith("ri:")
-        )
-    ]
-    if len(strong) >= 2 or (len(strong) >= 1 and skills_used):
+    if len(authoritative_rows) >= 2:
         return "high"
-    if len(authoritative) >= 1:
-        return "medium" if len(strong) == 0 or not skills_used else "high"
+    if len(authoritative_rows) == 1:
+        row = authoritative_rows[0]
+        if str(row.get("reason") or "") == "selected" or len(row.get("relevant_symbols") or []) >= 2:
+            return "high"
+        return "medium"
     return "low"
+
+
+def _has_primary_implementation(rows: list[dict[str, Any]], *, prompt: str) -> bool:
+    domain = _domain_tokens(prompt)
+    for row in rows:
+        for symbol in row.get("relevant_symbols") or []:
+            lower = str(symbol).lower()
+            if any(
+                lower.startswith(f"derive_{token}")
+                or lower.startswith(f"compute_{token}")
+                or lower.startswith(f"calculate_{token}")
+                for token in domain
+            ):
+                return True
+    return False
 
 
 def resolve_climate_context(
@@ -496,8 +637,9 @@ def resolve_climate_context(
     include_repo_context: bool = False,
     repository_intelligence: Any | None = None,
     handoff: bool = False,
+    repository_agent: bool = False,
 ) -> ContextResolverResult:
-    """Local zero-token context resolution + confidence gate."""
+    """Local zero-token context resolution and repository-agent acceleration."""
     mode = classify_task_mode(prompt, task_mode)
     activity: list[str] = ["Resolving repo"]
     root = _repo_root(repo)
@@ -514,7 +656,7 @@ def resolve_climate_context(
         result.diagnostics = {"reason": "repository_path_missing", "repository_id": repo.id, "confidence": "low"}
         return result
 
-    activity.append(f"Resolved repo {repo.id}")
+    activity.append(f"Repo resolved: {repo.id}")
     activity.append("Loading instructions")
 
     instruction_items = load_repo_instructions(root, repo_id=repo.id)
@@ -535,16 +677,19 @@ def resolve_climate_context(
         max_chars=8_000 if include_repo_context else 5_000,
     )
     instruction_files = [str(item.get("path") or "") for item in applicable]
+    activity.append(f"Instructions loaded: {len(instruction_files)}")
 
     tokens = _tokens(prompt)
     source_rows: list[dict[str, Any]] = []
     seen_paths: set[str] = set()
+    expansion_terms: list[str] = []
+    expansion_paths: list[str] = []
 
     def _add_source(path: str, content: str, *, reason: str, score: int = 1) -> None:
         rel = path.replace("\\", "/").lstrip("/")
         if not rel or rel in seen_paths:
             return
-        clipped = _clip(content, MAX_SOURCE_CHARS)
+        clipped = _source_excerpt(content, path=rel, prompt=prompt)
         if not clipped.strip():
             return
         seen_paths.add(rel)
@@ -597,10 +742,25 @@ def resolve_climate_context(
                     if summary:
                         _add_source(path, summary, reason="ri-summary", score=int(item.get("score") or 3))
 
-        query_terms = sorted(tokens, key=len, reverse=True)[:8 if expand else 6]
+        if expand:
+            for path in expansion_paths[:24]:
+                if path in seen_paths:
+                    continue
+                try:
+                    data = repository_workspace.preview(repo, path)
+                except Exception:  # noqa: BLE001
+                    continue
+                if data.get("binary") or data.get("error"):
+                    continue
+                content = str(data.get("content") or "")
+                score = 16 + _score_text(path + "\n" + content[:3000], tokens)
+                _add_source(path, content, reason="expand:reference", score=score)
+
+        query_terms = expansion_terms[:4] if expand else sorted(tokens, key=len, reverse=True)[:6]
         queries = []
         if query_terms:
-            queries.append(" ".join(query_terms[:3]))
+            if not expand:
+                queries.append(" ".join(query_terms[:3]))
         if expand:
             queries.extend(query_terms[:4])
             for sym in _SYMBOL.findall(prompt or ""):
@@ -616,7 +776,22 @@ def resolve_climate_context(
                     result = repository_workspace.search(repo, q=str(search_q), mode=mode_name)
                 except Exception:  # noqa: BLE001
                     continue
-                for match in list(result.get("matches") or [])[:MAX_SEARCH_HITS]:
+                matches = list(result.get("matches") or [])
+                if _implementation_question(prompt):
+                    matches.sort(key=lambda match: (
+                        0 if _is_code_path(str(match.get("path") or "")) and not _is_test_path(str(match.get("path") or "")) else 1,
+                        0 if _identifier_matches_domain(str(match.get("path") or ""), _domain_tokens(prompt)) else 1,
+                        str(match.get("path") or ""),
+                    ))
+                unique_matches: list[dict[str, Any]] = []
+                unique_match_paths: set[str] = set()
+                for match in matches:
+                    match_path = str(match.get("path") or "")
+                    if not match_path or match_path in unique_match_paths:
+                        continue
+                    unique_match_paths.add(match_path)
+                    unique_matches.append(match)
+                for match in unique_matches[:MAX_SEARCH_HITS]:
                     path = str(match.get("path") or "")
                     if not path or path in seen_paths:
                         continue
@@ -632,7 +807,7 @@ def resolve_climate_context(
                         continue
                     reason = f"{'expand' if expand else 'search'}:{mode_name}"
                     _add_source(path, content, reason=reason, score=max(1, score + (3 if expand else 0)))
-                    if len(source_rows) >= MAX_SOURCES:
+                    if len(source_rows) >= MAX_CANDIDATES:
                         return
 
         if len(source_rows) < (3 if expand else 2):
@@ -657,7 +832,7 @@ def resolve_climate_context(
                     reason=("expand:" + reason) if expand else reason,
                     score=5 + (2 if expand else 0),
                 )
-                if len(source_rows) >= MAX_SOURCES:
+                if len(source_rows) >= MAX_CANDIDATES:
                     break
 
     activity.append("Matching skill")
@@ -681,38 +856,64 @@ def resolve_climate_context(
         )
     skill_names = [str(row.get("name") or row.get("path") or "") for row in skills_used]
 
-    source_rows.sort(key=lambda row: (-int(row.get("score") or 0), str(row.get("path") or "")))
-    source_rows[:] = source_rows[:MAX_SOURCES]
-    source_files = [str(row.get("path") or "") for row in source_rows]
-    authoritative = _authoritative_sources(source_files, instruction_files)
+    authoritative_rows, qualification = _qualify_source_rows(source_rows, prompt=prompt)
     has_instructions = bool(instruction_files)
-    confidence = _confidence(
-        has_instructions=has_instructions,
-        authoritative=authoritative,
-        source_rows=source_rows,
-        skills_used=skills_used,
-    )
+    confidence = _confidence(authoritative_rows=authoritative_rows)
 
     expanded = False
-    if confidence == "medium":
+    initial_evidence_weak = confidence != "high" or (
+        _implementation_question(prompt)
+        and not _has_primary_implementation(authoritative_rows, prompt=prompt)
+    )
+    if initial_evidence_weak:
+        # Exactly one deterministic local expansion. Follow concrete code paths and
+        # terminology exposed by matched instructions, skills, docs, and symbols.
+        expansion_blobs = [str(item.get("content") or "") for item in applicable]
+        expansion_blobs.extend(str(item.get("content") or "") for item in skills_used)
+        expansion_blobs.extend(str(row.get("content") or "") for row in source_rows[:MAX_CANDIDATES])
+        term_candidates: list[str] = []
+        path_candidates: list[str] = []
+        domain = _domain_tokens(prompt)
+        for blob in expansion_blobs:
+            path_candidates.extend(_PATH_REFERENCE.findall(blob))
+            symbols = _SYMBOL.findall(blob) + _BACKTICK_SYMBOL.findall(blob)
+            term_candidates.extend(symbol for symbol in symbols if _identifier_matches_domain(symbol, domain))
+        for token in sorted(domain):
+            term_candidates.extend((f"derive_{token}", f"{token}_score", f"{token}_rule", token))
+        unique_terms = list(dict.fromkeys(term_candidates))
+        unique_terms.sort(key=lambda value: (0 if str(value).startswith("derive_") else 1, -len(str(value)), str(value)))
+        expansion_terms[:] = unique_terms[:12]
+        unique_paths = list(dict.fromkeys(path.replace("\\", "/").lstrip("/") for path in path_candidates))
+        unique_paths.sort(key=lambda value: (
+            0 if _identifier_matches_domain(value, domain) else (1 if "derive" in value.lower() else 2),
+            _is_test_path(value),
+            value,
+        ))
+        expansion_paths[:] = unique_paths[:24]
         activity.append("Expanding local search")
         _gather(expand=True)
         expanded = True
-        source_rows.sort(key=lambda row: (-int(row.get("score") or 0), str(row.get("path") or "")))
-        source_rows[:] = source_rows[:MAX_SOURCES]
-        source_files = [str(row.get("path") or "") for row in source_rows]
-        authoritative = _authoritative_sources(source_files, instruction_files)
-        confidence = _confidence(
-            has_instructions=has_instructions,
-            authoritative=authoritative,
-            source_rows=source_rows,
-            skills_used=skills_used,
-        )
-        # After one expansion, medium with authoritative source may promote to high.
-        if confidence == "medium" and authoritative and has_instructions:
-            confidence = "high"
+        authoritative_rows, qualification = _qualify_source_rows(source_rows, prompt=prompt)
+        confidence = _confidence(authoritative_rows=authoritative_rows)
 
+    authoritative_paths = [str(row.get("path") or "") for row in authoritative_rows]
+    authoritative_set = set(authoritative_paths)
+    ranked_rows = sorted(
+        source_rows,
+        key=lambda row: (
+            0 if str(row.get("path") or "") in authoritative_set else 1,
+            -int(next((q.get("score") or 0 for q in qualification if q.get("path") == row.get("path")), row.get("score") or 0)),
+            str(row.get("path") or ""),
+        ),
+    )[:MAX_SOURCES]
+    source_rows = ranked_rows
+    source_files = [str(row.get("path") or "") for row in source_rows]
+
+    activity.append(f"Found {len(qualification)} candidates")
+    activity.append(f"Selected {len(authoritative_paths)} authoritative sources")
+    # Compatibility marker for the existing preflight activity renderer.
     activity.append(f"Found {len(source_files)} sources")
+    activity.append(f"{len(source_files)} likely sources")
 
     diff_note = ""
     if mode == "edit":
@@ -725,8 +926,8 @@ def resolve_climate_context(
         except Exception:  # noqa: BLE001
             diff_note = ""
 
-    gate_ok = confidence == "high" and has_instructions and bool(authoritative)
-    if confidence == "low" or not gate_ok:
+    gate_ok = bool(repository_agent) or (confidence == "high" and bool(authoritative_paths))
+    if not gate_ok:
         activity.append("Building context")
         result = ContextResolverResult(
             ok=False,
@@ -745,12 +946,20 @@ def resolve_climate_context(
             "repository_id": repo.id,
             "workspace": workspace,
             "has_instructions": has_instructions,
-            "has_sources": bool(authoritative),
+            "has_sources": bool(authoritative_paths),
+            "candidates_found": len(qualification),
+            "authoritative_sources": authoritative_paths,
+            "qualification": qualification,
             "confidence": result.confidence,
             "expanded_search": expanded,
+            "context_chars": 0,
+            "context_tokens_est": 0,
+            "provider_invoked": False,
+            "current_run_tokens": 0,
             "provider": provider,
             "model": model,
             "handoff": bool(handoff),
+            "repository_agent": bool(repository_agent),
         }
         return result
 
@@ -766,6 +975,13 @@ def resolve_climate_context(
         f"CLIMATE context packet ({mode.upper()}).",
         f"Task:\n{(prompt or '').strip()}",
         f"Confidence: {confidence}",
+        (
+            "Repository access: the provider starts at the approved repository root and may "
+            "independently search, read, and trace it. The items below are starting hints, not "
+            "a complete evidence boundary."
+            if repository_agent
+            else "Repository access: bounded packet only."
+        ),
     ]
     if applicable:
         parts.append("Applicable repository instructions (nearest/specific first):")
@@ -782,11 +998,26 @@ def resolve_climate_context(
             parts.append(
                 f"### {skill.get('name')}\n{_clip(str(skill.get('content') or ''), 2000)}"
             )
-    if source_rows:
-        parts.append("Relevant code/docs:")
+    if source_rows and repository_agent:
+        parts.append("Likely source hints (verify in the repository before answering):")
+        qualification_by_path = {
+            str(item.get("path") or ""): item for item in qualification
+        }
         for row in source_rows:
+            path = str(row.get("path") or "")
+            qualified = qualification_by_path.get(path) or {}
+            symbols = list(qualified.get("functions") or qualified.get("symbols") or [])[:8]
+            label = "authoritative candidate" if path in authoritative_set else "supporting candidate"
             parts.append(
-                f"### {row.get('path')} ({row.get('reason')})\n"
+                f"- {path} | {label} | score={qualified.get('score', row.get('score', 0))} | "
+                f"symbols={','.join(symbols) or '(none)'} | reason={qualified.get('reason') or row.get('reason')}"
+            )
+    elif source_rows:
+        parts.append("Ranked repository evidence (authoritative implementation first):")
+        for row in source_rows:
+            evidence_label = "authoritative" if str(row.get("path") or "") in authoritative_set else "supporting"
+            parts.append(
+                f"### {row.get('path')} ({evidence_label}; {row.get('reason')})\n"
                 f"{_clip(str(row.get('content') or ''), MAX_CONTEXT_FILE_CHARS)}"
             )
     if selection and selection.strip():
@@ -794,10 +1025,17 @@ def resolve_climate_context(
     if diff_note:
         parts.append(diff_note)
     if mode == "ask":
-        parts.append(
-            "ASK/EXPLAIN constraints: read-only evidence only; no edits/diffs; "
-            "cite concrete paths/functions from this packet."
-        )
+        if repository_agent:
+            parts.append(
+                "ASK/EXPLAIN constraints: investigate the repository as needed with safe read-only "
+                "search, file/symbol/reference/import/test/git inspection commands. Do not modify "
+                "files or repository state. Cite the exact implementation paths/functions you verify."
+            )
+        else:
+            parts.append(
+                "ASK/EXPLAIN constraints: read-only evidence only; no edits/diffs; "
+                "cite concrete paths/functions from this packet."
+            )
     else:
         parts.append(
             "EDIT constraints: propose replacements only after using this evidence; "
@@ -830,9 +1068,17 @@ def resolve_climate_context(
             "provider": provider,
             "model": model,
             "handoff": bool(handoff),
+            "repository_agent": bool(repository_agent),
             "include_repo_context": bool(include_repo_context),
             "confidence": confidence,
             "expanded_search": expanded,
+            "candidates_found": len(qualification),
+            "authoritative_sources": authoritative_paths,
+            "qualification": qualification,
+            "context_chars": len(packet),
+            "context_tokens_est": _estimate_tokens(len(packet)),
+            "provider_invoked": True,
+            "current_run_tokens": 0,
             "reuse_hint": "same_provider_session" if not handoff else "compact_handoff",
         },
     )

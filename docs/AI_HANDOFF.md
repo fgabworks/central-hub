@@ -4,17 +4,36 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**CLIMATE Context Resolver (2026-08-14)**
+**VANTA native Codex repository investigation (2026-08-14)**
+
+For a valid VANTA repository, the local Context Resolver is now an accelerator rather
+than a Codex gate. It still runs at zero tokens, ranks/qualifies likely sources, and
+expands once when weak, but sends compact instruction/skill/path+symbol hints without
+duplicating source bodies. Agent Center permits only adapters advertising native
+repository investigation to proceed without a usable initial evidence packet. Codex ASK
+runs at the approved repository cwd with `--sandbox read-only` and may use safe read-only
+search/file/symbol/reference/import/test/git inspection. Providers without repository
+access keep the prior cannot-verify/zero-token evidence gate; EDIT keeps the existing
+proposal/diff Accept/Reject flow.
+
+CLIMATE chat IDs map to Agent Center conversations. When reuse is enabled, Codex's
+official persisted exec session ID is captured from JSONL and resumed explicitly only for
+the same immediately preceding provider/model/repository scope. Cross-provider handoff
+stays compact and breaks continuation. Raw JSONL remains diagnostics-only.
+
+Prior: **CLIMATE Context Resolver (2026-08-14)**
 
 Deterministic local context resolution runs before any coding-provider call (0 AI
 tokens): resolve repo → applicable/nearest instructions → metadata-scored skills →
-RI/local search → bounded packet → confidence gate. High confidence invokes the
-selected provider; medium expands local search once; low/no authoritative source
-returns `Not enough repository evidence. Model not invoked · 0 tokens.` ASK stays
-read-only; EDIT gathers evidence first. Same-provider session reuse; cross-provider
-compact handoff only. Activity:
-`Resolving repo → Loading instructions → Matching skill → Searching repo → Found N
-sources → Building context → Asking Codex`.
+RI/local search → executable-symbol qualification → one local path/terminology expansion
+when weak → bounded packet → confidence gate. Docs/tests may lead to implementation but
+do not qualify as authoritative for implementation questions. High confidence invokes
+the selected provider through the existing Agent Center grounding/runtime; low or
+unqualified evidence returns `Not enough repository evidence. Model not invoked · 0
+tokens.` ASK stays read-only; EDIT gathers evidence first. Context packets are capped at
+18,000 characters, same-provider session reuse remains supported, and cross-provider
+handoff stays compact. Diagnostics record candidate/authority decisions, symbols,
+scores, reasons, confidence, context size, invocation state, and current-run tokens.
 
 Prior: **CLIMATE zero-token preflight + evidence gate (2026-08-14)**
 

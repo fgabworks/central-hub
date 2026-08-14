@@ -266,6 +266,10 @@ class ClimateTaskModeUnitTests(unittest.TestCase):
         self.assertEqual(classify_task_mode("Explain how ANC Binary is derived"), "ask")
         self.assertEqual(classify_task_mode("what is the name of the repo selected"), "ask")
         self.assertEqual(classify_task_mode("Fix the null check in app.py"), "edit")
+        self.assertEqual(
+            classify_task_mode("Give me the logic of the ANC. Cite exact files/functions. Do not edit anything."),
+            "ask",
+        )
         self.assertEqual(classify_task_mode("anything", "edit"), "edit")
 
     def test_humanize_strips_edits_json(self):
@@ -293,18 +297,24 @@ class ClimateTaskModeUnitTests(unittest.TestCase):
         def fake_availability(provider=None, *, refresh=False):
             row = {
                 "id": "codex", "state": "connected", "status": "Connected",
-                "detail": "", "account_label": "", "capabilities": {},
+                "detail": "", "account_label": "", "capabilities": {"native_repository_investigation": True},
             }
             return row if provider else [row]
 
         adapter.availability = fake_availability  # type: ignore[method-assign]
         ask = adapter.execute(
             workspace="work", repository_id="work-repo", provider="codex", model="m",
-            prompt="Explain ANC Binary", task_mode="ask",
+            prompt="CLIMATE context packet (ASK).\nLikely source: pkg/scoring.py",
+            task_mode="ask", selected_files=["pkg/scoring.py"],
+            repository_investigation=True, conversation_id="conversation-1",
         )
         self.assertEqual(ask["task_mode"], "ask")
         self.assertIn("ASK / EXPLAIN", center.payload["prompt"])
         self.assertNotIn('{"edits":[{"path"', center.payload["prompt"])
+        self.assertEqual(center.payload["files"], {})
+        self.assertTrue(center.payload["repository_investigation"])
+        self.assertEqual(center.payload["conversation_id"], "conversation-1")
+        self.assertIn("independently search", center.payload["prompt"])
         edit = adapter.execute(
             workspace="work", repository_id="work-repo", provider="codex", model="m",
             prompt="Fix ANC Binary", task_mode="edit",

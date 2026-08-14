@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-14 (CLIMATE Context Resolver + confidence gate).
+Last verified: 2026-08-14 (VANTA native Codex repository investigation).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -19,9 +19,14 @@ explicitly and can use authenticated Claude Code or Cursor Agent with selected A
 Codex capacity in the AI usage chrome comes from authenticated `codex app-server`
 (`account/rateLimits/read` + `account/rateLimits/updated`), not from session token
 estimates; unavailable/non–ChatGPT auth shows `Codex limit unavailable`.
-CLIMATE coding runs use a deterministic Context Resolver (AGENTS/SKILLS/provider/nested
-instructions + RI/local search + confidence gate) and do not invoke providers without
-enough repository evidence (`Not enough repository evidence. Model not invoked · 0 tokens`).
+CLIMATE coding runs use a deterministic zero-token Context Resolver
+(AGENTS/SKILLS/provider/nested instructions + RI/local search). Implementation questions
+rank executable files/symbols above docs/tests and expand locally once when evidence is
+weak. For Codex, a valid VANTA repository is the evidence boundary: ASK may independently
+search/read/trace the approved cwd under `--sandbox read-only` even when local confidence
+is low. The resolver sends compact instruction/skill/path+symbol hints, not duplicated
+source bodies. Packet-only providers retain the evidence gate; calls without enough authoritative
+evidence remain local (`Not enough repository evidence. Model not invoked · 0 tokens`).
 VANTA and ARCTIC repository/run/proposal scopes are server-isolated; repositories tagged
 `personal`/`arctic` belong only to ARCTIC and all others default to VANTA. AiriX Tool
 Runtime and ECLIPSE are unchanged.
@@ -231,6 +236,10 @@ First-class context sources are DHIS2 environment, RO database/Data Explorer, re
 files, workspace, and prior findings. They add only scoped read-only tools/files; whole-repo
 packing remains off. A selected DHIS2 Stage/Live environment is forced server-side in Hub
 tools. Provider sessions/context fingerprints are reused when supplied and supported.
+VANTA maps each CLIMATE chat to its Agent Center conversation; Codex persists the first
+same-provider exec session and resumes it by explicit session UUID only for the same
+provider, model, repository scope, and immediately preceding conversation run.
+Cross-provider handoff resets CLI continuation and remains a compact summary.
 Every Smart Routing execution records event-sourced AI usage telemetry
 (`hub/agent_center/routing/telemetry.py`): tier, Deterministic/AI/Hybrid, LLM Yes/No,
 provider/model, tokens (actual when provider-reported, else marked estimate), tools,
@@ -252,7 +261,9 @@ plus Claude Code / Cursor Agent / Codex CLIs. Provider accounts are managed at
 `/system/ai-connections`; Aira and AiriX are profiles, never providers.
 OpenAI and Grok models come from the provider model-list endpoint; Codex MVP uses the
 authenticated Codex default model only (`__provider_default__`, no discovery yet) via
-`codex exec -C <repo> --sandbox read-only --ephemeral --json` for AiriX. Cursor uses
+read-only JSONL `codex exec` runs at the approved repo cwd. Non-conversation runs stay
+ephemeral; same-conversation VANTA runs use official explicit `codex exec resume <UUID>`
+continuation while retaining `--sandbox read-only`. Cursor uses
 `agent models`. Claude Code currently exposes only its provider default because its
 supported non-interactive CLI has no model-list command.
 Inaccessible models are never shown. Optional `OPENAI_ALLOWED_MODELS` can further restrict

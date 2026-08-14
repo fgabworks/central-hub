@@ -46,6 +46,8 @@ def classify_task_mode(prompt: str, explicit: str | None = None) -> str:
     if not text:
         return "ask"
     lower = text.lower()
+    if re.search(r"\b(?:do\s+not|don't|dont|never)\s+(?:edit|modify|change|write)\b|\bno\s+(?:file\s+)?edits?\b", lower):
+        return "ask"
     ask_score = 0
     edit_score = 0
     if "?" in text:
@@ -106,6 +108,11 @@ class ClimateCodingAdapter:
             "error": str(details.get("error") or ""),
         }
 
+    def can_investigate_repository(self, provider: str) -> bool:
+        connection = self.availability(provider)
+        capabilities = dict((connection or {}).get("capabilities") or {})
+        return bool(capabilities.get("native_repository_investigation"))
+
     def execute(
         self,
         *,
@@ -122,6 +129,9 @@ class ClimateCodingAdapter:
         reuse_session: bool = True,
         handoff: bool = False,
         preflight_log: str = "",
+        evidence_packet: dict[str, Any] | None = None,
+        conversation_id: str = "",
+        repository_investigation: bool = False,
     ) -> dict[str, Any]:
         self._require_provider(provider)
         if workspace not in {"work", "personal"}:
@@ -141,6 +151,7 @@ class ClimateCodingAdapter:
             mode = "edit"
         elif "CLIMATE context packet (ASK)" in prompt or "CLIMATE preflight context packet (ASK)" in prompt:
             mode = "ask"
+        repository_investigation = bool(repository_investigation and mode == "ask")
         files = list(dict.fromkeys(
             str(path).replace("\\", "/").lstrip("/")
             for path in ([current_file] + list(selected_files or []))
@@ -159,10 +170,24 @@ class ClimateCodingAdapter:
             context_note = [
                 "CLIMATE coding request (ASK / EXPLAIN mode).",
                 "Answer in clear human-readable prose (markdown allowed).",
-                "Use the bounded context packet (read-only).",
+                (
+                    "Use the compact context packet as starting guidance, then independently search, "
+                    "read, and trace the approved repository as needed."
+                    if repository_investigation
+                    else "Use the bounded context packet (read-only)."
+                ),
                 "Do NOT propose file edits, diffs, patches, or JSON {\"edits\":[...]} payloads.",
-                "Cite the concrete paths/functions from the packet.",
-                "Do not apply edits or execute commands.",
+                (
+                    "Cite the concrete implementation paths/functions you verify in the repository."
+                    if repository_investigation
+                    else "Cite the concrete paths/functions from the packet."
+                ),
+                (
+                    "Safe read-only search, file/symbol/reference/import/test/git inspection commands "
+                    "are allowed. Do not modify files or repository state and do not run destructive commands."
+                    if repository_investigation
+                    else "Do not apply edits or execute commands."
+                ),
             ]
         if selection:
             context_note.append("Current editor selection:\n" + selection[:20_000])
@@ -195,13 +220,23 @@ class ClimateCodingAdapter:
             "model": model,
             "prompt": packed_prompt,
             "tool_ids": [],
-            "files": {repository_id: files} if repository_id and workspace == "work" else {},
+            "files": (
+                {}
+                if repository_investigation
+                else ({repository_id: files} if repository_id and workspace == "work" else {})
+            ),
             "repository_ids": [repository_id] if repository_id and workspace == "work" else [],
             "active_repository_id": repository_id if workspace == "work" else None,
             "selected_repository_id": repository_id if workspace == "work" else None,
             "tool_runtime_lean_context": True if has_packet else (not include_repo_context),
+            "bounded_evidence_only": bool(has_packet),
             "reuse_provider_session": bool(reuse_session) and not handoff,
+            "repository_investigation": bool(repository_investigation),
         }
+        if conversation_id:
+            payload["conversation_id"] = conversation_id
+        if isinstance(evidence_packet, dict):
+            payload["evidence_packet"] = evidence_packet
         try:
             run = self.agent_center.start_run(payload)
         except AgentCenterError as exc:
@@ -337,7 +372,9 @@ class ClimateCodingAdapter:
             "error": run.get("error") or "",
             "logs": run.get("logs") or run.get("log") or "",
             "usage": dict(run.get("usage") or {}),
+            "tool_activity": list(run.get("tool_activity") or []),
             "cancel_requested": bool(run.get("cancel_requested")),
             "created_at": run.get("created_at"),
             "finished_at": run.get("finished_at"),
+            "conversation_id": run.get("conversation_id") or "",
         }

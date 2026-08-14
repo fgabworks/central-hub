@@ -698,6 +698,7 @@
     if (!t) return false;
     if (/^(thread|turn|response|item|event|tool|function_call|output_item)\.?/i.test(t)) return true;
     if (/^(thread\.started|turn\.started|turn\.completed|response\.|item\.|tool_call|function_call)/i.test(t)) return true;
+    if (/\[(thread\.started|turn\.started|turn\.completed|response\.|item\.|tool_call|function_call|message)\]/i.test(t)) return true;
     if (/^\{[\s\S]*"type"\s*:\s*"(thread|turn|response|item|event|tool)/i.test(t)) return true;
     if (/^\{[\s\S]*"type"\s*:\s*"[^"]+\.[^"]+"/i.test(t)) return true;
     if (/^(delta|reasoning|output_text|content_block|message_start|message_stop)\b/i.test(t)) return true;
@@ -717,6 +718,7 @@
     var text = String(prompt || "").trim();
     if (!text) return "ask";
     var lower = text.toLowerCase();
+    if (/\b(?:do\s+not|don't|dont|never)\s+(?:edit|modify|change|write)\b|\bno\s+(?:file\s+)?edits?\b/.test(lower)) return "ask";
     var askScore = 0;
     var editScore = 0;
     if (text.indexOf("?") >= 0) askScore += 2;
@@ -778,21 +780,20 @@
   }
   function splitRunOutput(logs, answer, taskMode) {
     var diag = [];
-    var clean = [];
     String(logs || "").split(/\r?\n/).forEach(function (line) {
       if (!line) return;
-      if (isRawProviderLine(line) || looksLikeEditsJson(line)) diag.push(line);
-      else clean.push(line);
+      // Provider stdout/stderr and protocol events are diagnostics-only. The
+      // normal chat body comes exclusively from the runner's final answer.
+      diag.push(line);
     });
     var body = String(answer || "").trim();
-    if (!body) body = clean.join("\n").trim();
     var humanized = humanizeAnswer(body, taskMode || "ask");
     if (humanized.diagnostics) {
       diag.push(humanized.diagnostics);
       body = humanized.text;
     } else if (body && (isRawProviderLine(body) || looksLikeProtocolDump(body) || looksLikeEditsJson(body))) {
       diag.push(body);
-      body = clean.filter(function (line) { return !isRawProviderLine(line) && !looksLikeEditsJson(line); }).join("\n").trim();
+      body = "";
       var again = humanizeAnswer(body, taskMode || "ask");
       if (again.diagnostics) {
         diag.push(again.diagnostics);
@@ -876,7 +877,7 @@
     if (has(/\b(Matching skill|Finding relevant skill)\b/i)) addStep("skill", "Matching skill");
     if (has(/\bExpanding local search\b/i)) addStep("expand", "Expanding local search");
     if (has(/\b(search(?:ing)?\s+repository|Searching repo|grep|glob|ripgrep|find_files?|codebase_search|workspace.?search)\b/i)) {
-      addStep("search", "Searching repo");
+      addStep("search", has(/Codex searching repository/i) ? "Codex searching repository" : "Searching repo");
     }
     var foundMatch = blob.match(/Found\s+(\d+)\s+sources?/i);
     if (foundMatch) addStep("sources", "Found " + foundMatch[1] + " sources");
@@ -1764,9 +1765,14 @@
         selected_files: files,
         include_repo_context: document.getElementById("climate-repo-context").checked,
         handoff: crossProvider,
-        reuse_session: !crossProvider
+        reuse_session: !crossProvider,
+        conversation_id: session.agentConversationId || ""
       })
     }).then(function (data) {
+      if (data.run && data.run.conversation_id) {
+        session.agentConversationId = data.run.conversation_id;
+        saveChatStore();
+      }
       if (state.stopRequested) {
         state.runId = data.run.id;
         state.run = data.run;
@@ -1777,9 +1783,10 @@
       state.run = data.run;
       if (data.run && data.run.preflight && data.run.preflight.activity) {
         var prefLog = "[climate_context_resolver]\n" + (data.run.preflight.activity || []).join("\n");
+        var preflightDiagnostics = prefLog + ((data.run.logs || "") ? ("\n" + data.run.logs) : "");
         upsertAssistantMessage({
           status: data.run.status === "completed" && data.run.provider_invoked === false ? "completed" : "running",
-          diagnostics: prefLog,
+          diagnostics: preflightDiagnostics,
           activity: parseActivityEvidence(prefLog + "\n" + (data.run.logs || ""), {
             running: data.run.provider_invoked !== false && data.run.status === "running",
             startedAt: Date.now()

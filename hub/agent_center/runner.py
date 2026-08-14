@@ -39,6 +39,7 @@ class AgentRunner:
         stdin_path: str | None = None,
         jsonl: bool = False,
         safety_repo: str | None = None,
+        session_reused: bool = False,
     ) -> None:
         timeout_seconds = max(5.0, min(float(timeout_seconds), float(MAX_TIMEOUT_SECONDS)))
         thread = threading.Thread(
@@ -52,6 +53,7 @@ class AgentRunner:
                 "stdin_path": stdin_path,
                 "jsonl": jsonl,
                 "safety_repo": safety_repo,
+                "session_reused": bool(session_reused),
             },
             daemon=True,
             name=f"agent-run-{run_id[:8]}",
@@ -85,6 +87,7 @@ class AgentRunner:
         stdin_path: str | None = None,
         jsonl: bool = False,
         safety_repo: str | None = None,
+        session_reused: bool = False,
     ) -> None:
         now = datetime.now(timezone.utc).isoformat()
         self.store.update_run(run_id, status="running", started_at=now)
@@ -135,7 +138,7 @@ class AgentRunner:
         self.store.update_run(run_id, pid=proc.pid)
 
         chunks: list[str] = []
-        accumulator = CodexJsonlAccumulator() if jsonl else None
+        accumulator = CodexJsonlAccumulator(session_reused=session_reused) if jsonl else None
         deadline = time.monotonic() + timeout_seconds
         assert proc.stdout is not None
         try:

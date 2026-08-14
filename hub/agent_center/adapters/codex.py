@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -35,6 +36,8 @@ class CodexAdapter(BaseCliAdapter):
                 "provider_default_model": True,
                 "jsonl_streaming": True,
                 "repository_runs": True,
+                "native_repository_investigation": True,
+                "safe_session_continuation": True,
                 "profiles": list(self.profiles_allowed),
             }
         )
@@ -240,26 +243,32 @@ class CodexAdapter(BaseCliAdapter):
         model: str,
         cwd: str,
         prompt_file: str = "",
+        provider_session_id: str = "",
+        persist_session: bool = False,
     ) -> list[str]:
         exe = self.resolve_executable() or (self.descriptor.executable or "codex")
         # Prefer stdin ("-") when a prompt file exists to avoid Windows argv limits.
         prompt_arg = "-" if prompt_file else (prompt or "")
-        argv = [
-            exe,
-            "exec",
-            "-C",
-            cwd,
-            "--sandbox",
-            "read-only",
-            "--ephemeral",
-            "--json",
-            prompt_arg,
-        ]
+        session_id = str(provider_session_id or "").strip()
+        if session_id and not re.fullmatch(
+            r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+            session_id,
+        ):
+            raise ValueError("Invalid Codex session id")
+        argv = [exe, "-C", cwd, "--sandbox", "read-only", "exec"]
+        if session_id:
+            argv.extend(["resume", "--json"])
+        else:
+            argv.append("--json")
+        if not persist_session:
+            argv.append("--ephemeral")
         # Omit --model when using provider default so Codex uses its configured/recommended default.
         if model and model not in {"", self.default_model_token, "__provider_default__"}:
-            insert_at = argv.index("--json")
-            argv[insert_at:insert_at] = ["--model", model]
-        assert_safe_codex_argv(argv)
+            argv.extend(["--model", model])
+        if session_id:
+            argv.append(session_id)
+        argv.append(prompt_arg)
+        assert_safe_codex_argv(argv, require_ephemeral=not persist_session)
         return argv
 
     def _default_template(self, mode: str) -> list[str]:

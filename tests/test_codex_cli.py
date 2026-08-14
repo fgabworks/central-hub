@@ -107,9 +107,29 @@ class CodexArgvSafetyTests(unittest.TestCase):
         )
         self.assertEqual(
             argv,
-            ["/safe/codex", "exec", "-C", "/repos/demo", "--sandbox", "read-only", "--ephemeral", "--json", "-"],
+            ["/safe/codex", "-C", "/repos/demo", "--sandbox", "read-only", "exec", "--json", "--ephemeral", "-"],
         )
         assert_safe_codex_argv(argv)
+
+    def test_persisted_session_uses_safe_explicit_resume(self):
+        adapter = CodexAdapter(_descriptor())
+        adapter.resolve_executable = lambda: "/safe/codex"
+        session_id = "019fbda6-4acd-7920-a6d9-385d0e229af9"
+        first = adapter.build_argv(
+            mode="ask", prompt="hello", model="gpt-5.6-sol", cwd="/repos/demo",
+            prompt_file="/tmp/prompt.txt", persist_session=True,
+        )
+        self.assertNotIn("--ephemeral", first)
+        self.assertIn("read-only", first)
+        resumed = adapter.build_argv(
+            mode="ask", prompt="follow up", model="gpt-5.6-sol", cwd="/repos/demo",
+            prompt_file="/tmp/prompt.txt", persist_session=True,
+            provider_session_id=session_id,
+        )
+        self.assertEqual(resumed[resumed.index("exec") + 1], "resume")
+        self.assertIn(session_id, resumed)
+        self.assertNotIn("--ephemeral", resumed)
+        assert_safe_codex_argv(resumed, require_ephemeral=False)
 
     def test_rejects_dangerous_sandbox_and_yolo(self):
         with self.assertRaises(ValueError):
@@ -145,7 +165,7 @@ class CodexJsonlTests(unittest.TestCase):
     def test_jsonl_streaming_messages_tools_usage_errors(self):
         acc = CodexJsonlAccumulator()
         events = [
-            {"type": "thread.started"},
+            {"type": "thread.started", "thread_id": "019fbda6-4acd-7920-a6d9-385d0e229af9"},
             {"type": "item.completed", "item": {"type": "command_execution", "command": "git status", "status": "completed"}},
             {"type": "item.completed", "item": {"type": "agent_message", "text": "Final answer here"}},
             {"type": "turn.completed", "usage": {"input_tokens": 11, "output_tokens": 7}},
@@ -156,6 +176,7 @@ class CodexJsonlTests(unittest.TestCase):
         self.assertEqual(acc.final_answer(), "Final answer here")
         self.assertEqual(acc.usage["input_tokens"], 11)
         self.assertEqual(acc.usage["output_tokens"], 7)
+        self.assertEqual(acc.usage["provider_session_id"], "019fbda6-4acd-7920-a6d9-385d0e229af9")
         self.assertTrue(any(row["type"] == "command_execution" for row in acc.tool_activity))
         self.assertEqual(classify_provider_error(acc.errors[-1])["code"], "quota")
 
@@ -231,6 +252,44 @@ class CodexRunnerLifecycleTests(unittest.TestCase):
         self.assertEqual(row["status"], "completed")
         self.assertIn("ok from fake", row["answer"])
         self.assertEqual(row["usage"].get("output_tokens"), 2)
+
+    def test_provider_session_is_scoped_to_latest_exact_conversation_run(self):
+        conversation = self.store.create_conversation(profile_id="okarun", title="session")
+        run = self.store.create_run(
+            {
+                "status": "completed", "mode": "ask", "agent_id": "codex",
+                "agent_label": "Codex", "model": "gpt-5.6-sol",
+                "repository_ids": ["demo"], "prompt": "one", "packed_prompt": "one",
+                "context": {}, "referenced_files": [], "profile_id": "okarun",
+                "conversation_id": conversation["id"],
+            }
+        )
+        session_id = "019fbda6-4acd-7920-a6d9-385d0e229af9"
+        self.store.update_run(run["id"], usage={"provider_session_id": session_id})
+        self.assertEqual(
+            self.store.latest_provider_session(
+                conversation_id=conversation["id"], profile_id="okarun", agent_id="codex",
+                model="gpt-5.6-sol", repository_ids=["demo"],
+            ),
+            session_id,
+        )
+        other = self.store.create_run(
+            {
+                "status": "completed", "mode": "ask", "agent_id": "claude-code",
+                "agent_label": "Claude", "model": "claude",
+                "repository_ids": ["demo"], "prompt": "handoff", "packed_prompt": "handoff",
+                "context": {}, "referenced_files": [], "profile_id": "okarun",
+                "conversation_id": conversation["id"],
+            }
+        )
+        self.assertTrue(other["id"])
+        self.assertEqual(
+            self.store.latest_provider_session(
+                conversation_id=conversation["id"], profile_id="okarun", agent_id="codex",
+                model="gpt-5.6-sol", repository_ids=["demo"],
+            ),
+            "",
+        )
 
     def test_cancellation(self):
         run_id = self._create_run()
@@ -399,6 +458,33 @@ class CodexServiceOkarunTests(unittest.TestCase):
         after = git_status_snapshot(self.repo)
         with self.assertRaises(RuntimeError):
             assert_git_unchanged(before, after)
+
+    def test_repository_investigation_bypasses_empty_packet_block(self):
+        run = self.service.start_run(
+            {
+                "profile_id": "okarun",
+                "agent_id": "codex",
+                "mode": "ask",
+                "prompt": "Explain the exact internal implementation of xyzzy",
+                "repository_ids": ["demo"],
+                "model": "__provider_default__",
+                "bounded_evidence_only": True,
+                "repository_investigation": True,
+                "evidence_packet": {
+                    "repository_ids": ["demo"], "hits": [], "sources": [],
+                    "usable": False, "errors": [], "summary": "No initial matches",
+                },
+            }
+        )
+        self.assertNotIn("cannot verify", str(run.get("answer") or "").lower())
+        self.assertIn(run["status"], {"queued", "running", "completed"})
+        self.assertIn("starting hints", run["packed_prompt"])
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            current = self.service.get_run(run["id"], profile_id="okarun")
+            if current["status"] in {"completed", "failed", "cancelled"}:
+                break
+            time.sleep(0.05)
 
     def test_history_preserves_provider_prompt_and_status(self):
         # Avoid real runner path complexity: mark connected and use fake argv that exits quickly.
