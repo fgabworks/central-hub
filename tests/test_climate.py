@@ -67,9 +67,9 @@ class FakeCodingAdapter:
         return ClimateCodingAdapter.proposed_edits(answer)
 
     @staticmethod
-    def humanize_answer(answer, *, task_mode="ask"):
+    def humanize_answer(answer, *, task_mode="ask", prompt=""):
         from hub.climate.coding import ClimateCodingAdapter
-        return ClimateCodingAdapter.humanize_answer(answer, task_mode=task_mode)
+        return ClimateCodingAdapter.humanize_answer(answer, task_mode=task_mode, prompt=prompt)
 
 class ClimateServiceTests(unittest.TestCase):
     def setUp(self):
@@ -519,6 +519,22 @@ class ClimateUiContractTests(unittest.TestCase):
         self.assertIn("climate-token-pill", template)
         self.assertIn("Session usage", template)
         self.assertIn("climate-run-summary", script)
+        self.assertIn("Evaluate Token Savings", script)
+        self.assertIn("/token-efficiency", script)
+        self.assertIn('"/evaluate"', script)
+        self.assertIn("renderTokenEfficiency", script)
+        self.assertIn("Not measured", script)
+        self.assertIn("Measuring…", script)
+        self.assertIn("CLIMATE run total", script)
+        self.assertIn("Benchmark details", script)
+        self.assertIn("Candidate Sources", script)
+        self.assertIn("Cached portion", script)
+        poll_fn = script.split("function pollRun", 1)[1].split("\n  function ", 1)[0]
+        send_fn = script.split("function sendRun", 1)[1].split("\n  function ", 1)[0]
+        self.assertNotIn("/token-efficiency/evaluate", poll_fn)
+        self.assertNotIn("/token-efficiency/evaluate", send_fn)
+        self.assertIn("hydrateTokenEfficiency", script)
+        self.assertIn(".climate-token-efficiency", css)
         self.assertIn("selectProvider", script)
         self.assertIn("enhanceClimateSelect", script)
         self.assertIn("--cl-font-ui", css)

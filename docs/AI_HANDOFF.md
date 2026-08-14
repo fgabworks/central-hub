@@ -4,7 +4,29 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**CLIMATE Terminal compact toolbar + ConPTY newlines (2026-08-14)**
+**CLIMATE Token Efficiency (manual Direct Codex comparison) (2026-08-14)**
+
+Completed Codex runs can store an immutable benchmark snapshot (raw user prompt,
+repo, commit SHA, model, reasoning/config, Codex version, read-only, CLIMATE
+provider usage, runtime, files inspected, Context Resolver packet size, source
+candidates, fresh vs resumed). Direct Codex is **never** launched from a normal
+prompt. The Token Efficiency card is compact: CLIMATE vs Direct totals, runtime,
+and files inspected; one result line (green savings / red increase); cached tokens
+shown as a subset of input; Candidate Sources distinct from files actually
+inspected. A resumed CLIMATE session is labeled in Benchmark details because Direct
+is always fresh/ephemeral — that session gap, not the Context Resolver packet, was
+the cause of the 708,792 vs 280,908 PNC measurement.
+fresh `codex exec --json --ephemeral --sandbox read-only` with the same exe /
+repo cwd / recorded commit / model / raw prompt, no `resume`, no provider
+session, no CLIMATE packet or chat history. If HEAD moved, comparison is
+`Not comparable` with `Benchmark cannot be reproduced: repository commit has
+changed.` (no checkout). Historical runs without a recorded SHA stay
+`Benchmark unavailable`. Results persist beside the original run
+(`data/agent_center/runs/<id>/token_efficiency.json`) so reopen does not rerun.
+Missing provider fields stay Unavailable, not zero. Direct JSONL is diagnostics
+on disk only.
+
+Prior: **CLIMATE Terminal compact toolbar + ConPTY newlines (2026-08-14)**
 
 CLIMATE Terminal keeps the repo-scoped PTY/WebSocket/xterm path. Root cause of
 PowerShell prompt glue was fitting/resizing the PTY while `#wc-term-stage` was

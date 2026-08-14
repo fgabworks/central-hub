@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-14 (Windows Codex standalone discovery).
+Last verified: 2026-08-14 (CLIMATE Token Efficiency).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -35,6 +35,18 @@ only — preflight source candidates stay in Sources. The resolver sends compact
 instruction/skill/path+symbol hints, not duplicated
 source bodies. Packet-only providers retain the evidence gate; calls without enough authoritative
 evidence remain local (`Not enough repository evidence. Model not invoked · 0 tokens`).
+Completed Codex runs can show a compact Token Efficiency card. Direct Codex is
+manual only (`Evaluate Token Savings`); normal prompts never spawn a second
+`codex exec`. The Direct side is a fresh ephemeral read-only process using the
+recorded prompt/repo/commit/model and does not resume the CLIMATE provider
+session or send the Context Resolver packet. Preflight token counts remain local
+estimates; CLIMATE and Direct totals are provider-reported when present.
+Historical runs recorded without a commit SHA cannot be measured against the
+current tree. Token Efficiency labels Candidate Sources separately from files
+the provider actually inspected. A resumed CLIMATE Codex session is not a
+same-context comparison against fresh Direct `--ephemeral`; the Context Resolver
+packet is a few hundred estimated tokens, not hundreds of thousands.
+
 VANTA and ARCTIC repository/run/proposal scopes are server-isolated; repositories tagged
 `personal`/`arctic` belong only to ARCTIC and all others default to VANTA. AiriX Tool
 Runtime and ECLIPSE are unchanged.

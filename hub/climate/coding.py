@@ -7,6 +7,11 @@ import re
 from typing import Any
 
 from hub.agent_center.service import AgentCenterError, AgentCenterService
+from hub.climate.logic_format import (
+    format_logic_explanation,
+    is_logic_explanation_prompt,
+    logic_explanation_instructions,
+)
 
 
 CODING_PROVIDERS = ("codex", "claude-code", "cursor-agent")
@@ -192,6 +197,8 @@ class ClimateCodingAdapter:
                     else "Do not apply edits or execute commands."
                 ),
             ]
+            if is_logic_explanation_prompt(prompt):
+                context_note.append(logic_explanation_instructions())
         if selection:
             context_note.append("Current editor selection:\n" + selection[:20_000])
         if handoff:
@@ -298,10 +305,11 @@ class ClimateCodingAdapter:
         return []
 
     @staticmethod
-    def humanize_answer(answer: str, *, task_mode: str = "ask") -> tuple[str, str]:
+    def humanize_answer(answer: str, *, task_mode: str = "ask", prompt: str = "") -> tuple[str, str]:
         """Return (display_text, raw_payload_for_diagnostics).
 
         Never leave provider edit-protocol JSON as the normal chat body.
+        Logic-explanation formatting is presentation-only and does not invent facts.
         """
         raw = str(answer or "")
         if not raw.strip():
@@ -313,13 +321,15 @@ class ClimateCodingAdapter:
             "",
             stripped,
         ).strip()
-        # Unescape common dumped string literals when the whole answer is one JSON object.
+        raw_diag = ""
+        display = stripped or raw.strip()
         if not stripped and edits:
             parts = [item["content"].strip() for item in edits if item.get("content", "").strip()]
             if task_mode == "ask" and parts:
-                return "\n\n".join(parts), raw
-            return ("Proposed changes are ready for review." if task_mode == "edit" else ""), raw
-        if stripped and '"edits"' in stripped and stripped.lstrip().startswith("{"):
+                display, raw_diag = "\n\n".join(parts), raw
+            else:
+                return ("Proposed changes are ready for review." if task_mode == "edit" else ""), raw
+        elif stripped and '"edits"' in stripped and stripped.lstrip().startswith("{"):
             try:
                 payload = json.loads(stripped)
             except (TypeError, ValueError):
@@ -328,19 +338,20 @@ class ClimateCodingAdapter:
                 edits = ClimateCodingAdapter.proposed_edits(stripped) or edits
                 parts = [item["content"].strip() for item in edits if item.get("content", "").strip()]
                 if task_mode == "ask" and parts:
-                    return "\n\n".join(parts), raw
-                return ("Proposed changes are ready for review." if task_mode == "edit" else ""), raw
-        display = stripped or raw.strip()
-        if edits and display == raw.strip():
-            # Raw answer still looks like protocol; prefer extracted content for ask.
+                    display, raw_diag = "\n\n".join(parts), raw
+                else:
+                    return ("Proposed changes are ready for review." if task_mode == "edit" else ""), raw
+        elif edits and display == raw.strip():
             parts = [item["content"].strip() for item in edits if item.get("content", "").strip()]
             if task_mode == "ask" and parts:
-                return "\n\n".join(parts), raw
-            if task_mode == "edit":
+                display, raw_diag = "\n\n".join(parts), raw
+            elif task_mode == "edit":
                 return "Proposed changes are ready for review.", raw
-        if edits and display != raw.strip():
-            return display, raw
-        return display, ""
+        elif edits and display != raw.strip():
+            raw_diag = raw
+        if task_mode == "ask" and is_logic_explanation_prompt(prompt):
+            display = format_logic_explanation(display)
+        return display, raw_diag
 
     def _require_provider(self, provider: str) -> None:
         if provider not in CODING_PROVIDERS:
@@ -382,6 +393,7 @@ class ClimateCodingAdapter:
             "tool_activity": list(run.get("tool_activity") or []),
             "cancel_requested": bool(run.get("cancel_requested")),
             "created_at": run.get("created_at"),
+            "started_at": run.get("started_at"),
             "finished_at": run.get("finished_at"),
             "conversation_id": run.get("conversation_id") or "",
         }

@@ -200,6 +200,27 @@ def register_climate_routes(app: Flask) -> None:
         except ClimateCodingError as exc:
             return _error(exc)
 
+    @app.get("/api/climate/<workspace>/runs/<run_id>/token-efficiency")
+    def api_climate_token_efficiency(workspace: str, run_id: str):
+        try:
+            return jsonify({"ok": True, "token_efficiency": _svc().token_efficiency_status(workspace, run_id)})
+        except ClimateCodingError as exc:
+            return _error(exc)
+
+    @app.post("/api/climate/<workspace>/runs/<run_id>/token-efficiency/evaluate")
+    def api_climate_token_efficiency_evaluate(workspace: str, run_id: str):
+        try:
+            return jsonify({"ok": True, "token_efficiency": _svc().evaluate_token_efficiency(workspace, run_id)})
+        except ClimateCodingError as exc:
+            return _error(exc)
+
+    @app.post("/api/climate/<workspace>/runs/<run_id>/token-efficiency/cancel")
+    def api_climate_token_efficiency_cancel(workspace: str, run_id: str):
+        try:
+            return jsonify({"ok": True, "token_efficiency": _svc().cancel_token_efficiency(workspace, run_id)})
+        except ClimateCodingError as exc:
+            return _error(exc)
+
     @app.post("/api/climate/<workspace>/runs/<run_id>/accept")
     def api_climate_accept(workspace: str, run_id: str):
         try:

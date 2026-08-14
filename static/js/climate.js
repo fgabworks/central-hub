@@ -41,7 +41,7 @@
   var proposalActions = document.getElementById("climate-proposal-actions");
   var state = {
     tabs: [], active: "", selectedFiles: [], showExcluded: false, panel: "problems",
-    runId: "", run: null, streamText: "", git: null, gitPath: "",
+    runId: "", run: null, streamText: "", git: null, gitPath: "", tePoll: {},
     chat: { activeId: "", sessions: [] }, streamingMsgId: "",
     activityExploreOpen: {},
     modelCache: {}, fetchCount: 0,
@@ -468,6 +468,17 @@
       source: source,
       exact: source === "exact"
     };
+  }
+  function formatTokenExact(value) {
+    if (value == null || value === "" || isNaN(Number(value))) return "Unavailable";
+    return Math.round(Number(value)).toLocaleString();
+  }
+  function formatMs(ms) {
+    if (ms == null || isNaN(Number(ms))) return "Unavailable";
+    return formatElapsed(Number(ms));
+  }
+  function tokenEfficiencyStatus(te) {
+    return String((te && te.status) || "Not measured");
   }
   function formatTokenCount(n) {
     n = Math.max(0, Number(n) || 0);
@@ -1090,6 +1101,136 @@
     html += '</section>';
     return html;
   }
+  function renderTokenEfficiency(msg) {
+    var te = msg.tokenEfficiency;
+    var provider = msg.provider || "";
+    if ((provider && provider !== "codex") || (!provider && !(te && te.eligible))) return "";
+    if (msg.status !== "completed" && !(te && te.status)) return "";
+    te = te || { status: "Not measured", climate: {}, direct: null, comparison: null };
+    var status = tokenEfficiencyStatus(te);
+    var cmp = te.comparison || {};
+    var tone = cmp.tone || (status === "Measuring…" ? "wait" : (status === "Measured" ? "neutral" : "muted"));
+    if (status === "Measured" && !cmp.tone) {
+      if (cmp.difference > 0) tone = "increase";
+      else if (cmp.difference < 0) tone = "savings";
+    }
+    if (status === "Measuring…") tone = "wait";
+    if (status === "Not measured" || status === "Benchmark unavailable" || status === "Not comparable" || status === "Failed" || status === "Cancelled") {
+      tone = "muted";
+    }
+    var climateTotal = te.climate && te.climate.total;
+    var directTotal = te.direct && te.direct.usage ? te.direct.usage.total_tokens : null;
+    var html = '<section class="climate-token-efficiency" data-te-run="' + escapeHtml(msg.runId || "") + '" data-te-status="' + escapeHtml(status) + '" data-te-tone="' + escapeHtml(tone) + '">';
+    html += '<div class="climate-te-head"><span>Token Efficiency</span>';
+    if (status === "Measured") html += '<small class="climate-te-status is-save">✓ Measured</small>';
+    else if (status === "Measuring…") html += '<small class="climate-te-status is-wait">● Measuring</small>';
+    else html += '<small class="climate-te-status is-muted">' + escapeHtml(status) + '</small>';
+    html += '</div>';
+    if (status === "Measured" && (cmp.primary || cmp.headline)) {
+      if (!cmp.primary) cmp.primary = cmp.headline;
+      html += renderTokenEfficiencyMeasured(te, msg, cmp, tone, climateTotal, directTotal);
+    } else if (status === "Measured") {
+      html += '<div class="climate-te-result is-muted">Token comparison unavailable</div>';
+    } else if (status === "Measuring…") {
+      html += renderTokenEfficiencyMeasuring(te);
+    } else {
+      html += '<div class="climate-te-stack">';
+      html += '<div class="climate-te-kv"><span>CLIMATE run total</span><b>' + escapeHtml(formatTokenExact(climateTotal)) + '</b></div>';
+      html += '<div class="climate-te-kv"><span>Preflight estimate</span><b title="CLIMATE Context Resolver estimate (not provider usage)">' + escapeHtml(formatTokenExact(te.climate && te.climate.preflight_tokens_est)) + '</b></div>';
+      html += '<div class="climate-te-kv"><span>Direct baseline</span><b class="climate-te-status is-muted">' + escapeHtml(status) + '</b></div>';
+      html += '</div>';
+      if (te.reason) html += '<div class="climate-te-note">' + escapeHtml(te.reason) + '</div>';
+    }
+    html += renderTokenEfficiencyDetails(te, msg, status);
+    html += '<div class="climate-te-actions">';
+    if (status === "Measuring…") {
+      html += '<button type="button" class="climate-btn" data-te-action="cancel" data-msg-id="' + escapeHtml(msg.id) + '">Cancel</button>';
+    } else if (status !== "Measured" && msg.runId) {
+      html += '<button type="button" class="climate-btn climate-btn-primary" data-te-action="evaluate" data-msg-id="' + escapeHtml(msg.id) + '">Evaluate Token Savings</button>';
+    }
+    html += "</div></section>";
+    return html;
+  }
+  function formatSignedTokens(value) {
+    if (value == null || value === "" || isNaN(Number(value))) return "Unavailable";
+    var n = Math.round(Number(value));
+    var formatted = Math.abs(n).toLocaleString();
+    if (n > 0) return "+" + formatted;
+    if (n < 0) return "−" + formatted;
+    return formatted;
+  }
+  function formatChangePct(value) {
+    if (value == null || isNaN(Number(value))) return "Unavailable";
+    var n = Number(value);
+    var body = (n > 0 ? "+" : (n < 0 ? "−" : "")) + Math.abs(n).toFixed(1) + "%";
+    return body;
+  }
+  function tokenEfficiencyElapsed(te) {
+    var start = te && te.direct && te.direct.started_at;
+    if (!start) return "";
+    var t = Date.parse(start);
+    if (!isFinite(t)) return "";
+    return formatElapsed(Date.now() - t);
+  }
+  function renderTokenEfficiencyMeasured(te, msg, cmp, tone, climateTotal, directTotal) {
+    var toneClass = tone === "savings" ? "is-save" : (tone === "increase" ? "is-cost" : "is-muted");
+    var html = '<table class="climate-te-compare"><thead><tr><th></th><th>CLIMATE</th><th>DIRECT</th></tr></thead><tbody>';
+    html += '<tr><th>Total</th><td>' + escapeHtml(formatTokenExact(climateTotal)) + '</td><td>' + escapeHtml(formatTokenExact(directTotal)) + '</td></tr>';
+    html += '<tr><th>Runtime</th><td>' + escapeHtml(formatMs(te.climate && te.climate.runtime_ms)) + '</td><td>' + escapeHtml(formatMs(te.direct && te.direct.runtime_ms)) + '</td></tr>';
+    html += '<tr><th>Files inspected</th><td>' + escapeHtml(te.climate && te.climate.files_inspected != null ? String(te.climate.files_inspected) : "Unavailable") + '</td><td>' + escapeHtml(te.direct && te.direct.files_inspected != null ? String(te.direct.files_inspected) : "Unavailable") + '</td></tr>';
+    html += '</tbody></table>';
+    html += '<div class="climate-te-result ' + toneClass + '">' + escapeHtml(cmp.primary) + '</div>';
+    if (cmp.secondary) html += '<div class="climate-te-secondary">' + escapeHtml(cmp.secondary) + '</div>';
+    html += '<div class="climate-te-kpis">';
+    html += '<div class="climate-te-kv"><span>Difference</span><b class="' + toneClass + '">' + escapeHtml(formatSignedTokens(cmp.difference)) + '</b></div>';
+    html += '<div class="climate-te-kv"><span>Change</span><b class="' + toneClass + '">' + escapeHtml(formatChangePct(cmp.percent)) + '</b></div>';
+    html += '<div class="climate-te-kv"><span>Relative usage</span><b>' + escapeHtml(cmp.relative != null ? (Number(cmp.relative).toFixed(2) + "× Direct") : "Unavailable") + '</b></div>';
+    html += '</div>';
+    if (te.comparability_note) html += '<div class="climate-te-note">' + escapeHtml(te.comparability_note) + '</div>';
+    return html;
+  }
+  function renderTokenEfficiencyMeasuring(te) {
+    var elapsed = tokenEfficiencyElapsed(te) || formatMs(te.direct && te.direct.runtime_ms) || "0s";
+    var html = '<div class="climate-te-split">';
+    html += '<div class="climate-te-col"><div class="climate-te-col-label">CLIMATE</div>';
+    html += '<div class="climate-te-kv"><span>Run total</span><b>' + escapeHtml(formatTokenExact(te.climate && te.climate.total)) + '</b></div>';
+    html += '<div class="climate-te-kv"><span>Preflight estimate</span><b>' + escapeHtml(formatTokenExact(te.climate && te.climate.preflight_tokens_est)) + '</b></div>';
+    html += '</div>';
+    html += '<div class="climate-te-col"><div class="climate-te-col-label">DIRECT</div>';
+    html += '<div class="climate-te-kv"><span>Fresh read-only benchmark running…</span><b class="climate-te-status is-wait">' + escapeHtml(elapsed) + '</b></div>';
+    html += '</div></div>';
+    html += '<div class="climate-te-note">Same repo · commit · model · read-only</div>';
+    return html;
+  }
+  function renderTokenEfficiencyDetails(te, msg, status) {
+    var html = '<details class="climate-te-details"><summary>Benchmark details</summary><table>';
+    html += '<thead><tr><th></th><th>CLIMATE</th><th>DIRECT</th></tr></thead><tbody>';
+    var rows = [
+      ["Input", te.climate && te.climate.input, te.direct && te.direct.usage && te.direct.usage.input_tokens, "tokens"],
+      ["↳ Cached portion", te.climate && te.climate.cached_input, te.direct && te.direct.usage && te.direct.usage.cached_input_tokens, "subset"],
+      ["Output", te.climate && te.climate.output, te.direct && te.direct.usage && te.direct.usage.output_tokens, "tokens"],
+      ["Total", te.climate && te.climate.total, te.direct && te.direct.usage && te.direct.usage.total_tokens, "tokens"],
+      ["Runtime", te.climate && te.climate.runtime_ms, te.direct && te.direct.runtime_ms, "runtime"],
+      ["Files actually inspected", te.climate && te.climate.files_inspected, te.direct && te.direct.files_inspected, "count"]
+    ];
+    rows.forEach(function (row) {
+      var kind = row[3];
+      var climateVal = kind === "runtime" ? formatMs(row[1]) : (kind === "count" ? (row[1] == null ? "Unavailable" : String(row[1])) : formatTokenExact(row[1]));
+      var directVal;
+      if (row[2] == null && status === "Not measured") directVal = "Not measured";
+      else if (kind === "runtime") directVal = formatMs(row[2]);
+      else if (kind === "count") directVal = row[2] == null ? (status === "Not measured" ? "Not measured" : "Unavailable") : String(row[2]);
+      else directVal = formatTokenExact(row[2]);
+      html += '<tr class="' + (kind === "subset" ? "is-subset" : "") + '"><th>' + escapeHtml(row[0]) + "</th><td>" + escapeHtml(climateVal) + "</td><td>" + escapeHtml(directVal) + "</td></tr>";
+    });
+    html += '<tr><th>Success</th><td>' + escapeHtml(msg.status === "completed" ? "Yes" : "No") + "</td><td>" + escapeHtml(te.direct && te.direct.success ? "Yes" : (te.direct ? "No" : "—")) + "</td></tr>";
+    html += '<tr><th>Candidate sources</th><td>' + escapeHtml(te.climate && te.climate.source_candidates != null ? String(te.climate.source_candidates) : "Unavailable") + "</td><td>—</td></tr>";
+    html += '<tr><th>CLIMATE session</th><td>' + escapeHtml(te.climate && te.climate.session_reused ? "Resumed" : (te.climate && te.climate.session_fresh ? "Fresh" : "Unavailable")) + '</td><td>Fresh ephemeral</td></tr>';
+    html += "</tbody></table>";
+    html += '<p class="climate-te-legend">Cached portion is a subset of Input, not an extra addend. Candidate sources are Context Resolver hints. Files actually inspected come from provider tool activity. Preflight estimate is local and is not provider usage. Missing fields stay Unavailable.</p>';
+    html += "</details>";
+    return html;
+  }
   function renderActivityComplete(msg) {
     var taskMode = msg.taskMode || "ask";
     var isEdit = taskMode === "edit" && !!(msg.proposal && msg.proposal.state === "pending" || (msg.changedFiles || []).length);
@@ -1429,6 +1570,7 @@
     renderChat();
     renderUsageChrome(session);
     setStatus("Restored chat");
+    hydrateTokenEfficiency(session);
   }
   function renderChat() {
     var session = activeSession();
@@ -1458,6 +1600,14 @@
           if (msg && msg.proposal) renderProposalReview(msg.proposal);
           else if (state.run && state.run.proposal) renderProposalReview(state.run.proposal);
         }
+      });
+    });
+    feed.querySelectorAll("[data-te-action]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var action = button.getAttribute("data-te-action");
+        var msgId = button.getAttribute("data-msg-id");
+        if (action === "evaluate") evaluateTokenSavings(msgId);
+        else if (action === "cancel") cancelTokenSavings(msgId);
       });
     });
     feed.querySelectorAll("[data-activity-explore]").forEach(function (button) {
@@ -1554,7 +1704,7 @@
     }
     if (body) html += '<div class="climate-chat-text">' + body + '</div>';
     if ((isComplete || isStopped) && sources.length) {
-      html += '<details class="climate-sources"><summary>Sources · ' + sources.length + ' file' + (sources.length === 1 ? "" : "s") + '</summary>';
+      html += '<details class="climate-sources"><summary>Candidate Sources · ' + sources.length + ' file' + (sources.length === 1 ? "" : "s") + '</summary>';
       html += '<ul>' + sources.map(function (path) {
         return '<li><button type="button" class="climate-chat-file" data-open-file="' + escapeHtml(path) + '">' + escapeHtml(path) + '</button></li>';
       }).join("") + '</ul></details>';
@@ -1590,6 +1740,9 @@
         html += '</div>';
       }
       html += '</section>';
+    }
+    if (isComplete && !isUser) {
+      html += renderTokenEfficiency(msg);
     }
     if (!isUser && msg.diagnostics) {
       html += '<details class="climate-chat-details" id="climate-details-' + escapeHtml(msg.id) + '"><summary>Details / Diagnostics</summary><pre class="mono">' + escapeHtml(msg.diagnostics) + '</pre></details>';
@@ -2122,6 +2275,7 @@
         elapsedMs: elapsedMs,
         runId: data.run.id,
         usage: usageParsed,
+        tokenEfficiency: data.run.token_efficiency || null,
         stopNotice: "",
         stoppedByUser: false
       });
@@ -2140,6 +2294,71 @@
       }
       upsertAssistantMessage({ status: "failed", text: error.message });
       finishRun();
+    });
+  }
+  function applyTokenEfficiency(msgId, payload, sessionId) {
+    var session = sessionId
+      ? state.chat.sessions.find(function (row) { return row.id === sessionId; })
+      : activeSession();
+    if (!session) return;
+    var msg = session.messages.find(function (row) { return row.id === msgId; });
+    if (!msg) return;
+    msg.tokenEfficiency = payload;
+    saveChatStore();
+    if (session.id === (activeSession() || {}).id) renderChat();
+  }
+  function tokenEfficiencyEndpoint(runId, suffix) {
+    return endpoint("/runs/" + encodeURIComponent(runId) + "/token-efficiency" + (suffix || ""));
+  }
+  function pollTokenEfficiency(msgId, runId) {
+    if (state.tePoll[runId]) window.clearTimeout(state.tePoll[runId]);
+    jsonFetch(tokenEfficiencyEndpoint(runId)).then(function (data) {
+      var te = data.token_efficiency;
+      applyTokenEfficiency(msgId, te);
+      var status = tokenEfficiencyStatus(te);
+      if (status === "Measuring…") {
+        state.tePoll[runId] = window.setTimeout(function () { pollTokenEfficiency(msgId, runId); }, 1200);
+      } else {
+        delete state.tePoll[runId];
+      }
+    }).catch(function (error) {
+      applyTokenEfficiency(msgId, { status: "Failed", reason: error.message || "Benchmark failed", climate: {} });
+      delete state.tePoll[runId];
+    });
+  }
+  function evaluateTokenSavings(msgId) {
+    var session = activeSession();
+    var msg = session && session.messages.find(function (row) { return row.id === msgId; });
+    if (!msg || !msg.runId) return;
+    applyTokenEfficiency(msgId, Object.assign({}, msg.tokenEfficiency || {}, { status: "Measuring…", reason: "" }));
+    jsonFetch(tokenEfficiencyEndpoint(msg.runId, "/evaluate"), { method: "POST", body: "{}" }).then(function (data) {
+      applyTokenEfficiency(msgId, data.token_efficiency);
+      if (tokenEfficiencyStatus(data.token_efficiency) === "Measuring…") pollTokenEfficiency(msgId, msg.runId);
+    }).catch(function (error) {
+      applyTokenEfficiency(msgId, { status: "Failed", reason: error.message || "Benchmark failed", climate: msg.tokenEfficiency && msg.tokenEfficiency.climate });
+    });
+  }
+  function cancelTokenSavings(msgId) {
+    var session = activeSession();
+    var msg = session && session.messages.find(function (row) { return row.id === msgId; });
+    if (!msg || !msg.runId) return;
+    jsonFetch(tokenEfficiencyEndpoint(msg.runId, "/cancel"), { method: "POST", body: "{}" }).then(function (data) {
+      applyTokenEfficiency(msgId, data.token_efficiency);
+      delete state.tePoll[msg.runId];
+    }).catch(function (error) {
+      applyTokenEfficiency(msgId, { status: "Cancelled", reason: error.message || "Cancelled", climate: msg.tokenEfficiency && msg.tokenEfficiency.climate });
+    });
+  }
+  function hydrateTokenEfficiency(session) {
+    if (!session) return;
+    (session.messages || []).forEach(function (msg) {
+      if (!msg.runId || (msg.provider && msg.provider !== "codex")) return;
+      if (msg.tokenEfficiency && tokenEfficiencyStatus(msg.tokenEfficiency) === "Measured") return;
+      jsonFetch(tokenEfficiencyEndpoint(msg.runId)).then(function (data) {
+        if (!data.token_efficiency) return;
+        applyTokenEfficiency(msg.id, data.token_efficiency, session.id);
+        if (tokenEfficiencyStatus(data.token_efficiency) === "Measuring…") pollTokenEfficiency(msg.id, msg.runId);
+      }).catch(function () {});
     });
   }
   function finishRun(){

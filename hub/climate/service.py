@@ -11,6 +11,7 @@ from hub.agent_center.redact import redact_text
 from hub.climate.coding import ClimateCodingAdapter, ClimateCodingError, classify_task_mode
 from hub.climate.codex_limits import get_codex_rate_limits_service
 from hub.climate.preflight import make_blocked_run, resolve_climate_context
+from hub.climate.token_efficiency import TokenEfficiencyService
 from hub.registry.models import Registry, Repository
 from hub.repository_workspace.ports import port_listeners
 from hub.repository_workspace.process_manager import ACTIVE_STATUSES
@@ -58,6 +59,7 @@ class ClimateService:
         self._run_meta: dict[str, dict[str, Any]] = {}
         self._proposals: dict[str, Proposal] = {}
         self._local_runs: dict[str, dict[str, Any]] = {}
+        self.token_efficiency = TokenEfficiencyService()
 
     def _repository_intelligence(self) -> Any | None:
         agent_center = getattr(self.coding, "agent_center", None)
@@ -290,6 +292,21 @@ class ClimateService:
         result["provider_invoked"] = True
         result["preflight"] = self._run_meta[str(result["id"])]["preflight"]
         result["sources"] = list(self._run_meta[str(result["id"])]["sources"])[:24]
+        self._capture_token_efficiency_snapshot(
+            str(result["id"]),
+            ws=ws,
+            repo=repo,
+            user_prompt=prompt,
+            provider=provider,
+            model=model,
+            preflight=preflight,
+            run=result,
+            reuse_session=bool(payload.get("reuse_session", True)) and not handoff,
+        )
+        if provider == "codex":
+            result["token_efficiency"] = self.token_efficiency.public(
+                self.token_efficiency.load(str(result["id"]))
+            )
         return result
 
     def result(self, workspace: str, run_id: str) -> dict[str, Any]:
@@ -310,7 +327,11 @@ class ClimateService:
         if scope:
             result["repository_id"] = scope[1]
         raw_answer = str(result.get("answer") or "")
-        display, raw_diag = self.coding.humanize_answer(raw_answer, task_mode=task_mode)
+        display, raw_diag = self.coding.humanize_answer(
+            raw_answer,
+            task_mode=task_mode,
+            prompt=str(meta.get("user_prompt") or ""),
+        )
         if raw_diag:
             result["raw_answer"] = raw_answer
             logs = str(result.get("logs") or "")
@@ -374,6 +395,8 @@ class ClimateService:
                 if p and p not in sources:
                     sources.append(p)
         result["sources"] = sources[:24]
+        if str(result.get("provider") or result.get("agent_id") or "") == "codex":
+            result["token_efficiency"] = self._token_efficiency_payload(ws, run_id, result)
         return result
     def cancel(self, workspace: str, run_id: str) -> dict[str, Any]:
         ws = normalize_workspace(workspace)
@@ -385,6 +408,161 @@ class ClimateService:
             self._local_runs[run_id] = local
             return local
         return self.coding.cancel(run_id, workspace=ws)
+
+    def token_efficiency_status(self, workspace: str, run_id: str) -> dict[str, Any]:
+        ws = normalize_workspace(workspace)
+        self._require_run_scope(ws, run_id)
+        return self._token_efficiency_payload(ws, run_id)
+
+    def evaluate_token_efficiency(self, workspace: str, run_id: str) -> dict[str, Any]:
+        ws = normalize_workspace(workspace)
+        self._require_run_scope(ws, run_id)
+        if run_id in self._local_runs:
+            raise ClimateCodingError("Blocked preflight runs have no Direct Codex comparison.", code="unavailable")
+        adapter = self._codex_adapter()
+        if adapter is None:
+            raise ClimateCodingError("Codex adapter is unavailable.", code="unavailable")
+        record = self._ensure_token_efficiency_record(ws, run_id)
+        if record.get("status") == "Measured" and record.get("direct"):
+            return self.token_efficiency.public(record)
+        snapshot = dict(record.get("snapshot") or {})
+        repo_id = str(snapshot.get("repository_id") or (self._run_scope.get(run_id) or ("", ""))[1] or "")
+        if not repo_id:
+            raise ClimateCodingError("Repository for this run is unknown.", code="not_found")
+        repo = self.require_repo(ws, repo_id)
+        record = self.token_efficiency.start_direct(
+            run_id,
+            adapter=adapter,
+            repository_id=repo.id,
+            repository_path=str(getattr(repo, "local_path", "") or getattr(repo, "working_directory", "") or ""),
+        )
+        return self.token_efficiency.public(record)
+
+    def cancel_token_efficiency(self, workspace: str, run_id: str) -> dict[str, Any]:
+        ws = normalize_workspace(workspace)
+        self._require_run_scope(ws, run_id)
+        record = self.token_efficiency.cancel(run_id)
+        return self.token_efficiency.public(record)
+
+    def _capture_token_efficiency_snapshot(
+        self,
+        run_id: str,
+        *,
+        ws: str,
+        repo: Any,
+        user_prompt: str,
+        provider: str,
+        model: str,
+        preflight: Any,
+        run: dict[str, Any],
+        reuse_session: bool,
+    ) -> None:
+        if provider != "codex":
+            return
+        adapter = self._codex_adapter()
+        exe = ""
+        version = ""
+        if adapter is not None:
+            try:
+                exe = adapter.resolve_executable() or ""
+                if exe and hasattr(adapter, "_detect_version"):
+                    version = adapter._detect_version(exe) or ""
+            except Exception:
+                exe = ""
+        diagnostics = dict(getattr(preflight, "diagnostics", None) or {})
+        candidates = diagnostics.get("candidates_found")
+        try:
+            candidates_i = int(candidates) if candidates is not None else None
+        except (TypeError, ValueError):
+            candidates_i = None
+        self.token_efficiency.capture_snapshot(
+            run_id=run_id,
+            user_prompt=user_prompt,
+            repository_id=repo.id,
+            repository_path=str(getattr(repo, "local_path", "") or getattr(repo, "working_directory", "") or ""),
+            provider=provider,
+            model=model,
+            read_only=True,
+            session_reused=None,
+            context_packet_chars=int(getattr(preflight, "context_chars", 0) or 0) or None,
+            context_tokens_est=int(getattr(preflight, "context_tokens_est", 0) or 0) or None,
+            source_candidates=candidates_i,
+            codex_executable=exe,
+            codex_version=version,
+            reasoning_config={
+                "sandbox": "read-only",
+                "json": True,
+                "model": model,
+                "reuse_session": bool(reuse_session),
+            },
+            persist=(self.token_efficiency.persist_root / run_id).is_dir(),
+        )
+        meta = self._run_meta.get(run_id) or {}
+        meta["user_prompt"] = user_prompt
+        self._run_meta[run_id] = meta
+
+    def _token_efficiency_payload(
+        self, workspace: str, run_id: str, result: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        record = self._ensure_token_efficiency_record(workspace, run_id, result=result)
+        return self.token_efficiency.public(record)
+
+    def _ensure_token_efficiency_record(
+        self, workspace: str, run_id: str, result: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        record = self.token_efficiency.load(run_id)
+        result = result if isinstance(result, dict) else None
+        if result is None and run_id not in self._local_runs:
+            try:
+                result = self.coding.result(run_id, workspace=workspace)
+            except ClimateCodingError:
+                result = None
+        if result and str(result.get("provider") or result.get("agent_id") or "") == "codex":
+            if str(result.get("status") or "") in {"completed", "failed", "cancelled"}:
+                usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
+                self.token_efficiency.update_climate_metrics(
+                    run_id,
+                    usage=usage,
+                    started_at=result.get("started_at") or result.get("created_at"),
+                    finished_at=result.get("finished_at"),
+                    tool_activity=list(result.get("tool_activity") or []),
+                    logs=str(result.get("logs") or ""),
+                    session_reused=usage.get("session_reused") if "session_reused" in usage else None,
+                    persist=(self.token_efficiency.persist_root / run_id).is_dir(),
+                )
+                record = self.token_efficiency.load(run_id)
+        if record and record.get("snapshot"):
+            return record
+        agent_run = self._agent_center_run(run_id, workspace)
+        if agent_run:
+            repo_id = (agent_run.get("repository_ids") or [None])[0]
+            path = ""
+            if repo_id:
+                try:
+                    repo = self.require_repo(workspace, str(repo_id))
+                    path = str(getattr(repo, "local_path", "") or "")
+                except ClimateCodingError:
+                    path = ""
+            return self.token_efficiency.reconstruct_from_agent_run(agent_run, repository_path=path)
+        return record or {"status": "Benchmark unavailable", "reason": "Run not found.", "snapshot": None}
+
+    def _agent_center_run(self, run_id: str, workspace: str) -> dict[str, Any] | None:
+        agent_center = getattr(self.coding, "agent_center", None)
+        if agent_center is None or not hasattr(agent_center, "store"):
+            return None
+        profile = "okarun" if workspace == "work" else "aira"
+        try:
+            return agent_center.store.get_run(run_id, profile_id=profile)
+        except Exception:
+            return None
+
+    def _codex_adapter(self) -> Any:
+        agent_center = getattr(self.coding, "agent_center", None)
+        if agent_center is None:
+            return None
+        registry = getattr(agent_center, "connections", None)
+        adapters = getattr(registry, "adapters", None) or {}
+        return adapters.get("codex")
 
     def stage_proposal(
         self, run_id: str, workspace: str, repository_id: str, edits: list[dict[str, str]]

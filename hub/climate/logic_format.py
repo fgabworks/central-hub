@@ -1,0 +1,223 @@
+"""Presentation-only formatting for CLIMATE implementation-logic answers.
+
+Does not change repository investigation, scoring, citations, or provider
+execution. Never invents thresholds, DEs, functions, or behavior.
+"""
+
+from __future__ import annotations
+
+import re
+
+LOGIC_SECTION_ORDER = (
+    "core_rule",
+    "decision_table",
+    "example",
+    "edge_cases",
+    "rollup",
+    "implementation",
+    "one_line",
+)
+
+CANONICAL_HEADINGS = {
+    "core_rule": "Core rule",
+    "decision_table": "Decision table",
+    "example": "Example",
+    "edge_cases": "Eligibility + edge cases",
+    "rollup": "Household/member roll-up",
+    "implementation": "Exact implementation files/functions",
+    "one_line": "In one line",
+}
+
+_SECTION_ALIASES = {
+    "core rule": "core_rule",
+    "period policy": "core_rule",
+    "decision table": "decision_table",
+    "decision table / thresholds": "decision_table",
+    "thresholds": "decision_table",
+    "required checks": "decision_table",
+    "due dates": "decision_table",
+    "four pnc checks and due dates": "decision_table",
+    "example": "example",
+    "examples": "example",
+    "eligibility + edge cases": "edge_cases",
+    "edge cases": "edge_cases",
+    "eligibility": "edge_cases",
+    "household/member roll-up": "rollup",
+    "household roll-up": "rollup",
+    "member roll-up": "rollup",
+    "eligibility and roll-up": "rollup",
+    "exact implementation files/functions": "implementation",
+    "exact implementation": "implementation",
+    "source trace": "implementation",
+    "implementation files/functions": "implementation",
+    "implementation": "implementation",
+    "in one line": "one_line",
+    "one-line summary": "one_line",
+    "one line": "one_line",
+}
+
+_LOGIC_RE = re.compile(
+    r"(?:"
+    r"\blogic of\b|"
+    r"give me the logic|"
+    r"\bscoring logic\b|"
+    r"\bindicator logic\b|"
+    r"\beligibility rules?\b|"
+    r"\bdecision table\b|"
+    r"\bpass\s*/\s*fail\b|"
+    r"\bthresholds?\b|"
+    r"\bhow (?:is|are)\b.{0,80}\bderiv|"
+    r"\bexplain how\b.{0,80}\bderiv|"
+    r"\bderivation of\b|"
+    r"\bcore rule\b|"
+    r"explain (?:this |the )?(?:indicator|scoring|eligibility|threshold)"
+    r")",
+    re.I | re.S,
+)
+
+_INSUFFICIENT_RE = re.compile(
+    r"not enough repository evidence|cannot verify|insufficient (?:repo(?:sitory)? )?evidence",
+    re.I,
+)
+
+_HEADING_RE = re.compile(r"^(#{1,3})\s+(.+?)\s*$", re.M)
+_SOURCE_TRACE_RE = re.compile(
+    r"`([^`]+)`\s+[—–-]\s+`([^`]+)`",
+)
+
+LOGIC_EXPLANATION_INSTRUCTIONS = """
+When this question asks for implementation, indicator, scoring, eligibility, or threshold logic, write the final answer in this order and do not add extra narrative sections:
+
+## <Topic> Logic
+
+Core rule:
+- the pass/fail policy only (period-specific rules first)
+
+Decision table / thresholds:
+- one compact markdown table when windows or cutoffs exist
+
+Example:
+- one concrete case, not a restatement of the core rule
+
+Eligibility + edge cases:
+- no eligible member, nothing due yet, missing dates, member Pass/Fail values
+- label surprising code fallbacks as edge cases
+
+Household/member roll-up:
+- any-member-pass vs all-members-pass
+- cite the actual implementation condition/function
+
+Exact implementation files/functions:
+- `path/file.py` — `function_name`
+- production scoring functions first; helper or recommended-timing functions after, labeled as helpers
+
+### In one line
+One plain-language sentence for the whole rule.
+
+Formatting:
+- result first, source trace second
+- do not repeat the same rule in multiple sections
+- bold only important outcomes
+- keep exact DE UIDs when the repository has them
+- never invent thresholds, functions, DEs, or behavior
+- if repository evidence is insufficient, say so instead of filling gaps
+""".strip()
+
+
+def is_logic_explanation_prompt(text: str) -> bool:
+    blob = str(text or "").strip()
+    if not blob:
+        return False
+    return bool(_LOGIC_RE.search(blob))
+
+
+def logic_explanation_instructions() -> str:
+    return LOGIC_EXPLANATION_INSTRUCTIONS
+
+
+def format_logic_explanation(answer: str) -> str:
+    """Reorder recognizable logic sections. Leave unknown answers unchanged."""
+    text = str(answer or "").strip()
+    if not text or _INSUFFICIENT_RE.search(text):
+        return text
+    title, mapped, leftover = _split_sections(text)
+    if len(mapped) < 2:
+        return text
+    chunks: list[str] = []
+    if title:
+        chunks.append(f"## {title}")
+    for key in LOGIC_SECTION_ORDER:
+        body = mapped.get(key)
+        if not body:
+            continue
+        heading = CANONICAL_HEADINGS[key]
+        if key == "one_line":
+            chunks.append(f"### {heading}\n{_dedupe_lines(body)}")
+        else:
+            chunks.append(f"{heading}:\n{_dedupe_lines(body)}")
+    for heading, body in leftover:
+        chunks.append(f"{heading}:\n{_dedupe_lines(body)}" if heading else _dedupe_lines(body))
+    formatted = "\n\n".join(chunk.strip() for chunk in chunks if chunk.strip()).strip()
+    return formatted or text
+
+
+def _split_sections(text: str) -> tuple[str, dict[str, str], list[tuple[str, str]]]:
+    matches = list(_HEADING_RE.finditer(text))
+    if not matches:
+        return "", {}, []
+    title = ""
+    mapped: dict[str, str] = {}
+    leftover: list[tuple[str, str]] = []
+    preamble = text[: matches[0].start()].strip()
+    first_heading = matches[0].group(2).strip()
+    first_key = _alias(first_heading)
+    start_index = 0
+    if not first_key and re.search(r"\blogic\b", first_heading, re.I):
+        title = first_heading
+        start_index = 1
+        if preamble:
+            leftover.append(("", preamble))
+    elif preamble:
+        leftover.append(("", preamble))
+    for i, match in enumerate(matches[start_index:], start=start_index):
+        heading = match.group(2).strip()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        body = text[match.end():end].strip()
+        key = _alias(heading)
+        if key:
+            mapped[key] = _merge_bodies(mapped.get(key), body)
+        else:
+            leftover.append((heading, body))
+    return title, mapped, leftover
+
+
+def _alias(heading: str) -> str:
+    cleaned = re.sub(r"[^a-z0-9+/ -]+", "", heading.strip().lower())
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" :")
+    return _SECTION_ALIASES.get(cleaned, "")
+
+
+def _merge_bodies(existing: str | None, incoming: str) -> str:
+    incoming = incoming.strip()
+    if not existing:
+        return incoming
+    if incoming and incoming not in existing:
+        return existing.rstrip() + "\n\n" + incoming
+    return existing
+
+
+def _dedupe_lines(body: str) -> str:
+    seen: set[str] = set()
+    out: list[str] = []
+    for line in str(body or "").splitlines():
+        key = re.sub(r"\s+", " ", line.strip())
+        if key and key in seen:
+            continue
+        if key:
+            seen.add(key)
+        out.append(line.rstrip())
+    return "\n".join(out).strip()
+
+
+def source_traces(text: str) -> list[tuple[str, str]]:
+    return [(path, name) for path, name in _SOURCE_TRACE_RE.findall(text or "")]

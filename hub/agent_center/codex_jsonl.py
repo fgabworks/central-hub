@@ -26,6 +26,7 @@ class CodexJsonlAccumulator:
         self.messages: list[str] = []
         self.tool_activity: list[dict[str, Any]] = []
         self.usage: dict[str, Any] = {"session_reused": bool(session_reused)}
+        self.raw_usage: dict[str, Any] | None = None
         self.errors: list[str] = []
         self.raw_lines: list[str] = []
         self._final: str = ""
@@ -57,6 +58,7 @@ class CodexJsonlAccumulator:
         if etype == "turn.completed":
             usage = event.get("usage") or event.get("token_usage") or {}
             if isinstance(usage, dict) and usage:
+                self.raw_usage = dict(usage)
                 retained = {
                     key: self.usage.get(key)
                     for key in ("provider_session_id", "session_reused")
@@ -158,7 +160,8 @@ def _event_error_message(event: dict[str, Any]) -> str:
 
 
 def _normalize_usage(raw: dict[str, Any]) -> dict[str, Any]:
-    return {
+    details = raw.get("input_tokens_details") if isinstance(raw.get("input_tokens_details"), dict) else {}
+    payload = {
         "input_tokens": int(raw.get("input_tokens") or raw.get("input") or 0),
         "output_tokens": int(raw.get("output_tokens") or raw.get("output") or 0),
         "total_tokens": int(
@@ -169,3 +172,20 @@ def _normalize_usage(raw: dict[str, Any]) -> dict[str, Any]:
             )
         ),
     }
+    cached = (
+        raw.get("cached_input_tokens")
+        if raw.get("cached_input_tokens") is not None
+        else raw.get("cache_read_input_tokens")
+        if raw.get("cache_read_input_tokens") is not None
+        else raw.get("input_tokens_cached")
+        if raw.get("input_tokens_cached") is not None
+        else raw.get("cached_tokens")
+        if raw.get("cached_tokens") is not None
+        else details.get("cached_tokens")
+    )
+    if cached is not None:
+        try:
+            payload["cached_input_tokens"] = int(cached)
+        except (TypeError, ValueError):
+            pass
+    return payload
