@@ -1,0 +1,1281 @@
+{
+  "base": "http://127.0.0.1:8080",
+  "phase": "after",
+  "ok": true,
+  "viewports": {
+    "1366x768": {
+      "one": {
+        "vw": 1366,
+        "vh": 768,
+        "bottom": {
+          "x": 374,
+          "y": 582,
+          "w": 580,
+          "h": 160
+        },
+        "bottomTabs": {
+          "x": 374,
+          "y": 583,
+          "w": 580,
+          "h": 34
+        },
+        "bottomTabH": 34,
+        "problemsToolbarH": 0,
+        "toolbar": {
+          "x": 374,
+          "y": 617,
+          "w": 580,
+          "h": 28
+        },
+        "toolbarH": 28,
+        "toolbarOverflowX": "hidden",
+        "toolbarScroll": {
+          "scrollWidth": 580,
+          "clientWidth": 580,
+          "overflow": false
+        },
+        "repoSelect": {
+          "x": 392,
+          "y": 620,
+          "w": 112,
+          "h": 22
+        },
+        "shellSelect": {
+          "x": 510,
+          "y": 620,
+          "w": 81,
+          "h": 22
+        },
+        "newBtn": {
+          "x": 597,
+          "y": 620,
+          "w": 94,
+          "h": 22
+        },
+        "addBtn": {
+          "x": 787,
+          "y": 620,
+          "w": 22,
+          "h": 22
+        },
+        "splitBtn": {
+          "x": 815,
+          "y": 620,
+          "w": 39,
+          "h": 22
+        },
+        "restartBtn": {
+          "x": 858,
+          "y": 620,
+          "w": 52,
+          "h": 22
+        },
+        "killBtn": {
+          "x": 914,
+          "y": 620,
+          "w": 32,
+          "h": 22
+        },
+        "sessionTabs": [
+          {
+            "label": "PowerShell 1",
+            "box": {
+              "x": 697,
+              "y": 620,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          }
+        ],
+        "sessionTabCount": 1,
+        "stage": {
+          "x": 374,
+          "y": 645,
+          "w": 580,
+          "h": 97
+        },
+        "xterm": {
+          "x": 375,
+          "y": 646,
+          "w": 578,
+          "h": 95
+        },
+        "labelFs": "10px",
+        "selectH": 22,
+        "newBtnH": 22,
+        "tabH": 22,
+        "clipped": []
+      },
+      "several": {
+        "vw": 1366,
+        "vh": 768,
+        "bottom": {
+          "x": 374,
+          "y": 582,
+          "w": 580,
+          "h": 160
+        },
+        "bottomTabs": {
+          "x": 374,
+          "y": 583,
+          "w": 580,
+          "h": 34
+        },
+        "bottomTabH": 34,
+        "problemsToolbarH": 0,
+        "toolbar": {
+          "x": 374,
+          "y": 617,
+          "w": 580,
+          "h": 28
+        },
+        "toolbarH": 28,
+        "toolbarOverflowX": "hidden",
+        "toolbarScroll": {
+          "scrollWidth": 580,
+          "clientWidth": 580,
+          "overflow": false
+        },
+        "repoSelect": {
+          "x": 392,
+          "y": 620,
+          "w": 112,
+          "h": 22
+        },
+        "shellSelect": {
+          "x": 510,
+          "y": 620,
+          "w": 81,
+          "h": 22
+        },
+        "newBtn": {
+          "x": 597,
+          "y": 620,
+          "w": 94,
+          "h": 22
+        },
+        "addBtn": {
+          "x": 787,
+          "y": 620,
+          "w": 22,
+          "h": 22
+        },
+        "splitBtn": {
+          "x": 815,
+          "y": 620,
+          "w": 39,
+          "h": 22
+        },
+        "restartBtn": {
+          "x": 858,
+          "y": 620,
+          "w": 52,
+          "h": 22
+        },
+        "killBtn": {
+          "x": 914,
+          "y": 620,
+          "w": 32,
+          "h": 22
+        },
+        "sessionTabs": [
+          {
+            "label": "PowerShell 1",
+            "box": {
+              "x": 697,
+              "y": 620,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          },
+          {
+            "label": "PowerShell 2",
+            "box": {
+              "x": 797,
+              "y": 620,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          },
+          {
+            "label": "PowerShell 3",
+            "box": {
+              "x": 897,
+              "y": 620,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          },
+          {
+            "label": "PowerShell 4",
+            "box": {
+              "x": 997,
+              "y": 620,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          }
+        ],
+        "sessionTabCount": 4,
+        "stage": {
+          "x": 374,
+          "y": 645,
+          "w": 580,
+          "h": 97
+        },
+        "xterm": {
+          "x": 375,
+          "y": 646,
+          "w": 578,
+          "h": 95
+        },
+        "labelFs": "10px",
+        "selectH": 22,
+        "newBtnH": 22,
+        "tabH": 22,
+        "clipped": []
+      },
+      "narrow": {
+        "vw": 1366,
+        "vh": 768,
+        "bottom": {
+          "x": 374,
+          "y": 582,
+          "w": 600,
+          "h": 160
+        },
+        "bottomTabs": {
+          "x": 374,
+          "y": 583,
+          "w": 600,
+          "h": 34
+        },
+        "bottomTabH": 34,
+        "problemsToolbarH": 0,
+        "toolbar": {
+          "x": 374,
+          "y": 617,
+          "w": 600,
+          "h": 28
+        },
+        "toolbarH": 28,
+        "toolbarOverflowX": "hidden",
+        "toolbarScroll": {
+          "scrollWidth": 600,
+          "clientWidth": 600,
+          "overflow": false
+        },
+        "repoSelect": {
+          "x": 392,
+          "y": 620,
+          "w": 112,
+          "h": 22
+        },
+        "shellSelect": {
+          "x": 510,
+          "y": 620,
+          "w": 81,
+          "h": 22
+        },
+        "newBtn": {
+          "x": 597,
+          "y": 620,
+          "w": 94,
+          "h": 22
+        },
+        "addBtn": {
+          "x": 807,
+          "y": 620,
+          "w": 22,
+          "h": 22
+        },
+        "splitBtn": {
+          "x": 835,
+          "y": 620,
+          "w": 39,
+          "h": 22
+        },
+        "restartBtn": {
+          "x": 878,
+          "y": 620,
+          "w": 52,
+          "h": 22
+        },
+        "killBtn": {
+          "x": 934,
+          "y": 620,
+          "w": 32,
+          "h": 22
+        },
+        "sessionTabs": [
+          {
+            "label": "PowerShell 1",
+            "box": {
+              "x": 697,
+              "y": 620,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          },
+          {
+            "label": "PowerShell 2",
+            "box": {
+              "x": 797,
+              "y": 620,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          },
+          {
+            "label": "PowerShell 3",
+            "box": {
+              "x": 897,
+              "y": 620,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          },
+          {
+            "label": "PowerShell 4",
+            "box": {
+              "x": 997,
+              "y": 620,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          }
+        ],
+        "sessionTabCount": 4,
+        "stage": {
+          "x": 374,
+          "y": 645,
+          "w": 600,
+          "h": 97
+        },
+        "xterm": {
+          "x": 375,
+          "y": 646,
+          "w": 598,
+          "h": 95
+        },
+        "labelFs": "10px",
+        "selectH": 22,
+        "newBtnH": 22,
+        "tabH": 22,
+        "clipped": []
+      },
+      "tall": {
+        "vw": 1366,
+        "vh": 768,
+        "bottom": {
+          "x": 374,
+          "y": 422,
+          "w": 600,
+          "h": 320
+        },
+        "bottomTabs": {
+          "x": 374,
+          "y": 423,
+          "w": 600,
+          "h": 34
+        },
+        "bottomTabH": 34,
+        "problemsToolbarH": 0,
+        "toolbar": {
+          "x": 374,
+          "y": 457,
+          "w": 600,
+          "h": 28
+        },
+        "toolbarH": 28,
+        "toolbarOverflowX": "hidden",
+        "toolbarScroll": {
+          "scrollWidth": 600,
+          "clientWidth": 600,
+          "overflow": false
+        },
+        "repoSelect": {
+          "x": 392,
+          "y": 460,
+          "w": 112,
+          "h": 22
+        },
+        "shellSelect": {
+          "x": 510,
+          "y": 460,
+          "w": 81,
+          "h": 22
+        },
+        "newBtn": {
+          "x": 597,
+          "y": 460,
+          "w": 94,
+          "h": 22
+        },
+        "addBtn": {
+          "x": 807,
+          "y": 460,
+          "w": 22,
+          "h": 22
+        },
+        "splitBtn": {
+          "x": 835,
+          "y": 460,
+          "w": 39,
+          "h": 22
+        },
+        "restartBtn": {
+          "x": 878,
+          "y": 460,
+          "w": 52,
+          "h": 22
+        },
+        "killBtn": {
+          "x": 934,
+          "y": 460,
+          "w": 32,
+          "h": 22
+        },
+        "sessionTabs": [
+          {
+            "label": "PowerShell 1",
+            "box": {
+              "x": 697,
+              "y": 460,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          },
+          {
+            "label": "PowerShell 2",
+            "box": {
+              "x": 797,
+              "y": 460,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          },
+          {
+            "label": "PowerShell 3",
+            "box": {
+              "x": 897,
+              "y": 460,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          },
+          {
+            "label": "PowerShell 4",
+            "box": {
+              "x": 997,
+              "y": 460,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          }
+        ],
+        "sessionTabCount": 4,
+        "stage": {
+          "x": 374,
+          "y": 485,
+          "w": 600,
+          "h": 257
+        },
+        "xterm": {
+          "x": 375,
+          "y": 486,
+          "w": 598,
+          "h": 255
+        },
+        "labelFs": "10px",
+        "selectH": 22,
+        "newBtnH": 22,
+        "tabH": 22,
+        "clipped": []
+      },
+      "short": {
+        "vw": 1366,
+        "vh": 768,
+        "bottom": {
+          "x": 374,
+          "y": 602,
+          "w": 600,
+          "h": 140
+        },
+        "bottomTabs": {
+          "x": 374,
+          "y": 603,
+          "w": 600,
+          "h": 34
+        },
+        "bottomTabH": 34,
+        "problemsToolbarH": 0,
+        "toolbar": {
+          "x": 374,
+          "y": 637,
+          "w": 600,
+          "h": 28
+        },
+        "toolbarH": 28,
+        "toolbarOverflowX": "hidden",
+        "toolbarScroll": {
+          "scrollWidth": 600,
+          "clientWidth": 600,
+          "overflow": false
+        },
+        "repoSelect": {
+          "x": 392,
+          "y": 640,
+          "w": 112,
+          "h": 22
+        },
+        "shellSelect": {
+          "x": 510,
+          "y": 640,
+          "w": 81,
+          "h": 22
+        },
+        "newBtn": {
+          "x": 597,
+          "y": 640,
+          "w": 94,
+          "h": 22
+        },
+        "addBtn": {
+          "x": 807,
+          "y": 640,
+          "w": 22,
+          "h": 22
+        },
+        "splitBtn": {
+          "x": 835,
+          "y": 640,
+          "w": 39,
+          "h": 22
+        },
+        "restartBtn": {
+          "x": 878,
+          "y": 640,
+          "w": 52,
+          "h": 22
+        },
+        "killBtn": {
+          "x": 934,
+          "y": 640,
+          "w": 32,
+          "h": 22
+        },
+        "sessionTabs": [
+          {
+            "label": "PowerShell 1",
+            "box": {
+              "x": 697,
+              "y": 640,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          },
+          {
+            "label": "PowerShell 2",
+            "box": {
+              "x": 797,
+              "y": 640,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          },
+          {
+            "label": "PowerShell 3",
+            "box": {
+              "x": 897,
+              "y": 640,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          },
+          {
+            "label": "PowerShell 4",
+            "box": {
+              "x": 997,
+              "y": 640,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          }
+        ],
+        "sessionTabCount": 4,
+        "stage": {
+          "x": 374,
+          "y": 665,
+          "w": 600,
+          "h": 77
+        },
+        "xterm": {
+          "x": 375,
+          "y": 666,
+          "w": 598,
+          "h": 75
+        },
+        "labelFs": "10px",
+        "selectH": 22,
+        "newBtnH": 22,
+        "tabH": 22,
+        "clipped": []
+      }
+    },
+    "1600x900": {
+      "one": {
+        "vw": 1600,
+        "vh": 900,
+        "bottom": {
+          "x": 374,
+          "y": 714,
+          "w": 814,
+          "h": 160
+        },
+        "bottomTabs": {
+          "x": 374,
+          "y": 715,
+          "w": 814,
+          "h": 34
+        },
+        "bottomTabH": 34,
+        "problemsToolbarH": 0,
+        "toolbar": {
+          "x": 374,
+          "y": 749,
+          "w": 814,
+          "h": 28
+        },
+        "toolbarH": 28,
+        "toolbarOverflowX": "hidden",
+        "toolbarScroll": {
+          "scrollWidth": 814,
+          "clientWidth": 814,
+          "overflow": false
+        },
+        "repoSelect": {
+          "x": 445,
+          "y": 752,
+          "w": 140,
+          "h": 22
+        },
+        "shellSelect": {
+          "x": 617,
+          "y": 752,
+          "w": 91,
+          "h": 22
+        },
+        "newBtn": {
+          "x": 714,
+          "y": 752,
+          "w": 94,
+          "h": 22
+        },
+        "addBtn": {
+          "x": 1021,
+          "y": 752,
+          "w": 22,
+          "h": 22
+        },
+        "splitBtn": {
+          "x": 1049,
+          "y": 752,
+          "w": 39,
+          "h": 22
+        },
+        "restartBtn": {
+          "x": 1092,
+          "y": 752,
+          "w": 52,
+          "h": 22
+        },
+        "killBtn": {
+          "x": 1148,
+          "y": 752,
+          "w": 32,
+          "h": 22
+        },
+        "sessionTabs": [
+          {
+            "label": "PowerShell 1",
+            "box": {
+              "x": 815,
+              "y": 752,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          }
+        ],
+        "sessionTabCount": 1,
+        "stage": {
+          "x": 374,
+          "y": 777,
+          "w": 814,
+          "h": 97
+        },
+        "xterm": {
+          "x": 375,
+          "y": 778,
+          "w": 812,
+          "h": 95
+        },
+        "labelFs": "10px",
+        "selectH": 22,
+        "newBtnH": 22,
+        "tabH": 22,
+        "clipped": []
+      },
+      "several": {
+        "vw": 1600,
+        "vh": 900,
+        "bottom": {
+          "x": 374,
+          "y": 714,
+          "w": 814,
+          "h": 160
+        },
+        "bottomTabs": {
+          "x": 374,
+          "y": 715,
+          "w": 814,
+          "h": 34
+        },
+        "bottomTabH": 34,
+        "problemsToolbarH": 0,
+        "toolbar": {
+          "x": 374,
+          "y": 749,
+          "w": 814,
+          "h": 28
+        },
+        "toolbarH": 28,
+        "toolbarOverflowX": "hidden",
+        "toolbarScroll": {
+          "scrollWidth": 814,
+          "clientWidth": 814,
+          "overflow": false
+        },
+        "repoSelect": {
+          "x": 445,
+          "y": 752,
+          "w": 140,
+          "h": 22
+        },
+        "shellSelect": {
+          "x": 617,
+          "y": 752,
+          "w": 91,
+          "h": 22
+        },
+        "newBtn": {
+          "x": 714,
+          "y": 752,
+          "w": 94,
+          "h": 22
+        },
+        "addBtn": {
+          "x": 1021,
+          "y": 752,
+          "w": 22,
+          "h": 22
+        },
+        "splitBtn": {
+          "x": 1049,
+          "y": 752,
+          "w": 39,
+          "h": 22
+        },
+        "restartBtn": {
+          "x": 1092,
+          "y": 752,
+          "w": 52,
+          "h": 22
+        },
+        "killBtn": {
+          "x": 1148,
+          "y": 752,
+          "w": 32,
+          "h": 22
+        },
+        "sessionTabs": [
+          {
+            "label": "PowerShell 1",
+            "box": {
+              "x": 815,
+              "y": 752,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          },
+          {
+            "label": "PowerShell 2",
+            "box": {
+              "x": 915,
+              "y": 752,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          },
+          {
+            "label": "PowerShell 3",
+            "box": {
+              "x": 1015,
+              "y": 752,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          },
+          {
+            "label": "PowerShell 4",
+            "box": {
+              "x": 1115,
+              "y": 752,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          }
+        ],
+        "sessionTabCount": 4,
+        "stage": {
+          "x": 374,
+          "y": 777,
+          "w": 814,
+          "h": 97
+        },
+        "xterm": {
+          "x": 375,
+          "y": 778,
+          "w": 812,
+          "h": 95
+        },
+        "labelFs": "10px",
+        "selectH": 22,
+        "newBtnH": 22,
+        "tabH": 22,
+        "clipped": []
+      },
+      "narrow": {
+        "vw": 1600,
+        "vh": 900,
+        "bottom": {
+          "x": 374,
+          "y": 714,
+          "w": 834,
+          "h": 160
+        },
+        "bottomTabs": {
+          "x": 374,
+          "y": 715,
+          "w": 834,
+          "h": 34
+        },
+        "bottomTabH": 34,
+        "problemsToolbarH": 0,
+        "toolbar": {
+          "x": 374,
+          "y": 749,
+          "w": 834,
+          "h": 28
+        },
+        "toolbarH": 28,
+        "toolbarOverflowX": "hidden",
+        "toolbarScroll": {
+          "scrollWidth": 834,
+          "clientWidth": 834,
+          "overflow": false
+        },
+        "repoSelect": {
+          "x": 445,
+          "y": 752,
+          "w": 140,
+          "h": 22
+        },
+        "shellSelect": {
+          "x": 617,
+          "y": 752,
+          "w": 91,
+          "h": 22
+        },
+        "newBtn": {
+          "x": 714,
+          "y": 752,
+          "w": 94,
+          "h": 22
+        },
+        "addBtn": {
+          "x": 1041,
+          "y": 752,
+          "w": 22,
+          "h": 22
+        },
+        "splitBtn": {
+          "x": 1069,
+          "y": 752,
+          "w": 39,
+          "h": 22
+        },
+        "restartBtn": {
+          "x": 1112,
+          "y": 752,
+          "w": 52,
+          "h": 22
+        },
+        "killBtn": {
+          "x": 1168,
+          "y": 752,
+          "w": 32,
+          "h": 22
+        },
+        "sessionTabs": [
+          {
+            "label": "PowerShell 1",
+            "box": {
+              "x": 815,
+              "y": 752,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          },
+          {
+            "label": "PowerShell 2",
+            "box": {
+              "x": 915,
+              "y": 752,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          },
+          {
+            "label": "PowerShell 3",
+            "box": {
+              "x": 1015,
+              "y": 752,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          },
+          {
+            "label": "PowerShell 4",
+            "box": {
+              "x": 1115,
+              "y": 752,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          }
+        ],
+        "sessionTabCount": 4,
+        "stage": {
+          "x": 374,
+          "y": 777,
+          "w": 834,
+          "h": 97
+        },
+        "xterm": {
+          "x": 375,
+          "y": 778,
+          "w": 832,
+          "h": 95
+        },
+        "labelFs": "10px",
+        "selectH": 22,
+        "newBtnH": 22,
+        "tabH": 22,
+        "clipped": []
+      },
+      "tall": {
+        "vw": 1600,
+        "vh": 900,
+        "bottom": {
+          "x": 374,
+          "y": 554,
+          "w": 834,
+          "h": 320
+        },
+        "bottomTabs": {
+          "x": 374,
+          "y": 555,
+          "w": 834,
+          "h": 34
+        },
+        "bottomTabH": 34,
+        "problemsToolbarH": 0,
+        "toolbar": {
+          "x": 374,
+          "y": 589,
+          "w": 834,
+          "h": 28
+        },
+        "toolbarH": 28,
+        "toolbarOverflowX": "hidden",
+        "toolbarScroll": {
+          "scrollWidth": 834,
+          "clientWidth": 834,
+          "overflow": false
+        },
+        "repoSelect": {
+          "x": 445,
+          "y": 592,
+          "w": 140,
+          "h": 22
+        },
+        "shellSelect": {
+          "x": 617,
+          "y": 592,
+          "w": 91,
+          "h": 22
+        },
+        "newBtn": {
+          "x": 714,
+          "y": 592,
+          "w": 94,
+          "h": 22
+        },
+        "addBtn": {
+          "x": 1041,
+          "y": 592,
+          "w": 22,
+          "h": 22
+        },
+        "splitBtn": {
+          "x": 1069,
+          "y": 592,
+          "w": 39,
+          "h": 22
+        },
+        "restartBtn": {
+          "x": 1112,
+          "y": 592,
+          "w": 52,
+          "h": 22
+        },
+        "killBtn": {
+          "x": 1168,
+          "y": 592,
+          "w": 32,
+          "h": 22
+        },
+        "sessionTabs": [
+          {
+            "label": "PowerShell 1",
+            "box": {
+              "x": 815,
+              "y": 592,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          },
+          {
+            "label": "PowerShell 2",
+            "box": {
+              "x": 915,
+              "y": 592,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          },
+          {
+            "label": "PowerShell 3",
+            "box": {
+              "x": 1015,
+              "y": 592,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          },
+          {
+            "label": "PowerShell 4",
+            "box": {
+              "x": 1115,
+              "y": 592,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          }
+        ],
+        "sessionTabCount": 4,
+        "stage": {
+          "x": 374,
+          "y": 617,
+          "w": 834,
+          "h": 257
+        },
+        "xterm": {
+          "x": 375,
+          "y": 618,
+          "w": 832,
+          "h": 255
+        },
+        "labelFs": "10px",
+        "selectH": 22,
+        "newBtnH": 22,
+        "tabH": 22,
+        "clipped": []
+      },
+      "short": {
+        "vw": 1600,
+        "vh": 900,
+        "bottom": {
+          "x": 374,
+          "y": 734,
+          "w": 834,
+          "h": 140
+        },
+        "bottomTabs": {
+          "x": 374,
+          "y": 735,
+          "w": 834,
+          "h": 34
+        },
+        "bottomTabH": 34,
+        "problemsToolbarH": 0,
+        "toolbar": {
+          "x": 374,
+          "y": 769,
+          "w": 834,
+          "h": 28
+        },
+        "toolbarH": 28,
+        "toolbarOverflowX": "hidden",
+        "toolbarScroll": {
+          "scrollWidth": 834,
+          "clientWidth": 834,
+          "overflow": false
+        },
+        "repoSelect": {
+          "x": 445,
+          "y": 772,
+          "w": 140,
+          "h": 22
+        },
+        "shellSelect": {
+          "x": 617,
+          "y": 772,
+          "w": 91,
+          "h": 22
+        },
+        "newBtn": {
+          "x": 714,
+          "y": 772,
+          "w": 94,
+          "h": 22
+        },
+        "addBtn": {
+          "x": 1041,
+          "y": 772,
+          "w": 22,
+          "h": 22
+        },
+        "splitBtn": {
+          "x": 1069,
+          "y": 772,
+          "w": 39,
+          "h": 22
+        },
+        "restartBtn": {
+          "x": 1112,
+          "y": 772,
+          "w": 52,
+          "h": 22
+        },
+        "killBtn": {
+          "x": 1168,
+          "y": 772,
+          "w": 32,
+          "h": 22
+        },
+        "sessionTabs": [
+          {
+            "label": "PowerShell 1",
+            "box": {
+              "x": 815,
+              "y": 772,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          },
+          {
+            "label": "PowerShell 2",
+            "box": {
+              "x": 915,
+              "y": 772,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          },
+          {
+            "label": "PowerShell 3",
+            "box": {
+              "x": 1015,
+              "y": 772,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          },
+          {
+            "label": "PowerShell 4",
+            "box": {
+              "x": 1115,
+              "y": 772,
+              "w": 98,
+              "h": 22
+            },
+            "overflow": false
+          }
+        ],
+        "sessionTabCount": 4,
+        "stage": {
+          "x": 374,
+          "y": 797,
+          "w": 834,
+          "h": 77
+        },
+        "xterm": {
+          "x": 375,
+          "y": 798,
+          "w": 832,
+          "h": 75
+        },
+        "labelFs": "10px",
+        "selectH": 22,
+        "newBtnH": 22,
+        "tabH": 22,
+        "clipped": []
+      }
+    }
+  }
+}

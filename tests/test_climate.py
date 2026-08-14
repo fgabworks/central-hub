@@ -502,6 +502,7 @@ class ClimateUiContractTests(unittest.TestCase):
         self.assertIn(".climate-wc-terminal .wc-term-toolbar", css)
         self.assertIn("height: 28px", css)
         self.assertIn("tabShortLabel", (root / "static" / "js" / "wc_terminal.js").read_text(encoding="utf-8"))
+        self.assertIn("hostIsFitReady", (root / "static" / "js" / "wc_terminal.js").read_text(encoding="utf-8"))
         self.assertIn("convertEol", (root / "static" / "js" / "wc_terminal.js").read_text(encoding="utf-8"))
         self.assertIn("positionClimateDropdownMenu", script)
         self.assertIn("is-portal", script)

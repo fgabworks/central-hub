@@ -1,0 +1,60 @@
+{
+  "base": "http://127.0.0.1:8080",
+  "ok": true,
+  "checks": [
+    {
+      "name": "echo one",
+      "ok": true,
+      "detail": "ion, script file, or\noperable program. Check the spelling of the name, or if a path was included, verify that the path is correct\nand try again.\nAt line:1 char:1\n+ sadsadasda\n+ ~~~~~~~~~~\n    + CategoryInfo          : ObjectNotFound: (sadsadasda:String) [], CommandNotFoundException\n    + FullyQualifiedErrorId : CommandNotFoundException\n\nPS C:\\PMNP\\pmnp-live-processing> Get-ChildItem -Name | Select-Object -First 5\n.claude\n.pytest_cache\n.tmp-tests\nAI_REFERENCE\ndocs\nPS C:\\PMNP\\pmnp-live-processing>"
+    },
+    {
+      "name": "echo two",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "invalid command visible",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "invalid command not duplicated",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "multiline listing",
+      "ok": true,
+      "detail": "PS C:\\PMNP\\pmnp-live-processing> echo one | one | PS C:\\PMNP\\pmnp-live-processing> echo two | two | PS C:\\PMNP\\pmnp-live-processing> sadsadasda | sadsadasda : The term 'sadsadasda' is not recognized as the name of a cmdlet, function, script file, or | operable program. Check the spelling of the name, or if a path was included, verify that the path is correct | and try again. | At line:1 char:1 | + sadsadasda | + ~~~~~~~~~~ |     + CategoryInfo          : ObjectNotFound: (sadsadasda:String) [], CommandNotFoundException |     + FullyQualifiedErrorId : CommandNotFoundException | PS C:\\PMNP\\pmnp-live-processing> Get-ChildItem -Name | Select-Object -First 5 | .claude | .pytest_cache | .tmp-tests | AI_REFERENCE | docs | PS C:\\PMNP\\pmnp-live-processing>"
+    },
+    {
+      "name": "listing not duplicated",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "no glued prompts",
+      "ok": true,
+      "detail": "PS C:\\PMNP\\pmnp-live-processing> echo one || PS C:\\PMNP\\pmnp-live-processing> echo two || PS C:\\PMNP\\pmnp-live-processing> sadsadasda || PS C:\\PMNP\\pmnp-live-processing> Get-ChildItem -Name | Select-Object -First 5 || PS C:\\PMNP\\pmnp-live-processing>"
+    },
+    {
+      "name": "multiple prompts",
+      "ok": true,
+      "detail": "5"
+    },
+    {
+      "name": "last prompt at column 0",
+      "ok": true,
+      "detail": "PS C:\\PMNP\\pmnp-live-processing>"
+    },
+    {
+      "name": "term width usable",
+      "ok": true,
+      "detail": "{\"cols\":111,\"rows\":14}"
+    }
+  ],
+  "termSize": {
+    "cols": 111,
+    "rows": 14
+  }
+}

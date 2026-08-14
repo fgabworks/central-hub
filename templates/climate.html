@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ climate.context_label }} · CLIMATE{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/climate.css') }}?v=22">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/climate.css') }}?v=24">
 {% endblock %}
 {% block content %}
 <div class="climate-shell" id="climate-shell"
@@ -129,7 +129,7 @@
                 <span class="wc-field-label">Shell</span>
                 <select id="wc-term-shell" class="wc-control wc-term-shell-select" aria-label="Shell"></select>
               </label>
-              <button type="button" class="btn btn-sm btn-primary wc-control-btn" id="wc-term-new" title="New interactive terminal">+ New Terminal</button>
+              <button type="button" class="btn btn-sm btn-primary wc-control-btn" id="wc-term-new" title="New interactive terminal">+ New<span class="wc-term-new-rest"> Terminal</span></button>
               <div class="wc-term-session-tabs" id="wc-term-session-tabs" role="tablist" aria-label="Terminal sessions"></div>
               <button type="button" class="btn btn-sm wc-control-btn wc-term-quick-add" id="wc-term-add" title="New terminal" aria-label="New terminal">+</button>
               <div class="wc-term-actions">
@@ -330,6 +330,6 @@
 {% endblock %}
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
-<script src="{{ url_for('static', filename='js/wc_terminal.js') }}?v=climate-2"></script>
+<script src="{{ url_for('static', filename='js/wc_terminal.js') }}?v=climate-5"></script>
 <script src="{{ url_for('static', filename='js/climate.js') }}?v=21"></script>
 {% endblock %}

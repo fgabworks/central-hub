@@ -458,7 +458,9 @@ CLI native tool loops) stays deferred.
 
 **Interactive repository terminal is implemented** (PTY + WebSocket + xterm.js).
 Windows ConPTY lone LF is normalized to CRLF so PowerShell prompts stay on their own
-line. CLIMATE’s Terminal toolbar is a compact VS Code-like row. See [SECURITY.md](SECURITY.md).
+line. CLIMATE never fits/resizes a hidden terminal (that spawned PowerShell at ~8–20
+columns and glued the next prompt onto `echo one`). The Terminal toolbar is a compact
+VS Code-like row. See [SECURITY.md](SECURITY.md).
 
 Next development target: **DHIS2 Standard Reports** (credentialed HTML viewer / library polish).
 DHIS2 Standard Report Manager Phase 2+ (replacement / design write-back) is **not** started.

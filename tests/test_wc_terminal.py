@@ -167,6 +167,20 @@ class TerminalSessionLifecycleTests(unittest.TestCase):
             self.assertNotIn("echo hub-term-ok", blob)
             self.assertNotIn("PASSWORD", blob.upper() if "password" in blob.lower() else blob)
 
+    def test_create_and_resize_reject_tiny_pty_dimensions(self):
+        sess = self.mgr.create(
+            repository_id="demo",
+            shell="powershell" if os.name == "nt" else "bash",
+            cols=8,
+            rows=4,
+        )
+        self.assertGreaterEqual(sess["cols"], 40)
+        self.assertGreaterEqual(sess["rows"], 10)
+        out = self.mgr.resize(sess["id"], 8, 4)
+        self.assertGreaterEqual(out["cols"], 40)
+        self.assertGreaterEqual(out["rows"], 10)
+        self.mgr.close(sess["id"], confirm=True)
+
     def test_multiple_sessions_and_duplicate(self):
         a = self.mgr.create(repository_id="demo", name="A")
         b = self.mgr.duplicate(a["id"])
@@ -416,11 +430,19 @@ class TerminalRouteTests(unittest.TestCase):
         # Public layout helpers for diagnostics/tests
         self.assertIn("getLayoutState", term_js)
         self.assertIn("isSplitEnabled", term_js)
+        self.assertIn("ptyTextForXterm", term_js)
+        self.assertIn("currentTermSize", term_js)
+        self.assertIn("hostIsFitReady", term_js)
+        self.assertIn("sendInput", term_js)
+        self.assertIn("attachGen", term_js)
+        self.assertIn("stillCurrent", term_js)
+        self.assertIn("convertEol: !win", term_js)
+        self.assertIn("windowsMode: false", term_js)
         self.assertIn("convertEol", term_js)
-        self.assertIn("windowsMode", term_js)
         self.assertIn("tabShortLabel", term_js)
         self.assertIn("getBufferText", term_js)
         self.assertNotIn("term.write(data)", term_js)
+        self.assertNotIn("convertEol: true", term_js)
 
 
 class ConptyNewlineTests(unittest.TestCase):

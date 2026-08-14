@@ -191,8 +191,8 @@ class TerminalSessionManager:
         shell_id, argv = resolve_shell_executable(
             shell or default_shell_id(), allow_cmd=self.settings.allow_cmd
         )
-        cols_i = int(cols or self.settings.default_cols)
-        rows_i = int(rows or self.settings.default_rows)
+        cols_i = max(40, min(400, int(cols or self.settings.default_cols)))
+        rows_i = max(10, min(120, int(rows or self.settings.default_rows)))
         session_id = uuid.uuid4().hex[:12]
         repo_name = getattr(repo, "name", repository_id) or repository_id
         label = (name or "").strip() or self._default_session_name(
@@ -355,8 +355,8 @@ class TerminalSessionManager:
 
     def resize(self, session_id: str, cols: int, rows: int) -> dict[str, Any]:
         sess = self._require(session_id)
-        cols_i = max(20, min(400, int(cols)))
-        rows_i = max(8, min(120, int(rows)))
+        cols_i = max(40, min(400, int(cols)))
+        rows_i = max(10, min(120, int(rows)))
         sess.cols = cols_i
         sess.rows = rows_i
         if sess._pty:

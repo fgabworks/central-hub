@@ -119,6 +119,8 @@ async function closeExtraSessions(page, keep) {
     }
   }, keep);
 }
+
+async function openTerminal(page) {
   await page.goto(BASE + "/work/climate", { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.waitForSelector("#climate-workbench", { timeout: 30000 });
   await page.evaluate(() => {
@@ -134,7 +136,10 @@ async function closeExtraSessions(page, keep) {
   await page.waitForSelector("#climate-terminal-panel", { timeout: 15000 });
   await page.waitForTimeout(400);
   await closeExtraSessions(page, 0);
-  await page.waitForTimeout(300);
+  await page.evaluate(() => {
+    if (window.WCTerminal && window.WCTerminal.refreshSessions) return window.WCTerminal.refreshSessions();
+  });
+  await page.waitForTimeout(400);
   const repo = page.locator("#wc-term-repo");
   if (await repo.count()) {
     const value = await repo.evaluate((el) => {
@@ -206,8 +211,8 @@ async function closeExtraSessions(page, keep) {
 
       // taller / shorter bottom
       await page.evaluate(() => {
-        const center = document.getElementById("climate-center");
-        if (center) center.style.setProperty("--bottom", "320px");
+        const wb = document.querySelector("#climate-workbench");
+        if (wb) wb.style.setProperty("--bottom", "320px");
       });
       await page.waitForTimeout(200);
       const tall = await measure(page);
@@ -216,8 +221,8 @@ async function closeExtraSessions(page, keep) {
         fullPage: false,
       });
       await page.evaluate(() => {
-        const center = document.getElementById("climate-center");
-        if (center) center.style.setProperty("--bottom", "140px");
+        const wb = document.querySelector("#climate-workbench");
+        if (wb) wb.style.setProperty("--bottom", "140px");
       });
       await page.waitForTimeout(200);
       const short = await measure(page);

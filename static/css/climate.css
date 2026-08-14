@@ -1309,12 +1309,15 @@ body > .climate-dd-menu .climate-dd-option.is-disabled {
   min-height: 0;
   height: 100%;
   overflow: hidden;
+  container-type: inline-size;
 }
 .climate-wc-terminal .wc-term-toolbar {
   flex: 0 0 auto;
   flex-wrap: nowrap;
+  justify-content: flex-start;
   align-items: center;
   gap: 6px;
+  box-sizing: border-box;
   min-height: 28px;
   height: 28px;
   padding: 0 8px;
@@ -1358,12 +1361,12 @@ body > .climate-dd-menu .climate-dd-option.is-disabled {
   border: 1px solid var(--cl-border);
 }
 .climate-wc-terminal .wc-term-repo-select {
-  min-width: 7.5rem;
+  min-width: 5.5rem;
   max-width: 11rem;
   width: 10rem;
 }
 .climate-wc-terminal .wc-term-shell-select {
-  min-width: 5.5rem;
+  min-width: 4.75rem;
   max-width: 7.5rem;
   width: 6.5rem;
 }
@@ -1380,6 +1383,7 @@ body > .climate-dd-menu .climate-dd-option.is-disabled {
   background: var(--cl-panel-2);
   color: var(--cl-text);
   box-shadow: none;
+  flex-shrink: 0;
 }
 .climate-wc-terminal .wc-term-toolbar .btn.btn-sm:hover:not(:disabled),
 .climate-wc-terminal .wc-term-toolbar .wc-control-btn:hover:not(:disabled) {
@@ -1412,7 +1416,7 @@ body > .climate-dd-menu .climate-dd-option.is-disabled {
 }
 .climate-wc-terminal .wc-term-session-tabs {
   flex: 1 1 auto;
-  min-width: 4.5rem;
+  min-width: 3.25rem;
   height: 22px;
   min-height: 22px;
   gap: 2px;
@@ -1464,10 +1468,23 @@ body > .climate-dd-menu .climate-dd-option.is-disabled {
   min-width: 22px;
   width: 22px;
   padding: 0;
+  flex: 0 0 auto;
 }
 .climate-wc-terminal .wc-term-actions {
   gap: 4px;
-  margin-left: 0;
+  margin-left: auto;
+  flex: 0 0 auto;
+  flex-shrink: 0;
+}
+.climate-wc-terminal #wc-term-new {
+  flex: 0 0 auto;
+}
+@container (max-width: 640px) {
+  .climate-wc-terminal .wc-field-label,
+  .climate-wc-terminal .wc-term-toolbar .wc-field-label { display: none; }
+  .climate-wc-terminal .wc-term-new-rest { display: none; }
+  .climate-wc-terminal .wc-term-repo-select { width: 8rem; max-width: 8.5rem; }
+  .climate-wc-terminal .wc-term-shell-select { width: 5.75rem; max-width: 6.25rem; }
 }
 .climate-wc-terminal .wc-term-stage {
   flex: 1 1 auto;

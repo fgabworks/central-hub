@@ -111,6 +111,75 @@
     return /Win/i.test(navigator.platform || "") || /Windows/i.test(navigator.userAgent || "");
   }
 
+  function ptyTextForXterm(text) {
+    var s = String(text || "");
+    var out = "";
+    for (var i = 0; i < s.length; i++) {
+      var ch = s.charAt(i);
+      if (ch === "\n" && (i === 0 || s.charAt(i - 1) !== "\r")) out += "\r";
+      out += ch;
+    }
+    return out;
+  }
+
+  function clampTermSize(cols, rows) {
+    return {
+      cols: Math.max(40, Math.min(400, parseInt(cols, 10) || 80)),
+      rows: Math.max(10, Math.min(120, parseInt(rows, 10) || 24)),
+    };
+  }
+
+  function hostIsFitReady(view) {
+    if (!view || !view.host || state.renderingPaused) return false;
+    var stage = $("wc-term-stage");
+    if (stage && stage.hidden) return false;
+    var w = view.host.clientWidth || 0;
+    var h = view.host.clientHeight || 0;
+    return w >= 200 && h >= 40;
+  }
+
+  function revealTerminalStage() {
+    var empty = $("wc-term-empty");
+    var stage = $("wc-term-stage");
+    if (empty) empty.hidden = true;
+    if (stage) stage.hidden = false;
+  }
+
+  function writePtyOut(view, data) {
+    if (!view || !view.term) return;
+    if (state.renderingPaused) {
+      state.hiddenActivity += 1;
+      updateBadges();
+    }
+    view.term.write(ptyTextForXterm(data || ""));
+  }
+
+  function releaseHeldOutput(view) {
+    if (!view) return;
+    if (!hostIsFitReady(view)) {
+      if (view.holdTries == null) view.holdTries = 0;
+      view.holdTries += 1;
+      if (view.holdTries < 30) {
+        requestAnimationFrame(function () {
+          releaseHeldOutput(view);
+        });
+        return;
+      }
+    }
+    view.holdTries = 0;
+    try {
+      if (view.fit && hostIsFitReady(view)) view.fit.fit();
+    } catch (e) {}
+    view.holdOutput = false;
+    var pending = view.pendingOut || [];
+    view.pendingOut = [];
+    if (pending.length) {
+      writePtyOut(view, pending.join(""));
+      markActivity();
+    }
+    fitView(view);
+  }
+
   function createView(slot, hostEl) {
     var win = isWindowsHost();
     var term = new global.Terminal({
@@ -120,10 +189,10 @@
       theme: { background: "#0e1116", foreground: "#d7dde5" },
       scrollback: 5000,
       allowProposedApi: true,
-      // ConPTY/pywinpty often emits LF without CR; LF must also return to column 0.
-      convertEol: win,
-      windowsMode: win,
-      windowsPty: win ? { backend: "conpty" } : {},
+      // ConPTY already emits CRLF; convertEol/windowsMode double-wrap PowerShell prompts.
+      convertEol: !win,
+      windowsMode: false,
+      windowsPty: win ? { backend: "conpty", buildNumber: 22621 } : {},
     });
     var Fit = FitCtor();
     var fit = Fit ? new Fit() : null;
@@ -138,6 +207,9 @@
       ws: null,
       disposed: false,
       intentionalClose: false,
+      holdOutput: false,
+      pendingOut: [],
+      holdTries: 0,
     };
     term.onData(function (data) {
       if (!view.ws || view.ws.readyState !== 1) return;
@@ -187,12 +259,12 @@
     if (!view || !view.fit || state.renderingPaused) return;
     var pane = view.host && view.host.closest ? view.host.closest(".wc-term-view") : null;
     if (pane && pane.hidden) return;
+    if (!hostIsFitReady(view)) return;
     try {
       view.fit.fit();
       if (view.ws && view.ws.readyState === 1) {
-        view.ws.send(
-          JSON.stringify({ type: "resize", cols: view.term.cols, rows: view.term.rows })
-        );
+        var size = clampTermSize(view.term.cols, view.term.rows);
+        view.ws.send(JSON.stringify({ type: "resize", cols: size.cols, rows: size.rows }));
       }
     } catch (e) {}
   }
@@ -233,7 +305,7 @@
 
   function attachSession(view, sessionId) {
     if (!view || !sessionId) return Promise.resolve(false);
-    if (view.sessionId === sessionId && view.ws && view.ws.readyState === 1) {
+    if (view.sessionId === sessionId && view.ws && view.ws.readyState <= 1) {
       hideFail(view.slot);
       fitView(view);
       return Promise.resolve(true);
@@ -241,6 +313,11 @@
     disconnectView(view, { intentional: true, hideFail: true });
     view.sessionId = sessionId;
     view.intentionalClose = false;
+    view.holdOutput = true;
+    view.pendingOut = [];
+    view.holdTries = 0;
+    view.attachGen = (view.attachGen || 0) + 1;
+    var attachGen = view.attachGen;
     view.term.reset();
     return jsonFetch(API.sessions + "/" + sessionId + "/ticket", { method: "POST", body: "{}" }).then(
       function (body) {
@@ -251,7 +328,23 @@
         }
         var sock = new WebSocket(wsUrl(sessionId, body.ticket));
         view.ws = sock;
+        function stillCurrent() {
+          return view.ws === sock && view.attachGen === attachGen;
+        }
+        sock.onopen = function () {
+          if (!stillCurrent()) return;
+          hideFail(view.slot);
+          requestAnimationFrame(function () {
+            if (!stillCurrent()) return;
+            releaseHeldOutput(view);
+            if (state.pendingInsert && state.pendingInsert.sessionId === sessionId) {
+              insertText(state.pendingInsert.text, false);
+              state.pendingInsert = null;
+            }
+          });
+        };
         sock.onmessage = function (ev) {
+          if (!stillCurrent()) return;
           var msg;
           try {
             msg = JSON.parse(ev.data);
@@ -259,16 +352,18 @@
             return;
           }
           if (msg.type === "out") {
-            if (state.renderingPaused) {
-              state.hiddenActivity += 1;
-              updateBadges();
+            if (view.holdOutput) {
+              view.pendingOut.push(msg.data || "");
               return;
             }
-            view.term.write(msg.data || "");
+            writePtyOut(view, msg.data || "");
             markActivity();
           } else if (msg.type === "ready") {
             hideFail(view.slot);
-            fitView(view);
+            requestAnimationFrame(function () {
+              if (!stillCurrent()) return;
+              releaseHeldOutput(view);
+            });
           } else if (msg.type === "exit") {
             view.term.writeln("\r\n\x1b[33m[process exited " + (msg.exit_code == null ? "" : msg.exit_code) + "]\x1b[0m");
             refreshSessions();
@@ -277,7 +372,7 @@
           }
         };
         sock.onerror = function () {
-          if (view.intentionalClose) return;
+          if (!stillCurrent() || view.intentionalClose) return;
           showFail(
             view.slot,
             "WebSocket error — restart the hub with .venv\\Scripts\\python.exe app.py after pip install -r requirements.txt."
@@ -285,7 +380,8 @@
           handleConnectionLost(view, "error");
         };
         sock.onclose = function (ev) {
-          if (view.ws === sock) view.ws = null;
+          if (!stillCurrent()) return;
+          view.ws = null;
           if (view.intentionalClose) return;
           var msg =
             ev && ev.code === 1006
@@ -293,14 +389,6 @@
               : "WebSocket disconnected";
           showFail(view.slot, msg);
           handleConnectionLost(view, "close");
-        };
-        sock.onopen = function () {
-          hideFail(view.slot);
-          fitView(view);
-          if (state.pendingInsert && state.pendingInsert.sessionId === sessionId) {
-            insertText(state.pendingInsert.text, false);
-            state.pendingInsert = null;
-          }
         };
         return true;
       }
@@ -694,6 +782,20 @@
     updateActionButtons();
   }
 
+  function currentTermSize() {
+    var fallback = { cols: 80, rows: 24 };
+    var view = state.views.a;
+    if (view && hostIsFitReady(view)) {
+      try {
+        if (view.fit) view.fit.fit();
+      } catch (e) {}
+      if (view.term && view.term.cols && view.term.rows) {
+        return clampTermSize(view.term.cols, view.term.rows);
+      }
+    }
+    return fallback;
+  }
+
   function newTerminal() {
     var repoSel = $("wc-term-repo");
     var shellSel = $("wc-term-shell");
@@ -701,21 +803,28 @@
       window.alert("Select a connected repository with a local path.");
       return;
     }
-    jsonFetch(API.sessions, {
-      method: "POST",
-      body: JSON.stringify({
-        repository_id: repoSel.value,
-        shell: shellSel ? shellSel.value : "powershell",
-        environment: ($("wc-term-env") && $("wc-term-env").value) || "development",
-      }),
-    }).then(function (body) {
-      if (!body.ok) {
-        window.alert(body.error || "Failed to create terminal");
-        return;
-      }
-      state.activeId = body.session.id;
-      refreshSessions().then(function () {
-        selectSession(state.activeId);
+    revealTerminalStage();
+    requestAnimationFrame(function () {
+      var size = currentTermSize();
+      jsonFetch(API.sessions, {
+        method: "POST",
+        body: JSON.stringify({
+          repository_id: repoSel.value,
+          shell: shellSel ? shellSel.value : "powershell",
+          environment: ($("wc-term-env") && $("wc-term-env").value) || "development",
+          cols: size.cols,
+          rows: size.rows,
+        }),
+      }).then(function (body) {
+        if (!body.ok) {
+          window.alert(body.error || "Failed to create terminal");
+          updateEmptyState();
+          return;
+        }
+        state.activeId = body.session.id;
+        refreshSessions().then(function () {
+          selectSession(state.activeId);
+        });
       });
     });
   }
@@ -1007,6 +1116,17 @@
     selectSession: selectSession,
     newTerminal: newTerminal,
     insertText: insertText,
+    sendInput: function (data) {
+      var view = state.activePane === "b" && state.splitEnabled ? state.views.b : state.views.a;
+      if (!view || !view.ws || view.ws.readyState !== 1) return false;
+      view.ws.send(JSON.stringify({ type: "in", data: String(data || "") }));
+      return true;
+    },
+    getTermSize: function (slot) {
+      var view = state.views[slot || state.activePane] || state.views.a;
+      if (!view || !view.term) return { cols: 0, rows: 0 };
+      return { cols: view.term.cols || 0, rows: view.term.rows || 0 };
+    },
     setRenderingPaused: setRenderingPaused,
     toggleSplit: toggleSplit,
     beginSplit: beginSplit,

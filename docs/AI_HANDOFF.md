@@ -6,10 +6,13 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 **CLIMATE Terminal compact toolbar + ConPTY newlines (2026-08-14)**
 
-CLIMATE Terminal keeps the repo-scoped PTY/WebSocket/xterm path. Windows ConPTY
-output now treats lone LF as CRLF (`convertEol`/`windowsMode` plus backend
-`normalize_conpty_newlines`) so PowerShell prompts start on a new line. The
-toolbar is a compact VS Code-like single row (scoped to `.climate-wc-terminal`).
+CLIMATE Terminal keeps the repo-scoped PTY/WebSocket/xterm path. Root cause of
+PowerShell prompt glue was fitting/resizing the PTY while `#wc-term-stage` was
+hidden (tiny cols), then painting the ConPTY snapshot into xterm at that width.
+Fix: hold WS output until the host is at least 40×10, never resize below that,
+normalize lone LF to CRLF, and do not enable xterm `windowsMode`/`convertEol` on
+Windows ConPTY (it already emits CRLF). Toolbar is a compact VS Code-like row
+(scoped to `.climate-wc-terminal`).
 
 Prior: **Windows Codex standalone discovery (2026-08-14)**
 
