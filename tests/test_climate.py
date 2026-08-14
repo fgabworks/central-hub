@@ -316,6 +316,20 @@ class ClimateTaskModeUnitTests(unittest.TestCase):
         self.assertTrue(center.payload["repository_investigation"])
         self.assertEqual(center.payload["conversation_id"], "conversation-1")
         self.assertIn("independently search", center.payload["prompt"])
+        adapter.availability = lambda provider=None, refresh=False: (  # type: ignore[method-assign]
+            {"id": "codex", "state": "connected", "capabilities": {}} if provider else []
+        )
+        self.assertTrue(adapter.can_investigate_repository("codex"))
+        self.assertFalse(adapter.can_investigate_repository("claude-code"))
+        self.assertFalse(adapter.can_investigate_repository("cursor-agent"))
+        cached_ask = adapter.execute(
+            workspace="work", repository_id="work-repo", provider="codex", model="m",
+            prompt="CLIMATE context packet (ASK).\nLikely source: pkg/scoring.py",
+            task_mode="ask", repository_investigation=adapter.can_investigate_repository("codex"),
+        )
+        self.assertEqual(cached_ask["task_mode"], "ask")
+        self.assertTrue(center.payload["repository_investigation"])
+        self.assertEqual(center.payload["tool_ids"], [])
         edit = adapter.execute(
             workspace="work", repository_id="work-repo", provider="codex", model="m",
             prompt="Fix ANC Binary", task_mode="edit",
@@ -374,6 +388,11 @@ class ClimateUiContractTests(unittest.TestCase):
         self.assertIn("climate-activity-progress", script)
         self.assertIn("renderActivityProgress", script)
         self.assertIn("renderActivityComplete", script)
+        complete_fn = script.split("function renderActivityComplete", 1)[1].split("\n  function ", 1)[0]
+        self.assertIn("filesInspected", complete_fn)
+        self.assertFalse(
+            any("sources" in line for line in complete_fn.splitlines() if "exploreCount" in line)
+        )
         self.assertIn("classifyTaskMode", script)
         self.assertIn("humanizeAnswer", script)
         self.assertIn("looksLikeEditsJson", script)

@@ -1018,7 +1018,8 @@
       status: msg.status
     });
     // Candidates/sources are preflight hints, not proof that the provider read a file.
-    var exploreCount = msg.filesInspected || 0;
+    var exploreCount = Number(msg.filesInspected);
+    if (!isFinite(exploreCount) || exploreCount < 0) exploreCount = 0;
     var testsRan = activity.testsRan || (msg.tests && msg.tests.count) || 0;
     if (!testsRan && msg.tests && msg.tests.label) {
       var tm = String(msg.tests.label).match(/(\d+)/);

@@ -80,4 +80,14 @@ const candidatesOnly = context.renderActivityComplete({
 });
 assert.doesNotMatch(candidatesOnly, /Explored /);
 
+const completeFn = functionSource("renderActivityComplete");
+assert.match(completeFn, /exploreCount = Number\(msg\.filesInspected\)/);
+assert.equal(
+  completeFn.split("\n").filter(function (line) {
+    return /exploreCount/.test(line) && /sources/.test(line);
+  }).length,
+  0,
+  "completed Explored count must not derive from msg.sources",
+);
+
 console.log("CLIMATE provider exploration count JS: OK");

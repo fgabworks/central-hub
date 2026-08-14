@@ -12,9 +12,12 @@ expands once when weak, but sends compact instruction/skill/path+symbol hints wi
 duplicating source bodies. Agent Center permits only adapters advertising native
 repository investigation to proceed without a usable initial evidence packet. Codex ASK
 runs at the approved repository cwd with `--sandbox read-only` and may use safe read-only
-search/file/symbol/reference/import/test/git inspection. Providers without repository
-access keep the prior cannot-verify/zero-token evidence gate; EDIT keeps the existing
-proposal/diff Accept/Reject flow.
+search/file/symbol/reference/import/test/git inspection. Packed prompts keep
+`tool_ids=[]` and say `Hub tools: none` plus native Codex inspection allowed — they must
+not inject `Enabled read-only tools: none.` Completed `Explored N files` counts provider
+read/inspection activity only; source candidates remain a separate Sources list.
+Providers without repository access keep the prior cannot-verify/zero-token evidence
+gate; EDIT keeps the existing proposal/diff Accept/Reject flow.
 
 CLIMATE chat IDs map to Agent Center conversations. When reuse is enabled, Codex's
 official persisted exec session ID is captured from JSONL and resumed explicitly only for

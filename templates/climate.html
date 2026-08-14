@@ -76,16 +76,46 @@
       <div class="climate-sash climate-sash-bottom" data-resize="bottom" role="separator" aria-label="Resize diagnostics"></div>
       <section class="climate-bottom" id="climate-bottom">
         <nav class="climate-bottom-tabs" aria-label="Diagnostics panels">
-          <button class="is-active" data-panel="problems">Problems <span class="count">0</span></button>
+          <button class="is-active" data-panel="problems">Problems <span class="count" id="climate-problems-count">0</span></button>
           <button data-panel="output">Output</button>
-          <button data-panel="tests">Tests</button>
-          <button data-panel="git">Git</button>
+          <button data-panel="debug">Debug Console</button>
           <button data-panel="terminal">Terminal</button>
+          <button data-panel="ports">Ports <span class="count" id="climate-ports-count" hidden>0</span></button>
+          <button class="climate-bottom-tab-secondary" data-panel="tests">Tests</button>
+          <button class="climate-bottom-tab-secondary" data-panel="git">Git</button>
           <span class="climate-spacer"></span>
           <button id="climate-bottom-close" title="Close panel">×</button>
         </nav>
-        <div class="climate-bottom-body mono" id="climate-bottom-body">No problems detected by CLIMATE.</div>
-        <div class="climate-terminal-panel" id="climate-terminal-panel" hidden>
+        <div class="climate-bottom-panes">
+        <div class="climate-bottom-pane" id="climate-pane-problems" data-pane="problems">
+          <div class="climate-bottom-toolbar">
+            <span class="climate-bottom-hint" id="climate-problems-hint">Editor, save, test, and runtime diagnostics</span>
+            <button type="button" class="climate-btn" id="climate-problems-refresh">Refresh</button>
+          </div>
+          <div class="climate-bottom-scroll" id="climate-problems-list"></div>
+        </div>
+        <div class="climate-bottom-pane" id="climate-pane-output" data-pane="output" hidden>
+          <div class="climate-bottom-toolbar">
+            <label class="climate-bottom-filter">Channel
+              <select id="climate-output-channel" aria-label="Output channel">
+                <option value="climate">CLIMATE</option>
+                <option value="runs">Runs/Tests</option>
+                <option value="git">Git</option>
+                <option value="system">AI/System</option>
+              </select>
+            </label>
+            <button type="button" class="climate-btn" id="climate-output-clear">Clear</button>
+          </div>
+          <pre class="climate-bottom-log mono" id="climate-output-log"></pre>
+        </div>
+        <div class="climate-bottom-pane" id="climate-pane-debug" data-pane="debug" hidden>
+          <div class="climate-bottom-toolbar">
+            <span class="climate-bottom-hint">Approved run-profile stdout/stderr only — no expression evaluation</span>
+            <button type="button" class="climate-btn" id="climate-debug-refresh">Refresh</button>
+          </div>
+          <div class="climate-bottom-scroll" id="climate-debug-body"></div>
+        </div>
+        <div class="climate-terminal-panel" id="climate-terminal-panel" data-pane="terminal" hidden>
           <div class="wc-pane wc-pane-terminal climate-wc-terminal" data-wc-pane="terminal" role="tabpanel">
             <div class="wc-toolbar wc-term-toolbar">
               <label class="wc-field wc-term-field">
@@ -151,6 +181,21 @@
               <pre id="wc-terminal-out"></pre>
             </div>
           </div>
+        </div>
+        <div class="climate-bottom-pane" id="climate-pane-ports" data-pane="ports" hidden>
+          <div class="climate-bottom-toolbar">
+            <span class="climate-bottom-hint">Read-only local listeners — no forwarding</span>
+            <button type="button" class="climate-btn" id="climate-ports-refresh">Refresh</button>
+          </div>
+          <div class="climate-bottom-scroll" id="climate-ports-list"></div>
+        </div>
+        <div class="climate-bottom-pane" id="climate-pane-tests" data-pane="tests" hidden>
+          <div class="climate-bottom-toolbar">
+            <span class="climate-bottom-hint">Last CLIMATE test summary from AI/run output</span>
+          </div>
+          <div class="climate-bottom-scroll mono" id="climate-tests-body"></div>
+        </div>
+        <div class="climate-bottom-pane climate-bottom-body mono" id="climate-bottom-body" data-pane="git" hidden></div>
         </div>
       </section>
     </main>
@@ -286,5 +331,5 @@
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
 <script src="{{ url_for('static', filename='js/wc_terminal.js') }}?v=climate-1"></script>
-<script src="{{ url_for('static', filename='js/climate.js') }}?v=19"></script>
+<script src="{{ url_for('static', filename='js/climate.js') }}?v=21"></script>
 {% endblock %}

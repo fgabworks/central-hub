@@ -259,6 +259,7 @@ class AgentCenterTests(unittest.TestCase):
         )
         self.assertIn("Enabled read-only tools: none.", packet_only["packed_prompt"])
         self.assertNotIn("Native Codex read-only repository search", packet_only["packed_prompt"])
+        self.assertNotIn("Hub tools: none.", packet_only["packed_prompt"])
 
     def test_run_cancel_error_and_unavailable(self):
         # Unavailable agent → status unavailable, no process

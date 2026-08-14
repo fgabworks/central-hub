@@ -24,7 +24,11 @@ CLIMATE coding runs use a deterministic zero-token Context Resolver
 rank executable files/symbols above docs/tests and expand locally once when evidence is
 weak. For Codex, a valid VANTA repository is the evidence boundary: ASK may independently
 search/read/trace the approved cwd under `--sandbox read-only` even when local confidence
-is low. The resolver sends compact instruction/skill/path+symbol hints, not duplicated
+is low. Packed prompts distinguish empty Hub tools from native Codex repository
+inspection; they must not tell Codex that read-only tools are unavailable. Completed
+CLIMATE chrome reports `Explored N files` from provider investigation/read activity
+only — preflight source candidates stay in Sources. The resolver sends compact
+instruction/skill/path+symbol hints, not duplicated
 source bodies. Packet-only providers retain the evidence gate; calls without enough authoritative
 evidence remain local (`Not enough repository evidence. Model not invoked · 0 tokens`).
 VANTA and ARCTIC repository/run/proposal scopes are server-isolated; repositories tagged

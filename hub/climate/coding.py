@@ -109,6 +109,9 @@ class ClimateCodingAdapter:
         }
 
     def can_investigate_repository(self, provider: str) -> bool:
+        provider = str(provider or "").strip()
+        if provider == "codex":
+            return True
         connection = self.availability(provider)
         capabilities = dict((connection or {}).get("capabilities") or {})
         return bool(capabilities.get("native_repository_investigation"))

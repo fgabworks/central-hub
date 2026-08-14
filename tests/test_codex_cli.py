@@ -460,6 +460,7 @@ class CodexServiceOkarunTests(unittest.TestCase):
             assert_git_unchanged(before, after)
 
     def test_repository_investigation_bypasses_empty_packet_block(self):
+        before = git_status_snapshot(self.repo)
         run = self.service.start_run(
             {
                 "profile_id": "okarun",
@@ -479,16 +480,27 @@ class CodexServiceOkarunTests(unittest.TestCase):
         )
         self.assertNotIn("cannot verify", str(run.get("answer") or "").lower())
         self.assertIn(run["status"], {"queued", "running", "completed"})
-        self.assertIn("starting hints", run["packed_prompt"])
-        self.assertNotIn("Enabled read-only tools: none.", run["packed_prompt"])
-        self.assertIn("Hub tools: none.", run["packed_prompt"])
         self.assertIn("Native Codex read-only repository search", run["packed_prompt"])
+        self.assertIn("starting hints", run["packed_prompt"])
+        self.assertIn("Hub tools: none.", run["packed_prompt"])
+        self.assertIn("Remain read-only", run["packed_prompt"])
+        self.assertNotIn("Enabled read-only tools: none.", run["packed_prompt"])
+        argv = self.adapter.build_argv(
+            mode="ask",
+            prompt="Explain the exact internal implementation of xyzzy",
+            model="__provider_default__",
+            cwd=str(self.repo),
+        )
+        self.assertEqual(argv[argv.index("--sandbox") + 1], "read-only")
+        self.assertNotIn("workspace-write", argv)
+        self.assertNotIn("--yolo", argv)
         deadline = time.time() + 5
         while time.time() < deadline:
             current = self.service.get_run(run["id"], profile_id="okarun")
             if current["status"] in {"completed", "failed", "cancelled"}:
                 break
             time.sleep(0.05)
+        assert_git_unchanged(before, git_status_snapshot(self.repo))
 
     def test_history_preserves_provider_prompt_and_status(self):
         # Avoid real runner path complexity: mark connected and use fake argv that exits quickly.
