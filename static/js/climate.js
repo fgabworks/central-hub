@@ -804,10 +804,6 @@
     } else {
       body = humanized.text || body;
     }
-    if (!body && clean.length) {
-      var residual = clean.filter(function (line) { return !isRawProviderLine(line) && !looksLikeEditsJson(line); }).join("\n").trim();
-      body = residual;
-    }
     return { text: body || "", diagnostics: diag.join("\n") };
   }
   function collectSources(msg, run, activity) {
