@@ -5,6 +5,15 @@
 # Prefer {prompt_file} for large packed prompts (Windows argv limits).
 
 agents:
+  - id: gemini
+    label: Gemini
+    provider: gemini_api
+    executable: ""
+    enabled: true
+    modes: [ask]
+    models_managed: []
+    notes: "Gemini API read-only chat. Models load dynamically from GEMINI_API_KEY or GOOGLE_API_KEY; no edits or command execution."
+
   - id: hub-simulator
     label: Hub Simulator (demo)
     provider: hub_simulator

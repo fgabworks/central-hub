@@ -18,8 +18,9 @@ PUBLIC_STATES = {
     "error": "Error",
 }
 
-# Account-backed coding CLIs surfaced in Settings / AiriX compact panel.
-CODING_CLI_PROVIDER_IDS = ("codex", "claude-code", "cursor-agent")
+# Providers surfaced in CLIMATE's compact provider/model controls. The legacy
+# constant name is retained because settings/API callers already depend on it.
+CODING_CLI_PROVIDER_IDS = ("gemini", "codex", "claude-code", "cursor-agent")
 
 PREF_DEFAULT_PROVIDER = "coding_default_provider"
 PREF_DEFAULT_MODEL_PREFIX = "coding_default_model:"
@@ -113,7 +114,7 @@ class AgentConnectionRegistry:
     def list_coding_clis(
         self, *, refresh: bool = False, probe: bool = True, include_models: bool = False
     ) -> list[dict[str, Any]]:
-        """Compact status rows for Codex / Claude Code / Cursor Agent."""
+        """Compact status rows for CLIMATE chat/coding providers."""
         rows = []
         for agent_id in CODING_CLI_PROVIDER_IDS:
             if agent_id not in self.adapters:

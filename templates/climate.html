@@ -220,7 +220,7 @@
       <div class="climate-ai-full">
       <header class="climate-chat-header">
         <div class="climate-chat-topline">
-          <span class="climate-chat-label">AI ASSISTANT</span>
+          <span class="climate-chat-label">AiriX · CLIMATE CHAT</span>
           <button type="button" class="climate-token-pill" id="climate-token-pill" title="Session usage" aria-expanded="false">
             <span class="climate-token-compact" id="climate-token-compact">
               <span id="climate-token-label">0 tokens</span>
@@ -289,12 +289,12 @@
       </header>
 
       <div class="climate-ai-feed" id="climate-ai-feed" aria-live="polite">
-        <div class="climate-ai-empty"><strong>CLIMATE coding chat</strong><span>Ask about the active repository. Provider protocol stays in Details.</span></div>
+        <div class="climate-ai-empty"><strong>AiriX</strong><span>Ask about the active repository. The selected provider powers the answer; AiriX remains your CLIMATE assistant.</span></div>
       </div>
 
       <div class="climate-chat-composer" id="climate-chat-composer">
         <div class="climate-compose-box">
-          <textarea id="climate-prompt" placeholder="Ask a follow-up…" rows="3" aria-label="Ask a follow-up"></textarea>
+          <textarea id="climate-prompt" placeholder="Ask AiriX…" rows="3" aria-label="Ask AiriX"></textarea>
           <div class="climate-compose-toolbar">
             <button type="button" class="climate-compose-tool" id="climate-ctx-mention" title="Context">@</button>
             <button type="button" class="climate-compose-tool" id="climate-ctx-files" title="Related files">#</button>
@@ -356,5 +356,5 @@
 <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
 <script src="{{ url_for('static', filename='js/wc_terminal.js') }}?v=climate-5"></script>
 <script src="{{ url_for('static', filename='js/climate_markdown.js') }}?v=3"></script>
-<script src="{{ url_for('static', filename='js/climate.js') }}?v=29"></script>
+<script src="{{ url_for('static', filename='js/climate.js') }}?v=30"></script>
 {% endblock %}

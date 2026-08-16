@@ -8,6 +8,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from hub.agent_center.db import AgentCenterDb
+from hub.agent_center.store import AgentCenterStore
 from hub.climate.coding import ClimateCodingAdapter, ClimateCodingError, classify_task_mode
 from hub.climate.service import ClimateService
 from hub.registry.models import Registry, Repository
@@ -160,6 +162,7 @@ class ClimateServiceTests(unittest.TestCase):
         self.assertEqual((second["provider"], second["model"]), ("cursor-agent", "cursor-exact"))
         self.assertEqual(self.coding.calls[0]["workspace"], "work")
         self.assertEqual(self.coding.calls[0]["repository_id"], "work-repo")
+        self.assertEqual(self.coding.calls[0]["display_prompt"], "inspect")
 
     def test_unavailable_and_auth_failed_states_are_exposed(self):
         rows = {row["id"]: row for row in self.service.bootstrap("work")["providers"]}
@@ -455,7 +458,8 @@ class ClimateUiContractTests(unittest.TestCase):
             'climate-terminal-panel',
             'wc_terminal.js',
             'wc-xterm-a',
-            'Ask a follow-up',
+            'Ask AiriX',
+            'AiriX · CLIMATE CHAT',
             'Session total',
             'Provider breakdown',
             'climate-token-quota',
@@ -588,6 +592,59 @@ class ClimateUiContractTests(unittest.TestCase):
         self.assertNotIn("Personal Repository Control Center", base)
         self.assertNotIn("Central Hub v{{ hub_version }}", base)
         self.assertNotIn("{{ workspace_labels[workspace] }} workspace", base)
+
+
+class ClimateConversationPersistenceTests(unittest.TestCase):
+    def test_conversation_runs_and_rename_are_server_persisted(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = AgentCenterStore(AgentCenterDb(Path(temp_dir) / "agent-center.db"))
+            conversation = store.create_conversation(profile_id="okarun", title="Original")
+            run = store.create_run({
+                "mode": "ask",
+                "agent_id": "codex",
+                "agent_label": "Codex",
+                "model": "test-model",
+                "repository_ids": ["work-repo"],
+                "prompt": "Where is the repository selector?",
+                "packed_prompt": "bounded prompt",
+                "profile_id": "okarun",
+                "conversation_id": conversation["id"],
+            })
+            store.update_run(run["id"], status="completed", answer="In the CLIMATE shell.")
+
+            rows = store.list_conversation_runs(
+                conversation["id"], profile_id="okarun"
+            )
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["prompt"], "Where is the repository selector?")
+            self.assertEqual(rows[0]["answer"], "In the CLIMATE shell.")
+
+            center = mock.Mock()
+            center.store = store
+            adapter = ClimateCodingAdapter(center)
+            scoped = adapter.conversation(
+                conversation["id"],
+                workspace="work",
+                repository_id="work-repo",
+            )
+            self.assertEqual(len(scoped["runs"]), 1)
+            with self.assertRaises(ClimateCodingError) as wrong_repo:
+                adapter.conversation(
+                    conversation["id"],
+                    workspace="work",
+                    repository_id="other-repo",
+                )
+            self.assertEqual(wrong_repo.exception.code, "not_found")
+
+            renamed = store.rename_conversation(
+                conversation["id"], profile_id="okarun", title="Repository selector"
+            )
+            self.assertEqual(renamed["title"], "Repository selector")
+            self.assertIsNone(
+                store.rename_conversation(
+                    conversation["id"], profile_id="aira", title="Wrong profile"
+                )
+            )
 
 
 class ClimateReadOnlyViewerTests(unittest.TestCase):

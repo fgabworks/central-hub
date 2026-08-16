@@ -1910,6 +1910,89 @@
       });
     });
   }
+  function serverConversationSession(row) {
+    var updated = Date.parse(row.updated_at || row.created_at || "") || Date.now();
+    return {
+      id: "server:" + row.id,
+      title: row.title || "New chat",
+      createdAt: Date.parse(row.created_at || "") || updated,
+      updatedAt: updated,
+      provider: "",
+      model: "",
+      executionMode: currentExecutionMode(),
+      lastRunProvider: "",
+      workspace: workspace,
+      repositoryId: repoId(),
+      branch: (branchSelect && branchSelect.value) || "",
+      context: captureContextPrefs(),
+      messages: [],
+      usage: emptyUsage(),
+      agentConversationId: row.id,
+      serverBacked: true,
+      serverHydrated: false
+    };
+  }
+  function hydrateServerHistory() {
+    if (!repoId()) return;
+    jsonFetch(endpoint("/conversations?repository_id=" + encodeURIComponent(repoId()) + "&limit=50")).then(function (data) {
+      (data.conversations || []).forEach(function (row) {
+        var existing = state.chat.sessions.find(function (session) {
+          return session.agentConversationId === row.id;
+        });
+        if (existing) {
+          if (!existing.title || existing.title === "New chat") existing.title = row.title || existing.title;
+          existing.updatedAt = Date.parse(row.updated_at || "") || existing.updatedAt;
+          existing.serverBacked = true;
+          return;
+        }
+        state.chat.sessions.push(serverConversationSession(row));
+      });
+      state.chat.sessions.sort(function (a, b) { return Number(b.updatedAt || 0) - Number(a.updatedAt || 0); });
+      state.chat.sessions = state.chat.sessions.slice(0, 40);
+      saveChatStore();
+      renderHistoryList();
+    }).catch(function () {
+      // Local chat remains usable when server history is unavailable.
+    });
+  }
+  function hydrateServerSession(session) {
+    if (!session || !session.agentConversationId || session.serverHydrated) return Promise.resolve(session);
+    return jsonFetch(endpoint("/conversations/" + encodeURIComponent(session.agentConversationId) + "?repository_id=" + encodeURIComponent(repoId()))).then(function (data) {
+      var conversation = data.conversation || {};
+      var messages = [];
+      (conversation.runs || []).forEach(function (run) {
+        var ts = Date.parse(run.created_at || "") || Date.now();
+        if (run.prompt) messages.push({ id: uid("msg"), role: "user", text: run.prompt, ts: ts });
+        if (run.answer || run.error || run.status) {
+          messages.push({
+            id: uid("msg"),
+            role: run.error ? "error" : "assistant",
+            text: run.error || run.answer || "Run " + run.status,
+            ts: Date.parse(run.finished_at || "") || ts,
+            status: run.status || "completed",
+            provider: run.provider || "",
+            model: run.model || "",
+            runId: run.id || "",
+            taskMode: run.mode || "ask",
+            usage: parseUsagePayload(run.usage || {})
+          });
+          session.provider = run.provider || session.provider;
+          session.model = run.model || session.model;
+          session.lastRunProvider = run.provider || session.lastRunProvider;
+          applyUsageFromRun(session, run.provider || "unknown", run.usage || {});
+        }
+      });
+      session.title = conversation.title || session.title;
+      session.messages = messages;
+      session.serverHydrated = true;
+      saveChatStore();
+      if (session.id === state.chat.activeId) {
+        renderChat();
+        renderUsageChrome(session);
+      }
+      return session;
+    }).catch(function () { return session; });
+  }
   function restoreChatSession(id) {
     var session = state.chat.sessions.find(function (row) { return row.id === id; });
     if (!session) return;
@@ -1933,6 +2016,7 @@
     renderUsageChrome(session);
     setStatus("Restored chat");
     hydrateTokenEfficiency(session);
+    hydrateServerSession(session);
   }
   function renderChat() {
     var session = activeSession();
@@ -1943,7 +2027,7 @@
     }
     renderUsageChrome(session);
     if (!session || !session.messages.length) {
-      feed.innerHTML = '<div class="climate-ai-empty"><strong>CLIMATE coding chat</strong><span>Ask a follow-up about the active repository. Raw provider events stay in Details.</span></div>';
+      feed.innerHTML = '<div class="climate-ai-empty"><strong>AiriX</strong><span>Ask about the active repository. The selected provider powers the answer.</span></div>';
       proposalActions.hidden = true;
       return;
     }
@@ -2375,6 +2459,7 @@
         provider: providerSelect.value,
         model: modelSelect.value,
         prompt: outboundPrompt,
+        display_prompt: prompt,
         task_mode: taskMode,
         current_file: document.getElementById("climate-current-file").checked && tab ? tab.path : "",
         selection: document.getElementById("climate-selection").checked ? currentSelection() : "",
@@ -3242,7 +3327,14 @@
     var session=activeSession();
     if(!session)return;
     var next=window.prompt("Rename chat", session.title||"New chat");
-    if(next&&next.trim()){session.title=next.trim();session.updatedAt=Date.now();saveChatStore();renderChat();}
+    if(next&&next.trim()){
+      session.title=next.trim();session.updatedAt=Date.now();saveChatStore();renderChat();
+      if(session.agentConversationId){
+        jsonFetch(endpoint("/conversations/"+encodeURIComponent(session.agentConversationId)+"?repository_id="+encodeURIComponent(repoId())),{
+          method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({title:session.title})
+        }).catch(function(error){pushOutput("system","Chat rename was saved locally only: "+error.message);});
+      }
+    }
   }
   var renameBtn=document.getElementById("climate-chat-rename");
   if(renameBtn)renameBtn.addEventListener("click",renameActiveChat);
@@ -3422,7 +3514,7 @@
     }
     scheduleEditorLayout();
   });
-  loadPrefs();normalizeAiPanelState();syncAiMaximizeChrome();renderTabs();renderProviders();enhanceProviderModelDropdowns();loadChatStore();
+  loadPrefs();normalizeAiPanelState();syncAiMaximizeChrome();renderTabs();renderProviders();enhanceProviderModelDropdowns();loadChatStore();hydrateServerHistory();
   (function syncModeAfterLoad(){
     var session=activeSession();
     applyExecutionMode((session&&session.executionMode)||currentExecutionMode(),{skipSession:true,skipPrefs:true});

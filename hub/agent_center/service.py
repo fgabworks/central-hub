@@ -11,6 +11,7 @@ from hub.agent_center.adapters.base import AgentAdapter, public_availability
 from hub.agent_center.adapters.codex import CodexAdapter
 from hub.agent_center.codex_safety import assert_safe_codex_argv, resolve_approved_repo_cwd
 from hub.agent_center.context_builder import build_context_preview, selectable_repositories
+from hub.agent_center.gemini_runner import GeminiRunner
 from hub.agent_center.connections import AgentConnectionRegistry
 from hub.agent_center.models import (
     DEFAULT_TIMEOUT_SECONDS,
@@ -88,13 +89,27 @@ class AgentCenterService:
             settings=self.openai_settings,
             audit=audit,
         )
-        self.api_runners: dict[str, OpenAIRunner] = {"openai-api": self.openai_runner}
+        self.api_runners: dict[str, Any] = {"openai-api": self.openai_runner}
         for adapter in self.adapters:
             if adapter.descriptor.id == "grok" and hasattr(adapter, "settings"):
                 self.api_runners["grok"] = OpenAIRunner(
                     self.store, settings=adapter.settings, client=adapter.client, audit=audit
                 )
-        connection_providers = {"codex", "claude_code", "cursor_agent", "openai_api", "xai_api"}
+            elif adapter.descriptor.id == "gemini" and hasattr(adapter, "settings"):
+                self.api_runners["gemini"] = GeminiRunner(
+                    self.store,
+                    settings=adapter.settings,
+                    client=adapter.client,
+                    audit=audit,
+                )
+        connection_providers = {
+            "codex",
+            "claude_code",
+            "cursor_agent",
+            "openai_api",
+            "xai_api",
+            "gemini_api",
+        }
         provider_adapters = [a for a in self.adapters if a.descriptor.provider in connection_providers]
         self.connections = AgentConnectionRegistry(provider_adapters, self.store, audit=audit)
 
@@ -534,6 +549,7 @@ class AgentCenterService:
             raise AgentCenterError("Prompt is required", code="prompt_required")
         if len(prompt) > MAX_PROMPT_CHARS:
             raise AgentCenterError(f"Prompt exceeds {MAX_PROMPT_CHARS} characters", code="prompt_too_long")
+        display_prompt = str(payload.get("display_prompt") or prompt).strip()[:MAX_PROMPT_CHARS]
 
         agent_id = str(payload.get("agent_id") or "").strip()
         adapter = self.get_agent(agent_id)
@@ -659,7 +675,7 @@ class AgentCenterService:
             conversation_id = str(payload.get("conversation_id") or "").strip()
             if not conversation_id:
                 conversation = self.store.create_conversation(
-                    profile_id=profile.id, title=prompt[:80]
+                    profile_id=profile.id, title=display_prompt[:80]
                 )
                 conversation_id = conversation["id"]
             run = self.store.create_run(
@@ -670,7 +686,7 @@ class AgentCenterService:
                     "agent_label": adapter.descriptor.label,
                     "model": str(payload.get("model") or ""),
                     "repository_ids": resolved_repos,
-                    "prompt": prompt,
+                    "prompt": display_prompt,
                     "packed_prompt": "",
                     "answer": answer,
                     "context": {
@@ -715,7 +731,7 @@ class AgentCenterService:
                     "agent_label": av.label,
                     "model": str(payload.get("model") or ""),
                     "repository_ids": list(payload.get("repository_ids") or []),
-                    "prompt": prompt,
+                    "prompt": display_prompt,
                     "packed_prompt": "",
                     "context": {"detail": unavailable_detail, "connection": connection or {}},
                     "referenced_files": [],
@@ -826,11 +842,11 @@ class AgentCenterService:
                 raise AgentCenterError("Conversation not found", code="conversation_not_found")
         else:
             conversation = self.store.create_conversation(
-                profile_id=profile.id, title=prompt[:80]
+                profile_id=profile.id, title=display_prompt[:80]
             )
             conversation_id = conversation["id"]
         self.store.update_conversation_summary(
-            conversation_id, profile_id=profile.id, summary=prompt[:500]
+            conversation_id, profile_id=profile.id, summary=display_prompt[:500]
         )
 
         provider_session_id = ""
@@ -854,7 +870,7 @@ class AgentCenterService:
                 "agent_label": av.label,
                 "model": model,
                 "repository_ids": preview["repository_ids"],
-                "prompt": prompt,
+                "prompt": display_prompt,
                 "packed_prompt": packed,
                 "context": {
                     "roots": roots,

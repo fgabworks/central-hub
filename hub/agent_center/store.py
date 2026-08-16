@@ -166,6 +166,40 @@ class AgentCenterStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def rename_conversation(
+        self, conversation_id: str, *, profile_id: str, title: str
+    ) -> dict[str, Any] | None:
+        clean = (title or "").strip()[:160]
+        if not clean:
+            return self.get_conversation(conversation_id, profile_id=profile_id)
+        with self.db.connect() as conn:
+            conn.execute(
+                """
+                UPDATE agent_conversations SET title=?, updated_at=?
+                WHERE id=? AND profile_id=?
+                """,
+                (clean, _now(), conversation_id, profile_id),
+            )
+        return self.get_conversation(conversation_id, profile_id=profile_id)
+
+    def list_conversation_runs(
+        self,
+        conversation_id: str,
+        *,
+        profile_id: str,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        with self.db.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM agent_runs
+                WHERE conversation_id=? AND profile_id=?
+                ORDER BY created_at ASC LIMIT ?
+                """,
+                (conversation_id, profile_id, max(1, min(limit, 500))),
+            ).fetchall()
+        return [self._run_row(row) for row in rows]
+
     def update_conversation_summary(
         self, conversation_id: str, *, profile_id: str, summary: str
     ) -> None:

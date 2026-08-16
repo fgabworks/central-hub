@@ -4,7 +4,34 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**CLIMATE execution mode selector (2026-08-15)**
+**AiriX CLIMATE Chat + Gemini read-only provider (2026-08-17)**
+
+The existing CLIMATE AI panel presents **AiriX · CLIMATE Chat** and explains that the
+selected provider powers AiriX rather than replacing its identity. CLIMATE reuses Agent
+Center's SQLite `agent_conversations`/`agent_runs`: scoped list, detail, and rename APIs
+let the browser reconcile server conversations for the active repository, hydrate
+completed messages, and persist renames. The browser store remains a local mirror for
+rich in-progress UI state.
+
+Gemini is now the first API provider for this surface. The `gemini_api` adapter uses
+environment-only credentials, discovers accessible text models from Google's Models API,
+validates the user's exact selection with no silent fallback, and streams SSE text through
+the shared queued/running/completed/cancelled run lifecycle. CLIMATE sends the user prompt
+and only its explicitly selected/bounded context when Gemini is selected. Same-provider,
+same-model completed turns can be reused as bounded conversation history. Gemini v1 is
+ASK-only and advertises no editing, command execution, SQL, email/calendar action, agent,
+tool-runtime, or native repository-investigation capability.
+
+Configure `GEMINI_API_KEY` or `GOOGLE_API_KEY` in the server environment; when both are
+present, `GOOGLE_API_KEY` takes precedence. Optional controls are documented in
+`.env.example`, including the default/allowed models, endpoint, timeout, cache TTL, and
+output-token limit.
+
+Focused verification: `python -m unittest tests.test_gemini_provider` (8 passed),
+`python -m unittest tests.test_climate` (29 passed), `node --check static/js/climate.js`,
+the CLIMATE viewer browser test (1 passed), and `git diff --check`.
+
+Prior: **CLIMATE execution mode selector (2026-08-15)**
 
 CLIMATE chat has a compact **Mode** selector next to Provider/Model:
 `CLIMATE Assisted` (`climate_assisted`) and `Direct Provider` (`direct`). Mode is

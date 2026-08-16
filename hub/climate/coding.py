@@ -16,7 +16,7 @@ from hub.climate.retrieval_policy import ASK_INVESTIGATION_CONSTRAINTS
 from hub.climate.execution_mode import is_direct_mode, normalize_execution_mode
 
 
-CODING_PROVIDERS = ("codex", "claude-code", "cursor-agent")
+CODING_PROVIDERS = ("gemini", "codex", "claude-code", "cursor-agent")
 
 _ASK_RE = re.compile(
     r"\b("
@@ -103,6 +103,66 @@ class ClimateCodingAdapter:
     def coding_defaults(self) -> dict[str, Any]:
         return self.agent_center.connections.coding_defaults()
 
+    def conversations(self, *, workspace: str, repository_id: str = "", limit: int = 50) -> list[dict[str, Any]]:
+        profile_id = "okarun" if workspace == "work" else "aira"
+        rows = self.agent_center.store.list_conversations(profile_id=profile_id, limit=limit)
+        if not repository_id:
+            return rows
+        filtered = []
+        for row in rows:
+            runs = self.agent_center.store.list_conversation_runs(
+                str(row.get("id") or ""), profile_id=profile_id, limit=100
+            )
+            if any(repository_id in list(run.get("repository_ids") or []) for run in runs):
+                filtered.append(row)
+        return filtered
+
+    def conversation(
+        self, conversation_id: str, *, workspace: str, repository_id: str = ""
+    ) -> dict[str, Any]:
+        profile_id = "okarun" if workspace == "work" else "aira"
+        conversation = self.agent_center.store.get_conversation(
+            conversation_id, profile_id=profile_id
+        )
+        if not conversation:
+            raise ClimateCodingError("Conversation not found", code="not_found")
+        runs = self.agent_center.store.list_conversation_runs(
+            conversation_id, profile_id=profile_id, limit=200
+        )
+        if repository_id and not any(
+            repository_id in list(run.get("repository_ids") or []) for run in runs
+        ):
+            raise ClimateCodingError("Conversation not found", code="not_found")
+        public_runs = []
+        for run in runs:
+            public = self._public_run(run, workspace=workspace)
+            public["prompt"] = run.get("prompt") or ""
+            public["mode"] = run.get("mode") or "ask"
+            public_runs.append(public)
+        return {**conversation, "runs": public_runs}
+
+    def rename_conversation(
+        self,
+        conversation_id: str,
+        *,
+        workspace: str,
+        title: str,
+        repository_id: str = "",
+    ) -> dict[str, Any]:
+        profile_id = "okarun" if workspace == "work" else "aira"
+        if repository_id:
+            self.conversation(
+                conversation_id,
+                workspace=workspace,
+                repository_id=repository_id,
+            )
+        conversation = self.agent_center.store.rename_conversation(
+            conversation_id, profile_id=profile_id, title=title
+        )
+        if not conversation:
+            raise ClimateCodingError("Conversation not found", code="not_found")
+        return conversation
+
     def models(self, provider: str, *, refresh: bool = False) -> dict[str, Any]:
         self._require_provider(provider)
         details = self.agent_center.connections.models(provider, mode="ask", refresh=refresh)
@@ -143,6 +203,7 @@ class ClimateCodingAdapter:
         conversation_id: str = "",
         repository_investigation: bool = False,
         execution_mode: str = "",
+        display_prompt: str = "",
     ) -> dict[str, Any]:
         self._require_provider(provider)
         if workspace not in {"work", "personal"}:
@@ -165,6 +226,11 @@ class ClimateCodingAdapter:
                 mode = "edit"
             elif "CLIMATE context packet (ASK)" in prompt or "CLIMATE preflight context packet (ASK)" in prompt:
                 mode = "ask"
+        if provider == "gemini" and mode != "ask":
+            raise ClimateCodingError(
+                "Gemini v1 is read-only chat. Ask for an explanation or analysis; editing and agent actions are not enabled.",
+                code="mode_unsupported",
+            )
         repository_investigation = bool(repository_investigation and mode == "ask")
         files = list(dict.fromkeys(
             str(path).replace("\\", "/").lstrip("/")
@@ -269,6 +335,7 @@ class ClimateCodingAdapter:
             "agent_id": provider,
             "model": model,
             "prompt": packed_prompt,
+            "display_prompt": display_prompt.strip() or prompt.strip(),
             "tool_ids": [],
             "files": (
                 {}

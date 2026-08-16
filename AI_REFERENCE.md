@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-15 (CLIMATE execution mode selector).
+Last verified: 2026-08-17 (AiriX CLIMATE Chat + Gemini read-only provider).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -35,7 +35,19 @@ instructions — no Context Resolver packet and no CLIMATE candidate-source/evid
 Direct bypasses CLIMATE retrieval assistance only; ASK read-only sandbox, approved repo
 boundary, controlled EDIT proposals, cancel, diagnostics, token accounting, and
 Git/terminal protections stay in force. Mode persists per workspace/repo prefs and per
-conversation.
+conversation. The CLIMATE AI panel is visibly identified as **AiriX · CLIMATE Chat**
+while provider/model controls remain explicit. Browser sessions reconcile with the
+existing SQLite `agent_conversations` and `agent_runs` store through scoped CLIMATE
+conversation list/detail/rename APIs. Completed server runs can therefore be restored
+when browser storage is unavailable without creating a second chat database; local UI
+state remains a fast mirror for in-progress rendering. Gemini is the first API-backed
+CLIMATE Chat provider: models are discovered from Google's Models API, the selected exact
+model receives the prompt plus only CLIMATE's explicitly selected/bounded context, and
+responses stream into the existing Agent Center run lifecycle. Gemini supports ASK only;
+it has no file-write, command, SQL, email, calendar, agent, or native repository-exploration
+capability. Configure it with an environment-only `GEMINI_API_KEY` or `GOOGLE_API_KEY`
+(`GOOGLE_API_KEY` takes precedence), then optionally constrain models with
+`GEMINI_ALLOWED_MODELS`. No new edit or command capability was added.
 CLIMATE coding runs in Assisted mode use a deterministic zero-token Context Resolver
 (AGENTS/SKILLS/provider/nested instructions + RI/local search). Implementation questions
 rank executable files/symbols above docs/tests and expand locally once when evidence is

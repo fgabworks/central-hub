@@ -74,6 +74,48 @@ def register_climate_routes(app: Flask) -> None:
         except ClimateCodingError as exc:
             return _error(exc)
 
+    @app.get("/api/climate/<workspace>/conversations")
+    def api_climate_conversations(workspace: str):
+        try:
+            rows = _svc().conversations(
+                workspace,
+                repository_id=str(request.args.get("repository_id") or ""),
+                limit=int(request.args.get("limit") or 50),
+            )
+            return jsonify({"ok": True, "conversations": rows})
+        except (ClimateCodingError, ValueError) as exc:
+            return _error(exc)
+
+    @app.get("/api/climate/<workspace>/conversations/<conversation_id>")
+    def api_climate_conversation(workspace: str, conversation_id: str):
+        try:
+            return jsonify({
+                "ok": True,
+                "conversation": _svc().conversation(
+                    workspace,
+                    conversation_id,
+                    repository_id=str(request.args.get("repository_id") or ""),
+                ),
+            })
+        except ClimateCodingError as exc:
+            return _error(exc)
+
+    @app.put("/api/climate/<workspace>/conversations/<conversation_id>")
+    def api_climate_conversation_update(workspace: str, conversation_id: str):
+        try:
+            payload = request.get_json(silent=True) or {}
+            return jsonify({
+                "ok": True,
+                "conversation": _svc().rename_conversation(
+                    workspace,
+                    conversation_id,
+                    title=str(payload.get("title") or ""),
+                    repository_id=str(request.args.get("repository_id") or ""),
+                ),
+            })
+        except ClimateCodingError as exc:
+            return _error(exc)
+
     @app.get("/api/climate/<workspace>/providers/codex/rate-limits")
     def api_climate_codex_rate_limits(workspace: str):
         try:

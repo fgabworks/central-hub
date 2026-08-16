@@ -174,6 +174,42 @@ class ClimateService:
         payload["workspace"] = ws
         return payload
 
+    def conversations(self, workspace: str, *, repository_id: str = "", limit: int = 50) -> list[dict[str, Any]]:
+        ws = normalize_workspace(workspace)
+        if repository_id:
+            self.require_repo(ws, repository_id)
+        return self.coding.conversations(
+            workspace=ws, repository_id=repository_id, limit=limit
+        )
+
+    def conversation(
+        self, workspace: str, conversation_id: str, *, repository_id: str = ""
+    ) -> dict[str, Any]:
+        ws = normalize_workspace(workspace)
+        if repository_id:
+            self.require_repo(ws, repository_id)
+        return self.coding.conversation(
+            conversation_id, workspace=ws, repository_id=repository_id
+        )
+
+    def rename_conversation(
+        self,
+        workspace: str,
+        conversation_id: str,
+        *,
+        title: str,
+        repository_id: str = "",
+    ) -> dict[str, Any]:
+        ws = normalize_workspace(workspace)
+        if repository_id:
+            self.require_repo(ws, repository_id)
+        return self.coding.rename_conversation(
+            conversation_id,
+            workspace=ws,
+            title=title,
+            repository_id=repository_id,
+        )
+
     def execute(self, workspace: str, repository_id: str, **payload: Any) -> dict[str, Any]:
         ws = normalize_workspace(workspace)
         repo = self.require_repo(ws, repository_id)
@@ -320,6 +356,7 @@ class ClimateService:
             conversation_id=str(payload.get("conversation_id") or "").strip(),
             repository_investigation=can_investigate,
             execution_mode=CLIMATE_ASSISTED,
+            display_prompt=str(payload.get("display_prompt") or prompt),
         )
         self._run_scope[str(result["id"])] = (ws, repo.id)
         self._run_meta[str(result["id"])] = {
@@ -407,6 +444,7 @@ class ClimateService:
             conversation_id=str(payload.get("conversation_id") or "").strip(),
             repository_investigation=can_investigate,
             execution_mode=DIRECT,
+            display_prompt=str(payload.get("display_prompt") or prompt),
         )
         preflight = {
             "ok": True,
@@ -1145,4 +1183,3 @@ def investigation_diagnostics(result: dict[str, Any], meta: dict[str, Any] | Non
         f"elapsed_ms={payload['elapsed_ms'] if payload['elapsed_ms'] is not None else 'n/a'}",
     ])
     return payload
-

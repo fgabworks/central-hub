@@ -11,6 +11,7 @@ from hub.agent_center.adapters.base import AgentAdapter, AgentDescriptor
 from hub.agent_center.adapters.claude_code import ClaudeCodeAdapter
 from hub.agent_center.adapters.codex import CodexAdapter
 from hub.agent_center.adapters.cursor_agent import CursorAgentAdapter
+from hub.agent_center.adapters.gemini_api import GeminiApiAdapter
 from hub.agent_center.adapters.hub_simulator import HubSimulatorAdapter
 from hub.agent_center.adapters.openai_api import OpenAIApiAdapter
 from hub.agent_center.adapters.xai_api import XaiApiAdapter
@@ -21,6 +22,7 @@ _ADAPTER_TYPES = {
     "hub_simulator": HubSimulatorAdapter,
     "openai_api": OpenAIApiAdapter,
     "xai_api": XaiApiAdapter,
+    "gemini_api": GeminiApiAdapter,
     "claude_code": ClaudeCodeAdapter,
     "cursor_agent": CursorAgentAdapter,
     "codex": CodexAdapter,
@@ -81,6 +83,14 @@ def build_adapters(descriptors: list[AgentDescriptor] | None = None) -> list[Age
 
 def _builtin_descriptors() -> list[AgentDescriptor]:
     return [
+        AgentDescriptor(
+            id="gemini",
+            label="Gemini",
+            provider="gemini_api",
+            executable="",
+            modes=["ask"],
+            notes="Gemini API read-only chat; models loaded dynamically from the server API key.",
+        ),
         AgentDescriptor(
             id="grok",
             label="Grok",
