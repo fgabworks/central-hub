@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import html
+import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from hub.repository_workspace.security import (
     WorkspaceSecurityError,
@@ -14,6 +16,7 @@ from hub.repository_workspace.security import (
     is_supported_text_path,
     language_for,
     looks_binary,
+    redact_audit_detail,
     relative_posix,
     safe_join,
     should_skip_dir,
@@ -36,10 +39,57 @@ def _size(path: Path) -> int | None:
         return None
 
 
+def _iter_search_files(
+    root: Path,
+    *,
+    skip_path_substrings: tuple[str, ...] = (),
+    max_files: int = 2_000,
+) -> Iterator[tuple[Path, str]]:
+    """Walk text-search candidates, pruning skipped/generated directories."""
+    scanned = 0
+    skip = tuple(marker.lower() for marker in skip_path_substrings if marker)
+    for dirpath, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
+        dirnames[:] = [name for name in dirnames if not should_skip_dir(name) and not name.lower().startswith(".git")]
+        try:
+            rel_dir = relative_posix(root, Path(dirpath))
+        except ValueError:
+            dirnames[:] = []
+            continue
+        rel_dir_l = f"/{rel_dir.lower()}".rstrip("/")
+        if skip and any(marker in f"{rel_dir_l}/" for marker in skip):
+            dirnames[:] = []
+            continue
+        if skip:
+            dirnames[:] = [
+                name
+                for name in dirnames
+                if not any(marker in f"{rel_dir_l}/{name.lower()}/" for marker in skip)
+            ]
+        for name in filenames:
+            if scanned >= max_files:
+                return
+            path = Path(dirpath) / name
+            try:
+                rel = relative_posix(root, path)
+            except ValueError:
+                continue
+            if is_blocked_secret(rel):
+                continue
+            if skip and any(marker in f"/{rel.lower()}" for marker in skip):
+                continue
+            scanned += 1
+            yield path, rel
+
+
 class RepositoryFiles:
     def __init__(self, repo_root: Path, settings: WorkspaceSettings) -> None:
         self.root = repo_root.resolve()
         self.settings = settings
+        self.last_search_meta: dict[str, Any] = {
+            "timed_out": False,
+            "truncated": False,
+            "unique_files": 0,
+        }
 
     def build_tree(
         self,
@@ -124,31 +174,34 @@ class RepositoryFiles:
             "count": count,
         }
 
-    def search_filenames(self, query: str, *, limit: int | None = None) -> list[dict[str, Any]]:
+    def search_filenames(
+        self,
+        query: str,
+        *,
+        limit: int | None = None,
+        skip_path_substrings: tuple[str, ...] | list[str] | None = None,
+        max_seconds: float | None = None,
+        max_unique_files: int | None = None,
+    ) -> list[dict[str, Any]]:
         q = (query or "").strip().lower()
         if not q:
+            self.last_search_meta = {"timed_out": False, "truncated": False, "unique_files": 0}
             return []
         cap = limit or self.settings.max_search_matches
+        file_cap = max_unique_files or cap
+        skip = tuple(skip_path_substrings or ())
+        timeout = max_seconds if max_seconds is not None else self.settings.search_timeout_seconds
+        started = time.monotonic()
         out: list[dict[str, Any]] = []
-        scanned = 0
-        for path in self.root.rglob("*"):
-            if scanned >= self.settings.max_search_files:
+        timed_out = False
+        for path, rel in _iter_search_files(
+            self.root,
+            skip_path_substrings=skip,
+            max_files=self.settings.max_search_files,
+        ):
+            if timeout and (time.monotonic() - started) >= timeout:
+                timed_out = True
                 break
-            if not path.is_file():
-                if path.is_dir() and should_skip_dir(path.name):
-                    # rglob still descends; skip by not matching files inside via continue
-                    continue
-                continue
-            # Skip files under blocked/skip dirs
-            try:
-                rel = relative_posix(self.root, path)
-            except ValueError:
-                continue
-            if any(should_skip_dir(p) for p in Path(rel).parts[:-1]):
-                continue
-            if is_blocked_secret(rel):
-                continue
-            scanned += 1
             if q in path.name.lower() or q in rel.lower():
                 out.append(
                     {
@@ -159,31 +212,59 @@ class RepositoryFiles:
                         "language": language_for(path),
                     }
                 )
-                if len(out) >= cap:
+                if len(out) >= min(cap, file_cap):
                     break
+        self.last_search_meta = {
+            "timed_out": timed_out,
+            "truncated": timed_out or len(out) >= cap,
+            "unique_files": len(out),
+        }
         return out
 
-    def search_content(self, query: str, *, limit: int | None = None) -> list[dict[str, Any]]:
+    def search_content(
+        self,
+        query: str,
+        *,
+        limit: int | None = None,
+        skip_path_substrings: tuple[str, ...] | list[str] | None = None,
+        max_seconds: float | None = None,
+        max_unique_files: int | None = None,
+        max_hits_per_file: int | None = None,
+        max_chars: int | None = None,
+    ) -> list[dict[str, Any]]:
         q = (query or "").strip()
         if not q:
+            self.last_search_meta = {"timed_out": False, "truncated": False, "unique_files": 0}
             return []
         q_lower = q.lower()
         cap = limit or self.settings.max_search_matches
+        file_cap = max_unique_files or 64
+        per_file = max_hits_per_file or 8
+        char_budget = max_chars or 24_000
+        skip = tuple(skip_path_substrings or ())
+        timeout = max_seconds if max_seconds is not None else self.settings.search_timeout_seconds
+        started = time.monotonic()
         out: list[dict[str, Any]] = []
+        timed_out = False
+        unique_files: set[str] = set()
+        used_chars = 0
+        truncated = False
         scanned = 0
-        for path in self.root.rglob("*"):
-            if scanned >= self.settings.max_search_files or len(out) >= cap:
+        for path, rel in _iter_search_files(
+            self.root,
+            skip_path_substrings=skip,
+            max_files=self.settings.max_search_files,
+        ):
+            if timeout and (time.monotonic() - started) >= timeout:
+                timed_out = True
+                truncated = True
                 break
-            if not path.is_file():
-                continue
-            try:
-                rel = relative_posix(self.root, path)
-            except ValueError:
-                continue
-            if any(should_skip_dir(p) for p in Path(rel).parts[:-1]):
-                continue
-            if is_blocked_secret(rel):
-                continue
+            if len(out) >= cap:
+                truncated = True
+                break
+            if used_chars >= char_budget:
+                truncated = True
+                break
             if not is_supported_text_path(path):
                 continue
             size = _size(path) or 0
@@ -203,24 +284,34 @@ class RepositoryFiles:
                     text = data.decode("utf-8", errors="replace")
                 except Exception:  # noqa: BLE001
                     continue
-            lines = text.splitlines()
-            for idx, line in enumerate(lines, start=1):
-                if q_lower in line.lower():
-                    snippet = line.strip()
-                    if len(snippet) > 200:
-                        snippet = snippet[:199] + "…"
-                    # Never return secret-looking line content
-                    from hub.repository_workspace.security import redact_audit_detail
-
-                    out.append(
-                        {
-                            "path": rel,
-                            "line": idx,
-                            "snippet": redact_audit_detail(snippet, limit=200),
-                        }
-                    )
-                    if len(out) >= cap:
-                        break
+            hits_in_file = 0
+            for idx, line in enumerate(text.splitlines(), start=1):
+                if q_lower not in line.lower():
+                    continue
+                if rel not in unique_files and len(unique_files) >= file_cap:
+                    truncated = True
+                    self.last_search_meta = {
+                        "timed_out": timed_out,
+                        "truncated": True,
+                        "unique_files": len(unique_files),
+                    }
+                    return out
+                snippet = line.strip()
+                if len(snippet) > 200:
+                    snippet = snippet[:199] + "…"
+                snippet = redact_audit_detail(snippet, limit=200)
+                out.append({"path": rel, "line": idx, "snippet": snippet})
+                unique_files.add(rel)
+                used_chars += len(snippet)
+                hits_in_file += 1
+                if len(out) >= cap or used_chars >= char_budget or hits_in_file >= per_file:
+                    truncated = len(out) >= cap or used_chars >= char_budget
+                    break
+        self.last_search_meta = {
+            "timed_out": timed_out,
+            "truncated": truncated,
+            "unique_files": len(unique_files),
+        }
         return out
 
     def read_preview(self, rel_path: str) -> dict[str, Any]:

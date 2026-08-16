@@ -112,6 +112,30 @@ class WorkspaceFilesEditorTests(unittest.TestCase):
         content = self.files.search_content("needle-token")
         self.assertEqual(content[0]["path"], "readme.md")
 
+    def test_search_skips_artifacts_and_redacts_pii(self) -> None:
+        logs = self.root / "lookup" / "logs" / "bulk_apply_jobs"
+        logs.mkdir(parents=True)
+        (logs / "job.json").write_text(
+            '{"email":"worker@example.com","username":"bulk.bot","needle-token":1}\n',
+            encoding="utf-8",
+        )
+        (self.root / "org.json").write_text(
+            '{"email":"geo@example.com","name":"Leyte","needle-token":1}\n',
+            encoding="utf-8",
+        )
+        skipped = self.files.search_content(
+            "needle-token",
+            skip_path_substrings=("lookup/logs/",),
+        )
+        paths = {row["path"] for row in skipped}
+        self.assertIn("org.json", paths)
+        self.assertNotIn("lookup/logs/bulk_apply_jobs/job.json", paths)
+        self.assertFalse(any("geo@example.com" in row["snippet"] for row in skipped))
+        self.assertTrue(any("[redacted" in row["snippet"] for row in skipped))
+        included = self.files.search_content("needle-token")
+        log_hit = next(row for row in included if "bulk_apply" in row["path"])
+        self.assertNotIn("worker@example.com", log_hit["snippet"])
+
     def test_tree_hides_generated_dirs_until_explicitly_shown(self) -> None:
         for name in ("tmp-run", "custom_pycache_build", ".venv", "node_modules"):
             folder = self.root / name

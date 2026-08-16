@@ -24,6 +24,25 @@ from hub.agent_center.secrets import is_secret_path
 from hub.climate.coding import classify_task_mode
 from hub.climate.domain_query import extract_domain_query, identifier_matches_query, score_source
 from hub.climate.repo_graph import concept_file_hints
+from hub.climate.retrieval_policy import (
+    ASK_INVESTIGATION_CONSTRAINTS,
+    BOUNDED_EXCERPT_CHARS,
+    LOW_CONFIDENCE_MAX_HINTS,
+    SEARCH_MAX_CHARS,
+    SEARCH_MAX_UNIQUE_FILES,
+    SEARCH_TIMEOUT_SECONDS,
+    SIMPLE_QUERY_MAX_SOURCES,
+    bounded_matching_excerpt,
+    is_implementation_question,
+    is_large_reference_dump,
+    is_noisy_artifact,
+    is_simple_reference_query,
+    path_matches_query_markers,
+    ranking_adjustment,
+    redact_search_snippet,
+    should_skip_as_evidence,
+    skip_path_substrings_for_prompt,
+)
 from hub.registry.models import Repository
 
 _TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_\-]{2,}")
@@ -145,6 +164,15 @@ def _clip(text: str, limit: int) -> str:
 def _source_excerpt(text: str, *, path: str, prompt: str, limit: int = MAX_SOURCE_CHARS) -> str:
     """Keep the implementation hit, not just the beginning of a large file."""
     value = str(text or "")
+    suffix = Path(path).suffix.lower()
+    if is_large_reference_dump(path) or suffix in {".json", ".csv", ".tsv", ".ndjson"}:
+        domain = extract_domain_query(prompt)
+        excerpt = bounded_matching_excerpt(
+            value,
+            domain.search_terms(),
+            max_chars=min(limit, BOUNDED_EXCERPT_CHARS),
+        )
+        return redact_search_snippet(excerpt, path=path)
     if len(value) <= limit:
         return value
     lower = value.lower()
@@ -489,8 +517,7 @@ def select_applicable_instructions(
 
 
 def _implementation_question(prompt: str) -> bool:
-    lower = str(prompt or "").lower()
-    return bool(re.search(r"\b(implementation|implement|logic|function|symbol|code|derive[ds]?|scor(?:e|ing))\b", lower))
+    return is_implementation_question(prompt)
 
 
 def _is_test_path(path: str) -> bool:
@@ -551,11 +578,19 @@ def _qualify_source_rows(
         test = _is_test_path(path)
         path_domain_match = identifier_matches_query(path, query)
         score = int(row.get("score") or 0)
-        rank_score = score
+        noisy = is_noisy_artifact(path) and should_skip_as_evidence(path, prompt)
+        large = is_large_reference_dump(path)
+        rank_score = score + ranking_adjustment(path, prompt=prompt)
         accepted = False
         reason = "supporting_candidate"
 
-        if authority:
+        if noisy:
+            accepted = False
+            reason = "noisy_artifact"
+        elif large and not path_domain_match:
+            accepted = False
+            reason = "expensive_dump"
+        elif authority:
             if test:
                 rank_score -= 10
                 reason = "test_support_only"
@@ -701,11 +736,21 @@ def resolve_climate_context(
     expansion_terms: list[str] = []
     expansion_paths: list[str] = []
     resolver_queries: list[str] = []
+    search_failures: list[str] = []
+    simple_ref = is_simple_reference_query(prompt)
 
     def _add_source(path: str, content: str, *, reason: str, score: int = 1) -> None:
         rel = path.replace("\\", "/").lstrip("/")
         if not rel or rel in seen_paths:
             return
+        explicit = reason == "selected"
+        if should_skip_as_evidence(rel, prompt, explicit=explicit):
+            return
+        if is_large_reference_dump(rel) and not explicit:
+            needles = domain_query.search_terms()
+            if not path_matches_query_markers(rel, needles + list(domain_query.phrases)):
+                return
+            content = bounded_matching_excerpt(content, needles)
         clipped = _source_excerpt(content, path=rel, prompt=prompt)
         if not clipped.strip():
             return
@@ -717,6 +762,16 @@ def resolve_climate_context(
             "reason": reason,
             "score": score,
         })
+
+    def _search_kwargs() -> dict[str, Any]:
+        return {
+            "limit": 40,
+            "skip_path_substrings": skip_path_substrings_for_prompt(prompt),
+            "max_seconds": SEARCH_TIMEOUT_SECONDS,
+            "max_unique_files": SEARCH_MAX_UNIQUE_FILES,
+            "max_hits_per_file": 6,
+            "max_chars": SEARCH_MAX_CHARS,
+        }
 
     def _gather(expand: bool = False) -> None:
         explicit = list(dict.fromkeys(
@@ -731,10 +786,14 @@ def resolve_climate_context(
                 if data.get("binary") or data.get("error"):
                     continue
                 content = str(data.get("content") or "")
-                score = 40 + score_source(path, content, domain_query)
+                score = 40 + score_source(path, content, domain_query, prompt=prompt)
                 _add_source(path, content, reason="selected", score=score)
 
-            if repository_intelligence is not None and workspace == "work":
+            if (
+                not simple_ref
+                and repository_intelligence is not None
+                and workspace == "work"
+            ):
                 try:
                     retrieved = repository_intelligence.retrieve([repo.id], prompt, limit=6)
                 except Exception:  # noqa: BLE001
@@ -776,7 +835,9 @@ def resolve_climate_context(
                             path,
                             content,
                             reason=str(hint.get("reason") or "graph"),
-                            score=int(hint.get("score") or 12) + score_source(path, content, domain_query),
+                            score=int(hint.get("score") or 12) + score_source(
+                                path, content, domain_query, prompt=prompt
+                            ),
                         )
                 except Exception:  # noqa: BLE001
                     pass
@@ -792,16 +853,24 @@ def resolve_climate_context(
                 if data.get("binary") or data.get("error"):
                     continue
                 content = str(data.get("content") or "")
-                score = 16 + score_source(path, content, domain_query)
+                score = 16 + score_source(path, content, domain_query, prompt=prompt)
                 _add_source(path, content, reason="expand:reference", score=score)
 
         if expand:
             query_terms = expansion_terms[:4] or domain_query.search_terms()[:6]
+        elif simple_ref:
+            query_terms = list(domain_query.phrases[:3])
+            query_terms.extend(t for t in domain_query.strong if t.lower() not in {p.lower() for p in query_terms})
+            compacted = []
+            for term in query_terms:
+                if " " in term or "-" in term:
+                    compacted.append(term.replace(" ", "_").replace("-", "_"))
+            query_terms = list(dict.fromkeys(query_terms + compacted))[:6]
         else:
             query_terms = domain_query.search_terms()[:8] or sorted(tokens, key=len, reverse=True)[:4]
         queries: list[str] = []
         if not expand:
-            queries.extend(query_terms[:5])
+            queries.extend(query_terms[:5] if not simple_ref else query_terms[:6])
         else:
             queries.extend(query_terms[:4])
             for sym in _SYMBOL.findall(prompt or ""):
@@ -810,19 +879,29 @@ def resolve_climate_context(
                 queries.append(Path(current_file).stem)
         queries = [q for q in dict.fromkeys(queries) if str(q).strip()]
         resolver_queries.extend(queries)
+        search_kw = _search_kwargs()
+        modes = ("filename",) if simple_ref else ("filename", "content")
 
         for search_q in queries:
-            for mode_name in ("filename", "content"):
+            for mode_name in modes:
                 try:
-                    result = repository_workspace.search(repo, q=str(search_q), mode=mode_name)
+                    result = repository_workspace.search(
+                        repo, q=str(search_q), mode=mode_name, **search_kw
+                    )
                 except Exception:  # noqa: BLE001
+                    search_failures.append(f"{mode_name}:{search_q}")
+                    continue
+                if result.get("timed_out"):
+                    search_failures.append(f"{mode_name}:{search_q}")
+                    activity.append(f"Search timed out for {search_q!r}; refining")
                     continue
                 matches = list(result.get("matches") or [])
-                if _authority_question(prompt):
+                if _authority_question(prompt) or simple_ref:
                     matches.sort(key=lambda match: (
+                        1 if is_noisy_artifact(str(match.get("path") or "")) else 0,
                         0 if _is_code_path(str(match.get("path") or "")) and not _is_test_path(str(match.get("path") or "")) else 1,
                         0 if identifier_matches_query(str(match.get("path") or ""), domain_query) else 1,
-                        -score_source(str(match.get("path") or ""), "", domain_query),
+                        -score_source(str(match.get("path") or ""), "", domain_query, prompt=prompt),
                         str(match.get("path") or ""),
                     ))
                 unique_matches: list[dict[str, Any]] = []
@@ -833,19 +912,43 @@ def resolve_climate_context(
                         continue
                     unique_match_paths.add(match_path)
                     unique_matches.append(match)
-                hit_limit = 8 if not expand else MAX_SEARCH_HITS
+                hit_limit = 4 if simple_ref else (8 if not expand else MAX_SEARCH_HITS)
                 for match in unique_matches[:hit_limit]:
                     path = str(match.get("path") or "")
                     if not path or path in seen_paths:
+                        continue
+                    if should_skip_as_evidence(path, prompt):
+                        continue
+                    snippet = redact_search_snippet(str(match.get("snippet") or ""), path=path)
+                    size = match.get("size")
+                    size_i = size if isinstance(size, int) else None
+                    if is_large_reference_dump(path, size_i):
+                        if not path_matches_query_markers(
+                            path, domain_query.search_terms() + list(domain_query.phrases)
+                        ):
+                            continue
+                        _add_source(
+                            path,
+                            snippet,
+                            reason=f"{'expand' if expand else 'search'}:{mode_name}-excerpt",
+                            score=max(1, score_source(path, snippet, domain_query, prompt=prompt)),
+                        )
                         continue
                     try:
                         data = repository_workspace.preview(repo, path)
                     except Exception:  # noqa: BLE001
                         continue
                     if data.get("binary") or data.get("error"):
+                        if snippet:
+                            _add_source(
+                                path,
+                                snippet,
+                                reason=f"{'expand' if expand else 'search'}:{mode_name}-excerpt",
+                                score=max(1, score_source(path, snippet, domain_query, prompt=prompt)),
+                            )
                         continue
                     content = str(data.get("content") or "")
-                    score = score_source(path, content, domain_query)
+                    score = score_source(path, content, domain_query, prompt=prompt)
                     if score <= 0 and mode_name == "content" and not expand:
                         continue
                     reason = f"{'expand' if expand else 'search'}:{mode_name}"
@@ -853,6 +956,8 @@ def resolve_climate_context(
                     if len(source_rows) >= MAX_CANDIDATES:
                         return
 
+        if simple_ref:
+            return
         if len(source_rows) < (3 if expand else 2):
             try:
                 selected = select_relevant_files(
@@ -905,9 +1010,12 @@ def resolve_climate_context(
 
     expanded = False
     initial_evidence_weak = confidence != "high" or (
-        _authority_question(prompt)
+        _implementation_question(prompt)
         and not _has_primary_implementation(authoritative_rows, prompt=prompt)
     )
+    if simple_ref:
+        initial_evidence_weak = False
+        activity.append("Lightweight reference lookup")
     if initial_evidence_weak:
         # Exactly one deterministic local expansion. Follow concrete code paths and
         # terminology exposed by matched instructions, skills, docs, and symbols.
@@ -943,14 +1051,27 @@ def resolve_climate_context(
 
     authoritative_paths = [str(row.get("path") or "") for row in authoritative_rows]
     authoritative_set = set(authoritative_paths)
-    ranked_rows = sorted(
-        source_rows,
-        key=lambda row: (
-            0 if str(row.get("path") or "") in authoritative_set else 1,
-            -int(next((q.get("score") or 0 for q in qualification if q.get("path") == row.get("path")), row.get("score") or 0)),
-            str(row.get("path") or ""),
-        ),
-    )[:MAX_SOURCES]
+    max_hints = SIMPLE_QUERY_MAX_SOURCES if simple_ref else (
+        LOW_CONFIDENCE_MAX_HINTS if confidence == "low" else MAX_SOURCES
+    )
+    ranked_rows = [
+        row
+        for row in sorted(
+            source_rows,
+            key=lambda row: (
+                0 if str(row.get("path") or "") in authoritative_set else 1,
+                1 if should_skip_as_evidence(str(row.get("path") or ""), prompt) else 0,
+                -int(next((q.get("score") or 0 for q in qualification if q.get("path") == row.get("path")), row.get("score") or 0)),
+                str(row.get("path") or ""),
+            ),
+        )
+        if not should_skip_as_evidence(str(row.get("path") or ""), prompt)
+    ]
+    if authoritative_set:
+        without_tests = [row for row in ranked_rows if not _is_test_path(str(row.get("path") or ""))]
+        if without_tests:
+            ranked_rows = without_tests
+    ranked_rows = ranked_rows[:max_hints]
     source_rows = ranked_rows
     source_files = [str(row.get("path") or "") for row in source_rows]
 
@@ -1004,6 +1125,8 @@ def resolve_climate_context(
             "resolver_queries": list(dict.fromkeys(resolver_queries))[:16],
             "confidence": result.confidence,
             "expanded_search": expanded,
+            "simple_reference": simple_ref,
+            "search_failures": list(dict.fromkeys(search_failures))[:12],
             "context_chars": 0,
             "context_tokens_est": 0,
             "provider_invoked": False,
@@ -1064,6 +1187,13 @@ def resolve_climate_context(
                 f"- {path} | {label} | score={qualified.get('score', row.get('score', 0))} | "
                 f"symbols={','.join(symbols) or '(none)'} | reason={qualified.get('reason') or row.get('reason')}"
             )
+        if simple_ref or confidence == "low":
+            parts.append(
+                "Hint packet is small on purpose. Confidence is limited — these paths are optional "
+                "starting points, not evidence. Investigate independently with filename/path/index "
+                "lookup for the distinctive phrase, UID, or symbol. Do not open lookup/logs or huge "
+                "JSON dumps unless the question is about them."
+            )
     elif source_rows:
         parts.append("Ranked repository evidence (authoritative implementation first):")
         for row in source_rows:
@@ -1082,11 +1212,7 @@ def resolve_climate_context(
                 "ASK/EXPLAIN constraints: investigate the repository as needed with safe read-only "
                 "search, file/symbol/reference/import/test/git inspection commands. Do not modify "
                 "files or repository state. Cite the exact implementation paths/functions you verify. "
-                "Investigate progressively: exact symbol/acronym/phrase, then likely modules, then "
-                "definitions/references, then open authoritative files; broaden only if evidence is "
-                "insufficient. Prefer bounded rg (`--max-count`, `--glob '*.py'`). On Windows/"
-                "PowerShell do not pass shell globs such as `tests *.py` or `lookup/test_*`; use "
-                "rg `--glob` or explicit paths. A failed command is not a successful inspection."
+                + ASK_INVESTIGATION_CONSTRAINTS
             )
         else:
             parts.append(
@@ -1139,6 +1265,8 @@ def resolve_climate_context(
                 "strong": list(domain_query.strong),
             },
             "resolver_queries": list(dict.fromkeys(resolver_queries))[:16],
+            "simple_reference": simple_ref,
+            "search_failures": list(dict.fromkeys(search_failures))[:12],
             "context_chars": len(packet),
             "context_tokens_est": _estimate_tokens(len(packet)),
             "provider_invoked": True,

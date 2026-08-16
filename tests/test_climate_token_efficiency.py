@@ -301,6 +301,8 @@ class TokenEfficiencyServiceTests(unittest.TestCase):
         public = svc.public(record)
         self.assertEqual(public["status"], "Not measured")
         self.assertIsNone(public["direct"])
+        self.assertEqual(public["compare_label"], "Compare with Direct")
+        self.assertEqual(public["execution_mode"], "climate_assisted")
 
     def test_climate_run_is_not_rerun(self):
         svc = self._service()
@@ -360,6 +362,29 @@ class TokenEfficiencyServiceTests(unittest.TestCase):
         self.assertEqual(self.popen_calls, [])
         self.assertEqual(record["status"], "Failed")
         self.assertIn("CLIMATE packet", record["reason"])
+
+    def test_assisted_comparison_allows_resolver_packet(self):
+        svc = self._service()
+        self._snapshot(svc, execution_mode="direct")
+        packet = "CLIMATE context packet (ASK).\nTask:\n" + ANC_PROMPT + "\n"
+        record = svc.start_direct(
+            "run-anc",
+            adapter=self.adapter,
+            repository_id="work-repo",
+            repository_path=str(self.repo),
+            comparison_prompt=packet,
+            comparison_side="assisted",
+        )
+        self._wait(svc, "run-anc")
+        finished = svc.load("run-anc")
+        self.assertIn(finished["status"], {STATUS_MEASURING, STATUS_MEASURED})
+        self.assertTrue(finished.get("assisted"))
+        prompt = (self.persist / "run-anc" / "assisted_prompt.txt").read_text(encoding="utf-8")
+        self.assertIn("CLIMATE context packet", prompt)
+        public = svc.public(finished)
+        self.assertEqual(public["execution_mode"], "direct")
+        self.assertEqual(public["compare_label"], "Compare with CLIMATE")
+        self.assertEqual(public["direct"]["usage"]["total_tokens"], 493229)
 
     def test_changed_commit_blocks_comparison(self):
         svc = self._service()
@@ -670,7 +695,9 @@ class TokenEfficiencyUiContractTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         script = (root / "static" / "js" / "climate.js").read_text(encoding="utf-8")
         css = (root / "static" / "css" / "climate.css").read_text(encoding="utf-8")
-        self.assertIn("Evaluate Token Savings", script)
+        self.assertIn("Compare with Direct", script)
+        self.assertIn("Compare with CLIMATE", script)
+        self.assertNotIn("Evaluate Token Savings", script)
         self.assertIn("data-te-action", script)
         self.assertIn("Unavailable", script)
         self.assertNotIn("direct_benchmark.jsonl", script)

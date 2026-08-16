@@ -35,6 +35,7 @@ _FAILED_RE = re.compile(
     r"(?:cannot find path|wildcard|parameter cannot be found|is not recognized|"
     r"commandnotfound|exit(?:ed)? with (?:code|status) [1-9]|"
     r"no such file|not a valid|"
+    r"timed?\s*out|timeout|command timed out|"
     r"the term '.+' is not recognized)",
     re.I,
 )

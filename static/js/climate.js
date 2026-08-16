@@ -28,6 +28,8 @@
   var modelSelect = document.getElementById("climate-model");
   var panelProviderSelect = document.getElementById("climate-provider-panel");
   var panelModelSelect = document.getElementById("climate-model-panel");
+  var executionModeSelect = document.getElementById("climate-execution-mode");
+  var executionModePill = document.getElementById("climate-mode-pill");
   var providerCards = document.getElementById("climate-provider-cards");
   var breadcrumb = document.getElementById("climate-breadcrumb");
   var providerState = document.getElementById("climate-provider-state");
@@ -108,6 +110,10 @@
       syncAiMaximizeChrome();
       if (saved.provider) providerSelect.dataset.saved = saved.provider;
       if (saved.model) modelSelect.dataset.saved = saved.model;
+      if (saved.executionMode && executionModeSelect) {
+        executionModeSelect.value = saved.executionMode === "direct" ? "direct" : "climate_assisted";
+      }
+      if (executionModePill) executionModePill.setAttribute("title", executionModeTooltip(currentExecutionMode()));
     } catch (_) {}
   }
   function savePrefs() {
@@ -118,6 +124,7 @@
     localStorage.setItem(storageKey(), JSON.stringify({
       tabs: state.tabs.map(function (tab) { return tab.path; }), active: state.active,
       selectedFiles: state.selectedFiles, showExcluded: state.showExcluded, provider: providerSelect.value, model: modelSelect.value,
+      executionMode: currentExecutionMode(),
       left: parseInt(css.getPropertyValue("--left"), 10) || 230,
       right: Math.max(AI_MIN, rightPx),
       aiPrevRight: parseInt(workbench.dataset.aiPrevRight, 10) || Math.max(AI_MIN, rightPx),
@@ -134,6 +141,30 @@
   var AI_MIN = 340;
   var AI_DEFAULT = 360;
   var AI_RAIL = 48;
+  function currentExecutionMode() {
+    var value = executionModeSelect && executionModeSelect.value === "direct" ? "direct" : "climate_assisted";
+    return value;
+  }
+  function executionModeTooltip(mode) {
+    return mode === "direct"
+      ? "Direct Provider — provider investigates the repo directly."
+      : "CLIMATE Assisted — CLIMATE finds useful repo context first.";
+  }
+  function applyExecutionMode(mode, opts) {
+    opts = opts || {};
+    var next = mode === "direct" ? "direct" : "climate_assisted";
+    if (executionModeSelect) {
+      executionModeSelect.value = next;
+      if (executionModeSelect._climateDd) syncClimateDropdown(executionModeSelect);
+    }
+    if (executionModePill) executionModePill.setAttribute("title", executionModeTooltip(next));
+    var session = activeSession();
+    if (session && !opts.skipSession) {
+      session.executionMode = next;
+      saveChatStore();
+    }
+    if (!opts.skipPrefs) savePrefs();
+  }
   function workbenchWidth() {
     return workbench.getBoundingClientRect().width || window.innerWidth;
   }
@@ -1453,7 +1484,7 @@
       html += renderTokenEfficiencyMeasuring(te);
     } else {
       html += '<div class="climate-te-stack">';
-      html += '<div class="climate-te-kv"><span>CLIMATE run total</span><b>' + escapeHtml(formatTokenExact(climateTotal)) + '</b></div>';
+      html += '<div class="climate-te-kv"><span>' + escapeHtml((te && te.execution_mode === "direct") ? "Direct run total" : "CLIMATE run total") + '</span><b>' + escapeHtml(formatTokenExact((te && te.execution_mode === "direct") ? (te.direct && te.direct.usage && te.direct.usage.total_tokens) : climateTotal)) + '</b></div>';
       html += '<div class="climate-te-kv"><span>Preflight estimate</span><b title="CLIMATE Context Resolver estimate (not provider usage)">' + escapeHtml(formatTokenExact(te.climate && te.climate.preflight_tokens_est)) + '</b></div>';
       html += '<div class="climate-te-kv"><span>Direct baseline</span><b class="climate-te-status is-muted">' + escapeHtml(status) + '</b></div>';
       html += '</div>';
@@ -1463,8 +1494,9 @@
     html += '<div class="climate-te-actions">';
     if (status === "Measuring…") {
       html += '<button type="button" class="climate-btn" data-te-action="cancel" data-msg-id="' + escapeHtml(msg.id) + '">Cancel</button>';
-    } else if (status !== "Measured" && msg.runId) {
-      html += '<button type="button" class="climate-btn climate-btn-primary" data-te-action="evaluate" data-msg-id="' + escapeHtml(msg.id) + '">Evaluate Token Savings</button>';
+    }     else if (status !== "Measured" && msg.runId) {
+      var compareLabel = (te && te.compare_label) || (msg.executionMode === "direct" ? "Compare with CLIMATE" : "Compare with Direct");
+      html += '<button type="button" class="climate-btn climate-btn-primary" data-te-action="evaluate" data-msg-id="' + escapeHtml(msg.id) + '">' + escapeHtml(compareLabel) + '</button>';
     }
     html += "</div></section>";
     return html;
@@ -1673,6 +1705,7 @@
       updatedAt: Date.now(),
       provider: providerSelect.value || "",
       model: modelSelect.value || "",
+      executionMode: currentExecutionMode(),
       lastRunProvider: "",
       workspace: workspace,
       repositoryId: repoId(),
@@ -1856,7 +1889,7 @@
     syncClimateDropdown(selectEl);
   }
   function enhanceProviderModelDropdowns() {
-    ["climate-provider", "climate-model", "climate-provider-panel", "climate-model-panel"].forEach(function (id) {
+    ["climate-provider", "climate-model", "climate-provider-panel", "climate-model-panel", "climate-execution-mode"].forEach(function (id) {
       var el = document.getElementById(id);
       if (el) enhanceClimateSelect(el);
     });
@@ -1893,6 +1926,7 @@
       panelModelSelect.value = session.model;
     }
     applyContextPrefs(session.context);
+    applyExecutionMode(session.executionMode || currentExecutionMode(), { skipSession: true });
     saveChatStore();
     selectProvider(session.provider || providerSelect.value, { refresh: false, preserveModel: session.model });
     renderChat();
@@ -2309,6 +2343,7 @@
     }
     session.provider = providerSelect.value;
     session.model = modelSelect.value;
+    session.executionMode = currentExecutionMode();
     session.repositoryId = repoId();
     session.branch = (branchSelect && branchSelect.value) || "";
     session.context = captureContextPrefs();
@@ -2326,6 +2361,7 @@
       model: modelSelect.value,
       startedAt: Date.now(),
       taskMode: taskMode,
+      executionMode: currentExecutionMode(),
       sources: [],
       stopNotice: "",
       stoppedByUser: false,
@@ -2344,6 +2380,7 @@
         selection: document.getElementById("climate-selection").checked ? currentSelection() : "",
         selected_files: files,
         include_repo_context: document.getElementById("climate-repo-context").checked,
+        execution_mode: currentExecutionMode(),
         handoff: crossProvider,
         reuse_session: !crossProvider,
         conversation_id: session.agentConversationId || ""
@@ -2611,6 +2648,7 @@
         runId: data.run.id,
         usage: usageParsed,
         tokenEfficiency: data.run.token_efficiency || null,
+        executionMode: data.run.execution_mode || currentExecutionMode(),
         stopNotice: "",
         stoppedByUser: false
       });
@@ -3193,6 +3231,11 @@
   if(panelProviderSelect){panelProviderSelect.addEventListener("change",function(){providerSelect.value=panelProviderSelect.value;selectProvider(providerSelect.value,{refresh:false});});}
   modelSelect.addEventListener("change",function(){panelModelSelect.value=modelSelect.value;if(!state.runActive)sendBtn.disabled=!modelSelect.value;var session=activeSession();if(session){session.model=modelSelect.value;saveChatStore();}savePrefs();});
   panelModelSelect.addEventListener("change",function(){modelSelect.value=panelModelSelect.value;if(!state.runActive)sendBtn.disabled=!modelSelect.value;var session=activeSession();if(session){session.model=modelSelect.value;saveChatStore();}savePrefs();});
+  if(executionModeSelect){
+    executionModeSelect.addEventListener("change",function(){
+      applyExecutionMode(executionModeSelect.value);
+    });
+  }
   document.getElementById("climate-model-refresh").addEventListener("click",function(){selectProvider(providerSelect.value,{refresh:true});});
   document.getElementById("climate-chat-new").addEventListener("click",function(){closeChatPopovers();newChatSession(false);promptEl.focus();});
   function renameActiveChat(){
@@ -3379,7 +3422,12 @@
     }
     scheduleEditorLayout();
   });
-  loadPrefs();normalizeAiPanelState();syncAiMaximizeChrome();renderTabs();renderProviders();enhanceProviderModelDropdowns();loadChatStore();loadTree();loadGit();setupResize();initMonaco();if(state.active)openFile(state.active);
+  loadPrefs();normalizeAiPanelState();syncAiMaximizeChrome();renderTabs();renderProviders();enhanceProviderModelDropdowns();loadChatStore();
+  (function syncModeAfterLoad(){
+    var session=activeSession();
+    applyExecutionMode((session&&session.executionMode)||currentExecutionMode(),{skipSession:true,skipPrefs:true});
+  })();
+  loadTree();loadGit();setupResize();initMonaco();if(state.active)openFile(state.active);
   switchPanel(state.panel,{ keepClosed: center.classList.contains("is-bottom-closed") });
   if(!workbench.classList.contains("is-ai-closed")) fetchCodexRateLimits({ refresh: false });
 }());

@@ -1,8 +1,9 @@
-"""Manual per-run CLIMATE vs Direct Codex token-efficiency benchmark.
+"""Manual per-run CLIMATE Assisted vs Direct Provider token-efficiency benchmark.
 
-Direct Codex is never launched from a normal CLIMATE prompt. The user must click
-Evaluate Token Savings. The original CLIMATE run, conversation, and provider
-session are not reused or rewritten.
+The comparison process is never launched from a normal prompt. The user must
+click Compare with Direct (Assisted original) or Compare with CLIMATE (Direct
+original). The original run, conversation, and provider session are not reused
+or rewritten.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from hub.agent_center.codex_safety import (
 )
 from hub.agent_center.redact import redact_text
 from hub.climate.investigation_metrics import summarize_tool_activity
+from hub.climate.execution_mode import CLIMATE_ASSISTED, DIRECT, normalize_execution_mode
 from hub.settings import ROOT_DIR
 
 STATUS_NOT_MEASURED = "Not measured"
@@ -254,46 +256,18 @@ class TokenEfficiencyService:
     def public(self, record: dict[str, Any] | None) -> dict[str, Any]:
         record = record if isinstance(record, dict) else _empty_record("")
         snapshot = dict(record.get("snapshot") or {})
-        direct = dict(record.get("direct") or {}) if record.get("direct") else None
-        if direct:
-            direct = {
-                key: direct.get(key)
-                for key in (
-                    "status",
-                    "usage",
-                    "runtime_ms",
-                    "files_inspected",
-                    "search_matched_files",
-                    "tool_executions",
-                    "success",
-                    "git_unchanged",
-                    "error",
-                    "started_at",
-                    "finished_at",
-                    "argv",
-                )
-            }
         return {
             "status": record.get("status") or STATUS_UNAVAILABLE,
             "reason": record.get("reason") or "",
             "eligible": bool(snapshot.get("provider") == ELIGIBLE_PROVIDER and snapshot.get("user_prompt")),
-            "climate": {
-                "total": (snapshot.get("climate_usage") or {}).get("total_tokens"),
-                "input": (snapshot.get("climate_usage") or {}).get("input_tokens"),
-                "cached_input": (snapshot.get("climate_usage") or {}).get("cached_input_tokens"),
-                "output": (snapshot.get("climate_usage") or {}).get("output_tokens"),
-                "runtime_ms": snapshot.get("runtime_ms"),
-                "files_inspected": snapshot.get("files_inspected"),
-                "search_matched_files": snapshot.get("search_matched_files"),
-                "tool_calls": snapshot.get("tool_calls"),
-                "preflight_tokens_est": snapshot.get("context_tokens_est"),
-                "context_packet_chars": snapshot.get("context_packet_chars"),
-                "source_candidates": snapshot.get("source_candidates"),
-                "session_fresh": snapshot.get("session_fresh"),
-                "session_reused": snapshot.get("session_reused"),
-                "usage_source": (snapshot.get("climate_usage") or {}).get("source") or "unavailable",
-            },
-            "direct": direct,
+            "execution_mode": normalize_execution_mode(snapshot.get("execution_mode")),
+            "compare_label": (
+                "Compare with CLIMATE"
+                if normalize_execution_mode(snapshot.get("execution_mode")) == DIRECT
+                else "Compare with Direct"
+            ),
+            "climate": self._public_climate_side(record, snapshot),
+            "direct": self._public_direct_side(record, snapshot),
             "comparison": self._public_comparison(record, snapshot),
             "comparability_note": _comparability_note(snapshot, record.get("status")),
             "measured_at": record.get("measured_at"),
@@ -306,13 +280,121 @@ class TokenEfficiencyService:
                 "read_only": snapshot.get("read_only"),
                 "codex_version": snapshot.get("codex_version"),
                 "reasoning_config": snapshot.get("reasoning_config"),
+                "execution_mode": normalize_execution_mode(snapshot.get("execution_mode")),
             },
+        }
+
+    def _original_usage_metrics(self, snapshot: dict[str, Any]) -> dict[str, Any]:
+        usage = snapshot.get("climate_usage") or {}
+        return {
+            "total": usage.get("total_tokens"),
+            "input": usage.get("input_tokens"),
+            "cached_input": usage.get("cached_input_tokens"),
+            "output": usage.get("output_tokens"),
+            "runtime_ms": snapshot.get("runtime_ms"),
+            "files_inspected": snapshot.get("files_inspected"),
+            "search_matched_files": snapshot.get("search_matched_files"),
+            "tool_calls": snapshot.get("tool_calls"),
+            "preflight_tokens_est": snapshot.get("context_tokens_est"),
+            "context_packet_chars": snapshot.get("context_packet_chars"),
+            "source_candidates": snapshot.get("source_candidates"),
+            "session_fresh": snapshot.get("session_fresh"),
+            "session_reused": snapshot.get("session_reused"),
+            "usage_source": usage.get("source") or "unavailable",
+        }
+
+    def _public_climate_side(self, record: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, Any]:
+        original = self._original_usage_metrics(snapshot)
+        if normalize_execution_mode(snapshot.get("execution_mode")) != DIRECT:
+            return original
+        assisted = dict(record.get("assisted") or {}) if record.get("assisted") else None
+        if not assisted:
+            return {
+                "total": None,
+                "input": None,
+                "cached_input": None,
+                "output": None,
+                "runtime_ms": None,
+                "files_inspected": None,
+                "search_matched_files": None,
+                "tool_calls": None,
+                "preflight_tokens_est": None,
+                "context_packet_chars": None,
+                "source_candidates": None,
+                "session_fresh": True,
+                "session_reused": False,
+                "usage_source": "unavailable",
+            }
+        usage = assisted.get("usage") or {}
+        return {
+            "total": usage.get("total_tokens"),
+            "input": usage.get("input_tokens"),
+            "cached_input": usage.get("cached_input_tokens"),
+            "output": usage.get("output_tokens"),
+            "runtime_ms": assisted.get("runtime_ms"),
+            "files_inspected": assisted.get("files_inspected"),
+            "search_matched_files": assisted.get("search_matched_files"),
+            "tool_calls": assisted.get("tool_executions"),
+            "preflight_tokens_est": snapshot.get("context_tokens_est"),
+            "context_packet_chars": snapshot.get("context_packet_chars"),
+            "source_candidates": snapshot.get("source_candidates"),
+            "session_fresh": True,
+            "session_reused": False,
+            "usage_source": usage.get("source") or "unavailable",
+        }
+
+    def _public_direct_side(self, record: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, Any] | None:
+        if normalize_execution_mode(snapshot.get("execution_mode")) == DIRECT:
+            original = self._original_usage_metrics(snapshot)
+            return {
+                "status": record.get("status") or STATUS_NOT_MEASURED,
+                "usage": {
+                    "total_tokens": original["total"],
+                    "input_tokens": original["input"],
+                    "cached_input_tokens": original["cached_input"],
+                    "output_tokens": original["output"],
+                    "source": original["usage_source"],
+                },
+                "runtime_ms": original["runtime_ms"],
+                "files_inspected": original["files_inspected"],
+                "search_matched_files": original["search_matched_files"],
+                "tool_executions": original["tool_calls"],
+                "success": True,
+                "git_unchanged": True,
+                "error": "",
+                "started_at": snapshot.get("captured_at"),
+                "finished_at": None,
+                "argv": [],
+            }
+        direct = dict(record.get("direct") or {}) if record.get("direct") else None
+        if not direct:
+            return None
+        return {
+            key: direct.get(key)
+            for key in (
+                "status",
+                "usage",
+                "runtime_ms",
+                "files_inspected",
+                "search_matched_files",
+                "tool_executions",
+                "success",
+                "git_unchanged",
+                "error",
+                "started_at",
+                "finished_at",
+                "argv",
+            )
         }
 
     @staticmethod
     def _public_comparison(record: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, Any] | None:
-        climate_total = (snapshot.get("climate_usage") or {}).get("total_tokens")
-        direct_total = ((record.get("direct") or {}).get("usage") or {}).get("total_tokens")
+        if normalize_execution_mode(snapshot.get("execution_mode")) == DIRECT:
+            climate_total = ((record.get("assisted") or {}).get("usage") or {}).get("total_tokens")
+            direct_total = (snapshot.get("climate_usage") or {}).get("total_tokens")
+        else:
+            climate_total = (snapshot.get("climate_usage") or {}).get("total_tokens")
+            direct_total = ((record.get("direct") or {}).get("usage") or {}).get("total_tokens")
         rebuilt = comparison_from_totals(climate_total, direct_total)
         if rebuilt:
             return rebuilt
@@ -350,6 +432,7 @@ class TokenEfficiencyService:
         persist: bool = False,
         commit_sha: str | None = None,
         infer_commit: bool = True,
+        execution_mode: str = CLIMATE_ASSISTED,
     ) -> dict[str, Any]:
         existing = self.load(run_id) or _empty_record(run_id)
         if existing.get("status") == STATUS_MEASURED and existing.get("direct"):
@@ -381,6 +464,7 @@ class TokenEfficiencyService:
                 "context_packet_chars": context_packet_chars,
                 "context_tokens_est": context_tokens_est,
                 "source_candidates": source_candidates,
+                "execution_mode": normalize_execution_mode(execution_mode),
                 "captured_at": snapshot.get("captured_at") or utcnow(),
             }
         )
@@ -549,10 +633,13 @@ class TokenEfficiencyService:
         repository_id: str,
         repository_path: str,
         timeout_seconds: float = 600.0,
+        comparison_prompt: str | None = None,
+        comparison_side: str = "direct",
     ) -> dict[str, Any]:
         record = self.load(run_id) or _empty_record(run_id)
         snapshot = dict(record.get("snapshot") or {})
-        if record.get("status") == STATUS_MEASURED and record.get("direct"):
+        result_key = "assisted" if comparison_side == "assisted" else "direct"
+        if record.get("status") == STATUS_MEASURED and record.get(result_key):
             return record
         if record.get("status") == STATUS_MEASURING:
             return record
@@ -585,19 +672,23 @@ class TokenEfficiencyService:
             self._cancel.discard(run_id)
 
         cwd = str(Path(repository_path))
-        prompt_text = str(snapshot.get("user_prompt") or "")
+        prompt_text = str(comparison_prompt if comparison_prompt is not None else snapshot.get("user_prompt") or "")
         folder = self.persist_root / run_id
         folder.mkdir(parents=True, exist_ok=True)
-        prompt_path = folder / "direct_prompt.txt"
+        prompt_path = folder / ("assisted_prompt.txt" if result_key == "assisted" else "direct_prompt.txt")
         prompt_path.write_text(prompt_text, encoding="utf-8")
         packed_lower = prompt_text
-        if any(marker.lower() in packed_lower.lower() for marker in PACKET_MARKERS):
+        if result_key == "direct" and any(marker.lower() in packed_lower.lower() for marker in PACKET_MARKERS):
             record["status"] = STATUS_FAILED
             record["reason"] = "Direct prompt unexpectedly contained a CLIMATE packet."
             with self._lock:
                 if self._active_id == run_id:
                     self._active_id = None
             return self.save(run_id, record, persist=True)
+        if result_key == "assisted" and not any(marker.lower() in packed_lower.lower() for marker in PACKET_MARKERS):
+            # Resolver may return an empty packet on weak evidence; still compare with the
+            # safety-wrapped Assisted prompt rather than failing the benchmark.
+            pass
 
         argv = adapter.build_argv(
             mode="ask",
@@ -623,7 +714,8 @@ class TokenEfficiencyService:
 
         record["status"] = STATUS_MEASURING
         record["reason"] = ""
-        record["direct"] = {
+        record["comparison_side"] = result_key
+        record[result_key] = {
             "status": STATUS_MEASURING,
             "argv": [redact_text(part, limit=240) for part in argv],
             "started_at": utcnow(),
@@ -639,7 +731,8 @@ class TokenEfficiencyService:
                 "cwd": cwd,
                 "prompt_path": str(prompt_path),
                 "timeout_seconds": timeout_seconds,
-                "jsonl_path": str(folder / "direct_benchmark.jsonl"),
+                "jsonl_path": str(folder / ("assisted_benchmark.jsonl" if result_key == "assisted" else "direct_benchmark.jsonl")),
+                "result_key": result_key,
             },
             daemon=True,
             name=f"climate-te-{run_id[:8]}",
@@ -665,10 +758,11 @@ class TokenEfficiencyService:
         if record.get("status") == STATUS_MEASURING:
             record["status"] = STATUS_CANCELLED
             record["reason"] = "Cancelled"
-            direct = dict(record.get("direct") or {})
-            direct["status"] = STATUS_CANCELLED
-            direct["finished_at"] = utcnow()
-            record["direct"] = direct
+            side = str(record.get("comparison_side") or "direct")
+            block = dict(record.get(side) or {})
+            block["status"] = STATUS_CANCELLED
+            block["finished_at"] = utcnow()
+            record[side] = block
             self.save(run_id, record, persist=True)
         with self._lock:
             if self._active_id == run_id:
@@ -684,6 +778,7 @@ class TokenEfficiencyService:
         prompt_path: str,
         timeout_seconds: float,
         jsonl_path: str,
+        result_key: str = "direct",
     ) -> None:
         before = git_status_snapshot(Path(cwd))
         child_env = dict(os.environ)
@@ -829,6 +924,7 @@ class TokenEfficiencyService:
         cwd: str = "",
         git_unchanged: bool | None = None,
         success: bool | None = None,
+        result_key: str = "direct",
     ) -> None:
         record = self.load(run_id) or _empty_record(run_id)
         if run_id in self._cancel:
@@ -848,7 +944,12 @@ class TokenEfficiencyService:
             except Exception:
                 git_unchanged = False
         climate_total = (snapshot.get("climate_usage") or {}).get("total_tokens")
-        direct_total = usage.get("total_tokens")
+        side = str(record.get("comparison_side") or result_key or "direct")
+        if side == "assisted":
+            climate_total = usage.get("total_tokens")
+            direct_total = (snapshot.get("climate_usage") or {}).get("total_tokens")
+        else:
+            direct_total = usage.get("total_tokens")
         comparison = None
         final_status = status
         if status == STATUS_MEASURED and (climate_total is None or direct_total is None):
@@ -860,7 +961,7 @@ class TokenEfficiencyService:
         record["reason"] = error if final_status != STATUS_MEASURED else ""
         record["measured_at"] = utcnow() if final_status == STATUS_MEASURED else record.get("measured_at")
         record["comparison"] = comparison
-        record["direct"] = {
+        record[side] = {
             "status": final_status,
             "usage": usage,
             "runtime_ms": elapsed_ms,
@@ -870,9 +971,9 @@ class TokenEfficiencyService:
             "success": bool(success) if success is not None else final_status == STATUS_MEASURED,
             "git_unchanged": git_unchanged,
             "error": redact_text(error, limit=400) if error else "",
-            "started_at": (record.get("direct") or {}).get("started_at") or utcnow(),
+            "started_at": (record.get(side) or {}).get("started_at") or utcnow(),
             "finished_at": utcnow(),
-            "argv": (record.get("direct") or {}).get("argv") or [],
+            "argv": (record.get(side) or {}).get("argv") or [],
         }
         self.save(run_id, record, persist=True)
 

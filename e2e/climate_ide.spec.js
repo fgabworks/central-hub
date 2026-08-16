@@ -350,3 +350,194 @@ test.describe("CLIMATE Markdown chat readability", () => {
     });
   }
 });
+
+test.describe("CLIMATE execution mode selector", () => {
+  async function openClimate(page) {
+    const response = await page.goto("/work/climate", { waitUntil: "domcontentloaded" }).catch(() => null);
+    if (!response || !response.ok()) test.skip(true, "CLIMATE server not available");
+    await page.waitForSelector("#climate-mode-pill", { timeout: 20000 });
+    await page.waitForSelector("#climate-execution-mode", { state: "attached", timeout: 20000 });
+  }
+
+  async function modeLabel(page) {
+    const trigger = page.locator("#climate-mode-pill .climate-dd-value");
+    if (await trigger.count()) return (await trigger.innerText()).trim();
+    return page.locator("#climate-execution-mode").evaluate((el) => {
+      const opt = el.options[el.selectedIndex];
+      return (opt && opt.textContent || el.value || "").trim();
+    });
+  }
+
+  async function selectMode(page, value) {
+    const trigger = page.locator("#climate-mode-pill .climate-dd-trigger");
+    if (await trigger.count()) {
+      await trigger.click();
+      const option = page.locator(`.climate-dd-option[data-value="${value}"]`).last();
+      await option.click();
+    } else {
+      await page.locator("#climate-execution-mode").selectOption(value);
+    }
+  }
+
+  async function seedTokenCard(page, executionMode) {
+    const te = {
+      status: "Not measured",
+      reason: "",
+      eligible: true,
+      execution_mode: executionMode,
+      compare_label: executionMode === "direct" ? "Compare with CLIMATE" : "Compare with Direct",
+      climate: { total: 1000, preflight_tokens_est: 40 },
+      direct: executionMode === "direct"
+        ? { usage: { total_tokens: 1000 } }
+        : null,
+      comparison: null,
+    };
+    await page.evaluate(({ te: payload, mode }) => {
+      localStorage.setItem(
+        "climate:chat:v1:work",
+        JSON.stringify({
+          activeId: "chat-mode",
+          sessions: [
+            {
+              id: "chat-mode",
+              title: "Mode benchmark",
+              createdAt: Date.now() - 60000,
+              updatedAt: Date.now(),
+              provider: "codex",
+              model: "gpt-5.4",
+              executionMode: mode,
+              lastRunProvider: "codex",
+              workspace: "work",
+              repositoryId: "",
+              messages: [
+                { id: "u1", role: "user", text: "Explain ANC", ts: Date.now() - 40000 },
+                {
+                  id: "a1",
+                  role: "assistant",
+                  provider: "codex",
+                  model: "gpt-5.4",
+                  status: "completed",
+                  taskMode: "ask",
+                  executionMode: mode,
+                  runId: "run-mode-" + mode,
+                  text: "ANC Binary uses visit thresholds.",
+                  tokenEfficiency: payload,
+                  ts: Date.now() - 1000,
+                },
+              ],
+            },
+          ],
+        })
+      );
+    }, { te, mode: executionMode });
+  }
+
+  for (const viewport of [
+    { width: 1366, height: 768 },
+    { width: 1600, height: 900 },
+  ]) {
+    test(`selector, persist, labels, overflow at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+      test.setTimeout(45000);
+      await page.setViewportSize(viewport);
+      await page.route(/\/token-efficiency/, async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            ok: true,
+            token_efficiency: {
+              status: "Not measured",
+              eligible: true,
+              execution_mode: "climate_assisted",
+              compare_label: "Compare with Direct",
+              climate: { total: 1000 },
+              direct: null,
+              comparison: null,
+            },
+          }),
+        });
+      });
+      await openClimate(page);
+      await expect(page.locator("#climate-mode-pill")).toBeVisible();
+      await expect(page.locator("#climate-provider-panel")).toBeVisible();
+      await expect(page.locator("#climate-model-panel")).toBeVisible();
+      expect(await modeLabel(page)).toBe("CLIMATE Assisted");
+      expect(await page.locator("#climate-mode-pill").getAttribute("title")).toContain("CLIMATE finds useful repo context first");
+
+      await selectMode(page, "direct");
+      expect(await modeLabel(page)).toBe("Direct Provider");
+      expect(await page.locator("#climate-execution-mode")).toHaveValue("direct");
+      expect(await page.locator("#climate-mode-pill").getAttribute("title")).toContain("provider investigates the repo directly");
+
+      const overflow = await page.evaluate(() => {
+        const footer = document.querySelector(".climate-chat-footer-controls");
+        const composer = document.getElementById("climate-chat-composer");
+        const pill = document.getElementById("climate-mode-pill");
+        function box(el) {
+          if (!el) return { overflow: false };
+          return {
+            overflow: el.scrollWidth > el.clientWidth + 2,
+            scrollWidth: el.scrollWidth,
+            clientWidth: el.clientWidth,
+          };
+        }
+        return { footer: box(footer), composer: box(composer), pill: box(pill) };
+      });
+      expect(overflow.footer.overflow, `footer overflow ${JSON.stringify(overflow.footer)}`).toBe(false);
+      expect(overflow.composer.overflow, `composer overflow ${JSON.stringify(overflow.composer)}`).toBe(false);
+
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.waitForSelector("#climate-mode-pill", { timeout: 20000 });
+      await page.waitForSelector("#climate-execution-mode", { state: "attached", timeout: 20000 });
+      await page.waitForFunction(() => {
+        const el = document.getElementById("climate-execution-mode");
+        return el && el.value === "direct";
+      });
+      expect(await modeLabel(page)).toBe("Direct Provider");
+
+      await selectMode(page, "climate_assisted");
+      expect(await modeLabel(page)).toBe("CLIMATE Assisted");
+    });
+
+    test(`benchmark button wording follows mode at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+      test.setTimeout(45000);
+      await page.setViewportSize(viewport);
+      let tePayload = {
+        status: "Not measured",
+        eligible: true,
+        execution_mode: "climate_assisted",
+        compare_label: "Compare with Direct",
+        climate: { total: 1000, preflight_tokens_est: 40 },
+        direct: null,
+        comparison: null,
+      };
+      await page.route(/\/token-efficiency/, async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ ok: true, token_efficiency: tePayload }),
+        });
+      });
+      await openClimate(page);
+      await seedTokenCard(page, "climate_assisted");
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.waitForSelector(".climate-token-efficiency", { timeout: 20000 });
+      await expect(page.locator('[data-te-action="evaluate"]')).toHaveText("Compare with Direct");
+
+      tePayload = {
+        status: "Not measured",
+        eligible: true,
+        execution_mode: "direct",
+        compare_label: "Compare with CLIMATE",
+        climate: { total: null },
+        direct: { usage: { total_tokens: 1000 } },
+        comparison: null,
+      };
+      await seedTokenCard(page, "direct");
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.waitForSelector(".climate-token-efficiency", { timeout: 20000 });
+      await expect(page.locator('[data-te-action="evaluate"]')).toHaveText("Compare with CLIMATE");
+      await expect(page.locator(".climate-token-efficiency")).toContainText("Direct run total");
+    });
+  }
+});

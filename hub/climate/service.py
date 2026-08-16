@@ -12,7 +12,17 @@ from hub.climate.file_view import as_read_only_file
 from hub.climate.coding import ClimateCodingAdapter, ClimateCodingError, classify_task_mode
 from hub.climate.codex_limits import get_codex_rate_limits_service
 from hub.climate.investigation_metrics import summarize_tool_activity
+from hub.climate.execution_mode import (
+    CLIMATE_ASSISTED,
+    DIRECT,
+    MODE_LABELS,
+    MODE_TOOLTIPS,
+    EXECUTION_MODES,
+    is_direct_mode,
+    normalize_execution_mode,
+)
 from hub.climate.preflight import make_blocked_run, resolve_climate_context
+from hub.climate.retrieval_policy import is_logs_history_query, is_noisy_artifact
 from hub.climate.token_efficiency import TokenEfficiencyService
 from hub.registry.models import Registry, Repository
 from hub.repository_workspace.ports import port_listeners
@@ -133,6 +143,14 @@ class ClimateService:
             "active_repository_id": active,
             "providers": providers,
             "coding_defaults": self.coding.coding_defaults(),
+            "execution_modes": [
+                {
+                    "id": mode,
+                    "label": MODE_LABELS[mode],
+                    "tooltip": MODE_TOOLTIPS[mode],
+                }
+                for mode in EXECUTION_MODES
+            ],
             "safety": {
                 "safe_file_api": True,
                 "proposal_confirmation": True,
@@ -188,11 +206,29 @@ class ClimateService:
         task_mode = classify_task_mode(prompt, str(payload.get("task_mode") or "") or None)
         handoff = bool(payload.get("handoff"))
         include_repo_context = bool(payload.get("include_repo_context"))
+        execution_mode = normalize_execution_mode(payload.get("execution_mode"))
+        direct = is_direct_mode(execution_mode)
         can_investigate = bool(
             self.coding.can_investigate_repository(provider)
             if hasattr(self.coding, "can_investigate_repository")
             else provider == "codex"
         )
+
+        if direct:
+            return self._execute_direct(
+                ws=ws,
+                repo=repo,
+                prompt=prompt,
+                provider=provider,
+                model=model,
+                task_mode=task_mode,
+                current_file=current_file,
+                selected_files=selected_files,
+                selection=selection,
+                handoff=handoff,
+                can_investigate=can_investigate,
+                payload=payload,
+            )
 
         preflight = resolve_climate_context(
             workspace=ws,
@@ -233,13 +269,18 @@ class ClimateService:
         # Bounded packet replaces blind full-history / full-instruction dumps.
         # Keep a short task banner; packet already contains task + evidence.
         augmented_prompt = preflight.packet
+        clean_sources = [
+            path
+            for path in list(preflight.source_files)
+            if not is_noisy_artifact(path) or is_logs_history_query(prompt)
+        ]
         result = self.coding.execute(
             workspace=ws,
             repository_id=repo.id,
             provider=provider,
             model=model,
             prompt=augmented_prompt,
-            selected_files=list(dict.fromkeys(selected_files + list(preflight.source_files)))[:16],
+            selected_files=list(dict.fromkeys(selected_files + clean_sources))[:16],
             current_file=current_file,
             selection=selection if ws == "personal" else "",
             include_repo_context=False,  # packet already carries ranked evidence
@@ -260,6 +301,10 @@ class ClimateService:
                     }
                     for item in list(preflight.diagnostics.get("qualification") or [])
                     if item.get("accepted")
+                    and (
+                        not is_noisy_artifact(str(item.get("path") or item.get("file") or ""))
+                        or is_logs_history_query(prompt)
+                    )
                 ],
                 "sources": [
                     f"repository:{repo.id}:{path}"
@@ -274,6 +319,7 @@ class ClimateService:
             },
             conversation_id=str(payload.get("conversation_id") or "").strip(),
             repository_investigation=can_investigate,
+            execution_mode=CLIMATE_ASSISTED,
         )
         self._run_scope[str(result["id"])] = (ws, repo.id)
         self._run_meta[str(result["id"])] = {
@@ -296,8 +342,10 @@ class ClimateService:
             },
             "sources": list(dict.fromkeys(list(preflight.source_files) + selected_files + ([current_file] if current_file else []))),
             "user_prompt": prompt,
+            "execution_mode": CLIMATE_ASSISTED,
         }
         result["provider_invoked"] = True
+        result["execution_mode"] = CLIMATE_ASSISTED
         result["preflight"] = self._run_meta[str(result["id"])]["preflight"]
         result["sources"] = list(self._run_meta[str(result["id"])]["sources"])[:24]
         self._capture_token_efficiency_snapshot(
@@ -310,6 +358,106 @@ class ClimateService:
             preflight=preflight,
             run=result,
             reuse_session=bool(payload.get("reuse_session", True)) and not handoff,
+            execution_mode=CLIMATE_ASSISTED,
+        )
+        if provider == "codex":
+            result["token_efficiency"] = self.token_efficiency.public(
+                self.token_efficiency.load(str(result["id"]))
+            )
+        return result
+
+    def _execute_direct(
+        self,
+        *,
+        ws: str,
+        repo: Repository,
+        prompt: str,
+        provider: str,
+        model: str,
+        task_mode: str,
+        current_file: str,
+        selected_files: list[str],
+        selection: str,
+        handoff: bool,
+        can_investigate: bool,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Raw prompt + approved cwd. Skip Context Resolver; keep ASK/EDIT safety."""
+        safety_log = (
+            "[climate_execution_mode]\n"
+            "Mode=direct\n"
+            "Context Resolver skipped\n"
+            "Safety=approved repo boundary, ASK read-only sandbox, controlled EDIT"
+        )
+        result = self.coding.execute(
+            workspace=ws,
+            repository_id=repo.id,
+            provider=provider,
+            model=model,
+            prompt=prompt,
+            selected_files=list(selected_files)[:16],
+            current_file=current_file,
+            selection=selection if ws == "personal" else "",
+            include_repo_context=False,
+            task_mode=task_mode,
+            reuse_session=bool(payload.get("reuse_session", True)) and not handoff,
+            handoff=handoff,
+            preflight_log=safety_log,
+            evidence_packet=None,
+            conversation_id=str(payload.get("conversation_id") or "").strip(),
+            repository_investigation=can_investigate,
+            execution_mode=DIRECT,
+        )
+        preflight = {
+            "ok": True,
+            "activity": [
+                "Direct Provider",
+                "Context Resolver skipped",
+                "Approved repository boundary preserved",
+            ],
+            "instruction_files": [],
+            "skills_used": [],
+            "source_files": [],
+            "context_chars": 0,
+            "context_tokens_est": 0,
+            "confidence": "n/a",
+            "provider_invoked": True,
+            "diagnostics": {
+                "execution_mode": DIRECT,
+                "resolver_skipped": True,
+                "provider_invoked": True,
+                "candidates_found": 0,
+                "authoritative_sources": [],
+                "qualification": [],
+            },
+        }
+        self._run_scope[str(result["id"])] = (ws, repo.id)
+        self._run_meta[str(result["id"])] = {
+            "task_mode": result.get("task_mode") or task_mode,
+            "selected_files": selected_files,
+            "current_file": current_file,
+            "provider_invoked": True,
+            "conversation_id": result.get("conversation_id") or "",
+            "preflight": preflight,
+            "sources": list(dict.fromkeys(selected_files + ([current_file] if current_file else []))),
+            "user_prompt": prompt,
+            "execution_mode": DIRECT,
+        }
+        result["provider_invoked"] = True
+        result["execution_mode"] = DIRECT
+        result["preflight"] = preflight
+        result["sources"] = list(self._run_meta[str(result["id"])]["sources"])[:24]
+        self._capture_token_efficiency_snapshot(
+            str(result["id"]),
+            ws=ws,
+            repo=repo,
+            user_prompt=prompt,
+            provider=provider,
+            model=model,
+            preflight=None,
+            run=result,
+            reuse_session=bool(payload.get("reuse_session", True)) and not handoff,
+            execution_mode=DIRECT,
         )
         if provider == "codex":
             result["token_efficiency"] = self.token_efficiency.public(
@@ -332,6 +480,7 @@ class ClimateService:
         meta = self._run_meta.get(run_id) or {}
         task_mode = str(meta.get("task_mode") or result.get("task_mode") or "ask")
         result["task_mode"] = task_mode
+        result["execution_mode"] = meta.get("execution_mode") or result.get("execution_mode") or CLIMATE_ASSISTED
         if scope:
             result["repository_id"] = scope[1]
         raw_answer = str(result.get("answer") or "")
@@ -355,7 +504,12 @@ class ClimateService:
             pref_log = ""
             activity = list((preflight_meta or {}).get("activity") or [])
             if activity:
-                pref_log = "[climate_context_resolver]\n" + "\n".join(activity)
+                header = (
+                    "[climate_execution_mode]"
+                    if meta.get("execution_mode") == DIRECT
+                    else "[climate_context_resolver]"
+                )
+                pref_log = header + "\n" + "\n".join(activity)
                 diag_lines = [
                     "[climate_context_resolver_diagnostics]",
                     f"instruction_files={','.join(preflight_meta.get('instruction_files') or []) or '(none)'}",
@@ -441,19 +595,47 @@ class ClimateService:
         if adapter is None:
             raise ClimateCodingError("Codex adapter is unavailable.", code="unavailable")
         record = self._ensure_token_efficiency_record(ws, run_id)
-        if record.get("status") == "Measured" and record.get("direct"):
-            return self.token_efficiency.public(record)
         snapshot = dict(record.get("snapshot") or {})
+        mode = normalize_execution_mode(snapshot.get("execution_mode"))
+        if record.get("status") == "Measured":
+            if mode == DIRECT and record.get("assisted"):
+                return self.token_efficiency.public(record)
+            if mode != DIRECT and record.get("direct"):
+                return self.token_efficiency.public(record)
         repo_id = str(snapshot.get("repository_id") or (self._run_scope.get(run_id) or ("", ""))[1] or "")
         if not repo_id:
             raise ClimateCodingError("Repository for this run is unknown.", code="not_found")
         repo = self.require_repo(ws, repo_id)
-        record = self.token_efficiency.start_direct(
-            run_id,
-            adapter=adapter,
-            repository_id=repo.id,
-            repository_path=str(getattr(repo, "local_path", "") or getattr(repo, "working_directory", "") or ""),
-        )
+        if mode == DIRECT:
+            user_prompt = str(snapshot.get("user_prompt") or "")
+            preflight = resolve_climate_context(
+                workspace=ws,
+                repo=repo,
+                repository_workspace=self.repository_workspace,
+                prompt=user_prompt,
+                provider=str(snapshot.get("provider") or "codex"),
+                model=str(snapshot.get("model") or ""),
+                task_mode="ask",
+                include_repo_context=False,
+                repository_intelligence=self._repository_intelligence() if ws == "work" else None,
+                repository_agent=True,
+            )
+            packed = str(preflight.packet or user_prompt)
+            record = self.token_efficiency.start_direct(
+                run_id,
+                adapter=adapter,
+                repository_id=repo.id,
+                repository_path=str(getattr(repo, "local_path", "") or getattr(repo, "working_directory", "") or ""),
+                comparison_prompt=packed,
+                comparison_side="assisted",
+            )
+        else:
+            record = self.token_efficiency.start_direct(
+                run_id,
+                adapter=adapter,
+                repository_id=repo.id,
+                repository_path=str(getattr(repo, "local_path", "") or getattr(repo, "working_directory", "") or ""),
+            )
         return self.token_efficiency.public(record)
 
     def cancel_token_efficiency(self, workspace: str, run_id: str) -> dict[str, Any]:
@@ -474,6 +656,7 @@ class ClimateService:
         preflight: Any,
         run: dict[str, Any],
         reuse_session: bool,
+        execution_mode: str = CLIMATE_ASSISTED,
     ) -> None:
         if provider != "codex":
             return
@@ -488,11 +671,23 @@ class ClimateService:
             except Exception:
                 exe = ""
         diagnostics = dict(getattr(preflight, "diagnostics", None) or {})
+        if not diagnostics and isinstance(preflight, dict):
+            diagnostics = dict(preflight.get("diagnostics") or {})
         candidates = diagnostics.get("candidates_found")
         try:
             candidates_i = int(candidates) if candidates is not None else None
         except (TypeError, ValueError):
             candidates_i = None
+        packet_chars = int(getattr(preflight, "context_chars", 0) or 0) if preflight is not None else 0
+        if not packet_chars and isinstance(preflight, dict):
+            packet_chars = int(preflight.get("context_chars") or 0)
+        token_est = int(getattr(preflight, "context_tokens_est", 0) or 0) if preflight is not None else 0
+        if not token_est and isinstance(preflight, dict):
+            token_est = int(preflight.get("context_tokens_est") or 0)
+        if is_direct_mode(execution_mode):
+            packet_chars = 0
+            token_est = 0
+            candidates_i = 0
         self.token_efficiency.capture_snapshot(
             run_id=run_id,
             user_prompt=user_prompt,
@@ -502,9 +697,10 @@ class ClimateService:
             model=model,
             read_only=True,
             session_reused=None,
-            context_packet_chars=int(getattr(preflight, "context_chars", 0) or 0) or None,
-            context_tokens_est=int(getattr(preflight, "context_tokens_est", 0) or 0) or None,
+            context_packet_chars=packet_chars or None,
+            context_tokens_est=token_est or None,
             source_candidates=candidates_i,
+            execution_mode=normalize_execution_mode(execution_mode),
             codex_executable=exe,
             codex_version=version,
             reasoning_config={

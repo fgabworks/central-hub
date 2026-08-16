@@ -184,7 +184,7 @@ async function main() {
         const checks = [];
         if (stateKey === "not-measured") {
           checks.push(result.text.includes("Not measured"));
-          checks.push(result.html.includes("Evaluate Token Savings"));
+          checks.push(result.html.includes("Compare with Direct"));
           checks.push(result.text.includes("493,229") || result.text.includes("493229"));
         }
         if (stateKey === "measuring") {
@@ -198,7 +198,7 @@ async function main() {
           checks.push(result.text.includes("654,900") || result.text.includes("654900"));
           checks.push(result.text.includes("Saved 161,671 tokens"));
           checks.push(result.text.includes("-24.7%"));
-          checks.push(!result.html.includes("Evaluate Token Savings"));
+          checks.push(!result.html.includes("Compare with Direct"));
           checks.push((result.text.match(/Saved 161,671 tokens/g) || []).length === 1);
           await page.locator(".climate-te-details summary").click();
           const open = ((await page.locator(".climate-token-efficiency").innerText()) || "");

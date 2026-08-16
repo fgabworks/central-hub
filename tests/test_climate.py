@@ -465,6 +465,9 @@ class ClimateUiContractTests(unittest.TestCase):
             'Codex limit unavailable',
             'id="climate-stop"',
             'id="climate-stop-top"',
+            'id="climate-execution-mode"',
+            'CLIMATE Assisted',
+            'Direct Provider',
         ):
             self.assertIn(marker, template)
         self.assertNotIn('id="climate-cancel"', template)
@@ -543,7 +546,9 @@ class ClimateUiContractTests(unittest.TestCase):
         self.assertIn("climate-token-pill", template)
         self.assertIn("Session usage", template)
         self.assertIn("climate-run-summary", script)
-        self.assertIn("Evaluate Token Savings", script)
+        self.assertIn("Compare with Direct", script)
+        self.assertIn("Compare with CLIMATE", script)
+        self.assertNotIn("Evaluate Token Savings", script)
         self.assertIn("/token-efficiency", script)
         self.assertIn('"/evaluate"', script)
         self.assertIn("renderTokenEfficiency", script)

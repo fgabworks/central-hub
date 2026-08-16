@@ -1347,6 +1347,14 @@ body > .climate-dd-menu .climate-dd-option.is-disabled {
   color: var(--cl-text);
 }
 .climate-chat-pill-model { flex: 1 1 140px; }
+.climate-chat-pill-mode { flex: 1 1 168px; }
+.climate-chat-pill-k {
+  flex: 0 0 auto;
+  color: var(--cl-muted);
+  font-size: 10px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
 .climate-chat-pill select {
   min-width: 0;
   width: 100%;

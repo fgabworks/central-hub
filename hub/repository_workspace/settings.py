@@ -28,6 +28,7 @@ class WorkspaceSettings:
     max_tree_depth: int = 16
     git_timeout_seconds: float = 8.0
     open_timeout_seconds: float = 5.0
+    search_timeout_seconds: float = 8.0
 
 
 def load_workspace_settings() -> WorkspaceSettings:
@@ -46,5 +47,8 @@ def load_workspace_settings() -> WorkspaceSettings:
         ),
         open_timeout_seconds=float(
             _as_int("REPO_WS_OPEN_TIMEOUT_SECONDS", 5, minimum=1, maximum=60)
+        ),
+        search_timeout_seconds=float(
+            _as_int("REPO_WS_SEARCH_TIMEOUT_SECONDS", 8, minimum=1, maximum=60)
         ),
     )

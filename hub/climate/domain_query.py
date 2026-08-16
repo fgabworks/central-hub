@@ -10,19 +10,26 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from hub.climate.retrieval_policy import (
+    extract_reference_phrases,
+    is_simple_reference_query,
+    ranking_adjustment,
+)
+
 _TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_\-]{2,}")
 _ACRONYM = re.compile(r"\b[A-Z][A-Z0-9]{1,7}\b")
 _SNAKE_ACRONYM = re.compile(r"\b(?:CH_)?[A-Z]{2,8}(?:_STATUS|_SCORE|_RULE)?\b")
 
 GENERIC_TERMS = {
     "about", "after", "anything", "cite", "code", "complete", "completely",
-    "data", "date", "does", "edit", "exact", "explain", "file", "files",
+    "data", "date", "does", "edit", "eastern", "exact", "explain", "file", "files",
     "from", "fully", "function", "functions", "give", "how", "implementation",
-    "into", "logic", "member", "members", "name", "nothing", "please",
-    "score", "source", "sources", "status", "tell", "test", "that", "the",
-    "this", "type", "value", "visit", "what", "whats", "when", "where",
-    "which", "who", "why", "with", "year", "child", "children", "household",
-    "households",
+    "into", "list", "logic", "member", "members", "name", "names", "northern",
+    "nothing", "please", "province", "provinces", "region", "regions",
+    "score", "source", "sources", "southern", "status", "tell", "test", "that",
+    "the", "this", "type", "value", "visit", "western", "what", "whats", "when",
+    "where", "which", "who", "why", "with", "year", "child", "children",
+    "household", "households",
 }
 
 QUESTION_STOP = {
@@ -72,15 +79,17 @@ def extract_domain_query(prompt: str) -> DomainQuery:
         strong.extend(_related_stems(token))
 
     phrases: list[str] = []
-    if len(significant) >= 2:
+    phrases.extend(extract_reference_phrases(text))
+    distinctive = [t for t in significant if t not in GENERIC_TERMS]
+    if len(distinctive) >= 2:
+        phrases.append(" ".join(distinctive[:6]))
+    generic_heavy = sum(1 for t in significant[:6] if t in GENERIC_TERMS) >= 2
+    if len(significant) >= 2 and not generic_heavy:
         phrases.append(" ".join(significant[:6]))
-        distinctive = [t for t in significant if t not in GENERIC_TERMS]
-        if len(distinctive) >= 2:
-            phrases.append(" ".join(distinctive[:6]))
 
     acronyms = [m.group(0) for m in _ACRONYM.finditer(text)]
     acronyms.extend(m.group(0) for m in _SNAKE_ACRONYM.finditer(text))
-    if significant:
+    if significant and not is_simple_reference_query(text):
         letters = "".join(word[0] for word in significant if word)
         if 2 <= len(letters) <= 6:
             acronyms.append(letters.upper())
@@ -105,7 +114,7 @@ def extract_domain_query(prompt: str) -> DomainQuery:
     )
 
 
-def score_source(path: str, content: str, query: DomainQuery) -> int:
+def score_source(path: str, content: str, query: DomainQuery, *, prompt: str = "") -> int:
     """Score a candidate file for a domain question. Generic leftovers stay cheap."""
     if not path:
         return 0
@@ -120,7 +129,7 @@ def score_source(path: str, content: str, query: DomainQuery) -> int:
             score += 48
         compact = needle.replace(" ", "_")
         squeezed = needle.replace(" ", "")
-        if compact in rel or squeezed in rel:
+        if compact in rel or squeezed in rel or needle in rel:
             score += 28
     for acr in query.acronyms:
         low = acr.lower()
@@ -144,7 +153,7 @@ def score_source(path: str, content: str, query: DomainQuery) -> int:
     for token in query.weak:
         if token in name:
             score += 1
-    return score
+    return score + ranking_adjustment(path, prompt=prompt)
 
 
 def identifier_matches_query(value: str, query: DomainQuery) -> bool:

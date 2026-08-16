@@ -4,7 +4,35 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**CLIMATE Markdown chat readability polish (2026-08-15)**
+**CLIMATE execution mode selector (2026-08-15)**
+
+CLIMATE chat has a compact **Mode** selector next to Provider/Model:
+`CLIMATE Assisted` (`climate_assisted`) and `Direct Provider` (`direct`). Mode is
+orchestration, not provider identity — there is no Smart mode and no Direct Codex
+mode. Assisted keeps the Context Resolver packet/hints (native repo investigation
+still allowed). Direct sends the raw user prompt with selected repo/cwd and normal
+provider instructions; it never builds or sends a resolver packet or candidate-source
+hints. Direct bypasses retrieval assistance only: approved repo boundary, ASK
+read-only sandbox, controlled EDIT, cancel, diagnostics, token accounting, and
+Git/terminal protections remain. Mode persists in workspace prefs and per
+conversation. Token Efficiency records `execution_mode` and labels the button
+**Compare with Direct** or **Compare with CLIMATE**. Fair comparison still requires
+the same repo, commit, provider, model/config, prompt, read-only mode, and fresh
+session.
+
+Prior: **CLIMATE retrieval for simple factual/reference questions (2026-08-15)**
+
+Simple ASK questions (provinces of a region, name of a UID, which file defines a
+symbol) now do a lightweight filename/index lookup first. Context Resolver downranks
+`lookup/logs/**`, bulk-apply jobs, dry-run exports, generated artifacts, and huge
+`reference-json` dumps unless the prompt is about logs/history. Generic words such as
+`region` no longer dominate stronger phrases (`Region VIII`, `Eastern Visayas`).
+Hub search is bounded (lines, characters, unique files, timeout); timed-out searches
+count as failures. Diagnostics redact emails/usernames in snippets. Native Codex
+investigation, ASK read-only safety, ANC/PNC logic targeting, and Token Efficiency
+are unchanged. The resolver remains hints, not a gate.
+
+Prior: **CLIMATE Markdown chat readability polish (2026-08-15)**
 
 Chat Markdown stays compact. Section headings and lists have a little more
 air, table cells have slightly more padding, and wide tables scroll

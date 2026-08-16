@@ -252,6 +252,27 @@ class SearchCommandTests(unittest.TestCase):
         self.assertEqual(summary.inspected_paths, [])
 
 
+class TimeoutSearchTests(unittest.TestCase):
+    def test_timed_out_search_is_a_failure(self):
+        from hub.climate.investigation_metrics import command_failed, summarize_tool_activity
+
+        self.assertTrue(command_failed({
+            "name": "rg -n region",
+            "status": "completed",
+            "detail": "command timed out after 4s",
+        }))
+        summary = summarize_tool_activity([
+            {
+                "type": "command_execution",
+                "name": "rg -n region AI_REFERENCE/reference-json/metadata.json",
+                "status": "failed",
+                "detail": "timed out",
+            }
+        ])
+        self.assertEqual(summary.failed_searches, 1)
+        self.assertEqual(summary.successful_searches, 0)
+
+
 class GraphEvalTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -307,6 +328,8 @@ class InvestigationPromptTests(unittest.TestCase):
         self.assertIn("Search progressively", packed)
         self.assertIn("tests *.py", packed)
         self.assertIn("failed command is not a successful inspection", packed)
+        self.assertIn("lookup/logs", packed)
+        self.assertIn("timed-out search", packed.lower())
         adapter.execute(
             workspace="work", repository_id="work-repo", provider="codex", model="m",
             prompt="Fix ANC Binary", task_mode="edit",

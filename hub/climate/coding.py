@@ -12,6 +12,8 @@ from hub.climate.logic_format import (
     is_logic_explanation_prompt,
     logic_explanation_instructions,
 )
+from hub.climate.retrieval_policy import ASK_INVESTIGATION_CONSTRAINTS
+from hub.climate.execution_mode import is_direct_mode, normalize_execution_mode
 
 
 CODING_PROVIDERS = ("codex", "claude-code", "cursor-agent")
@@ -140,6 +142,7 @@ class ClimateCodingAdapter:
         evidence_packet: dict[str, Any] | None = None,
         conversation_id: str = "",
         repository_investigation: bool = False,
+        execution_mode: str = "",
     ) -> dict[str, Any]:
         self._require_provider(provider)
         if workspace not in {"work", "personal"}:
@@ -154,11 +157,14 @@ class ClimateCodingAdapter:
             raise ClimateCodingError("Select an exact model before running", code="model_required")
 
         mode = classify_task_mode(prompt, task_mode)
+        orchestration = normalize_execution_mode(execution_mode)
+        direct = is_direct_mode(orchestration)
         # Prefer task_mode already applied in the context packet when present.
-        if "CLIMATE context packet (EDIT)" in prompt or "CLIMATE preflight context packet (EDIT)" in prompt:
-            mode = "edit"
-        elif "CLIMATE context packet (ASK)" in prompt or "CLIMATE preflight context packet (ASK)" in prompt:
-            mode = "ask"
+        if not direct:
+            if "CLIMATE context packet (EDIT)" in prompt or "CLIMATE preflight context packet (EDIT)" in prompt:
+                mode = "edit"
+            elif "CLIMATE context packet (ASK)" in prompt or "CLIMATE preflight context packet (ASK)" in prompt:
+                mode = "ask"
         repository_investigation = bool(repository_investigation and mode == "ask")
         files = list(dict.fromkeys(
             str(path).replace("\\", "/").lstrip("/")
@@ -172,36 +178,63 @@ class ClimateCodingAdapter:
                 "Return proposed file replacements in a fenced JSON object using this schema: ",
                 '{"edits":[{"path":"relative/path","content":"complete replacement content"}]}.',
                 "Do not apply edits or execute commands.",
-                "Use only the bounded context packet; do not assume full chat history.",
+                (
+                    "Do not assume full chat history."
+                    if direct
+                    else "Use only the bounded context packet; do not assume full chat history."
+                ),
             ]
         else:
-            context_note = [
-                "CLIMATE coding request (ASK / EXPLAIN mode).",
-                "Answer in clear human-readable prose (markdown allowed).",
-                (
-                    "Use the compact context packet as starting guidance, then independently search, "
-                    "read, and trace the approved repository as needed."
-                    if repository_investigation
-                    else "Use the bounded context packet (read-only)."
-                ),
-                "Do NOT propose file edits, diffs, patches, or JSON {\"edits\":[...]} payloads.",
-                (
-                    "Cite the concrete implementation paths/functions you verify in the repository."
-                    if repository_investigation
-                    else "Cite the concrete paths/functions from the packet."
-                ),
-                (
-                    "Safe read-only search, file/symbol/reference/import/test/git inspection commands "
-                    "are allowed. Do not modify files or repository state and do not run destructive commands. "
-                    "Search progressively: exact symbol/acronym/phrase, then likely modules, then "
-                    "definitions/references, then open the authoritative files. Bound rg output "
-                    "(`--max-count`, `--glob '*.py'`). On Windows/PowerShell do not use shell globs "
-                    "such as `tests *.py` or `lookup/test_immunization*`; use rg `--glob` or explicit "
-                    "paths. A failed command is not a successful inspection."
-                    if repository_investigation
-                    else "Do not apply edits or execute commands."
-                ),
-            ]
+            if direct:
+                context_note = [
+                    "CLIMATE coding request (ASK / EXPLAIN mode).",
+                    "Execution mode: Direct Provider.",
+                    "Answer in clear human-readable prose (markdown allowed).",
+                    (
+                        "Investigate the approved repository directly from the user prompt. "
+                        "There is no CLIMATE Context Resolver packet and no candidate-source list. "
+                        "Use the provider's normal project/repository instructions."
+                        if repository_investigation
+                        else "Answer from the user prompt. There is no CLIMATE Context Resolver packet."
+                    ),
+                    "Do NOT propose file edits, diffs, patches, or JSON {\"edits\":[...]} payloads.",
+                    (
+                        "Cite the concrete implementation paths/functions you verify in the repository."
+                        if repository_investigation
+                        else "Cite concrete paths/functions when you use them."
+                    ),
+                    (
+                        "Safe read-only search, file/symbol/reference/import/test/git inspection commands "
+                        "are allowed. Do not modify files or repository state and do not run destructive commands. "
+                        + ASK_INVESTIGATION_CONSTRAINTS
+                        if repository_investigation
+                        else "Do not apply edits or execute commands."
+                    ),
+                ]
+            else:
+                context_note = [
+                    "CLIMATE coding request (ASK / EXPLAIN mode).",
+                    "Answer in clear human-readable prose (markdown allowed).",
+                    (
+                        "Use the compact context packet as starting guidance, then independently search, "
+                        "read, and trace the approved repository as needed."
+                        if repository_investigation
+                        else "Use the bounded context packet (read-only)."
+                    ),
+                    "Do NOT propose file edits, diffs, patches, or JSON {\"edits\":[...]} payloads.",
+                    (
+                        "Cite the concrete implementation paths/functions you verify in the repository."
+                        if repository_investigation
+                        else "Cite the concrete paths/functions from the packet."
+                    ),
+                    (
+                        "Safe read-only search, file/symbol/reference/import/test/git inspection commands "
+                        "are allowed. Do not modify files or repository state and do not run destructive commands. "
+                        + ASK_INVESTIGATION_CONSTRAINTS
+                        if repository_investigation
+                        else "Do not apply edits or execute commands."
+                    ),
+                ]
             if is_logic_explanation_prompt(prompt):
                 context_note.append(logic_explanation_instructions())
         if selection:
@@ -210,12 +243,14 @@ class ClimateCodingAdapter:
             context_note.append("Cross-provider compact handoff — do not replay full CLIMATE history.")
         if reuse_session and not handoff:
             context_note.append("Same-provider session: reuse prior provider context when supported.")
-        has_packet = (
+        has_packet = (not direct) and (
             "CLIMATE context packet" in prompt
             or "CLIMATE preflight context packet" in prompt
         )
         if has_packet:
             packed_prompt = "\n\n".join(context_note + [prompt.strip()])
+        elif direct:
+            packed_prompt = "\n\n".join(context_note + ["User prompt:", prompt.strip()])
         else:
             context_note.append(
                 "Repository context: " + ("enabled" if include_repo_context else "selected files only")
@@ -243,8 +278,8 @@ class ClimateCodingAdapter:
             "repository_ids": [repository_id] if repository_id and workspace == "work" else [],
             "active_repository_id": repository_id if workspace == "work" else None,
             "selected_repository_id": repository_id if workspace == "work" else None,
-            "tool_runtime_lean_context": True if has_packet else (not include_repo_context),
-            "bounded_evidence_only": bool(has_packet),
+            "tool_runtime_lean_context": False if direct else (True if has_packet else (not include_repo_context)),
+            "bounded_evidence_only": False if direct else bool(has_packet),
             "reuse_provider_session": bool(reuse_session) and not handoff,
             "repository_investigation": bool(repository_investigation),
         }
@@ -259,6 +294,7 @@ class ClimateCodingAdapter:
         public = self._public_run(run, workspace=workspace, repository_id=repository_id)
         public["task_mode"] = mode
         public["provider_invoked"] = True
+        public["execution_mode"] = orchestration
         if preflight_log:
             logs = str(public.get("logs") or "")
             public["logs"] = (preflight_log + ("\n\n" if logs else "") + logs).strip()

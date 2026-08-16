@@ -185,6 +185,11 @@ _EXTRA_SECRET_NAMES = frozenset(
 _SECRET_CONTENT_RE = re.compile(
     r"(?i)(api[_-]?key|secret|password|passwd|token|bearer|private[_-]?key)\s*[:=]\s*\S+"
 )
+_EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
+_PII_KEY_RE = re.compile(
+    r'(?i)("(?:email|e-mail|phone|mobile|username|user_name|userName|'
+    r'password|secret)"\s*:\s*")([^"]+)(")'
+)
 
 
 class WorkspaceSecurityError(ValueError):
@@ -413,9 +418,16 @@ def relative_posix(repo_root: Path, path: Path) -> str:
     return rel.as_posix()
 
 
+def redact_personal_detail(text: str) -> str:
+    """Hide emails and record-level contact fields in search diagnostics."""
+    cleaned = _EMAIL_RE.sub("[redacted-email]", str(text or ""))
+    return _PII_KEY_RE.sub(r"\1[redacted]\3", cleaned)
+
+
 def redact_audit_detail(text: str, *, limit: int = 400) -> str:
     """Strip secret-looking assignments from audit/error strings."""
     cleaned = _SECRET_CONTENT_RE.sub(r"\1=[REDACTED]", text or "")
+    cleaned = redact_personal_detail(cleaned)
     cleaned = cleaned.replace("\n", " ").strip()
     if len(cleaned) > limit:
         return cleaned[: limit - 1] + "…"

@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-15 (CLIMATE Markdown chat readability polish).
+Last verified: 2026-08-15 (CLIMATE execution mode selector).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -26,7 +26,17 @@ explicitly and can use authenticated Claude Code or Cursor Agent with selected A
 Codex capacity in the AI usage chrome comes from authenticated `codex app-server`
 (`account/rateLimits/read` + `account/rateLimits/updated`), not from session token
 estimates; unavailable/non–ChatGPT auth shows `Codex limit unavailable`.
-CLIMATE coding runs use a deterministic zero-token Context Resolver
+AI execution **Mode** is orchestration, separate from Provider and Model:
+`climate_assisted` (CLIMATE Assisted) or `direct` (Direct Provider). There is no Smart
+mode and no provider-specific Direct Codex mode. Assisted preserves the current Context
+Resolver flow (compact repo hints/packet; native provider investigation still allowed).
+Direct sends the raw user prompt plus the selected repo/cwd and normal provider/project
+instructions — no Context Resolver packet and no CLIMATE candidate-source/evidence hints.
+Direct bypasses CLIMATE retrieval assistance only; ASK read-only sandbox, approved repo
+boundary, controlled EDIT proposals, cancel, diagnostics, token accounting, and
+Git/terminal protections stay in force. Mode persists per workspace/repo prefs and per
+conversation.
+CLIMATE coding runs in Assisted mode use a deterministic zero-token Context Resolver
 (AGENTS/SKILLS/provider/nested instructions + RI/local search). Implementation questions
 rank executable files/symbols above docs/tests and expand locally once when evidence is
 weak. For Codex, a valid VANTA repository is the evidence boundary: ASK may independently
@@ -41,11 +51,14 @@ is the browser wall clock; Token Efficiency **Provider runtime** is the provider
 instruction/skill/path+symbol hints, not duplicated
 source bodies. Packet-only providers retain the evidence gate; calls without enough authoritative
 evidence remain local (`Not enough repository evidence. Model not invoked · 0 tokens`).
-Completed Codex runs can show a compact Token Efficiency card. Direct Codex is
-manual only (`Evaluate Token Savings`); normal prompts never spawn a second
-`codex exec`. The Direct side is a fresh ephemeral read-only process using the
-recorded prompt/repo/commit/model and does not resume the CLIMATE provider
-session or send the Context Resolver packet. Preflight token counts remain local
+Completed Codex runs can show a compact Token Efficiency card. The comparison process is
+manual only (`Compare with Direct` after an Assisted run, `Compare with CLIMATE` after a
+Direct run); normal prompts never spawn a second `codex exec`. The opposite-mode side is a
+fresh ephemeral read-only process using the recorded prompt/repo/commit/provider/model and
+does not resume the original provider session. Assisted originals do not send the Context
+Resolver packet to the Direct comparison; Direct originals build an Assisted packet only
+for that comparison. Fair comparison requires the same repo, commit, provider, model/config,
+prompt, read-only mode, and fresh-session condition. Preflight token counts remain local
 estimates; CLIMATE and Direct totals are provider-reported when present.
 Historical runs recorded without a commit SHA cannot be measured against the
 current tree. Token Efficiency labels Candidate Sources separately from files
@@ -58,11 +71,18 @@ roll-up → exact files/functions → one-line summary). Investigation, scoring,
 citations, and provider execution are unchanged; unrelated prompts keep normal
 prose. A conservative post-process only reorders recognizable sections and does
 not invent tables, thresholds, or a one-line summary.
-Context Resolver search prefers exact phrases, acronyms, aliases, and symbols
-over generic tokens. `Explored N files` counts files whose contents were
-opened/read, not rg hit paths or resolver candidates. Search-matched files and
-candidate sources are labeled separately. Codex ASK still investigates the
-approved repository independently when local hints are weak.
+Context Resolver search prefers exact phrases, UIDs, acronyms, aliases, filenames,
+and hierarchy/reference/index hits over generic tokens such as `region` or `child`.
+`lookup/logs/**`, bulk-apply results, dry-run exports, generated artifacts, and huge
+JSON/CSV reference dumps are not normal ASK evidence unless the question is about
+logs, history, or those files. Simple factual/reference questions use a lightweight
+filename/index lookup first and send a small hint packet; Codex still investigates
+the approved repository independently when local hints are weak. Generic searches
+return bounded excerpts (line/character/file/timeout caps) and do not dump entire
+huge records into provider context. Search diagnostics prefer paths, counts, matched
+symbols, and redacted snippets — not unrelated names, emails, phones, or usernames.
+`Explored N files` counts files whose contents were opened/read, not rg hit paths or
+resolver candidates. Search-matched files and candidate sources are labeled separately.
 
 VANTA and ARCTIC repository/run/proposal scopes are server-isolated; repositories tagged
 `personal`/`arctic` belong only to ARCTIC and all others default to VANTA. AiriX Tool

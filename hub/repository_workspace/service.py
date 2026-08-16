@@ -114,13 +114,43 @@ class RepositoryWorkspaceService:
             data["git_status"] = None
         return data
 
-    def search(self, repo: Repository, *, q: str, mode: str = "filename") -> dict[str, Any]:
+    def search(self, repo: Repository, *, q: str, mode: str = "filename", **kwargs: Any) -> dict[str, Any]:
         files, _, _, _ = self._require(repo)
+        search_kwargs = {
+            key: value
+            for key, value in kwargs.items()
+            if key in {
+                "limit",
+                "skip_path_substrings",
+                "max_seconds",
+                "max_unique_files",
+                "max_hits_per_file",
+                "max_chars",
+            }
+            and value is not None
+        }
         if mode == "content":
-            matches = files.search_content(q)
+            matches = files.search_content(q, **search_kwargs)
         else:
-            matches = files.search_filenames(q)
-        return {"q": q, "mode": mode, "matches": matches, "count": len(matches)}
+            filename_keys = {
+                "limit",
+                "skip_path_substrings",
+                "max_seconds",
+                "max_unique_files",
+            }
+            matches = files.search_filenames(
+                q, **{key: value for key, value in search_kwargs.items() if key in filename_keys}
+            )
+        meta = getattr(files, "last_search_meta", {}) or {}
+        return {
+            "q": q,
+            "mode": mode,
+            "matches": matches,
+            "count": len(matches),
+            "timed_out": bool(meta.get("timed_out")),
+            "truncated": bool(meta.get("truncated")),
+            "unique_files": int(meta.get("unique_files") or 0),
+        }
 
     def preview_save(self, repo: Repository, path: str, content: str) -> dict[str, Any]:
         _, editor, _, _ = self._require(repo)
