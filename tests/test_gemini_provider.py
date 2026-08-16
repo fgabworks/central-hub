@@ -14,8 +14,15 @@ from hub.agent_center.db import AgentCenterDb
 from hub.agent_center.gemini_client import GeminiClient, response_text, response_usage
 from hub.agent_center.gemini_runner import GeminiRunner
 from hub.agent_center.gemini_settings import GeminiSettings, load_gemini_settings
+from hub.agent_center.redact import redact_text
 from hub.agent_center.store import AgentCenterStore
 from hub.climate.coding import ClimateCodingAdapter, ClimateCodingError
+from hub.climate.service import ClimateService
+from hub.registry.models import Registry, Repository
+from hub.repository_workspace.service import RepositoryWorkspaceService
+from hub.repository_workspace.settings import WorkspaceSettings
+
+from tests.test_climate import FakeCodingAdapter
 
 
 def settings(**overrides):
@@ -176,6 +183,9 @@ class GeminiAdapterTests(unittest.TestCase):
         )
         self.assertFalse(rejected["ok"])
         self.assertEqual(rejected["code"], "model_unavailable")
+        missing = adapter.resolve_run_model(mode="ask", requested_model="")
+        self.assertFalse(missing["ok"])
+        self.assertEqual(missing["code"], "model_required")
         self.assertEqual(
             adapter.resolve_run_model(mode="plan", requested_model=None)["code"],
             "mode_unsupported",
@@ -270,6 +280,107 @@ class GeminiRunnerTests(unittest.TestCase):
             self.assertEqual(sent["contents"][-1]["parts"][0]["text"], "Bounded follow-up context")
             self.assertIn("You are AiriX", sent["system_instruction"])
 
+    def test_cancel_closes_active_stream_and_keeps_partial_answer(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = AgentCenterStore(
+                AgentCenterDb(Path(temp_dir) / "agent-center.db")
+            )
+            current = store.create_run(
+                {
+                    "mode": "ask",
+                    "agent_id": "gemini",
+                    "agent_label": "Gemini",
+                    "model": "gemini-test-flash",
+                    "repository_ids": ["work-repo"],
+                    "prompt": "Summarize",
+                    "packed_prompt": "Summarize",
+                    "profile_id": "okarun",
+                    "conversation_id": "",
+                }
+            )
+            response = FakeResponse(
+                lines=[
+                    'data: {"candidates":[{"content":{"parts":[{"text":"Partial"}]}}]}'
+                ]
+            )
+
+            class StreamClient:
+                def stream_generate_content(self, **kwargs):
+                    kwargs["on_response"](response)
+                    store.request_cancel(current["id"])
+                    if kwargs["should_cancel"]():
+                        return iter(())
+                    yield from ()
+
+            runner = GeminiRunner(
+                store, settings=settings(), client=StreamClient()
+            )
+            runner._set_stream(current["id"], response)
+            cancelled = runner.cancel(current["id"])
+            self.assertTrue(response.closed)
+            self.assertTrue((cancelled or store.get_run(current["id"])).get("cancel_requested"))
+
+
+class GeminiRedactionTests(unittest.TestCase):
+    def test_google_and_gemini_keys_are_redacted(self):
+        blob = redact_text(
+            "header AIzaSyDummyGoogleApiKeyValue0000001 and GEMINI_API_KEY=secret-value"
+        )
+        self.assertNotIn("AIzaSyDummyGoogleApiKeyValue0000001", blob)
+        self.assertNotIn("secret-value", blob)
+        self.assertIn("[redacted]", blob)
+
+
+class ClimateGeminiServiceTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.work = Path(self.temp.name) / "work"
+        self.work.mkdir()
+        (self.work / "app.py").write_text("value = 1\n", encoding="utf-8")
+        (self.work / "AGENTS.md").write_text("# Agents\nUse files.\n", encoding="utf-8")
+        self.registry = Registry([
+            Repository(id="work-repo", name="Work", type="command", enabled=True, local_path=str(self.work)),
+        ])
+        self.coding = FakeCodingAdapter()
+        self.service = ClimateService(
+            self.registry, RepositoryWorkspaceService(WorkspaceSettings()), self.coding
+        )
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def test_work_gemini_packs_explicit_file_only(self):
+        self.service.execute(
+            "work",
+            "work-repo",
+            provider="gemini",
+            model="gemini-test-flash",
+            prompt="Summarize the purpose of the provided file in 3 bullets. Use only the supplied context and do not infer information from elsewhere.",
+            display_prompt="Summarize the purpose of the provided file in 3 bullets. Use only the supplied context and do not infer information from elsewhere.",
+            current_file="app.py",
+            selected_files=[],
+            task_mode="ask",
+        )
+        call = self.coding.calls[-1]
+        self.assertIn("Selected file app.py", call["selection"])
+        self.assertIn("value = 1", call["selection"])
+        self.assertEqual(call["display_prompt"].startswith("Summarize the purpose"), True)
+
+    def test_gemini_selected_file_bypasses_empty_evidence_gate(self):
+        result = self.service.execute(
+            "work",
+            "work-repo",
+            provider="gemini",
+            model="gemini-test-flash",
+            prompt="Explain quantum foam topology xyzzy-no-match",
+            current_file="app.py",
+            selected_files=[],
+            task_mode="ask",
+        )
+        self.assertTrue(result.get("provider_invoked"))
+        self.assertEqual(self.coding.calls[-1]["provider"], "gemini")
+        self.assertIn("value = 1", self.coding.calls[-1]["selection"])
+
 
 class ClimateGeminiSafetyTests(unittest.TestCase):
     def test_climate_keeps_display_prompt_separate_from_provider_packet(self):
@@ -315,6 +426,42 @@ class ClimateGeminiSafetyTests(unittest.TestCase):
             )
         self.assertEqual(caught.exception.code, "mode_unsupported")
         center.start_run.assert_not_called()
+
+    def test_gemini_ask_keeps_bounded_context_and_omits_resolver_hits(self):
+        center = mock.Mock()
+        center.start_run.return_value = {
+            "id": "run-2",
+            "status": "queued",
+            "agent_id": "gemini",
+            "model": "gemini-test-flash",
+            "conversation_id": "conversation-1",
+        }
+        adapter = ClimateCodingAdapter(center)
+        adapter.availability = mock.Mock(
+            return_value={"id": "gemini", "state": "connected"}
+        )
+        adapter.execute(
+            workspace="work",
+            repository_id="work-repo",
+            provider="gemini",
+            model="gemini-test-flash",
+            prompt="CLIMATE context packet (ASK).\nLikely source: app.py",
+            display_prompt="Summarize the provided file in 3 bullets.",
+            task_mode="ask",
+            current_file="app.py",
+            selected_files=["app.py"],
+            selection="Selected file app.py:\nvalue = 1\n",
+            evidence_packet={"hits": [{"source": "climate_context_resolver", "path": "app.py"}]},
+        )
+        payload = center.start_run.call_args.args[0]
+        self.assertEqual(payload["display_prompt"], "Summarize the provided file in 3 bullets.")
+        self.assertTrue(payload["bounded_evidence_only"])
+        self.assertTrue(payload["tool_runtime_lean_context"])
+        self.assertFalse(payload["repository_investigation"])
+        self.assertEqual(payload["files"], {})
+        self.assertNotIn("evidence_packet", payload)
+        self.assertIn("Selected file app.py", payload["prompt"])
+        self.assertIn("value = 1", payload["prompt"])
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import threading
 import time
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 from urllib.parse import quote
 
 import requests
@@ -132,6 +132,8 @@ class GeminiClient:
         contents: list[dict[str, Any]],
         system_instruction: str,
         timeout: float | None = None,
+        should_cancel: Callable[[], bool] | None = None,
+        on_response: Callable[[Any], None] | None = None,
     ) -> Iterator[dict[str, Any]]:
         safe_model = quote(model.removeprefix("models/"), safe="-._")
         body: dict[str, Any] = {
@@ -162,8 +164,12 @@ class GeminiClient:
             ) from exc
         if response.status_code >= 400:
             self._raise_http(response, operation="generation")
+        if on_response:
+            on_response(response)
         try:
             for raw in response.iter_lines(decode_unicode=True):
+                if should_cancel and should_cancel():
+                    break
                 if not raw:
                     continue
                 line = raw.strip()

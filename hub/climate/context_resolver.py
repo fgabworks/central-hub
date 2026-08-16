@@ -1092,7 +1092,14 @@ def resolve_climate_context(
         except Exception:  # noqa: BLE001
             diff_note = ""
 
-    gate_ok = bool(repository_agent) or (confidence == "high" and bool(authoritative_paths))
+    explicit_file_context = bool(
+        str(current_file or "").strip() or any(str(path or "").strip() for path in (selected_files or []))
+    )
+    gate_ok = (
+        bool(repository_agent)
+        or (confidence == "high" and bool(authoritative_paths))
+        or (provider == "gemini" and explicit_file_context)
+    )
     if not gate_ok:
         activity.append("Building context")
         result = ContextResolverResult(

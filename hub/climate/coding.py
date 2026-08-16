@@ -352,7 +352,13 @@ class ClimateCodingAdapter:
         }
         if conversation_id:
             payload["conversation_id"] = conversation_id
-        if isinstance(evidence_packet, dict):
+        if provider == "gemini":
+            payload["tool_runtime_lean_context"] = True
+            payload["bounded_evidence_only"] = True
+            payload["repository_investigation"] = False
+            payload["files"] = {}
+            payload["tool_runtime"] = False
+        elif isinstance(evidence_packet, dict):
             payload["evidence_packet"] = evidence_packet
         try:
             run = self.agent_center.start_run(payload)

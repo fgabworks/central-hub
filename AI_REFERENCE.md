@@ -42,8 +42,9 @@ conversation list/detail/rename APIs. Completed server runs can therefore be res
 when browser storage is unavailable without creating a second chat database; local UI
 state remains a fast mirror for in-progress rendering. Gemini is the first API-backed
 CLIMATE Chat provider: models are discovered from Google's Models API, the selected exact
-model receives the prompt plus only CLIMATE's explicitly selected/bounded context, and
-responses stream into the existing Agent Center run lifecycle. Gemini supports ASK only;
+model is required (no silent fallback), and Gemini receives the user prompt plus only
+explicitly selected file bodies and/or the bounded Context Resolver packet. Responses
+stream into the existing Agent Center run lifecycle. Gemini supports ASK only;
 it has no file-write, command, SQL, email, calendar, agent, or native repository-exploration
 capability. Configure it with an environment-only `GEMINI_API_KEY` or `GOOGLE_API_KEY`
 (`GOOGLE_API_KEY` takes precedence), then optionally constrain models with

@@ -34,6 +34,7 @@ class GeminiRunner:
         self.client = client or GeminiClient(settings)
         self.audit = audit
         self._threads: dict[str, threading.Thread] = {}
+        self._streams: dict[str, Any] = {}
         self._lock = threading.Lock()
 
     def start(
@@ -67,7 +68,15 @@ class GeminiRunner:
         thread.start()
 
     def cancel(self, run_id: str) -> dict[str, Any] | None:
-        return self.store.request_cancel(run_id)
+        updated = self.store.request_cancel(run_id)
+        with self._lock:
+            stream = self._streams.get(run_id)
+        if stream is not None:
+            try:
+                stream.close()
+            except Exception:
+                pass
+        return updated
 
     def _run(
         self,
@@ -106,6 +115,8 @@ class GeminiRunner:
                 contents=contents,
                 system_instruction=system,
                 timeout=timeout_seconds,
+                should_cancel=lambda: self._cancelled(run_id),
+                on_response=lambda response: self._set_stream(run_id, response),
             ):
                 if self._cancelled(run_id):
                     self._finish_cancelled(run_id, answer_parts, usage)
@@ -168,6 +179,11 @@ class GeminiRunner:
         finally:
             with self._lock:
                 self._threads.pop(run_id, None)
+                self._streams.pop(run_id, None)
+
+    def _set_stream(self, run_id: str, response: Any) -> None:
+        with self._lock:
+            self._streams[run_id] = response
 
     def _conversation_contents(
         self,

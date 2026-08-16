@@ -210,6 +210,25 @@ class ClimateService:
             repository_id=repository_id,
         )
 
+    def _attach_selected_file_bodies(
+        self,
+        repo: Repository,
+        *,
+        current_file: str,
+        selected_files: list[str],
+        selection: str,
+    ) -> str:
+        """Pack only user-selected files for providers that cannot inspect the repo."""
+        chunks = [selection] if str(selection or "").strip() else []
+        for path in list(dict.fromkeys(([current_file] if current_file else []) + selected_files))[:4]:
+            data = self.repository_workspace.preview(repo, path)
+            if data.get("binary") or data.get("error"):
+                continue
+            chunks.append(
+                f"Selected file {path}:\n{str(data.get('content') or '')[:12_000]}"
+            )
+        return "\n\n".join(chunks).strip()[:40_000]
+
     def execute(self, workspace: str, repository_id: str, **payload: Any) -> dict[str, Any]:
         ws = normalize_workspace(workspace)
         repo = self.require_repo(ws, repository_id)
@@ -239,6 +258,13 @@ class ClimateService:
         prompt = str(payload.get("prompt") or "")
         provider = str(payload.get("provider") or "")
         model = str(payload.get("model") or "")
+        if provider == "gemini" and ws == "work":
+            selection = self._attach_selected_file_bodies(
+                repo,
+                current_file=current_file,
+                selected_files=selected_files,
+                selection=selection,
+            )
         task_mode = classify_task_mode(prompt, str(payload.get("task_mode") or "") or None)
         handoff = bool(payload.get("handoff"))
         include_repo_context = bool(payload.get("include_repo_context"))
@@ -318,7 +344,7 @@ class ClimateService:
             prompt=augmented_prompt,
             selected_files=list(dict.fromkeys(selected_files + clean_sources))[:16],
             current_file=current_file,
-            selection=selection if ws == "personal" else "",
+            selection=selection if (ws == "personal" or provider == "gemini") else "",
             include_repo_context=False,  # packet already carries ranked evidence
             task_mode=preflight.task_mode,
             reuse_session=bool(payload.get("reuse_session", True)) and not handoff,
@@ -434,7 +460,7 @@ class ClimateService:
             prompt=prompt,
             selected_files=list(selected_files)[:16],
             current_file=current_file,
-            selection=selection if ws == "personal" else "",
+            selection=selection if (ws == "personal" or provider == "gemini") else "",
             include_repo_context=False,
             task_mode=task_mode,
             reuse_session=bool(payload.get("reuse_session", True)) and not handoff,

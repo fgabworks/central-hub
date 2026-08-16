@@ -10,10 +10,11 @@ _SECRET_LINE = re.compile(
 )
 _ENV_ASSIGN = re.compile(r"(?i)^[A-Z0-9_]*(SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|COOKIE)[A-Z0-9_]*\s*=")
 _OPENAI_KEY = re.compile(r"\b(sk-[A-Za-z0-9_\-]{8,})\b")
+_GOOGLE_API_KEY = re.compile(r"\b(AIza[0-9A-Za-z_\-]{20,})\b")
 _BEARER = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9\-._~+/]+=*")
 _JWT = re.compile(r"\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\b")
 _CMD_SECRET = re.compile(
-    r"(?i)((?:--?(?:api[_-]?key|token|password|secret)|CODEX_API_KEY|OPENAI_API_KEY)\s*[= ]\s*)(\S+)"
+    r"(?i)((?:--?(?:api[_-]?key|token|password|secret)|CODEX_API_KEY|OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY)\s*[= ]\s*)(\S+)"
 )
 _ENV_INLINE = re.compile(
     r"(?i)\b([A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|COOKIE)[A-Z0-9_]*)=([^\s]+)"
@@ -23,6 +24,7 @@ _ENV_INLINE = re.compile(
 def redact_text(value: str | None, *, limit: int | None = None) -> str:
     text = value or ""
     text = _OPENAI_KEY.sub("[redacted]", text)
+    text = _GOOGLE_API_KEY.sub("[redacted]", text)
     text = _JWT.sub("[redacted]", text)
     text = _BEARER.sub("Bearer [redacted]", text)
     text = _CMD_SECRET.sub(r"\1[redacted]", text)

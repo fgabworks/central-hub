@@ -15,12 +15,13 @@ rich in-progress UI state.
 
 Gemini is now the first API provider for this surface. The `gemini_api` adapter uses
 environment-only credentials, discovers accessible text models from Google's Models API,
-validates the user's exact selection with no silent fallback, and streams SSE text through
-the shared queued/running/completed/cancelled run lifecycle. CLIMATE sends the user prompt
-and only its explicitly selected/bounded context when Gemini is selected. Same-provider,
-same-model completed turns can be reused as bounded conversation history. Gemini v1 is
-ASK-only and advertises no editing, command execution, SQL, email/calendar action, agent,
-tool-runtime, or native repository-investigation capability.
+requires an exact user-selected model with no silent fallback, packs only explicitly
+selected file bodies plus the bounded Context Resolver packet, and streams SSE text
+through the shared queued/running/completed/cancelled run lifecycle. CLIMATE stores the
+clean user prompt separately from internal provider context. Same-provider, same-model
+completed turns can be reused as bounded conversation history. Gemini v1 is ASK-only and
+advertises no editing, command execution, SQL, email/calendar action, agent, tool-runtime,
+or native repository-investigation capability.
 
 Configure `GEMINI_API_KEY` or `GOOGLE_API_KEY` in the server environment; when both are
 present, `GOOGLE_API_KEY` takes precedence. Optional controls are documented in

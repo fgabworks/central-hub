@@ -104,7 +104,13 @@ class GeminiApiAdapter:
         )
         models = list(details["models"])
         requested = (requested_model or "").strip()
-        if requested and requested not in models:
+        if not requested:
+            return {
+                "ok": False,
+                "code": "model_required",
+                "error": "Select an exact Gemini model before running",
+            }
+        if requested not in models:
             return {
                 "ok": False,
                 "code": "model_unavailable",
@@ -112,28 +118,16 @@ class GeminiApiAdapter:
                     f"Model {requested!r} is not accessible with this Gemini API key"
                 ),
             }
-        model = requested or details.get("recommended_model")
-        if not model:
-            return {
-                "ok": False,
-                "code": "model_unavailable",
-                "error": details.get("error")
-                or "No Gemini text models are accessible",
-            }
         return {
             "ok": True,
-            "model": model,
-            "reason": (
-                "user_selected"
-                if requested
-                else details.get("recommendation_reason")
-            ),
+            "model": requested,
+            "reason": "user_selected",
             "supports_reasoning_effort": False,
             "background": False,
             "is_pro": False,
             "timeout_seconds": self.settings.timeout_seconds,
             "selected_model": requested,
-            "resolved_model": model,
+            "resolved_model": requested,
             "models_source": details.get("models_source"),
         }
 
