@@ -102,6 +102,8 @@ def register_agent_center_routes(app: Flask) -> None:
             defaults = _svc().connections.set_coding_defaults(
                 default_provider=payload.get("default_provider"),
                 default_models=payload.get("default_models"),
+                chat=payload.get("chat"),
+                workspace=payload.get("workspace"),
             )
         except ValueError as exc:
             return jsonify({"ok": False, "error": str(exc)}), 400

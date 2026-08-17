@@ -4,12 +4,34 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**AI Connections CLIMATE settings UI (2026-08-18)**
+**Split CLIMATE Chat / Code Workspace AI defaults (2026-08-18)**
+
+AI Connections now stores independent defaults for CLIMATE Chat and Code
+Workspace (`chat_default_*` / `workspace_default_*`), plus the existing
+per-provider model overrides. Manual selection stays authoritative. Existing
+`coding_default_provider` values are copied once into both surfaces; provider
+overrides are unchanged. The legacy `default_provider` field aliases Code
+Workspace only.
+
+Prior: **AI Connections approved UI + local API keys (2026-08-18)**
+
+`/system/ai-connections` matches the approved CLIMATE settings preview: local
+provider logos, API Key/CLI method badges, Test Connection + Manage, and
+Coding Defaults with logo-aligned dark selectors. Gemini keys reuse the
+existing Settings storage path (`data/ai_provider_secrets.env` / environment);
+values are never returned to the browser or stored in conversations. Storage is
+not encrypted at rest. CLI providers keep provider-managed login.
+
+Prior: **AI Connections CLIMATE settings UI (2026-08-18)**
 
 `/system/ai-connections` is restyled as a CLIMATE settings page: provider
 cards first, Coding Defaults below, blue credential notice, dark selectors,
-and compact Reset / Save changes. Registry, CLI auth, discovery, exact-model
-rules, and APIs are unchanged.
+and compact Reset / Save changes. Gemini's card now accepts a key once through
+the existing owner-only provider-settings API, clears the browser field after
+submission, stores the value in gitignored `data/ai_provider_secrets.env`, then
+tests the same Gemini adapter and dynamically discovers its accessible models.
+The key is never returned to the browser. CLI auth and exact-model rules remain
+unchanged.
 
 Prior: **VANTA section placement for Code Workspace / Repositories (2026-08-17)**
 
@@ -75,7 +97,7 @@ Assistant** (editor, Explorer, diagnostics, repo-scoped AiriX panel).
 The standalone page reuses Agent Center SQLite conversations/runs, the Gemini
 adapter, dynamic exact-model discovery, streaming, Stop/cancel, rename, and
 `display_prompt` vs packed provider prompt. Chat runs send no repository IDs or
-file bodies. Gemini stays Ask-only with no silent model fallback and env-only
+file bodies. Gemini stays Ask-only with no silent model fallback and server-side
 keys. Conversation lists use `surface=chat` so editor threads stay in the
 Workspace Assistant.
 

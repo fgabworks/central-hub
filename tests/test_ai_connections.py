@@ -189,12 +189,28 @@ class AiConnectionsTests(unittest.TestCase):
         html = page.get_data(as_text=True)
         self.assertIn("AI Connections", html)
         self.assertIn("Refresh Status", html)
-        self.assertIn("Default Coding Provider", html)
+        self.assertIn("AI Defaults", html)
+        self.assertIn("CLIMATE Chat", html)
+        self.assertIn("Code Workspace", html)
+        self.assertIn("Provider Overrides", html)
+        self.assertIn('id="chat-default-provider"', html)
+        self.assertIn('id="workspace-default-provider"', html)
+        self.assertNotIn('id="coding-default-provider"', html)
         self.assertIn("Configure AI providers and default models used across CLIMATE.", html)
         self.assertIn("aic-notice", html)
         self.assertNotIn("agent-safety", html)
         self.assertIn("Save changes", html)
         self.assertIn("Test Connection", html)
+        self.assertIn("Manage", html)
+        self.assertIn("Reset to defaults", html)
+        self.assertIn("CLI", html)
+        self.assertIn("ai-provider-key-dialog", html)
+        self.assertIn("img/providers/", html)
+        row = self.registry.get("codex")
+        self.assertEqual(row.get("credential_type"), "cli")
+        self.assertEqual(row.get("method_label"), "CLI")
+        self.assertNotIn("api_key", row)
+        self.assertFalse(any(k for k in row if "secret" in k or k.endswith("_key")))
         providers_at = html.find("aic-providers-title")
         defaults_at = html.find("aic-defaults-title")
         self.assertGreater(providers_at, 0)
@@ -202,6 +218,27 @@ class AiConnectionsTests(unittest.TestCase):
         personal = client.get("/personal/aira")
         self.assertIn(b"/system/ai-connections", personal.data)
         self.assertIn(b">Connections<", personal.data)
+
+    def test_ai_connections_exposes_secure_gemini_key_entry(self):
+        from app import create_app
+
+        app = create_app()
+        app.config.update(TESTING=True)
+        client = app.test_client()
+        page = client.get("/system/ai-connections")
+        self.assertEqual(page.status_code, 200)
+        html = page.get_data(as_text=True)
+        self.assertIn('data-provider-id="gemini"', html)
+        self.assertIn('data-credential-type="api_key"', html)
+        self.assertIn('id="ai-provider-key-dialog"', html)
+        self.assertIn('id="ai-provider-key-form"', html)
+        self.assertIn('type="password"', html)
+        self.assertIn("API keys are never exposed after saving", html)
+
+        script = (ROOT / "static" / "js" / "ai_connections.js").read_text(encoding="utf-8")
+        self.assertIn('/api/settings/ai-providers/', script)
+        self.assertIn('keyInput.value = ""', script)
+        self.assertNotIn("localStorage", script)
 
     def test_refresh_status_and_coding_defaults(self):
         refreshed = self.registry.action("codex", "refresh-status")
@@ -214,8 +251,39 @@ class AiConnectionsTests(unittest.TestCase):
         self.assertEqual(defaults["default_provider"], "claude-code")
         self.assertEqual(defaults["default_models"]["claude-code"], "claude-sonnet")
         self.assertEqual(self.registry.coding_defaults()["default_models"]["codex"], "codex-mini")
+        self.assertEqual(defaults["workspace"]["default_provider"], "claude-code")
+        self.assertEqual(defaults["chat"]["default_provider"], "")
+        split = self.registry.set_coding_defaults(
+            chat={"default_provider": "gemini", "default_model": "gemini-flash"},
+            workspace={"default_provider": "codex", "default_model": "gpt-5"},
+        )
+        self.assertEqual(split["chat"]["default_provider"], "gemini")
+        self.assertEqual(split["chat"]["default_model"], "gemini-flash")
+        self.assertEqual(split["workspace"]["default_provider"], "codex")
+        self.assertEqual(split["workspace"]["default_model"], "gpt-5")
+        self.assertEqual(split["default_provider"], "codex")
+        self.assertEqual(split["default_models"]["claude-code"], "claude-sonnet")
         with self.assertRaises(ValueError):
             self.registry.set_coding_defaults(default_provider="not-a-provider")
+        with self.assertRaises(ValueError):
+            self.registry.set_coding_defaults(chat={"default_provider": "not-a-provider"})
+
+    def test_legacy_coding_defaults_migrate_to_both_surfaces(self):
+        self.store.set_pref("coding_default_provider", "codex")
+        self.store.set_pref("coding_default_model:codex", "codex-mini")
+        defaults = self.registry.coding_defaults()
+        self.assertEqual(defaults["chat"]["default_provider"], "codex")
+        self.assertEqual(defaults["workspace"]["default_provider"], "codex")
+        self.assertEqual(defaults["chat"]["default_model"], "")
+        self.assertEqual(defaults["workspace"]["default_model"], "")
+        self.assertEqual(defaults["default_models"]["codex"], "codex-mini")
+        self.registry.set_coding_defaults(
+            chat={"default_provider": "gemini", "default_model": "gemini-flash"},
+        )
+        after = self.registry.coding_defaults()
+        self.assertEqual(after["chat"]["default_provider"], "gemini")
+        self.assertEqual(after["workspace"]["default_provider"], "codex")
+        self.assertEqual(after["default_models"]["codex"], "codex-mini")
 
     def test_provider_switching_is_preserved_per_run(self):
         service = AgentCenterService(

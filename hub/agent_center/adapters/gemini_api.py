@@ -18,13 +18,15 @@ class GeminiApiAdapter:
     enabled_defaults_to_key = True
     enable_when_key_set = True
     authentication_method = "Server-side GEMINI_API_KEY or GOOGLE_API_KEY"
-    credential_storage = "Environment only"
+    credential_storage = "Gitignored local server file or server environment"
     settings_help = (
-        "Uses GEMINI_API_KEY or GOOGLE_API_KEY from the server environment. "
+        "Uses GEMINI_API_KEY or GOOGLE_API_KEY from CLIMATE's local secret store or server environment. "
         "If both are set, GOOGLE_API_KEY takes precedence."
     )
     settings_display_name = "Gemini"
     settings_mark = "G"
+    settings_vendor = "Google"
+    settings_logo = "img/providers/gemini.svg"
     settings_blurb = "Add your Gemini API key to enable Gemini in CLIMATE."
 
     def __init__(

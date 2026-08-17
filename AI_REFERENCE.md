@@ -52,11 +52,14 @@ model is required (no silent fallback), and Gemini receives the user prompt plus
 explicitly selected file bodies and/or the bounded Context Resolver packet. Responses
 stream into the existing Agent Center run lifecycle. Gemini supports ASK only;
 it has no file-write, command, SQL, email, calendar, agent, or native repository-exploration
-capability. Configure it with an environment-only `GEMINI_API_KEY` or `GOOGLE_API_KEY`
+capability. Configure it with a server-side `GEMINI_API_KEY` or `GOOGLE_API_KEY`
 (`GOOGLE_API_KEY` takes precedence), then optionally constrain models with
 `GEMINI_ALLOWED_MODELS`. Keys can also be set, replaced, or removed from
 **Settings → AI Providers** (`/settings/ai-providers`); stored values stay on the
-server and are never returned to the browser. No new edit or command capability was added.
+server and are never returned to the browser. Gemini can also accept or replace its key
+directly from **AI Connections** (`/system/ai-connections`), which reuses the same
+gitignored local secret store and connection-test/model-discovery flow. No new edit or
+command capability was added.
 CLIMATE coding runs in Assisted mode use a deterministic zero-token Context Resolver
 (AGENTS/SKILLS/provider/nested instructions + RI/local search). Implementation questions
 rank executable files/symbols above docs/tests and expand locally once when evidence is
@@ -211,7 +214,7 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Workspace Console | Bottom panel under main content only (`left: var(--sidebar-w)`); bounded height; Ctrl+J; collapsed by default |
 | Activity Rail | Far-right icons for AI Assistant, Quick Notepad, Workspace Console (future utilities placeholders); reduces main width only |
 | App shell | Fixed sidebar 210–216px + `padding-left` on `.app-shell`; `.main-column` / `.content` `flex:1; min-width:0`; `.sidebar-scroll` for nav |
-| AI Connections | `/system/ai-connections`; CLIMATE settings cards for Gemini/Codex/Claude Code/Cursor Agent from the coding registry; Installed/Authenticated/Version/Last Checked + connect/test/refresh/disconnect; coding defaults below cards; Codex never stores tokens |
+| AI Connections | `/system/ai-connections`; CLIMATE provider cards with local logos, API Key/CLI method, Test Connection + Manage; Gemini keys reuse `data/ai_provider_secrets.env` (never returned, not encrypted); CLI auth unchanged; split AI Defaults for CLIMATE Chat and Code Workspace plus per-provider model overrides |
 | AI Provider Settings | `/settings/ai-providers`; Settings submenu + registry-driven cards for Gemini, Grok/xAI, OpenAI, Claude/Anthropic (planned adapter), Local Models (UI-ready); Add/Replace/Remove key + Test Connection; secrets in gitignored `data/ai_provider_secrets.env`; APIs return metadata only; CLI providers stay on AI Connections |
 | DHIS2 | GET client, discovery, UID mapping, preview builder |
 | UID index admin | LP-style controlled update: dry-run → preview → typed confirm → archive/versions/restore |

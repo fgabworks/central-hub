@@ -29,15 +29,96 @@
     return Math.max(1, Math.round(seconds / 86400)) + "d ago";
   }
 
+  function formatTested(value) {
+    if (!value) return "—";
+    return formatChecked(value);
+  }
+
   function applyChecked(el, value) {
     if (!el) return;
     var stamp = value || el.getAttribute("data-timestamp") || "";
     if (value) el.setAttribute("data-timestamp", value);
-    el.textContent = formatChecked(stamp);
+    el.textContent = el.classList.contains("connection-last-check")
+      ? formatTested(stamp)
+      : formatChecked(stamp);
   }
 
   function modelCountLabel(models) {
-    return models && models.length ? models.length + " available" : "—";
+    return models && models.length ? String(models.length) : "—";
+  }
+
+  function credType(row, connection) {
+    return (
+      (connection && connection.credential_type) ||
+      (row && row.getAttribute("data-credential-type")) ||
+      "cli"
+    );
+  }
+
+  function uiStatus(connection) {
+    if (connection.ui_status) return connection.ui_status;
+    if (connection.state === "connected") return "connected";
+    if (connection.state === "error") return "error";
+    if (!connection.installed || connection.state === "unavailable") return "offline";
+    return "available";
+  }
+
+  function uiStatusLabel(connection) {
+    return connection.ui_status_label || ({
+      connected: "Connected",
+      available: "Available",
+      offline: "Offline",
+      error: "Error"
+    }[uiStatus(connection)] || connection.summary_label || connection.status || "Error");
+  }
+
+  function codingActionsHtml(connection, row) {
+    var installed = !!connection.installed;
+    var connected = connection.state === "connected";
+    var cred = credType(row, connection);
+    var configured = connection.key_configured != null
+      ? !!connection.key_configured
+      : !!(row && row.getAttribute("data-configured") === "1");
+    var offline = !installed || uiStatus(connection) === "offline";
+    var testDisabled = offline || (cred === "api_key" && !configured);
+    var html = "";
+    html +=
+      '<button type="button" class="btn btn-sm" data-action="test"' +
+      (testDisabled ? " disabled" : "") +
+      '><span aria-hidden="true">✓</span> Test Connection</button>';
+    html +=
+      '<button type="button" class="btn btn-sm" data-action="manage"' +
+      (offline ? " disabled" : "") +
+      ">Manage</button>";
+    html += '<details class="aic-overflow"><summary class="btn btn-sm aic-overflow-btn" aria-label="More actions">⋯</summary><div class="aic-overflow-menu">';
+    html +=
+      '<button type="button" class="aic-overflow-item" data-action="refresh-status">Refresh Status</button>';
+    if (cred === "api_key") {
+      html +=
+        '<button type="button" class="aic-overflow-item" data-action="set-key">' +
+        (configured ? "Replace Key" : "Add Key") +
+        "</button>";
+      html +=
+        '<button type="button" class="aic-overflow-item" data-action="remove-key"' +
+        (configured ? "" : " disabled") +
+        ">Remove Key</button>";
+    } else if (!installed) {
+      html +=
+        '<button type="button" class="aic-overflow-item" data-action="install_help">Install help</button>';
+    }
+    if (connected) {
+      html +=
+        '<button type="button" class="aic-overflow-item" data-action="refresh-models">Refresh Models</button>';
+      html +=
+        '<button type="button" class="aic-overflow-item" data-action="reauthenticate">Re-authenticate</button>';
+    } else if (installed && cred !== "api_key") {
+      html +=
+        '<button type="button" class="aic-overflow-item" data-action="connect">Connect</button>';
+    }
+    html +=
+      '<button type="button" class="aic-overflow-item" data-action="disconnect">Disconnect</button>';
+    html += "</div></details>";
+    return html;
   }
 
   function fillModelSelect(selectEl, models, current) {
@@ -70,38 +151,6 @@
     if (window.ClimateSelect) window.ClimateSelect.sync(selectEl);
   }
 
-  function codingActionsHtml(connection) {
-    var installed = !!connection.installed;
-    var connected = connection.state === "connected";
-    var html = "";
-    if (!installed) {
-      html +=
-        '<button type="button" class="btn btn-sm btn-primary" data-action="install_help">Install help</button>';
-      html +=
-        '<button type="button" class="btn btn-sm" data-action="refresh-status">Refresh Status</button>';
-      return html;
-    }
-    html +=
-      '<button type="button" class="btn btn-sm" data-action="test"><span aria-hidden="true">✓</span> Test Connection</button>';
-    if (!connected) {
-      html +=
-        '<button type="button" class="btn btn-sm btn-primary" data-action="connect">Connect</button>';
-    }
-    html += '<details class="aic-overflow"><summary class="btn btn-sm aic-overflow-btn" aria-label="More actions">⋯</summary><div class="aic-overflow-menu">';
-    html +=
-      '<button type="button" class="aic-overflow-item" data-action="refresh-status">Refresh Status</button>';
-    if (connected) {
-      html +=
-        '<button type="button" class="aic-overflow-item" data-action="refresh-models">Refresh Models</button>';
-      html +=
-        '<button type="button" class="aic-overflow-item" data-action="reauthenticate">Re-authenticate</button>';
-    }
-    html +=
-      '<button type="button" class="aic-overflow-item" data-action="disconnect">Disconnect</button>';
-    html += "</div></details>";
-    return html;
-  }
-
   function syncActions(row, connection) {
     var actions =
       row.querySelector(".connection-actions") ||
@@ -113,7 +162,7 @@
     var compact = !!row.closest("#ai-provider-compact");
     var codingPage = isCodingPage() && !!row.closest("#ai-connections");
     if (codingPage) {
-      actions.innerHTML = codingActionsHtml(connection);
+      actions.innerHTML = codingActionsHtml(connection, row);
       return;
     }
     var sm = compact ? " btn-sm" : "";
@@ -208,9 +257,13 @@
     var selectEl = wrap && wrap.querySelector("select");
     var input = wrap && wrap.querySelector("input");
     if (selectEl) fillModelSelect(selectEl, connection.models || [], input ? input.value.trim() : "");
+    refreshSurfaceModelOptions(id, connection.models || []);
   }
 
   function render(row, connection, result) {
+    if (connection.credential_type) {
+      row.setAttribute("data-credential-type", connection.credential_type);
+    }
     var status = row.querySelector(".connection-status");
     var detail =
       row.querySelector(".connection-detail") ||
@@ -229,10 +282,9 @@
     var executable = row.querySelector(".connection-executable");
     var compact = !!row.closest("#ai-provider-compact");
     if (status) {
-      status.textContent = connection.summary_label || connection.status || "Error";
-      var stateClass = String(connection.state || "error").replace(/_/g, "-");
-      if (!connection.installed && stateClass !== "error") stateClass = "unavailable";
-      status.className = "status-pill connection-status status-" + stateClass;
+      status.textContent = uiStatusLabel(connection);
+      status.className =
+        "status-pill connection-status status-" + uiStatus(connection).replace(/_/g, "-");
     }
     if (detail) {
       var text = (result && result.detail) || connection.detail || "";
@@ -242,7 +294,13 @@
       detail.textContent = text;
     }
     if (account) account.textContent = connection.account_label || "—";
-    applyChecked(last, connection.last_check || connection.last_successful_check || "");
+    applyChecked(last, connection.last_successful_check || connection.last_check || "");
+    if (row && connection.credential_type) {
+      row.setAttribute("data-credential-type", connection.credential_type);
+    }
+    if (row && connection.key_configured != null) {
+      row.setAttribute("data-configured", connection.key_configured ? "1" : "0");
+    }
     if (installed)
       installed.textContent = compact
         ? connection.installed
@@ -286,19 +344,125 @@
     window.alert(help);
   }
 
+  var keyDialog = document.getElementById("ai-provider-key-dialog");
+  var keyForm = document.getElementById("ai-provider-key-form");
+  var keyInput = document.getElementById("ai-provider-key-input");
+  var keyTitle = document.getElementById("ai-provider-key-title");
+  var keyCancel = document.getElementById("ai-provider-key-cancel");
+  var activeKeyRow = null;
+
+  function clearKeyInput() {
+    if (keyInput) keyInput.value = "";
+  }
+
+  function openKeyDialog(row) {
+    if (!keyDialog || !keyDialog.showModal) return;
+    activeKeyRow = row;
+    var name = (row && row.getAttribute("data-display-name")) || "provider";
+    if (keyTitle) keyTitle.textContent = "Configure " + name;
+    var help = document.getElementById("ai-provider-key-help");
+    if (help) {
+      help.textContent =
+        "The key is stored only on the local CLIMATE server and will not be displayed again after saving. Storage is not encrypted at rest.";
+    }
+    clearKeyInput();
+    keyDialog.showModal();
+    if (keyInput) keyInput.focus();
+  }
+
+  function settingsKey(id, method, body) {
+    return fetch("/api/settings/ai-providers/" + encodeURIComponent(id) + "/key", {
+      method: method,
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: body ? JSON.stringify(body) : undefined,
+    }).then(function (response) {
+      return response.json().then(function (data) {
+        if (!response.ok || !data.ok) {
+          throw new Error(data.error || "Request failed");
+        }
+        return data;
+      });
+    });
+  }
+
+  function applyKeyResult(row, provider, refresh) {
+    if (!row || !provider) return;
+    row.setAttribute("data-configured", provider.configured ? "1" : "0");
+    row.setAttribute("data-credential-type", provider.credential_type || "api_key");
+    if (refresh !== false) refreshAll();
+  }
+
+  function manageProvider(row) {
+    if (credType(row) === "api_key") {
+      openKeyDialog(row);
+      return;
+    }
+    var details = row.querySelector(".aic-more");
+    if (details) details.open = true;
+  }
+
+  if (keyCancel) {
+    keyCancel.addEventListener("click", function () {
+      clearKeyInput();
+      activeKeyRow = null;
+      if (keyDialog && keyDialog.open) keyDialog.close();
+    });
+  }
+
+  if (keyDialog) {
+    keyDialog.addEventListener("close", function () {
+      clearKeyInput();
+      activeKeyRow = null;
+    });
+  }
+
+  if (keyForm) {
+    keyForm.addEventListener("submit", function (event) {
+      event.preventDefault();
+      var row = activeKeyRow;
+      var provider = row && row.getAttribute("data-provider-id");
+      var apiKey = keyInput ? keyInput.value.trim() : "";
+      var help = document.getElementById("ai-provider-key-help");
+      var submit = keyForm.querySelector('button[type="submit"]');
+      if (!provider || !apiKey) {
+        if (help) help.textContent = "Enter an API key before saving.";
+        return;
+      }
+      if (submit) submit.disabled = true;
+      if (help) help.textContent = "Saving and testing the connection…";
+      var request = settingsKey(provider, "POST", { api_key: apiKey });
+      clearKeyInput();
+      request
+        .then(function (data) {
+          applyKeyResult(row, data.provider, false);
+          if (keyDialog && keyDialog.open) keyDialog.close();
+          return runAction(row, "test");
+        })
+        .catch(function (error) {
+          if (help) help.textContent = error.message;
+        })
+        .finally(function () {
+          clearKeyInput();
+          if (submit) submit.disabled = false;
+        });
+    });
+  }
+
   function updateStatusSummary(connections) {
     var root = document.getElementById("aic-summary");
     if (!root || !connections) return;
     var connected = 0;
-    var notConnected = 0;
-    var unavailable = 0;
+    var available = 0;
+    var offline = 0;
     var error = 0;
     var last = "";
     connections.forEach(function (item) {
-      if (item.state === "connected") connected += 1;
-      else if (item.state === "error") error += 1;
-      else if (item.state === "unavailable") unavailable += 1;
-      else notConnected += 1;
+      var tone = uiStatus(item);
+      if (tone === "connected") connected += 1;
+      else if (tone === "available") available += 1;
+      else if (tone === "error") error += 1;
+      else offline += 1;
       if (item.last_check && item.last_check > last) last = item.last_check;
     });
     function chip(cls, label) {
@@ -311,8 +475,8 @@
       );
     }
     var html = chip("is-connected", connected + " Connected");
-    if (notConnected) html += chip("is-idle", notConnected + " Not connected");
-    if (unavailable) html += chip("is-offline", unavailable + " Unavailable");
+    if (available) html += chip("is-available", available + " Available");
+    if (offline) html += chip("is-offline", offline + " Offline");
     if (error) html += chip("is-error", error + " Error");
     html +=
       '<span class="aic-summary-checked">Last checked <time class="aic-last-global" datetime="' +
@@ -328,6 +492,22 @@
 
   function runAction(row, action) {
     var provider = row.getAttribute("data-provider-id");
+    if (action === "manage" || action === "set-key") {
+      if (credType(row) === "api_key" || action === "set-key") openKeyDialog(row);
+      else manageProvider(row);
+      return Promise.resolve();
+    }
+    if (action === "remove-key") {
+      if (!window.confirm("Remove the stored API key for this provider from the server?")) {
+        return Promise.resolve();
+      }
+      return settingsKey(provider, "DELETE").then(function (data) {
+        applyKeyResult(row, data.provider);
+      }).catch(function (error) {
+        var detail = row.querySelector(".connection-detail");
+        if (detail) detail.textContent = error.message;
+      });
+    }
     if (action === "install_help") {
       fetchFn("/api/ai-connections?refresh=1&coding=1", { credentials: "same-origin" })
         .then(function (response) {
@@ -413,9 +593,13 @@
           var button = event.target.closest("button[data-action]");
           if (!button || !row.contains(button)) return;
           var action = button.getAttribute("data-action");
+          if (button.disabled) return;
           button.disabled = true;
           Promise.resolve(runAction(row, action)).finally(function () {
-            button.disabled = false;
+            if (action !== "test" && action !== "remove-key") button.disabled = false;
+            else if (row.getAttribute("data-configured") === "1" || credType(row) !== "api_key") {
+              button.disabled = false;
+            }
           });
         });
       });
@@ -442,14 +626,89 @@
     }
   }
 
+  function modelsFor(providerId) {
+    var wrap = document.querySelector('[data-default-model-for="' + providerId + '"]');
+    var datalist = document.getElementById("models-" + providerId);
+    if (datalist) {
+      return Array.prototype.map.call(datalist.options || [], function (opt) {
+        return opt.value;
+      }).filter(Boolean);
+    }
+    if (!wrap) return [];
+    return Array.prototype.map.call((wrap.querySelector("select") || {}).options || [], function (opt) {
+      return opt.value;
+    }).filter(Boolean);
+  }
+
+  function refreshSurfaceModelOptions(providerId, models) {
+    document.querySelectorAll("[data-surface-model]").forEach(function (wrap) {
+      var surface = wrap.getAttribute("data-surface-model");
+      var providerEl = document.getElementById(surface + "-default-provider");
+      if (!providerEl || providerEl.value !== providerId) return;
+      var selectEl = wrap.querySelector("select");
+      var input = wrap.querySelector("input");
+      if (selectEl) fillModelSelect(selectEl, models || modelsFor(providerId), input ? input.value.trim() : "");
+    });
+  }
+
+  function syncProviderLogo(selectEl) {
+    if (!selectEl) return;
+    var wrap = selectEl.closest(".aic-select-with-logo");
+    if (!wrap) return;
+    var opt = selectEl.options[selectEl.selectedIndex];
+    var src = (opt && opt.getAttribute("data-logo")) || "";
+    var img = wrap.querySelector("img.aic-logo");
+    var fallback = wrap.querySelector(".aic-logo-fallback");
+    if (src) {
+      if (!img) {
+        img = document.createElement("img");
+        img.className = "aic-logo";
+        img.alt = "";
+        img.width = 22;
+        img.height = 22;
+        wrap.insertBefore(img, wrap.firstChild);
+      }
+      img.src = src;
+      img.hidden = false;
+      if (fallback) fallback.hidden = true;
+    } else {
+      if (img) img.hidden = true;
+      if (fallback) fallback.hidden = false;
+    }
+  }
+
+  function readSurface(name) {
+    var provider = document.getElementById(name + "-default-provider");
+    var wrap = document.querySelector('[data-surface-model="' + name + '"]');
+    var input = wrap && wrap.querySelector("input");
+    return {
+      default_provider: provider ? provider.value : "",
+      default_model: input ? input.value.trim() : "",
+    };
+  }
+
+  function applySurface(name, payload) {
+    payload = payload || {};
+    var provider = document.getElementById(name + "-default-provider");
+    var wrap = document.querySelector('[data-surface-model="' + name + '"]');
+    if (provider) {
+      provider.value = payload.default_provider || "";
+      if (window.ClimateSelect) window.ClimateSelect.sync(provider);
+      syncProviderLogo(provider);
+    }
+    if (!wrap) return;
+    var input = wrap.querySelector("input");
+    var selectEl = wrap.querySelector("select");
+    var value = payload.default_model || "";
+    if (input) input.value = value;
+    if (selectEl) fillModelSelect(selectEl, modelsFor(provider ? provider.value : ""), value);
+  }
+
   function applyDefaults(defaults) {
     var form = document.getElementById("coding-defaults-form");
     if (!form || !defaults) return;
-    var provider = document.getElementById("coding-default-provider");
-    if (provider) {
-      provider.value = defaults.default_provider || "";
-      if (window.ClimateSelect) window.ClimateSelect.sync(provider);
-    }
+    applySurface("chat", defaults.chat || {});
+    applySurface("workspace", defaults.workspace || {});
     var models = defaults.default_models || {};
     form.querySelectorAll("[data-default-model-for]").forEach(function (wrap) {
       var id = wrap.getAttribute("data-default-model-for");
@@ -457,10 +716,27 @@
       var selectEl = wrap.querySelector("select");
       var value = models[id] || "";
       if (input) input.value = value;
-      if (selectEl) fillModelSelect(selectEl, Array.prototype.map.call(selectEl.options, function (opt) {
-        return opt.value;
-      }).filter(Boolean), value);
+      if (selectEl) fillModelSelect(selectEl, modelsFor(id), value);
     });
+  }
+
+  function bindSurfaceProvider(name) {
+    var provider = document.getElementById(name + "-default-provider");
+    if (!provider || provider._aicSurfaceBound) return;
+    provider._aicSurfaceBound = true;
+    provider.addEventListener("change", function () {
+      syncProviderLogo(provider);
+      var wrap = document.querySelector('[data-surface-model="' + name + '"]');
+      if (!wrap) return;
+      var input = wrap.querySelector("input");
+      var selectEl = wrap.querySelector("select");
+      var models = modelsFor(provider.value);
+      var current = input ? input.value.trim() : "";
+      if (models.length && current && models.indexOf(current) < 0) current = "";
+      if (input) input.value = current;
+      if (selectEl) fillModelSelect(selectEl, models, current);
+    });
+    syncProviderLogo(provider);
   }
 
   function bindDefaultsForm() {
@@ -468,7 +744,9 @@
     if (!form || form._aiBound) return;
     form._aiBound = true;
     var status = document.getElementById("coding-defaults-status");
-    form.querySelectorAll("[data-default-model-for]").forEach(bindModelField);
+    form.querySelectorAll("[data-default-model-for], [data-surface-model]").forEach(bindModelField);
+    bindSurfaceProvider("chat");
+    bindSurfaceProvider("workspace");
     var reset = document.getElementById("coding-defaults-reset");
     if (reset) {
       reset.addEventListener("click", function () {
@@ -486,7 +764,6 @@
     }
     form.addEventListener("submit", function (event) {
       event.preventDefault();
-      var provider = document.getElementById("coding-default-provider");
       var models = {};
       form.querySelectorAll("[data-default-model-for]").forEach(function (label) {
         var id = label.getAttribute("data-default-model-for");
@@ -499,7 +776,8 @@
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         body: JSON.stringify({
-          default_provider: provider ? provider.value : "",
+          chat: readSurface("chat"),
+          workspace: readSurface("workspace"),
           default_models: models,
         }),
       })
@@ -523,7 +801,9 @@
         });
     });
     if (window.ClimateSelect) {
-      window.ClimateSelect.enhance(document.getElementById("coding-default-provider"));
+      ["chat-default-provider", "workspace-default-provider"].forEach(function (id) {
+        window.ClimateSelect.enhance(document.getElementById(id));
+      });
       form.querySelectorAll(".aic-model-select").forEach(function (el) {
         window.ClimateSelect.enhance(el);
       });

@@ -40,10 +40,10 @@ def _luma(rgb: tuple[int, int, int] | None) -> float | None:
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     app = create_app()
-    httpd = make_server("127.0.0.1", 8778, app)
+    httpd = make_server("127.0.0.1", 8781, app)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
-    base = "http://127.0.0.1:8778"
+    base = "http://127.0.0.1:8781"
     time.sleep(0.4)
     report: dict = {"pages": {}}
     try:
@@ -63,19 +63,39 @@ def main() -> None:
                       const providers = q("#aic-providers-title");
                       const defaults = q("#aic-defaults-title");
                       const save = qa(".aic-defaults-actions .btn-primary")[0];
+                      const reset = q("#coding-defaults-reset");
+                      const chat = q("#aic-chat-defaults-title");
+                      const workspace = q("#aic-workspace-defaults-title");
+                      const overrides = q("#aic-overrides-title");
                       return {
                         title: (q(".section-header-title") || {}).textContent || "",
                         lede: (q(".aic-lede") || {}).textContent || "",
+                        defaultsTitle: (defaults && defaults.textContent) || "",
+                        chatTitle: (chat && chat.textContent) || "",
+                        workspaceTitle: (workspace && workspace.textContent) || "",
+                        overridesTitle: (overrides && overrides.textContent) || "",
+                        chatProvider: !!q("#chat-default-provider"),
+                        workspaceProvider: !!q("#workspace-default-provider"),
+                        legacyMergedProvider: !!q("#coding-default-provider"),
+                        chatBeforeWorkspace: !!(chat && workspace &&
+                          chat.compareDocumentPosition(workspace) & Node.DOCUMENT_POSITION_FOLLOWING),
+                        workspaceBeforeOverrides: !!(workspace && overrides &&
+                          workspace.compareDocumentPosition(overrides) & Node.DOCUMENT_POSITION_FOLLOWING),
                         noticeBg: cs(notice, "background-color"),
                         noticeColor: cs(notice, "color"),
                         noticeText: (notice && notice.innerText) || "",
                         providerCount: qa("#ai-connections [data-provider-id]").length,
+                        logos: qa("#ai-connections .aic-logo, #ai-connections .aic-logo-fallback").length,
+                        manage: qa("#ai-connections [data-action='manage']").length,
+                        methods: qa("#ai-connections .aic-method").map((el) => el.textContent.trim()),
+                        keyDialog: !!q("#ai-provider-key-dialog"),
                         providersBeforeDefaults: !!(providers && defaults &&
                           providers.compareDocumentPosition(defaults) & Node.DOCUMENT_POSITION_FOLLOWING),
                         fieldBgs: fields.map((el) => cs(el, "background-color")),
                         fieldColors: fields.map((el) => cs(el, "color")),
                         saveWidth: save ? Math.round(save.getBoundingClientRect().width) : 0,
                         saveText: save ? save.textContent.trim() : "",
+                        resetText: reset ? reset.textContent.trim() : "",
                         pageWidth: q(".aic-page") ? Math.round(q(".aic-page").getBoundingClientRect().width) : 0,
                         gridCols: getComputedStyle(q(".aic-provider-grid")).gridTemplateColumns,
                         modelCols: getComputedStyle(q(".aic-model-grid")).gridTemplateColumns,
@@ -97,6 +117,33 @@ def main() -> None:
                 }
                 page.screenshot(path=str(OUT / f"{name}.png"), full_page=True)
                 page.close()
+            surfaces = {}
+            for route, key in (("/work/chat", "chat"), ("/work/climate", "workspace")):
+                page = browser.new_page(viewport={"width": 1440, "height": 900})
+                page.goto(base + route, wait_until="domcontentloaded", timeout=60000)
+                page.wait_for_timeout(500)
+                surfaces[key] = page.evaluate(
+                    """() => {
+                      const root = document.getElementById("ax-chat") || document.getElementById("climate-shell");
+                      let boot = {};
+                      try { boot = JSON.parse((root && root.getAttribute("data-bootstrap")) || "{}"); }
+                      catch (_err) { boot = {}; }
+                      const defaults = boot.coding_defaults || {};
+                      return {
+                        url: location.pathname,
+                        hasChatSelects: !!(document.getElementById("ax-provider") && document.getElementById("ax-model")),
+                        hasWorkspaceSelects: !!(document.getElementById("climate-provider") && document.getElementById("climate-model")),
+                        chatProvider: (defaults.chat || {}).default_provider || "",
+                        workspaceProvider: (defaults.workspace || {}).default_provider || "",
+                        hasChat: !!(defaults.chat && "default_provider" in defaults.chat),
+                        hasWorkspace: !!(defaults.workspace && "default_provider" in defaults.workspace),
+                        aliasProvider: defaults.default_provider || "",
+                      };
+                    }"""
+                )
+                page.screenshot(path=str(OUT / f"{key}_surface.png"), full_page=False)
+                page.close()
+            report["surfaces"] = surfaces
             browser.close()
     finally:
         httpd.shutdown()
@@ -116,6 +163,46 @@ def main() -> None:
             failed.append(f"{name}: Save is oversized")
         if "Save changes" not in (row.get("saveText") or ""):
             failed.append(f"{name}: missing Save changes")
+        if "Reset to defaults" not in (row.get("resetText") or ""):
+            failed.append(f"{name}: missing Reset to defaults")
+        if row.get("providerCount", 0) < 4:
+            failed.append(f"{name}: expected 4 provider cards")
+        if row.get("logos", 0) < 4:
+            failed.append(f"{name}: missing provider logos")
+        if row.get("manage", 0) < 4:
+            failed.append(f"{name}: missing Manage actions")
+        if "API Key" not in (row.get("methods") or []) or "CLI" not in (row.get("methods") or []):
+            failed.append(f"{name}: missing connection method badges")
+        if not row.get("keyDialog"):
+            failed.append(f"{name}: missing API key dialog")
+        if row.get("defaultsTitle") != "AI Defaults":
+            failed.append(f"{name}: defaults title is not AI Defaults")
+        if row.get("chatTitle") != "CLIMATE Chat":
+            failed.append(f"{name}: missing CLIMATE Chat defaults")
+        if row.get("workspaceTitle") != "Code Workspace":
+            failed.append(f"{name}: missing Code Workspace defaults")
+        if row.get("overridesTitle") != "Provider Overrides":
+            failed.append(f"{name}: missing Provider Overrides")
+        if not row.get("chatProvider") or not row.get("workspaceProvider"):
+            failed.append(f"{name}: missing split provider selectors")
+        if row.get("legacyMergedProvider"):
+            failed.append(f"{name}: merged coding-default-provider is still present")
+        if not row.get("chatBeforeWorkspace"):
+            failed.append(f"{name}: Chat defaults are not above Code Workspace")
+        if not row.get("workspaceBeforeOverrides"):
+            failed.append(f"{name}: Code Workspace defaults are not above Provider Overrides")
+        if "encrypted" in (row.get("noticeText") or "").lower() and "not encrypted" not in (row.get("noticeText") or "").lower():
+            failed.append(f"{name}: notice claims encryption")
+    chat = (report.get("surfaces") or {}).get("chat") or {}
+    workspace = (report.get("surfaces") or {}).get("workspace") or {}
+    if not chat.get("hasChatSelects"):
+        failed.append("chat: missing provider/model selectors")
+    if not workspace.get("hasWorkspaceSelects"):
+        failed.append("workspace: missing provider/model selectors")
+    if not chat.get("hasChat") or not chat.get("hasWorkspace"):
+        failed.append("chat: bootstrap is missing split coding_defaults.chat/workspace")
+    if not workspace.get("hasChat") or not workspace.get("hasWorkspace"):
+        failed.append("workspace: bootstrap is missing split coding_defaults.chat/workspace")
     if failed:
         raise SystemExit("AI Connections UI validation failed:\n- " + "\n- ".join(failed))
     print("AI Connections UI validation passed")

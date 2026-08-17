@@ -25,6 +25,8 @@ from hub.agent_center.redact import classify_provider_error, redact_text
 class CodexAdapter(BaseCliAdapter):
     authentication_method = "Visible `codex login` (ChatGPT / Codex device auth)"
     credential_storage = "Provider CLI managed (~/.codex). Central Hub never stores Codex tokens."
+    settings_vendor = "OpenAI"
+    settings_logo = "img/providers/codex.svg"
     profiles_allowed = ("okarun",)
     uses_jsonl = True
     default_model_token = "__provider_default__"

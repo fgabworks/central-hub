@@ -22,6 +22,7 @@
   var providerDot = document.getElementById("ax-provider-dot");
   var titleEl = document.getElementById("ax-chat-title");
   var storeKey = "ax-climate-chat:" + workspace;
+  var selectionKey = "ax-climate-chat-selection:" + workspace;
 
   var state = {
     conversations: [],
@@ -64,6 +65,44 @@
   function loadActive() {
     try { return sessionStorage.getItem(storeKey) || ""; } catch (_) { return ""; }
   }
+  function saveChatSelection(sel) {
+    try {
+      sessionStorage.setItem(selectionKey, JSON.stringify({
+        provider: (sel && sel.provider) || "",
+        model: (sel && sel.model) || ""
+      }));
+    } catch (_) {}
+  }
+  function loadChatSelection() {
+    try { return JSON.parse(sessionStorage.getItem(selectionKey) || "{}") || {}; }
+    catch (_) { return {}; }
+  }
+  function chatSurfaceDefaults() {
+    var defaults = bootstrap.coding_defaults || {};
+    return defaults.chat || { default_provider: "", default_model: "" };
+  }
+  function preferredChatProvider() {
+    var sel = loadChatSelection();
+    if (sel.provider) return sel.provider;
+    var chat = chatSurfaceDefaults();
+    if (chat.default_provider) return chat.default_provider;
+    var first = (bootstrap.providers || []).find(function (row) { return row.state === "connected"; });
+    return (first || {}).id || "";
+  }
+  function preferredChatModel(providerId) {
+    var sel = loadChatSelection();
+    if (sel.provider === providerId && sel.model) return sel.model;
+    var defaults = bootstrap.coding_defaults || {};
+    var chat = chatSurfaceDefaults();
+    if (chat.default_provider === providerId && chat.default_model) return chat.default_model;
+    return (defaults.default_models || {})[providerId] || "";
+  }
+  function listedModelOrAuto(models, preferred) {
+    var list = models || [];
+    if (preferred && list.indexOf(preferred) >= 0) return preferred;
+    if (!preferred && list.indexOf("__provider_default__") >= 0) return "__provider_default__";
+    return "";
+  }
   function titleFromPrompt(prompt) {
     var t = String(prompt || "").replace(/\s+/g, " ").trim();
     if (!t) return "New chat";
@@ -97,7 +136,7 @@
       return '<option value="' + escapeHtml(m) + '">' + escapeHtml(m) + "</option>";
     }).join("");
     modelSelect.innerHTML = options;
-    var pick = preferred || "";
+    var pick = listedModelOrAuto(models, preferred);
     if (pick && (models || []).indexOf(pick) >= 0) modelSelect.value = pick;
     else modelSelect.selectedIndex = 0;
     if (!state.runActive) sendBtn.disabled = !modelSelect.value;
@@ -116,9 +155,9 @@
       return;
     }
     var cached = state.modelCache[providerSelect.value];
-    var preferred = opts.preserveModel || modelSelect.value || "";
+    var preferred = opts.preserveModel || preferredChatModel(providerSelect.value) || "";
     if (cached && !opts.refresh) {
-      applyModelOptions(cached.models, preferred || cached.recommended);
+      applyModelOptions(cached.models, listedModelOrAuto(cached.models, preferred));
       return;
     }
     jsonFetch(endpoint("/providers/" + encodeURIComponent(providerSelect.value) + "/models" + (opts.refresh ? "?refresh=1" : ""))).then(function (data) {
@@ -126,7 +165,7 @@
         models: data.models || [],
         recommended: data.recommended_model || ""
       };
-      applyModelOptions(data.models || [], preferred || data.recommended_model || "");
+      applyModelOptions(data.models || [], listedModelOrAuto(data.models || [], preferred));
     }).catch(function (err) {
       modelSelect.innerHTML = '<option value="" disabled>' + escapeHtml(err.message || "Models unavailable") + "</option>";
       sendBtn.disabled = true;
@@ -213,6 +252,17 @@
     });
     state.messages = messages;
     saveActive();
+    var last = null;
+    for (var i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i] && messages[i].provider) {
+        last = messages[i];
+        break;
+      }
+    }
+    if (last && last.provider) {
+      saveChatSelection({ provider: last.provider, model: last.model || "" });
+      selectProvider(last.provider, { refresh: true, preserveModel: last.model || "" });
+    }
     renderHistory();
     renderFeed();
   }
@@ -346,10 +396,8 @@
     if (row.state !== "connected") opt.setAttribute("data-unavailable", "1");
     providerSelect.appendChild(opt);
   });
-  var preferred = (bootstrap.providers || []).find(function (row) {
-    return row.id === "gemini" && row.state === "connected";
-  }) || (bootstrap.providers || []).find(function (row) { return row.state === "connected"; });
-  if (preferred) providerSelect.value = preferred.id;
+  var preferred = preferredChatProvider();
+  if (preferred) providerSelect.value = preferred;
   enhanceChatSelects();
   selectProvider(providerSelect.value, { refresh: true });
 
@@ -377,9 +425,11 @@
     openConversation(btn.getAttribute("data-id"));
   });
   providerSelect.addEventListener("change", function () {
+    saveChatSelection({ provider: providerSelect.value, model: "" });
     selectProvider(providerSelect.value, { refresh: true });
   });
   modelSelect.addEventListener("change", function () {
+    saveChatSelection({ provider: providerSelect.value, model: modelSelect.value });
     if (!state.runActive) sendBtn.disabled = !modelSelect.value;
   });
   sendBtn.addEventListener("click", sendRun);

@@ -10,6 +10,8 @@ from hub.agent_center.redact import redact_text
 class ClaudeCodeAdapter(BaseCliAdapter):
     authentication_method = "Official Claude Code CLI auth (`claude auth login`)"
     credential_storage = "Claude Code CLI managed. Hub never stores Anthropic credentials."
+    settings_vendor = "Anthropic"
+    settings_logo = "img/providers/claude-code.svg"
 
     def _authentication_probe(self, executable: str) -> dict[str, Any]:
         result = self._run_probe([executable, "auth", "status"])

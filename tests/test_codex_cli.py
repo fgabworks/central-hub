@@ -728,7 +728,10 @@ class CodexUiFactsTests(unittest.TestCase):
         self.assertIn(b"Runtime health", page.data)
         self.assertIn(b"Last Checked", page.data)
         self.assertIn(b"Refresh Status", page.data)
-        self.assertIn(b"Default Coding Provider", page.data)
+        self.assertIn(b"AI Defaults", page.data)
+        self.assertIn(b"CLIMATE Chat", page.data)
+        self.assertIn(b"Code Workspace", page.data)
+        self.assertIn(b"Provider Overrides", page.data)
 
 
 if __name__ == "__main__":

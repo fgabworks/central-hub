@@ -39,6 +39,8 @@ class FakeCodingAdapter:
                 "cursor-agent": "",
             },
             "providers": ["codex", "claude-code", "cursor-agent"],
+            "chat": {"default_provider": "gemini", "default_model": "gemini-flash"},
+            "workspace": {"default_provider": "codex", "default_model": "codex-mini"},
         }
 
     def execute(self, **payload):
@@ -138,6 +140,12 @@ class ClimateServiceTests(unittest.TestCase):
         self.assertEqual([row["id"] for row in self.service.repositories("personal")], ["personal-repo"])
         boot = self.service.bootstrap("work")
         self.assertEqual(boot["coding_defaults"]["default_provider"], "codex")
+        self.assertEqual(boot["coding_defaults"]["workspace"]["default_provider"], "codex")
+        self.assertEqual(boot["coding_defaults"]["chat"]["default_provider"], "gemini")
+        self.assertNotEqual(
+            boot["coding_defaults"]["chat"]["default_provider"],
+            boot["coding_defaults"]["workspace"]["default_provider"],
+        )
         with self.assertRaises(ClimateCodingError) as ctx:
             self.service.require_repo("personal", "work-repo")
         self.assertEqual(ctx.exception.code, "workspace_isolation")
@@ -569,6 +577,10 @@ class ClimateUiContractTests(unittest.TestCase):
         self.assertIn("hydrateTokenEfficiency", script)
         self.assertIn(".climate-token-efficiency", css)
         self.assertIn("selectProvider", script)
+        self.assertIn("workspaceSurfaceDefaults", script)
+        self.assertIn("preferredWorkspaceModel", script)
+        self.assertIn("listedModelOrAuto", script)
+        self.assertNotIn("chatSurfaceDefaults", script)
         self.assertIn("enhanceClimateSelect", script)
         self.assertIn("--cl-font-ui", css)
         self.assertIn("climate-dd-menu", css)

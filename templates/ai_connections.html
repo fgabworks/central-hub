@@ -1,17 +1,24 @@
 {% extends "base.html" %}
 {% block title %}AI Connections - {{ app_name }}{% endblock %}
 {% block content %}
-{% set coding_ids = connections|map(attribute='id')|list %}
-{% set ns = namespace(connected=0, not_connected=0, unavailable=0, error=0, last='') %}
-{% for item in connections %}
-  {% if item.state == 'connected' %}
-    {% set ns.connected = ns.connected + 1 %}
-  {% elif item.state == 'error' %}
-    {% set ns.error = ns.error + 1 %}
-  {% elif item.state == 'unavailable' %}
-    {% set ns.unavailable = ns.unavailable + 1 %}
+{% macro aic_logo(item, size=28) %}
+  {% if item.logo %}
+  <img class="aic-logo" src="{{ url_for('static', filename=item.logo) }}" alt="" width="{{ size }}" height="{{ size }}">
   {% else %}
-    {% set ns.not_connected = ns.not_connected + 1 %}
+  <span class="aic-logo-fallback" aria-hidden="true">{{ (item.label or '?')[:1] }}</span>
+  {% endif %}
+{% endmacro %}
+{% set coding_ids = connections|map(attribute='id')|list %}
+{% set ns = namespace(connected=0, available=0, offline=0, error=0, last='') %}
+{% for item in connections %}
+  {% if item.ui_status == 'connected' %}
+    {% set ns.connected = ns.connected + 1 %}
+  {% elif item.ui_status == 'available' %}
+    {% set ns.available = ns.available + 1 %}
+  {% elif item.ui_status == 'error' %}
+    {% set ns.error = ns.error + 1 %}
+  {% else %}
+    {% set ns.offline = ns.offline + 1 %}
   {% endif %}
   {% if item.last_check and item.last_check > ns.last %}
     {% set ns.last = item.last_check %}
@@ -22,11 +29,11 @@
 {% set sh_meta %}
 <div class="aic-summary" id="aic-summary" aria-live="polite">
   <span class="aic-summary-chip is-connected"><i aria-hidden="true"></i>{{ ns.connected }} Connected</span>
-  {% if ns.not_connected %}
-  <span class="aic-summary-chip is-idle"><i aria-hidden="true"></i>{{ ns.not_connected }} Not connected</span>
+  {% if ns.available %}
+  <span class="aic-summary-chip is-available"><i aria-hidden="true"></i>{{ ns.available }} Available</span>
   {% endif %}
-  {% if ns.unavailable %}
-  <span class="aic-summary-chip is-offline"><i aria-hidden="true"></i>{{ ns.unavailable }} Unavailable</span>
+  {% if ns.offline %}
+  <span class="aic-summary-chip is-offline"><i aria-hidden="true"></i>{{ ns.offline }} Offline</span>
   {% endif %}
   {% if ns.error %}
   <span class="aic-summary-chip is-error"><i aria-hidden="true"></i>{{ ns.error }} Error</span>
@@ -47,34 +54,52 @@
         <path d="M6 7V5.5a2 2 0 0 1 4 0V7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
       </svg>
     </span>
-    <p>
-      Credentials remain in provider-managed CLI storage. CLIMATE never accepts passwords, browser cookies, private sessions, or API keys on this page.
-    </p>
+    <div class="aic-notice-copy">
+      <p>
+        Credentials are stored locally on this CLIMATE server. API keys are never exposed after saving or stored in conversation records. CLI logins remain in provider-managed CLI storage.
+      </p>
+      <p class="aic-notice-note">Storage is local/server-side, not encrypted at rest.</p>
+    </div>
+    <a class="aic-learn-more" href="{{ url_for('settings_ai_providers') }}">Learn more</a>
   </div>
 
   <section class="aic-section" aria-labelledby="aic-providers-title">
-    <h2 class="aic-section-title" id="aic-providers-title">Providers</h2>
+    <div class="aic-section-head">
+      <h2 class="aic-section-title" id="aic-providers-title">Providers</h2>
+      <p class="muted">Manage and test your AI provider connections.</p>
+    </div>
     <div class="aic-provider-grid connections-list" id="ai-connections" data-coding="1">
       {% for item in connections %}
-      <article class="aic-card connection-row" data-provider-id="{{ item.id }}">
+      <article
+        class="aic-card connection-row"
+        data-provider-id="{{ item.id }}"
+        data-credential-type="{{ item.credential_type or 'cli' }}"
+        data-configured="{{ '1' if item.key_configured else '0' }}"
+        data-display-name="{{ item.label }}"
+        data-logo="{{ url_for('static', filename=item.logo) if item.logo else '' }}"
+      >
         <div class="aic-card-head connection-main">
-          <div>
-            <h2>{{ item.label }}</h2>
+          <div class="aic-identity">
+            {{ aic_logo(item) }}
+            <div>
+              <h2>{{ item.label }}</h2>
+              {% if item.vendor %}<p class="muted aic-vendor">{{ item.vendor }}</p>{% endif %}
+            </div>
           </div>
-          <span class="status-pill connection-status status-{{ item.state|replace('_', '-') }}{% if not item.installed %} status-unavailable{% endif %}">{{ item.summary_label or item.status }}</span>
+          <span class="status-pill connection-status status-{{ (item.ui_status or item.state)|replace('_', '-') }}">{{ item.ui_status_label or item.summary_label or item.status }}</span>
         </div>
-        <dl class="aic-card-facts">
+        <dl class="aic-card-facts aic-card-facts-main">
           <div>
-            <dt>Auth</dt>
-            <dd>{{ item.authentication_method or '—' }}</dd>
+            <dt>Connection method</dt>
+            <dd><span class="aic-method is-{{ item.credential_type or 'cli' }}">{{ item.method_label or 'CLI' }}</span></dd>
           </div>
           <div>
-            <dt>Models</dt>
-            <dd class="connection-model-count">{% if item.models %}{{ item.models|length }} available{% else %}—{% endif %}</dd>
+            <dt>Models available</dt>
+            <dd class="connection-model-count">{% if item.models %}{{ item.models|length }}{% else %}—{% endif %}</dd>
           </div>
           <div>
-            <dt>Last Checked</dt>
-            <dd class="connection-last-check" data-timestamp="{{ item.last_check or '' }}">{{ item.last_check or 'Never' }}</dd>
+            <dt>Last tested</dt>
+            <dd class="connection-last-check" data-timestamp="{{ item.last_successful_check or item.last_check or '' }}">{{ item.last_successful_check or item.last_check or '—' }}</dd>
           </div>
         </dl>
         <details class="aic-more">
@@ -88,6 +113,7 @@
             <div><dt>Runtime health</dt><dd class="connection-runtime-health">{{ item.runtime_health or '—' }}{% if item.discovery_source %} · {{ item.discovery_source }}{% endif %}</dd></div>
             <div><dt>CLI</dt><dd class="connection-cli">{{ item.cli_commands|join(', ') if item.cli_commands else '—' }}</dd></div>
             <div><dt>Account</dt><dd class="connection-account">{{ item.account_label or '—' }}</dd></div>
+            <div><dt>Last Checked</dt><dd>{{ item.last_check or 'Never' }}</dd></div>
             <div><dt>Credential storage</dt><dd>{{ item.credential_storage }}</dd></div>
           </dl>
           <p class="connection-detail">{{ item.detail }}{% if item.install_help and not item.installed %} — {{ item.install_help }}{% endif %}</p>
@@ -97,77 +123,138 @@
           </div>
         </details>
         <div class="aic-card-actions connection-actions">
-          {% if not item.installed %}
-          <button type="button" class="btn btn-sm btn-primary" data-action="install_help">Install help</button>
-          <button type="button" class="btn btn-sm" data-action="refresh-status">Refresh Status</button>
-          {% else %}
-          <button type="button" class="btn btn-sm" data-action="test">
+          {% set offline = (not item.installed) or item.ui_status == 'offline' %}
+          {% set test_disabled = offline or (item.credential_type == 'api_key' and not item.key_configured) %}
+          <button type="button" class="btn btn-sm" data-action="test"{% if test_disabled %} disabled{% endif %}>
             <span aria-hidden="true">✓</span> Test Connection
           </button>
-          {% if item.state != 'connected' %}
-          <button type="button" class="btn btn-sm btn-primary" data-action="connect">Connect</button>
-          {% endif %}
+          <button type="button" class="btn btn-sm" data-action="manage"{% if offline %} disabled{% endif %}>Manage</button>
           <details class="aic-overflow">
             <summary class="btn btn-sm aic-overflow-btn" aria-label="More actions">⋯</summary>
             <div class="aic-overflow-menu">
               <button type="button" class="aic-overflow-item" data-action="refresh-status">Refresh Status</button>
+              {% if item.credential_type == 'api_key' %}
+              <button type="button" class="aic-overflow-item" data-action="set-key">{{ 'Replace Key' if item.key_configured else 'Add Key' }}</button>
+              <button type="button" class="aic-overflow-item" data-action="remove-key"{% if not item.key_configured %} disabled{% endif %}>Remove Key</button>
+              {% elif not item.installed %}
+              <button type="button" class="aic-overflow-item" data-action="install_help">Install help</button>
+              {% endif %}
               {% if item.state == 'connected' %}
               <button type="button" class="aic-overflow-item" data-action="refresh-models">Refresh Models</button>
               <button type="button" class="aic-overflow-item" data-action="reauthenticate">Re-authenticate</button>
+              {% elif item.installed and item.credential_type != 'api_key' %}
+              <button type="button" class="aic-overflow-item" data-action="connect">Connect</button>
               {% endif %}
               <button type="button" class="aic-overflow-item" data-action="disconnect">Disconnect</button>
             </div>
           </details>
-          {% endif %}
         </div>
       </article>
       {% endfor %}
     </div>
   </section>
 
+  {% set chat_defaults = coding_defaults.chat or {} %}
+  {% set workspace_defaults = coding_defaults.workspace or {} %}
+  {% macro aic_provider_select(select_id, current_id) %}
+    {% set current = connections|selectattr('id', 'equalto', current_id)|list %}
+    <div class="aic-select-with-logo">
+      {% if current %}{{ aic_logo(current[0], 22) }}{% else %}<span class="aic-logo-fallback is-empty" aria-hidden="true"></span>{% endif %}
+      <select id="{{ select_id }}" data-surface-provider="{{ select_id.replace('-default-provider', '') }}">
+        <option value="">— none —</option>
+        {% for item in connections %}
+        <option value="{{ item.id }}" data-logo="{{ url_for('static', filename=item.logo) if item.logo else '' }}" {% if current_id == item.id %}selected{% endif %}>{{ item.label }}{% if item.vendor %} ({{ item.vendor }}){% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+  {% endmacro %}
+  {% macro aic_model_field(name, current_provider, saved, extra_attrs='') %}
+    {% set current = connections|selectattr('id', 'equalto', current_provider)|list %}
+    {% set models = (current[0].models or []) if current else [] %}
+    <div class="aic-field" {{ extra_attrs|safe }}>
+      <select class="aic-model-select" id="{{ name }}-select" aria-label="{{ name }} model">
+        <option value="">Auto (use provider default)</option>
+        {% for model in models %}
+        <option value="{{ model }}" {% if saved == model %}selected{% endif %}>{{ model }}</option>
+        {% endfor %}
+        {% if saved and saved not in models %}
+        <option value="{{ saved }}" selected>{{ saved }}</option>
+        {% endif %}
+      </select>
+      <input type="text" class="aic-exact-input" id="{{ name }}-input" value="{{ saved }}" placeholder="Exact model id or leave blank" list="{{ name }}-models" autocomplete="off" spellcheck="false" aria-label="{{ name }} exact model id">
+      <datalist id="{{ name }}-models">
+        {% for model in models %}
+        <option value="{{ model }}"></option>
+        {% endfor %}
+      </datalist>
+    </div>
+  {% endmacro %}
+
   <section class="aic-section" aria-labelledby="aic-defaults-title">
     <div class="aic-defaults card connection-defaults" id="coding-defaults" data-defaults='{{ coding_defaults|tojson }}'>
       <div class="aic-defaults-head">
         <div>
-          <h2 id="aic-defaults-title">Coding Defaults</h2>
-          <p class="muted">Used when Code Workspace has no manual provider/model selection yet. Manual selection remains authoritative.</p>
+          <h2 id="aic-defaults-title">AI Defaults</h2>
+          <p class="muted">Used only when a surface has no manual provider/model selection. Manual selection stays authoritative.</p>
         </div>
       </div>
       <form class="aic-defaults-form coding-defaults-form" id="coding-defaults-form">
-        <label class="aic-field aic-field-wide"><span>Default Coding Provider</span>
-          <select name="default_provider" id="coding-default-provider">
-            <option value="">— none —</option>
-            {% for item in connections %}
-            <option value="{{ item.id }}" {% if coding_defaults.default_provider == item.id %}selected{% endif %}>{{ item.label }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <div class="aic-model-grid">
-          {% for item in connections %}
-          {% set saved = coding_defaults.default_models.get(item.id, '') %}
-          <div class="aic-field" data-default-model-for="{{ item.id }}">
-            <span>{{ item.label }}</span>
-            <select class="aic-model-select" id="default-model-{{ item.id }}" data-model-select="{{ item.id }}" aria-label="{{ item.label }} default model">
-              <option value="">Auto (use provider default)</option>
-              {% for model in item.models or [] %}
-              <option value="{{ model }}" {% if saved == model %}selected{% endif %}>{{ model }}</option>
-              {% endfor %}
-              {% if saved and saved not in (item.models or []) %}
-              <option value="{{ saved }}" selected>{{ saved }}</option>
-              {% endif %}
-            </select>
-            <input type="text" class="aic-exact-input" name="default_model_{{ item.id }}" value="{{ saved }}" placeholder="Exact model id or leave blank" list="models-{{ item.id }}" autocomplete="off" spellcheck="false">
-            <datalist id="models-{{ item.id }}">
-              {% for model in item.models or [] %}
-              <option value="{{ model }}"></option>
-              {% endfor %}
-            </datalist>
+        <div class="aic-surface" data-surface="chat">
+          <h3 id="aic-chat-defaults-title">CLIMATE Chat</h3>
+          <div class="aic-surface-grid">
+            <label class="aic-field"><span>Provider</span>
+              {{ aic_provider_select('chat-default-provider', chat_defaults.default_provider or '') }}
+            </label>
+            <div class="aic-field-stack">
+              <span class="aic-field-caption">Model</span>
+              {{ aic_model_field('chat-default-model', chat_defaults.default_provider or '', chat_defaults.default_model or '', 'data-surface-model="chat"') }}
+            </div>
           </div>
-          {% endfor %}
+        </div>
+        <div class="aic-surface" data-surface="workspace">
+          <h3 id="aic-workspace-defaults-title">Code Workspace</h3>
+          <div class="aic-surface-grid">
+            <label class="aic-field"><span>Provider</span>
+              {{ aic_provider_select('workspace-default-provider', workspace_defaults.default_provider or '') }}
+            </label>
+            <div class="aic-field-stack">
+              <span class="aic-field-caption">Model</span>
+              {{ aic_model_field('workspace-default-model', workspace_defaults.default_provider or '', workspace_defaults.default_model or '', 'data-surface-model="workspace"') }}
+            </div>
+          </div>
+        </div>
+        <div class="aic-overrides">
+          <div>
+            <h3 id="aic-overrides-title">Provider Overrides</h3>
+            <p class="muted">Exact model when that provider is selected and the surface has no model of its own. Auto keeps the provider default.</p>
+          </div>
+          <div class="aic-model-grid">
+            {% for item in connections %}
+            {% set saved = coding_defaults.default_models.get(item.id, '') %}
+            <div class="aic-field" data-default-model-for="{{ item.id }}">
+              <span class="aic-field-label">{{ aic_logo(item, 20) }} {{ item.label }}</span>
+              <select class="aic-model-select" id="default-model-{{ item.id }}" data-model-select="{{ item.id }}" aria-label="{{ item.label }} default model">
+                <option value="">Auto (use provider default)</option>
+                {% for model in item.models or [] %}
+                <option value="{{ model }}" {% if saved == model %}selected{% endif %}>{{ model }}</option>
+                {% endfor %}
+                {% if saved and saved not in (item.models or []) %}
+                <option value="{{ saved }}" selected>{{ saved }}</option>
+                {% endif %}
+              </select>
+              <input type="text" class="aic-exact-input" name="default_model_{{ item.id }}" value="{{ saved }}" placeholder="Exact model id or leave blank" list="models-{{ item.id }}" autocomplete="off" spellcheck="false" aria-label="{{ item.label }} exact model id">
+              <datalist id="models-{{ item.id }}">
+                {% for model in item.models or [] %}
+                <option value="{{ model }}"></option>
+                {% endfor %}
+              </datalist>
+            </div>
+            {% endfor %}
+          </div>
         </div>
         <div class="aic-defaults-actions">
           <span class="muted coding-defaults-status" id="coding-defaults-status" aria-live="polite"></span>
-          <button type="button" class="btn" id="coding-defaults-reset">Reset</button>
+          <button type="button" class="btn" id="coding-defaults-reset">Reset to defaults</button>
           <button type="submit" class="btn btn-primary">Save changes</button>
         </div>
       </form>
@@ -184,13 +271,16 @@
     <summary>Other AI providers ({{ extra_ns.items|length }})</summary>
     <div class="aic-provider-grid connections-list" id="ai-connections-other">
       {% for item in extra_ns.items %}
-      <article class="aic-card connection-row" data-provider-id="{{ item.id }}">
+      <article class="aic-card connection-row" data-provider-id="{{ item.id }}" data-credential-type="{{ item.credential_type or 'cli' }}">
         <div class="aic-card-head connection-main">
-          <div>
-            <h2>{{ item.label }}</h2>
-            <p class="muted">{{ item.authentication_method }}</p>
+          <div class="aic-identity">
+            {{ aic_logo(item) }}
+            <div>
+              <h2>{{ item.label }}</h2>
+              <p class="muted">{{ item.method_label or item.authentication_method }}</p>
+            </div>
           </div>
-          <span class="status-pill connection-status status-{{ item.state|replace('_', '-') }}">{{ item.summary_label or item.status }}</span>
+          <span class="status-pill connection-status status-{{ (item.ui_status or item.state)|replace('_', '-') }}">{{ item.ui_status_label or item.summary_label or item.status }}</span>
         </div>
         <p class="connection-detail">{{ item.detail }}</p>
         <div class="aic-card-actions connection-actions">
@@ -209,10 +299,27 @@
   {% endif %}
   {% endif %}
 
-  <p class="aic-tip"><span aria-hidden="true">💡</span> Tip: Test a connection after any change to ensure CLIMATE can access your provider CLI.</p>
+  <p class="aic-tip"><span aria-hidden="true">💡</span> Tip: Test a connection after any change to ensure CLIMATE can access your provider CLI or API.</p>
 </div>
+
+<dialog id="ai-provider-key-dialog" class="ai-provider-dialog">
+  <form method="dialog" id="ai-provider-key-form" autocomplete="off">
+    <h2 id="ai-provider-key-title">Configure provider</h2>
+    <label>
+      <span>API Key</span>
+      <input type="password" id="ai-provider-key-input" name="api_key" required minlength="8" autocomplete="new-password" spellcheck="false">
+    </label>
+    <p class="muted" id="ai-provider-key-help" role="status" aria-live="polite">
+      The key is stored only on the local CLIMATE server and will not be displayed again after saving. Storage is not encrypted at rest.
+    </p>
+    <div class="ai-provider-dialog-actions">
+      <button type="button" class="btn" id="ai-provider-key-cancel" value="cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" value="save">Save Key</button>
+    </div>
+  </form>
+</dialog>
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/climate_select.js') }}?v=1"></script>
-<script src="{{ url_for('static', filename='js/ai_connections.js') }}?v=cli-conn-4" defer></script>
+<script src="{{ url_for('static', filename='js/ai_connections.js') }}?v=cli-conn-6" defer></script>
 {% endblock %}

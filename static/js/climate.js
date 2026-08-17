@@ -2230,8 +2230,30 @@
     renderChat();
     return msg;
   }
+  function codingDefaults() {
+    return bootstrap.coding_defaults || {};
+  }
+  function workspaceSurfaceDefaults() {
+    var defaults = codingDefaults();
+    return defaults.workspace || {
+      default_provider: defaults.default_provider || "",
+      default_model: ""
+    };
+  }
+  function preferredWorkspaceModel(providerId) {
+    var defaults = codingDefaults();
+    var surface = workspaceSurfaceDefaults();
+    if (surface.default_provider === providerId && surface.default_model) return surface.default_model;
+    return (defaults.default_models || {})[providerId] || "";
+  }
+  function listedModelOrAuto(models, preferred) {
+    var list = models || [];
+    if (preferred && list.indexOf(preferred) >= 0) return preferred;
+    if (!preferred && list.indexOf("__provider_default__") >= 0) return "__provider_default__";
+    return "";
+  }
   function renderProviders() {
-    var providers = bootstrap.providers || []; var defaults = bootstrap.coding_defaults || {};
+    var providers = bootstrap.providers || []; var defaults = codingDefaults();
     var options = providers.map(function (p) {
       return '<option value="' + escapeHtml(p.id) + '" ' + (p.state !== "connected" ? 'data-unavailable="1"' : "") + '>' + escapeHtml(p.label) + '</option>';
     }).join("");
@@ -2250,10 +2272,11 @@
         });
       });
     }
+    var surface = workspaceSurfaceDefaults();
     var saved = providerSelect.dataset.saved;
-    var preferred = saved || defaults.default_provider || "";
+    var preferred = saved || surface.default_provider || defaults.default_provider || "";
     if (preferred && providers.some(function (p) { return p.id === preferred; })) providerSelect.value = preferred;
-    else {
+    else if (!saved && !surface.default_provider) {
       var firstConnected = providers.find(function (p) { return p.state === "connected"; });
       if (firstConnected) providerSelect.value = firstConnected.id;
     }
@@ -2280,8 +2303,6 @@
     opts = opts || {};
     var refresh = !!opts.refresh;
     var p = (bootstrap.providers || []).find(function (row) { return row.id === providerId; });
-    var defaults = bootstrap.coding_defaults || {};
-    var defaultModels = defaults.default_models || {};
     if (providerId) providerSelect.value = providerId;
     if (panelProviderSelect) panelProviderSelect.value = providerSelect.value;
     if (providerCards) providerCards.querySelectorAll("[data-provider]").forEach(function (card) {
@@ -2316,9 +2337,9 @@
       return;
     }
     var cached = state.modelCache[providerSelect.value];
-    var preferred = opts.preserveModel || modelSelect.dataset.saved || defaultModels[providerSelect.value] || "";
+    var preferred = opts.preserveModel || modelSelect.dataset.saved || preferredWorkspaceModel(providerSelect.value) || "";
     if (cached && !refresh) {
-      applyModelOptions(providerSelect.value, cached.models, preferred || cached.recommended);
+      applyModelOptions(providerSelect.value, cached.models, listedModelOrAuto(cached.models, preferred));
       enhanceProviderModelDropdowns();
       return;
     }
@@ -2335,7 +2356,7 @@
         models: data.models || [],
         recommended: data.recommended_model || ""
       };
-      applyModelOptions(providerSelect.value, data.models || [], preferred || data.recommended_model || "");
+      applyModelOptions(providerSelect.value, data.models || [], listedModelOrAuto(data.models || [], preferred));
       if (session) { session.model = modelSelect.value; saveChatStore(); }
       savePrefs();
       enhanceProviderModelDropdowns();

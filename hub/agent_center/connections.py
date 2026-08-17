@@ -5,9 +5,11 @@ from __future__ import annotations
 import os
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable
 
-from hub.agent_center.provider_secrets import redact_known_secrets
+from hub.agent_center.provider_catalog import credential_type_for, env_keys_for
+from hub.agent_center.provider_secrets import configured_env_keys, redact_known_secrets
 from hub.agent_center.redact import redact_text
 from hub.perf import TtlCache, coalesce, record_external, timed
 
@@ -25,8 +27,14 @@ CODING_CLI_PROVIDER_IDS = ("gemini", "codex", "claude-code", "cursor-agent")
 
 PREF_DEFAULT_PROVIDER = "coding_default_provider"
 PREF_DEFAULT_MODEL_PREFIX = "coding_default_model:"
+PREF_CHAT_PROVIDER = "chat_default_provider"
+PREF_CHAT_MODEL = "chat_default_model"
+PREF_WORKSPACE_PROVIDER = "workspace_default_provider"
+PREF_WORKSPACE_MODEL = "workspace_default_model"
+PREF_SURFACE_DEFAULTS_V2 = "ai_surface_defaults_v2"
 
 _STATUS_TTL = float(os.getenv("CENTRAL_HUB_AI_CONNECTION_CACHE_TTL", "60"))
+_STATIC_DIR = Path(__file__).resolve().parents[2] / "static"
 
 
 def _now() -> str:
@@ -142,16 +150,25 @@ class AgentConnectionRegistry:
         return rows
 
     def coding_defaults(self) -> dict[str, Any]:
-        provider = self.store.get_pref(PREF_DEFAULT_PROVIDER, "").strip()
-        if provider not in CODING_CLI_PROVIDER_IDS:
-            provider = ""
+        self._ensure_surface_defaults_migrated()
         models: dict[str, str] = {}
         for agent_id in CODING_CLI_PROVIDER_IDS:
             models[agent_id] = self.store.get_pref(f"{PREF_DEFAULT_MODEL_PREFIX}{agent_id}", "").strip()
+        chat = {
+            "default_provider": self._clean_provider(self.store.get_pref(PREF_CHAT_PROVIDER, "")),
+            "default_model": self.store.get_pref(PREF_CHAT_MODEL, "").strip(),
+        }
+        workspace = {
+            "default_provider": self._clean_provider(self.store.get_pref(PREF_WORKSPACE_PROVIDER, "")),
+            "default_model": self.store.get_pref(PREF_WORKSPACE_MODEL, "").strip(),
+        }
         return {
-            "default_provider": provider,
+            # Legacy alias: Code Workspace provider. Chat is never implied by this field.
+            "default_provider": workspace["default_provider"],
             "default_models": models,
             "providers": list(CODING_CLI_PROVIDER_IDS),
+            "chat": chat,
+            "workspace": workspace,
         }
 
     def set_coding_defaults(
@@ -159,11 +176,20 @@ class AgentConnectionRegistry:
         *,
         default_provider: str | None = None,
         default_models: dict[str, str] | None = None,
+        chat: dict[str, Any] | None = None,
+        workspace: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        if default_provider is not None:
-            value = str(default_provider or "").strip()
-            if value and value not in CODING_CLI_PROVIDER_IDS:
-                raise ValueError("Unknown default coding provider")
+        self._ensure_surface_defaults_migrated()
+        if chat is not None:
+            self._set_surface_defaults(PREF_CHAT_PROVIDER, PREF_CHAT_MODEL, chat)
+        if workspace is not None:
+            provider = self._set_surface_defaults(PREF_WORKSPACE_PROVIDER, PREF_WORKSPACE_MODEL, workspace)
+            if "default_provider" in workspace:
+                self.store.set_pref(PREF_DEFAULT_PROVIDER, provider)
+        elif default_provider is not None:
+            # Legacy callers update Code Workspace only; Chat stays independent.
+            value = self._clean_provider(default_provider, required=True)
+            self.store.set_pref(PREF_WORKSPACE_PROVIDER, value)
             self.store.set_pref(PREF_DEFAULT_PROVIDER, value)
         if default_models:
             for agent_id, model in default_models.items():
@@ -176,6 +202,37 @@ class AgentConnectionRegistry:
                 detail={"defaults": self.coding_defaults()},
             )
         return self.coding_defaults()
+
+    def _ensure_surface_defaults_migrated(self) -> None:
+        if self.store.get_pref(PREF_SURFACE_DEFAULTS_V2, "").strip() == "1":
+            return
+        legacy_provider = self._clean_provider(self.store.get_pref(PREF_DEFAULT_PROVIDER, ""))
+        self.store.set_pref(PREF_CHAT_PROVIDER, legacy_provider)
+        self.store.set_pref(PREF_WORKSPACE_PROVIDER, legacy_provider)
+        self.store.set_pref(PREF_CHAT_MODEL, "")
+        self.store.set_pref(PREF_WORKSPACE_MODEL, "")
+        self.store.set_pref(PREF_SURFACE_DEFAULTS_V2, "1")
+
+    def _set_surface_defaults(self, provider_key: str, model_key: str, payload: Any) -> str:
+        if not isinstance(payload, dict):
+            raise ValueError("Surface defaults must be an object")
+        provider = self.store.get_pref(provider_key, "")
+        if "default_provider" in payload:
+            provider = self._clean_provider(payload.get("default_provider"), required=True)
+            self.store.set_pref(provider_key, provider)
+        if "default_model" in payload:
+            self.store.set_pref(model_key, str(payload.get("default_model") or "").strip())
+        return self._clean_provider(provider)
+
+    def _clean_provider(self, value: Any, *, required: bool = False) -> str:
+        provider = str(value or "").strip()
+        if not provider:
+            return ""
+        if provider not in CODING_CLI_PROVIDER_IDS:
+            if required:
+                raise ValueError("Unknown default coding provider")
+            return ""
+        return provider
 
     def action(self, agent_id: str, action: str) -> dict[str, Any]:
         adapter = self._adapter(agent_id)
@@ -319,6 +376,7 @@ class AgentConnectionRegistry:
                 pass
         status["summary_label"] = _summary_label(status)
         status["primary_action"] = _primary_action(status)
+        _attach_presentation(adapter, status)
         status["from_cache"] = True
         status["cache_fresh"] = False
         status["pending_refresh"] = True
@@ -379,6 +437,7 @@ class AgentConnectionRegistry:
         status.setdefault("models_error", "")
         status["summary_label"] = _summary_label(status)
         status["primary_action"] = _primary_action(status)
+        _attach_presentation(adapter, status)
         return status
 
     def _adapter(self, agent_id: str) -> Any:
@@ -408,6 +467,35 @@ class AgentConnectionRegistry:
             "summary_label": "",
             "primary_action": "connect",
         }
+
+
+def _attach_presentation(adapter: Any, status: dict[str, Any]) -> None:
+    """UI-only facts derived from the adapter. Never includes secret values."""
+    cred_type = credential_type_for(adapter)
+    status["credential_type"] = cred_type
+    status["method_label"] = "API Key" if cred_type == "api_key" else "CLI"
+    status["vendor"] = str(getattr(adapter, "settings_vendor", "") or "")
+    logo = str(getattr(adapter, "settings_logo", "") or "").strip()
+    if not logo:
+        logo = f"img/providers/{adapter.descriptor.id}.svg"
+    logo = logo.replace("\\", "/").lstrip("/")
+    status["logo"] = logo if (_STATIC_DIR / logo).is_file() else ""
+    status["key_configured"] = (
+        bool(configured_env_keys(env_keys_for(adapter))) if cred_type == "api_key" else False
+    )
+    state = str(status.get("state") or "")
+    if state == "connected":
+        status["ui_status"] = "connected"
+        status["ui_status_label"] = "Connected"
+    elif state == "error":
+        status["ui_status"] = "error"
+        status["ui_status_label"] = "Error"
+    elif (not status.get("installed")) or state == "unavailable":
+        status["ui_status"] = "offline"
+        status["ui_status_label"] = "Offline"
+    else:
+        status["ui_status"] = "available"
+        status["ui_status_label"] = "Available"
 
 
 def _summary_label(status: dict[str, Any]) -> str:

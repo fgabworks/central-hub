@@ -12,6 +12,8 @@ class CursorAgentAdapter(BaseCliAdapter):
     _CANDIDATES = ("agent", "cursor-agent")
     authentication_method = "Official Cursor Agent CLI login (`agent login`)"
     credential_storage = "Cursor Agent CLI managed. Hub never stores Cursor credentials."
+    settings_vendor = "Cursor"
+    settings_logo = "img/providers/cursor-agent.svg"
 
     def _authentication_probe(self, executable: str) -> dict[str, Any]:
         result = self._run_probe([executable, "status"])
