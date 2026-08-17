@@ -1,0 +1,408 @@
+{
+  "label": "vanta-arctic-nav",
+  "base": "http://127.0.0.1:8765",
+  "pages": {
+    "/": {
+      "url": "http://127.0.0.1:8765/work/climate",
+      "title": "VANTA / DOH / PMNP Live Processing · CLIMATE",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "sidebarBrand": {
+        "w": 169,
+        "h": 48,
+        "t": 0,
+        "l": 0,
+        "text": "CLIMATE Integrated Intelligence System"
+      },
+      "brandMark": {
+        "w": 22,
+        "h": 22,
+        "t": 13,
+        "l": 8,
+        "text": ""
+      },
+      "topbarBrand": null,
+      "climateBrand": {
+        "w": 199,
+        "h": 31,
+        "t": 58,
+        "l": 184,
+        "text": "CLIMATE VANTA / DOH / PMNP Live Processing"
+      },
+      "climateWelcomeLogo": {
+        "w": 40,
+        "h": 40,
+        "t": 354,
+        "l": 681,
+        "text": ""
+      },
+      "explorer": {
+        "w": 200,
+        "h": 774,
+        "t": 100,
+        "l": 170,
+        "text": "EXPLORER ↻ ⌕ 0 files selected for AI context Show excluded files ▸ .claude settings.local.json ▸ .tmp-tests ▸ _support _"
+      },
+      "editor": {
+        "w": 654,
+        "h": 774,
+        "t": 100,
+        "l": 374,
+        "text": "Open a file from Explorer Open a file from Explorer CLIMATE VANTA / DOH / PMNP LIVE PROCESSING Open a repository file "
+      },
+      "ai": {
+        "w": 360,
+        "h": 774,
+        "t": 100,
+        "l": 1032,
+        "text": "AiriX · CLIMATE CHAT 0 tokens Connected + ⋯ × New chat AiriX Ask about the active repository. The selected provider powe"
+      },
+      "bottom": {
+        "w": 654,
+        "h": 160,
+        "t": 714,
+        "l": 374,
+        "text": "PROBLEMS 0 OUTPUT DEBUG CONSOLE TERMINAL PORTS Tests Git × 0 errors, 0 warnings Refresh No problems detected"
+      },
+      "bottomClosed": false,
+      "aiMaximized": false,
+      "providerCards": 4,
+      "providerSelect": true,
+      "modelSelect": true,
+      "workspaceSwitcher": [
+        "VANTA",
+        "ARCTIC"
+      ],
+      "firstNav": "Dashboard",
+      "wcHostVisible": false,
+      "climateBrandCount": 3,
+      "bodyClasses": "climate-system-shell theme-work enable-motion underline-links",
+      "appShellClasses": "app-shell has-activity-rail"
+    },
+    "/work": {
+      "url": "http://127.0.0.1:8765/work",
+      "title": "Work Dashboard · CLIMATE",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "sidebarBrand": {
+        "w": 169,
+        "h": 48,
+        "t": 0,
+        "l": 0,
+        "text": "CLIMATE Integrated Intelligence System"
+      },
+      "brandMark": {
+        "w": 22,
+        "h": 22,
+        "t": 13,
+        "l": 8,
+        "text": ""
+      },
+      "topbarBrand": null,
+      "climateBrand": null,
+      "climateWelcomeLogo": null,
+      "explorer": null,
+      "editor": null,
+      "ai": null,
+      "bottom": null,
+      "bottomClosed": false,
+      "aiMaximized": false,
+      "providerCards": 0,
+      "providerSelect": false,
+      "modelSelect": false,
+      "workspaceSwitcher": [
+        "VANTA",
+        "ARCTIC"
+      ],
+      "firstNav": "Dashboard",
+      "wcHostVisible": true,
+      "climateBrandCount": 1,
+      "bodyClasses": "climate-system-shell theme-work",
+      "appShellClasses": "app-shell has-activity-rail has-ad-dock is-wc-open"
+    },
+    "/work/climate": {
+      "url": "http://127.0.0.1:8765/work/climate",
+      "title": "VANTA / DOH / PMNP Live Processing · CLIMATE",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "sidebarBrand": {
+        "w": 169,
+        "h": 48,
+        "t": 0,
+        "l": 0,
+        "text": "CLIMATE Integrated Intelligence System"
+      },
+      "brandMark": {
+        "w": 22,
+        "h": 22,
+        "t": 13,
+        "l": 8,
+        "text": ""
+      },
+      "topbarBrand": null,
+      "climateBrand": {
+        "w": 199,
+        "h": 31,
+        "t": 58,
+        "l": 184,
+        "text": "CLIMATE VANTA / DOH / PMNP Live Processing"
+      },
+      "climateWelcomeLogo": {
+        "w": 40,
+        "h": 40,
+        "t": 354,
+        "l": 681,
+        "text": ""
+      },
+      "explorer": {
+        "w": 200,
+        "h": 774,
+        "t": 100,
+        "l": 170,
+        "text": "EXPLORER ↻ ⌕ 0 files selected for AI context Show excluded files ▸ .claude settings.local.json ▸ .tmp-tests ▸ _support _"
+      },
+      "editor": {
+        "w": 654,
+        "h": 774,
+        "t": 100,
+        "l": 374,
+        "text": "Open a file from Explorer Open a file from Explorer CLIMATE VANTA / DOH / PMNP LIVE PROCESSING Open a repository file "
+      },
+      "ai": {
+        "w": 360,
+        "h": 774,
+        "t": 100,
+        "l": 1032,
+        "text": "AiriX · CLIMATE CHAT 0 tokens Connected + ⋯ × New chat AiriX Ask about the active repository. The selected provider powe"
+      },
+      "bottom": {
+        "w": 654,
+        "h": 160,
+        "t": 714,
+        "l": 374,
+        "text": "PROBLEMS 0 OUTPUT DEBUG CONSOLE TERMINAL PORTS Tests Git × 0 errors, 0 warnings Refresh No problems detected"
+      },
+      "bottomClosed": false,
+      "aiMaximized": false,
+      "providerCards": 4,
+      "providerSelect": true,
+      "modelSelect": true,
+      "workspaceSwitcher": [
+        "VANTA",
+        "ARCTIC"
+      ],
+      "firstNav": "Dashboard",
+      "wcHostVisible": false,
+      "climateBrandCount": 3,
+      "bodyClasses": "climate-system-shell theme-work enable-motion underline-links",
+      "appShellClasses": "app-shell has-activity-rail"
+    },
+    "/personal": {
+      "url": "http://127.0.0.1:8765/personal",
+      "title": "Personal Dashboard · CLIMATE",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "sidebarBrand": {
+        "w": 169,
+        "h": 48,
+        "t": 0,
+        "l": 0,
+        "text": "CLIMATE Integrated Intelligence System"
+      },
+      "brandMark": {
+        "w": 22,
+        "h": 22,
+        "t": 13,
+        "l": 8,
+        "text": ""
+      },
+      "topbarBrand": null,
+      "climateBrand": null,
+      "climateWelcomeLogo": null,
+      "explorer": null,
+      "editor": null,
+      "ai": null,
+      "bottom": null,
+      "bottomClosed": false,
+      "aiMaximized": false,
+      "providerCards": 0,
+      "providerSelect": false,
+      "modelSelect": false,
+      "workspaceSwitcher": [
+        "VANTA",
+        "ARCTIC"
+      ],
+      "firstNav": "Dashboard",
+      "wcHostVisible": false,
+      "climateBrandCount": 1,
+      "bodyClasses": "climate-system-shell theme-personal",
+      "appShellClasses": "app-shell has-activity-rail has-ad-dock"
+    },
+    "bottom_collapsed": {
+      "url": "http://127.0.0.1:8765/work/climate",
+      "title": "VANTA / DOH / PMNP Live Processing · CLIMATE",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "sidebarBrand": {
+        "w": 169,
+        "h": 48,
+        "t": 0,
+        "l": 0,
+        "text": "CLIMATE Integrated Intelligence System"
+      },
+      "brandMark": {
+        "w": 22,
+        "h": 22,
+        "t": 13,
+        "l": 8,
+        "text": ""
+      },
+      "topbarBrand": null,
+      "climateBrand": {
+        "w": 199,
+        "h": 31,
+        "t": 58,
+        "l": 184,
+        "text": "CLIMATE VANTA / DOH / PMNP Live Processing"
+      },
+      "climateWelcomeLogo": {
+        "w": 40,
+        "h": 40,
+        "t": 436,
+        "l": 681,
+        "text": ""
+      },
+      "explorer": {
+        "w": 200,
+        "h": 774,
+        "t": 100,
+        "l": 170,
+        "text": "EXPLORER ↻ ⌕ 0 files selected for AI context Show excluded files ▸ .claude settings.local.json ▸ .tmp-tests ▸ _support _"
+      },
+      "editor": {
+        "w": 654,
+        "h": 774,
+        "t": 100,
+        "l": 374,
+        "text": "Open a file from Explorer Open a file from Explorer CLIMATE VANTA / DOH / PMNP LIVE PROCESSING Open a repository file "
+      },
+      "ai": {
+        "w": 360,
+        "h": 774,
+        "t": 100,
+        "l": 1032,
+        "text": "AiriX · CLIMATE CHAT 0 tokens Connected + ⋯ × New chat AiriX Ask about the active repository. The selected provider powe"
+      },
+      "bottom": {
+        "w": 0,
+        "h": 0,
+        "t": 0,
+        "l": 0,
+        "text": " Problems 0 Output Debug Console Terminal Ports 0 T"
+      },
+      "bottomClosed": true,
+      "aiMaximized": false,
+      "providerCards": 4,
+      "providerSelect": true,
+      "modelSelect": true,
+      "workspaceSwitcher": [
+        "VANTA",
+        "ARCTIC"
+      ],
+      "firstNav": "Dashboard",
+      "wcHostVisible": false,
+      "climateBrandCount": 3,
+      "bodyClasses": "climate-system-shell theme-work enable-motion underline-links",
+      "appShellClasses": "app-shell has-activity-rail"
+    },
+    "ai_maximized": {
+      "url": "http://127.0.0.1:8765/work/climate",
+      "title": "VANTA / DOH / PMNP Live Processing · CLIMATE",
+      "viewport": {
+        "w": 1440,
+        "h": 900
+      },
+      "sidebarBrand": {
+        "w": 169,
+        "h": 48,
+        "t": 0,
+        "l": 0,
+        "text": "CLIMATE Integrated Intelligence System"
+      },
+      "brandMark": {
+        "w": 22,
+        "h": 22,
+        "t": 13,
+        "l": 8,
+        "text": ""
+      },
+      "topbarBrand": null,
+      "climateBrand": {
+        "w": 199,
+        "h": 31,
+        "t": 58,
+        "l": 184,
+        "text": "CLIMATE VANTA / DOH / PMNP Live Processing"
+      },
+      "climateWelcomeLogo": {
+        "w": 40,
+        "h": 40,
+        "t": 354,
+        "l": 537,
+        "text": ""
+      },
+      "explorer": {
+        "w": 200,
+        "h": 774,
+        "t": 100,
+        "l": 170,
+        "text": "EXPLORER ↻ ⌕ 0 files selected for AI context Show excluded files ▸ .claude settings.local.json ▸ .tmp-tests ▸ _support _"
+      },
+      "editor": {
+        "w": 366,
+        "h": 774,
+        "t": 100,
+        "l": 374,
+        "text": "Open a file from Explorer Open a file from Explorer CLIMATE VANTA / DOH / PMNP LIVE PROCESSING Open a repository file "
+      },
+      "ai": {
+        "w": 648,
+        "h": 774,
+        "t": 100,
+        "l": 744,
+        "text": "AiriX · CLIMATE CHAT 0 tokens Connected + New Chat ◷ ⋯ × New chat ✎ AiriX Ask about the active repository. The selected "
+      },
+      "bottom": {
+        "w": 366,
+        "h": 160,
+        "t": 714,
+        "l": 374,
+        "text": "PROBLEMS 0 OUTPUT DEBUG CONSOLE TERMINAL PORTS Tests Git × 0 errors, 0 warnings Refresh No problems detected"
+      },
+      "bottomClosed": false,
+      "aiMaximized": true,
+      "providerCards": 4,
+      "providerSelect": true,
+      "modelSelect": true,
+      "workspaceSwitcher": [
+        "VANTA",
+        "ARCTIC"
+      ],
+      "firstNav": "Dashboard",
+      "wcHostVisible": false,
+      "climateBrandCount": 3,
+      "bodyClasses": "climate-system-shell theme-work enable-motion underline-links",
+      "appShellClasses": "app-shell has-activity-rail"
+    }
+  }
+}

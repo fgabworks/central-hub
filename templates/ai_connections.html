@@ -1,120 +1,218 @@
 {% extends "base.html" %}
 {% block title %}AI Connections - {{ app_name }}{% endblock %}
 {% block content %}
+{% set coding_ids = connections|map(attribute='id')|list %}
+{% set ns = namespace(connected=0, not_connected=0, unavailable=0, error=0, last='') %}
+{% for item in connections %}
+  {% if item.state == 'connected' %}
+    {% set ns.connected = ns.connected + 1 %}
+  {% elif item.state == 'error' %}
+    {% set ns.error = ns.error + 1 %}
+  {% elif item.state == 'unavailable' %}
+    {% set ns.unavailable = ns.unavailable + 1 %}
+  {% else %}
+    {% set ns.not_connected = ns.not_connected + 1 %}
+  {% endif %}
+  {% if item.last_check and item.last_check > ns.last %}
+    {% set ns.last = item.last_check %}
+  {% endif %}
+{% endfor %}
 {% set sh_title = "AI Connections" %}
-{% set sh_info = "Manage CLIMATE coding providers once, then select them in Code Workspace." %}
+{% set sh_info = "Configure AI providers and default models used across CLIMATE." %}
+{% set sh_meta %}
+<div class="aic-summary" id="aic-summary" aria-live="polite">
+  <span class="aic-summary-chip is-connected"><i aria-hidden="true"></i>{{ ns.connected }} Connected</span>
+  {% if ns.not_connected %}
+  <span class="aic-summary-chip is-idle"><i aria-hidden="true"></i>{{ ns.not_connected }} Not connected</span>
+  {% endif %}
+  {% if ns.unavailable %}
+  <span class="aic-summary-chip is-offline"><i aria-hidden="true"></i>{{ ns.unavailable }} Unavailable</span>
+  {% endif %}
+  {% if ns.error %}
+  <span class="aic-summary-chip is-error"><i aria-hidden="true"></i>{{ ns.error }} Error</span>
+  {% endif %}
+  <span class="aic-summary-checked">Last checked <time class="aic-last-global" datetime="{{ ns.last }}">{{ ns.last or 'Never' }}</time></span>
+  <button type="button" class="aic-icon-btn" id="aic-refresh-all" title="Refresh provider status" aria-label="Refresh provider status">↻</button>
+</div>
+{% endset %}
 {% include "partials/section_header.html" %}
 
-<div class="agent-safety" role="status">
-  Credentials remain in provider-managed CLI storage. CLIMATE never accepts passwords, browser cookies, private sessions, or API keys on this page.
-</div>
+<div class="aic-page">
+  <p class="aic-lede">Configure AI providers and default models used across CLIMATE.</p>
 
-<section class="card connection-defaults" id="coding-defaults" data-defaults='{{ coding_defaults|tojson }}'>
-  <div class="connection-main">
-    <div>
-      <h2>CLIMATE coding defaults</h2>
-      <p class="muted">Used when Code Workspace has no manual provider/model selection yet. Manual selection remains authoritative.</p>
-    </div>
+  <div class="aic-notice" role="status">
+    <span class="aic-notice-ico" aria-hidden="true">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <rect x="4" y="7" width="8" height="7" rx="1.5" stroke="currentColor" stroke-width="1.4"/>
+        <path d="M6 7V5.5a2 2 0 0 1 4 0V7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>
+    </span>
+    <p>
+      Credentials remain in provider-managed CLI storage. CLIMATE never accepts passwords, browser cookies, private sessions, or API keys on this page.
+    </p>
   </div>
-  <form class="coding-defaults-form builder-form" id="coding-defaults-form">
-    <label><span>Default Coding Provider</span>
-      <select name="default_provider" id="coding-default-provider">
-        <option value="">— none —</option>
-        {% for item in connections %}
-        <option value="{{ item.id }}" {% if coding_defaults.default_provider == item.id %}selected{% endif %}>{{ item.label }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    {% for item in connections %}
-    <label data-default-model-for="{{ item.id }}"><span>Default Model · {{ item.label }}</span>
-      <input type="text" name="default_model_{{ item.id }}" value="{{ coding_defaults.default_models.get(item.id, '') }}" placeholder="Exact model id or leave blank" list="models-{{ item.id }}">
-      <datalist id="models-{{ item.id }}">
-        {% for model in item.models or [] %}
-        <option value="{{ model }}"></option>
-        {% endfor %}
-      </datalist>
-    </label>
-    {% endfor %}
-    <button type="submit" class="btn btn-primary">Save defaults</button>
-    <span class="muted coding-defaults-status" id="coding-defaults-status" aria-live="polite"></span>
-  </form>
-</section>
 
-<div class="connections-list" id="ai-connections" data-coding="1">
-  {% for item in connections %}
-  <section class="connection-row card" data-provider-id="{{ item.id }}">
-    <div class="connection-main">
-      <div>
-        <h2>{{ item.label }}</h2>
-        <p class="muted">{{ item.authentication_method }}</p>
-      </div>
-      <span class="status-pill connection-status status-{{ item.state|replace('_', '-') }}">{{ item.summary_label or item.status }}</span>
-    </div>
-    <dl class="connection-facts">
-      <div><dt>Installed</dt><dd class="connection-installed">{{ 'Installed' if item.installed else 'Not Installed' }}</dd></div>
-      <div><dt>Connected</dt><dd class="connection-authenticated">{{ 'Connected' if item.authenticated and item.state == 'connected' else 'Not Connected' }}</dd></div>
-      <div><dt>Available</dt><dd class="connection-available">{{ 'Yes' if item.available else 'No' }}</dd></div>
-      <div><dt>Version</dt><dd class="connection-version">{{ item.version or '—' }}</dd></div>
-      <div><dt>Executable</dt><dd class="connection-executable mono">{{ item.executable_path or '—' }}</dd></div>
-      <div><dt>Runtime health</dt><dd class="connection-runtime-health">{{ item.runtime_health or '—' }}{% if item.discovery_source %} · {{ item.discovery_source }}{% endif %}</dd></div>
-      <div><dt>CLI</dt><dd class="connection-cli">{{ item.cli_commands|join(', ') if item.cli_commands else '—' }}</dd></div>
-      <div><dt>Account</dt><dd class="connection-account">{{ item.account_label or '—' }}</dd></div>
-      <div><dt>Last Checked</dt><dd class="connection-last-check">{{ item.last_check or 'Never' }}</dd></div>
-      <div><dt>Credential storage</dt><dd>{{ item.credential_storage }}</dd></div>
-    </dl>
-    <p class="connection-detail">{{ item.detail }}{% if item.install_help and not item.installed %} — {{ item.install_help }}{% endif %}</p>
-    <div class="connection-models">
-      <strong>Models</strong>
-      <p class="muted connection-models-list">{% if item.models %}{{ item.models|join(', ') }}{% else %}Connect, then Refresh Status / Refresh Models{% endif %}</p>
-    </div>
-    <div class="connection-actions">
-      {% if not item.installed %}
-      <button type="button" class="btn btn-primary" data-action="install_help">Install help</button>
-      <button type="button" class="btn" data-action="refresh-status">Refresh Status</button>
-      {% elif item.state == 'connected' %}
-      <button type="button" class="btn" data-action="refresh-status">Refresh Status</button>
-      <button type="button" class="btn" data-action="refresh-models">Refresh Models</button>
-      <button type="button" class="btn" data-action="reauthenticate">Re-authenticate</button>
-      <button type="button" class="btn" data-action="disconnect">Disconnect</button>
-      {% else %}
-      <button type="button" class="btn btn-primary" data-action="connect">Connect</button>
-      <button type="button" class="btn" data-action="refresh-status">Refresh Status</button>
-      <button type="button" class="btn" data-action="disconnect">Disconnect</button>
-      {% endif %}
+  <section class="aic-section" aria-labelledby="aic-providers-title">
+    <h2 class="aic-section-title" id="aic-providers-title">Providers</h2>
+    <div class="aic-provider-grid connections-list" id="ai-connections" data-coding="1">
+      {% for item in connections %}
+      <article class="aic-card connection-row" data-provider-id="{{ item.id }}">
+        <div class="aic-card-head connection-main">
+          <div>
+            <h2>{{ item.label }}</h2>
+          </div>
+          <span class="status-pill connection-status status-{{ item.state|replace('_', '-') }}{% if not item.installed %} status-unavailable{% endif %}">{{ item.summary_label or item.status }}</span>
+        </div>
+        <dl class="aic-card-facts">
+          <div>
+            <dt>Auth</dt>
+            <dd>{{ item.authentication_method or '—' }}</dd>
+          </div>
+          <div>
+            <dt>Models</dt>
+            <dd class="connection-model-count">{% if item.models %}{{ item.models|length }} available{% else %}—{% endif %}</dd>
+          </div>
+          <div>
+            <dt>Last Checked</dt>
+            <dd class="connection-last-check" data-timestamp="{{ item.last_check or '' }}">{{ item.last_check or 'Never' }}</dd>
+          </div>
+        </dl>
+        <details class="aic-more">
+          <summary>Details</summary>
+          <dl class="aic-card-facts aic-card-facts-extra">
+            <div><dt>Installed</dt><dd class="connection-installed">{{ 'Installed' if item.installed else 'Not Installed' }}</dd></div>
+            <div><dt>Connected</dt><dd class="connection-authenticated">{{ 'Connected' if item.authenticated and item.state == 'connected' else 'Not Connected' }}</dd></div>
+            <div><dt>Available</dt><dd class="connection-available">{{ 'Yes' if item.available else 'No' }}</dd></div>
+            <div><dt>Version</dt><dd class="connection-version">{{ item.version or '—' }}</dd></div>
+            <div><dt>Executable</dt><dd class="connection-executable mono">{{ item.executable_path or '—' }}</dd></div>
+            <div><dt>Runtime health</dt><dd class="connection-runtime-health">{{ item.runtime_health or '—' }}{% if item.discovery_source %} · {{ item.discovery_source }}{% endif %}</dd></div>
+            <div><dt>CLI</dt><dd class="connection-cli">{{ item.cli_commands|join(', ') if item.cli_commands else '—' }}</dd></div>
+            <div><dt>Account</dt><dd class="connection-account">{{ item.account_label or '—' }}</dd></div>
+            <div><dt>Credential storage</dt><dd>{{ item.credential_storage }}</dd></div>
+          </dl>
+          <p class="connection-detail">{{ item.detail }}{% if item.install_help and not item.installed %} — {{ item.install_help }}{% endif %}</p>
+          <div class="connection-models">
+            <strong>Models</strong>
+            <p class="muted connection-models-list">{% if item.models %}{{ item.models|join(', ') }}{% else %}Connect, then Refresh Status / Refresh Models{% endif %}</p>
+          </div>
+        </details>
+        <div class="aic-card-actions connection-actions">
+          {% if not item.installed %}
+          <button type="button" class="btn btn-sm btn-primary" data-action="install_help">Install help</button>
+          <button type="button" class="btn btn-sm" data-action="refresh-status">Refresh Status</button>
+          {% else %}
+          <button type="button" class="btn btn-sm" data-action="test">
+            <span aria-hidden="true">✓</span> Test Connection
+          </button>
+          {% if item.state != 'connected' %}
+          <button type="button" class="btn btn-sm btn-primary" data-action="connect">Connect</button>
+          {% endif %}
+          <details class="aic-overflow">
+            <summary class="btn btn-sm aic-overflow-btn" aria-label="More actions">⋯</summary>
+            <div class="aic-overflow-menu">
+              <button type="button" class="aic-overflow-item" data-action="refresh-status">Refresh Status</button>
+              {% if item.state == 'connected' %}
+              <button type="button" class="aic-overflow-item" data-action="refresh-models">Refresh Models</button>
+              <button type="button" class="aic-overflow-item" data-action="reauthenticate">Re-authenticate</button>
+              {% endif %}
+              <button type="button" class="aic-overflow-item" data-action="disconnect">Disconnect</button>
+            </div>
+          </details>
+          {% endif %}
+        </div>
+      </article>
+      {% endfor %}
     </div>
   </section>
-  {% endfor %}
-</div>
 
-{% if other_connections %}
-<details class="card" style="margin-top:0.85rem;padding:0.85rem 1rem">
-  <summary>Other AI providers ({{ other_connections|length }})</summary>
-  <div class="connections-list" id="ai-connections-other" style="margin-top:0.75rem">
-    {% for item in other_connections %}
-    <section class="connection-row card" data-provider-id="{{ item.id }}">
-      <div class="connection-main">
+  <section class="aic-section" aria-labelledby="aic-defaults-title">
+    <div class="aic-defaults card connection-defaults" id="coding-defaults" data-defaults='{{ coding_defaults|tojson }}'>
+      <div class="aic-defaults-head">
         <div>
-          <h2>{{ item.label }}</h2>
-          <p class="muted">{{ item.authentication_method }}</p>
+          <h2 id="aic-defaults-title">Coding Defaults</h2>
+          <p class="muted">Used when Code Workspace has no manual provider/model selection yet. Manual selection remains authoritative.</p>
         </div>
-        <span class="status-pill connection-status status-{{ item.state|replace('_', '-') }}">{{ item.summary_label or item.status }}</span>
       </div>
-      <p class="connection-detail">{{ item.detail }}</p>
-      <div class="connection-actions">
-        {% if item.state == 'connected' %}
-        <button type="button" class="btn btn-primary" data-action="test">Test Connection</button>
-        <button type="button" class="btn" data-action="disconnect">Sign out</button>
-        {% else %}
-        <button type="button" class="btn btn-primary" data-action="connect">Connect</button>
-        <button type="button" class="btn" data-action="test">Test Connection</button>
-        {% endif %}
-      </div>
-    </section>
-    {% endfor %}
-  </div>
-</details>
-{% endif %}
+      <form class="aic-defaults-form coding-defaults-form" id="coding-defaults-form">
+        <label class="aic-field aic-field-wide"><span>Default Coding Provider</span>
+          <select name="default_provider" id="coding-default-provider">
+            <option value="">— none —</option>
+            {% for item in connections %}
+            <option value="{{ item.id }}" {% if coding_defaults.default_provider == item.id %}selected{% endif %}>{{ item.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <div class="aic-model-grid">
+          {% for item in connections %}
+          {% set saved = coding_defaults.default_models.get(item.id, '') %}
+          <div class="aic-field" data-default-model-for="{{ item.id }}">
+            <span>{{ item.label }}</span>
+            <select class="aic-model-select" id="default-model-{{ item.id }}" data-model-select="{{ item.id }}" aria-label="{{ item.label }} default model">
+              <option value="">Auto (use provider default)</option>
+              {% for model in item.models or [] %}
+              <option value="{{ model }}" {% if saved == model %}selected{% endif %}>{{ model }}</option>
+              {% endfor %}
+              {% if saved and saved not in (item.models or []) %}
+              <option value="{{ saved }}" selected>{{ saved }}</option>
+              {% endif %}
+            </select>
+            <input type="text" class="aic-exact-input" name="default_model_{{ item.id }}" value="{{ saved }}" placeholder="Exact model id or leave blank" list="models-{{ item.id }}" autocomplete="off" spellcheck="false">
+            <datalist id="models-{{ item.id }}">
+              {% for model in item.models or [] %}
+              <option value="{{ model }}"></option>
+              {% endfor %}
+            </datalist>
+          </div>
+          {% endfor %}
+        </div>
+        <div class="aic-defaults-actions">
+          <span class="muted coding-defaults-status" id="coding-defaults-status" aria-live="polite"></span>
+          <button type="button" class="btn" id="coding-defaults-reset">Reset</button>
+          <button type="submit" class="btn btn-primary">Save changes</button>
+        </div>
+      </form>
+    </div>
+  </section>
 
-<script src="{{ url_for('static', filename='js/hub_perf.js') }}?v=perf-1"></script>
-<script src="{{ url_for('static', filename='js/ai_connections.js') }}?v=cli-conn-3" defer></script>
+  {% if other_connections %}
+  {% set extra_ns = namespace(items=[]) %}
+  {% for item in other_connections if item.id not in coding_ids %}
+    {% set extra_ns.items = extra_ns.items + [item] %}
+  {% endfor %}
+  {% if extra_ns.items %}
+  <details class="aic-other">
+    <summary>Other AI providers ({{ extra_ns.items|length }})</summary>
+    <div class="aic-provider-grid connections-list" id="ai-connections-other">
+      {% for item in extra_ns.items %}
+      <article class="aic-card connection-row" data-provider-id="{{ item.id }}">
+        <div class="aic-card-head connection-main">
+          <div>
+            <h2>{{ item.label }}</h2>
+            <p class="muted">{{ item.authentication_method }}</p>
+          </div>
+          <span class="status-pill connection-status status-{{ item.state|replace('_', '-') }}">{{ item.summary_label or item.status }}</span>
+        </div>
+        <p class="connection-detail">{{ item.detail }}</p>
+        <div class="aic-card-actions connection-actions">
+          {% if item.state == 'connected' %}
+          <button type="button" class="btn btn-sm btn-primary" data-action="test">Test Connection</button>
+          <button type="button" class="btn btn-sm" data-action="disconnect">Sign out</button>
+          {% else %}
+          <button type="button" class="btn btn-sm btn-primary" data-action="connect">Connect</button>
+          <button type="button" class="btn btn-sm" data-action="test">Test Connection</button>
+          {% endif %}
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+  </details>
+  {% endif %}
+  {% endif %}
+
+  <p class="aic-tip"><span aria-hidden="true">💡</span> Tip: Test a connection after any change to ensure CLIMATE can access your provider CLI.</p>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/climate_select.js') }}?v=1"></script>
+<script src="{{ url_for('static', filename='js/ai_connections.js') }}?v=cli-conn-4" defer></script>
 {% endblock %}

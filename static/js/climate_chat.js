@@ -93,22 +93,26 @@
     if (!state.runActive) sendBtn.disabled = !(connected && modelSelect.value);
   }
   function applyModelOptions(models, preferred) {
-    var options = '<option value="">Select exact model</option>' + (models || []).map(function (m) {
+    var options = '<option value="" disabled>Select exact model</option>' + (models || []).map(function (m) {
       return '<option value="' + escapeHtml(m) + '">' + escapeHtml(m) + "</option>";
     }).join("");
     modelSelect.innerHTML = options;
     var pick = preferred || "";
     if (pick && (models || []).indexOf(pick) >= 0) modelSelect.value = pick;
+    else modelSelect.selectedIndex = 0;
     if (!state.runActive) sendBtn.disabled = !modelSelect.value;
+    enhanceChatSelects();
   }
   function selectProvider(providerId, opts) {
     opts = opts || {};
     var p = connectedProvider(providerId);
     if (providerId) providerSelect.value = providerId;
     setProviderChrome(providerSelect.value);
+    enhanceChatSelects();
     if (!p || p.state !== "connected") {
-      modelSelect.innerHTML = '<option value="">' + escapeHtml((p && p.detail) || "Provider unavailable") + "</option>";
+      modelSelect.innerHTML = '<option value="" disabled>' + escapeHtml((p && p.detail) || "Provider unavailable") + "</option>";
       sendBtn.disabled = true;
+      enhanceChatSelects();
       return;
     }
     var cached = state.modelCache[providerSelect.value];
@@ -124,8 +128,9 @@
       };
       applyModelOptions(data.models || [], preferred || data.recommended_model || "");
     }).catch(function (err) {
-      modelSelect.innerHTML = '<option value="">' + escapeHtml(err.message || "Models unavailable") + "</option>";
+      modelSelect.innerHTML = '<option value="" disabled>' + escapeHtml(err.message || "Models unavailable") + "</option>";
       sendBtn.disabled = true;
+      enhanceChatSelects();
     });
   }
   function renderHistory() {
@@ -330,16 +335,22 @@
     });
   }
 
+  function enhanceChatSelects() {
+    if (window.ClimateSelect) window.ClimateSelect.enhanceAll([providerSelect, modelSelect]);
+  }
+
   (bootstrap.providers || []).forEach(function (row) {
     var opt = document.createElement("option");
     opt.value = row.id;
     opt.textContent = row.label || row.id;
+    if (row.state !== "connected") opt.setAttribute("data-unavailable", "1");
     providerSelect.appendChild(opt);
   });
   var preferred = (bootstrap.providers || []).find(function (row) {
     return row.id === "gemini" && row.state === "connected";
   }) || (bootstrap.providers || []).find(function (row) { return row.state === "connected"; });
   if (preferred) providerSelect.value = preferred.id;
+  enhanceChatSelects();
   selectProvider(providerSelect.value, { refresh: true });
 
   document.getElementById("ax-chat-new").addEventListener("click", newChat);

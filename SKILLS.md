@@ -21,7 +21,7 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 | Live Processing (GET-only API + path health) | `config/repositories.yaml` |
 | Data-Script / Report Template (git + optional path) | `config/repositories.yaml` |
 | Live dashboard (health / notebook queue / audit) | `/work` (legacy `/` redirects) |
-| Personal / Work workspace switcher | `/workspace/<name>`, cookie + `hub_prefs`; one CLIMATE shell; Code Workspace + Repositories are VANTA-only in nav |
+| Personal / Work workspace switcher | `/workspace/<name>`, cookie + `hub_prefs`; CLIMATE nav is shared; Code Workspace + Repositories live under VANTA |
 | Personal Dashboard + Tasks + Quick Notepad | `/personal`, `/personal/tasks`; shared Tasks framework also at `/work/tasks` |
 | **ARCTIC** (CLIMATE / Personal) | `/personal/arctic` — Profile + Document Registry (Local/Drive refs); Dashboard\|Profile\|Files; Career Pack logical view; Primary CV = latest CV; AiriX context explicit-only; Drive sync deferred (`hub/arctic/`, `data/arctic.db`) |
 | Official References (Work Notebook) | `/work/notebook?view=references` — Year→Type library for memoranda/advisories/guidelines; local upload and/or external link; files under `data/work-notebook/references/{year}/`; editable Subject with bounded PDF/DOCX/TXT detection (no OCR/LLM); Quick Add autofill via `/api/notebook/references/detect-meta`; search/year/type filters (`hub/notebook/references.py`) |
@@ -30,7 +30,7 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 | Data Explorer (RO browse + lineage + allowlisted exports/jobs/history) | `/data-explorer`; legacy `/live-data-export` redirects to Export; `hub/data_explorer/`, `config/data_explorer.yaml`, `config/live_data_exports.yaml`, `data/data_explorer.db` |
 | AI Assistant Center (read-only) | `/personal/aira`, `/work/airix`, dock on all pages via `templates/partials/assistant_dock_panel.html` + `static/js/assistant_dock.js`, `hub/agent_center/` (+ `routing/` Phase 5), `config/agents.yaml`, `data/agent_center.db` |
 | Workspace Console | Bottom dock on all pages via `templates/partials/workspace_console_panel.html` + `static/js/workspace_console.js`, `hub/workspace_console/` — reuses repo runner / process monitor / jobs / audit |
-| AI Connections | `/system/ai-connections` — Installed/Authenticated/Available/Version/Last Checked; Connect / Re-authenticate / Test / Sign out via official CLI auth; Codex / Claude Code / Cursor Agent (+ OpenAI / Grok API keys); compact panel also on Settings; AiriX routing excludes unavailable CLIs |
+| AI Connections | `/system/ai-connections` — CLIMATE provider cards + Coding Defaults; Installed/Authenticated/Available/Version/Last Checked; Connect / Re-authenticate / Test / Sign out via official CLI auth; Codex / Claude Code / Cursor Agent / Gemini (+ other API providers under Other); compact panel also on Settings; AiriX routing excludes unavailable CLIs |
 | **AI Provider Settings** | `/settings/ai-providers` — Settings submenu; dynamic cards from the Agent Center provider registry plus planned Claude/Local Models cards; Add/Replace/Remove server-side API keys; Test Connection via existing adapters; never returns stored secrets; does not claim encryption |
 | Email Center (Gmail readonly OAuth) | `/personal/email`, `/work/email`, `hub/email/`, `data/email.db` |
 | Calendar Center (Calendar readonly) | `/personal/calendar`, `/work/calendar`, `hub/calendar/` |

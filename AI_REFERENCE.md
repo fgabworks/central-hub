@@ -114,7 +114,7 @@ ARCTIC while retaining the existing `work` and `personal` route/storage identiti
 Code Workspace context labels use `VANTA / DOH / <Repository>` or
 `ARCTIC / <Personal Context>` without adding Work/Personal workspace subtitles.
 VANTA tools are a workspace-specific submenu (Code Workspace, Repositories,
-SQL, Data Explorer, DHIS2, AiriX, Email, Calendar). ARCTIC tools are Personal
+SQL, Data Explorer, DHIS2, Workspace Assistant, Email, Calendar). ARCTIC tools are Personal
 Files, Aira, Email, and Calendar.
 Shared CLIMATE items (Dashboard, Chat, Tasks, Notebook, Settings) stay visible
 in both workspaces. Code Workspace and Repositories remain implemented at
@@ -211,7 +211,7 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Workspace Console | Bottom panel under main content only (`left: var(--sidebar-w)`); bounded height; Ctrl+J; collapsed by default |
 | Activity Rail | Far-right icons for AI Assistant, Quick Notepad, Workspace Console (future utilities placeholders); reduces main width only |
 | App shell | Fixed sidebar 210–216px + `padding-left` on `.app-shell`; `.main-column` / `.content` `flex:1; min-width:0`; `.sidebar-scroll` for nav |
-| AI Connections | `/system/ai-connections`; Installed/Authenticated/Version/Last Checked + connect/test/capabilities/disconnect; Codex never stores tokens |
+| AI Connections | `/system/ai-connections`; CLIMATE settings cards for Gemini/Codex/Claude Code/Cursor Agent from the coding registry; Installed/Authenticated/Version/Last Checked + connect/test/refresh/disconnect; coding defaults below cards; Codex never stores tokens |
 | AI Provider Settings | `/settings/ai-providers`; Settings submenu + registry-driven cards for Gemini, Grok/xAI, OpenAI, Claude/Anthropic (planned adapter), Local Models (UI-ready); Add/Replace/Remove key + Test Connection; secrets in gitignored `data/ai_provider_secrets.env`; APIs return metadata only; CLI providers stay on AI Connections |
 | DHIS2 | GET client, discovery, UID mapping, preview builder |
 | UID index admin | LP-style controlled update: dry-run → preview → typed confirm → archive/versions/restore |

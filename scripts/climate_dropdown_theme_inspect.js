@@ -38,22 +38,24 @@ async function measureTheme(page, route, name) {
     const q = (s) => document.querySelector(s);
     const cs = (el, prop) => (el ? getComputedStyle(el).getPropertyValue(prop) : "");
     const ui = q(".climate-chat-title, .climate-chat-label, .climate-ai-empty");
-    const tech = q("#climate-token-label, .climate-chat-file, #climate-provider-panel, .climate-dd-value");
+      const tech = q("#climate-token-label, .climate-chat-file, #climate-provider-panel, #ax-model, .climate-dd-value");
     const chat = q(".climate-chat-text, .climate-ai-empty span, #climate-prompt");
     return {
       shellFont: cs(q(".climate-shell"), "font-family"),
       uiFont: cs(ui, "font-family"),
       techFont: cs(tech, "font-family"),
       chatFont: cs(chat, "font-family"),
-      colorScheme: cs(q(".climate-shell"), "color-scheme"),
+      colorScheme: cs(q(".climate-shell, .ax-chat"), "color-scheme"),
       hasCustomDd: !!q(".climate-dd"),
-      providerDd: !!q('#climate-provider-panel') || !!q('.climate-dd[data-for="climate-provider-panel"]'),
+      providerDd: !!q('#climate-provider-panel') || !!q('#ax-provider') || !!q('.climate-dd[data-for="climate-provider-panel"]') || !!q('.climate-dd[data-for="ax-provider"]'),
     };
   });
 
   // Open provider dropdown (custom preferred)
-  const customTrigger = page.locator('.climate-dd[data-for="climate-provider-panel"] .climate-dd-trigger, .climate-chat-footer-controls .climate-dd-trigger').first();
-  const nativeSelect = page.locator("#climate-provider-panel");
+  const customTrigger = page.locator(
+    '.climate-dd[data-for="climate-provider-panel"] .climate-dd-trigger, .climate-dd[data-for="ax-provider"] .climate-dd-trigger, .climate-chat-footer-controls .climate-dd-trigger, .ax-chat-controls .climate-dd-trigger'
+  ).first();
+  const nativeSelect = page.locator("#climate-provider-panel, #ax-provider");
   let openStats = null;
   if (await customTrigger.count()) {
     await customTrigger.click();
@@ -79,7 +81,7 @@ async function measureTheme(page, route, name) {
         visible: menu.getBoundingClientRect().height > 0,
       };
     });
-    await page.locator("#climate-ai").screenshot({ path: path.join(outDir, `${name}_provider_open.png`) }).catch(() => {});
+    await page.locator("#climate-ai, .ax-chat-composer, .ax-chat").first().screenshot({ path: path.join(outDir, `${name}_provider_open.png`) }).catch(() => {});
     await page.keyboard.press("Escape");
   } else if (await nativeSelect.count()) {
     // Fallback: style probe on closed select + option element styles
@@ -121,6 +123,7 @@ async function main() {
   for (const [route, name] of [
     ["/work/climate", "vanta"],
     ["/personal/climate", "arctic"],
+    ["/work/chat", "chat"],
   ]) {
     const m = await measureTheme(page, route, name);
     const menuBg = parseRgb(m.openStats && m.openStats.menuBg);

@@ -22,6 +22,7 @@
   color: var(--climate-text, #f5f7f9);
   font: 14px/1.5 "Segoe UI", system-ui, sans-serif;
   overflow: hidden;
+  color-scheme: dark;
 }
 
 .ax-chat-sidebar {
@@ -270,6 +271,29 @@
   color: var(--climate-text, #f5f7f9);
   font: inherit;
   max-width: 220px;
+  color-scheme: dark;
+}
+.ax-pill .climate-dd {
+  width: auto;
+  min-width: 0;
+  max-width: 220px;
+}
+.ax-pill .climate-dd-trigger {
+  min-height: 20px;
+  padding: 0;
+  background: transparent;
+  color: var(--climate-text, #f5f7f9);
+}
+.ax-pill .climate-dd-value {
+  font-size: 12px;
+  color: var(--climate-text, #f5f7f9);
+}
+.ax-pill .climate-dd-value.is-placeholder {
+  color: var(--climate-muted, #9ea3a9);
+}
+.ax-pill .climate-dd.is-disabled .climate-dd-trigger {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .ax-pill-dot {
   width: 8px;

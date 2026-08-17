@@ -173,8 +173,24 @@ body > .climate-dd-menu .climate-dd-option.is-selected {
 .climate-shell .climate-dd-option.is-disabled,
 body > .climate-dd-menu .climate-dd-option:disabled,
 body > .climate-dd-menu .climate-dd-option.is-disabled {
-  opacity: 0.45;
+  opacity: 1;
   cursor: not-allowed;
+  color: #9aa0a6;
+  background: transparent;
+}
+.climate-shell .climate-dd-option[data-unavailable="1"],
+body > .climate-dd-menu .climate-dd-option[data-unavailable="1"] {
+  opacity: 1;
+  color: #c5c9ce;
+}
+.climate-shell .climate-dd-option[data-unavailable="1"]:hover,
+.climate-shell .climate-dd-option[data-unavailable="1"]:focus,
+body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:hover,
+body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:focus {
+  color: #fff;
+}
+.climate-dd-value.is-placeholder {
+  color: var(--cl-muted, #8e959e);
 }
 .climate-shell .climate-dd-value {
   font-family: var(--cl-font-tech);

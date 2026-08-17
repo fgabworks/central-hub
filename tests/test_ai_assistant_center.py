@@ -170,7 +170,7 @@ class AssistantCenterIsolationTests(unittest.TestCase):
         # Personal nav must not link to SQL Workspace (activity-rail placeholder may mention it).
         self.assertNotIn(b'href="/sql"', personal.data)
         self.assertEqual(work.status_code, 200)
-        self.assertIn(b">AiriX<", work.data)
+        self.assertIn(b">Workspace Assistant<", work.data)
         self.assertIn(b'href="/sql"', work.data)
 
         audit = AuditStore(Path(self.temp.name) / "audit.jsonl")

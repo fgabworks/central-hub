@@ -1,0 +1,115 @@
+{
+  "label": "chat-fix",
+  "base": "http://127.0.0.1:8765",
+  "pages": {
+    "vanta": {
+      "route": "/work/climate",
+      "bodyTheme": "climate-system-shell theme-work enable-motion underline-links",
+      "base": {
+        "shellFont": "Inter, \"Segoe UI\", system-ui, sans-serif",
+        "uiFont": "Inter, \"Segoe UI\", system-ui, sans-serif",
+        "techFont": "\"JetBrains Mono\", \"Cascadia Code\", Consolas, monospace",
+        "chatFont": "Inter, \"Segoe UI\", system-ui, sans-serif",
+        "colorScheme": "dark",
+        "hasCustomDd": true,
+        "providerDd": true
+      },
+      "openStats": {
+        "menuBg": "rgb(20, 24, 30)",
+        "menuColor": "rgb(245, 247, 249)",
+        "menuBorder": "rgb(38, 43, 50)",
+        "optionColor": "rgb(255, 255, 255)",
+        "optionBg": "color(srgb 0.324863 0.150118 0.168314)",
+        "selectedBg": "color(srgb 0.324863 0.150118 0.168314)",
+        "selectedColor": "rgb(255, 255, 255)",
+        "menuFont": "ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+        "optionFont": "\"JetBrains Mono\", \"Cascadia Code\", Consolas, monospace",
+        "visible": true
+      },
+      "darkMenu": true,
+      "pass": {
+        "darkMenuBg": true,
+        "lightMenuText": true,
+        "customDropdown": true,
+        "uiNotMono": true,
+        "techIsMono": true,
+        "optionTechMono": true,
+        "chatNotMono": true,
+        "colorSchemeDark": true
+      }
+    },
+    "arctic": {
+      "route": "/personal/climate",
+      "bodyTheme": "climate-system-shell theme-personal enable-motion underline-links",
+      "base": {
+        "shellFont": "Inter, \"Segoe UI\", system-ui, sans-serif",
+        "uiFont": "Inter, \"Segoe UI\", system-ui, sans-serif",
+        "techFont": "\"JetBrains Mono\", \"Cascadia Code\", Consolas, monospace",
+        "chatFont": "Inter, \"Segoe UI\", system-ui, sans-serif",
+        "colorScheme": "dark",
+        "hasCustomDd": true,
+        "providerDd": true
+      },
+      "openStats": {
+        "menuBg": "rgb(20, 24, 30)",
+        "menuColor": "rgb(245, 247, 249)",
+        "menuBorder": "rgb(38, 43, 50)",
+        "optionColor": "rgb(255, 255, 255)",
+        "optionBg": "color(srgb 0.115137 0.304941 0.34949)",
+        "selectedBg": "color(srgb 0.115137 0.304941 0.34949)",
+        "selectedColor": "rgb(255, 255, 255)",
+        "menuFont": "ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+        "optionFont": "\"JetBrains Mono\", \"Cascadia Code\", Consolas, monospace",
+        "visible": true
+      },
+      "darkMenu": true,
+      "pass": {
+        "darkMenuBg": true,
+        "lightMenuText": true,
+        "customDropdown": true,
+        "uiNotMono": true,
+        "techIsMono": true,
+        "optionTechMono": true,
+        "chatNotMono": true,
+        "colorSchemeDark": true
+      }
+    },
+    "chat": {
+      "route": "/work/chat",
+      "bodyTheme": "climate-system-shell theme-work",
+      "base": {
+        "shellFont": "",
+        "uiFont": "",
+        "techFont": "\"JetBrains Mono\", \"Cascadia Code\", Consolas, monospace",
+        "chatFont": "",
+        "colorScheme": "dark",
+        "hasCustomDd": true,
+        "providerDd": true
+      },
+      "openStats": {
+        "menuBg": "rgb(20, 24, 30)",
+        "menuColor": "rgb(245, 247, 249)",
+        "menuBorder": "rgb(38, 43, 50)",
+        "optionColor": "rgb(197, 201, 206)",
+        "optionBg": "rgba(0, 0, 0, 0)",
+        "selectedBg": "color(srgb 0.324863 0.150118 0.168314)",
+        "selectedColor": "rgb(255, 255, 255)",
+        "menuFont": "ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+        "optionFont": "\"JetBrains Mono\", \"Cascadia Code\", Consolas, monospace",
+        "visible": true
+      },
+      "darkMenu": true,
+      "pass": {
+        "darkMenuBg": true,
+        "lightMenuText": true,
+        "customDropdown": true,
+        "uiNotMono": true,
+        "techIsMono": true,
+        "optionTechMono": true,
+        "chatNotMono": true,
+        "colorSchemeDark": true
+      }
+    }
+  },
+  "passAll": true
+}

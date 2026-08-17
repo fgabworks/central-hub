@@ -127,27 +127,15 @@ def climate_nav_sections(workspace: str) -> list[dict[str, Any]]:
     shared = [
         _nav_item(dashboard_endpoint(ws), "Dashboard", "⌂"),
         _nav_item(chat_endpoint(ws), "CLIMATE Chat", "✦"),
-    ]
-    if not personal:
-        shared.append(_nav_item("work_climate", "Code Workspace", "C"))
-    shared.extend(
-        [
-            _nav_item(tasks_endpoint(ws), "Tasks", "☑"),
-            _nav_item(
-                notebook_endpoint(ws),
-                "Notebook",
-                "✎",
-                active_prefix="personal_notebook" if personal else "work_notebook",
-            ),
-        ]
-    )
-    if not personal:
-        shared.append(
-            _nav_item("repositories", "Repositories", "▣", active_prefix="repository")
-        )
-    shared.append(
+        _nav_item(tasks_endpoint(ws), "Tasks", "☑"),
+        _nav_item(
+            notebook_endpoint(ws),
+            "Notebook",
+            "✎",
+            active_prefix="personal_notebook" if personal else "work_notebook",
+        ),
         _nav_item("settings_page", "Settings", "⚙", active_prefix="settings"),
-    )
+    ]
     sections: list[dict[str, Any]] = [
         {"id": "climate", "label": "CLIMATE", "entries": shared},
     ]
@@ -170,9 +158,16 @@ def climate_nav_sections(workspace: str) -> list[dict[str, Any]]:
                 "id": "vanta",
                 "label": "VANTA",
                 "entries": [
+                    _nav_item("work_climate", "Code Workspace", "C"),
+                    _nav_item("repositories", "Repositories", "▣", active_prefix="repository"),
                     _nav_item("sql_workspace", "SQL Workspace", "▦", active_prefix="sql_workspace"),
                     _nav_item("data_explorer", "Data Explorer", "▤", active_prefix="data_explorer"),
-                    _nav_item("work_airix", "AiriX", "AI", active_prefix="work_airix"),
+                    _nav_item(
+                        "work_airix",
+                        "Workspace Assistant",
+                        "AI",
+                        active_prefix="work_airix",
+                    ),
                     _nav_item("work_email", "Email", "✉", active_prefix="work_email"),
                     _nav_item("work_calendar", "Calendar", "📅", active_prefix="work_calendar"),
                 ],

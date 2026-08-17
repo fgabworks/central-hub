@@ -4,7 +4,22 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**VANTA-scoped Code Workspace / Repositories (2026-08-17)**
+**AI Connections CLIMATE settings UI (2026-08-18)**
+
+`/system/ai-connections` is restyled as a CLIMATE settings page: provider
+cards first, Coding Defaults below, blue credential notice, dark selectors,
+and compact Reset / Save changes. Registry, CLI auth, discovery, exact-model
+rules, and APIs are unchanged.
+
+Prior: **VANTA section placement for Code Workspace / Repositories (2026-08-17)**
+
+Shared CLIMATE nav is Dashboard, CLIMATE Chat, Tasks, Notebook, and Settings.
+Code Workspace and Repositories now sit in the VANTA section with SQL, Data
+Explorer, Workspace Assistant (`/work/airix`, label only), Email, Calendar, and
+DHIS2. ARCTIC still hides them. Routes `/work/climate`, `/personal/climate`,
+`/repositories`, and `/work/airix` are unchanged.
+
+Prior: **VANTA-scoped Code Workspace / Repositories (2026-08-17)**
 
 Code Workspace and Repositories stay implemented, but their navigation,
 dashboard shortcuts, and workspace context are VANTA-only. ARCTIC keeps the

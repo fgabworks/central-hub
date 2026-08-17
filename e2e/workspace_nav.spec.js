@@ -10,11 +10,17 @@ test.describe("VANTA / ARCTIC navigation scope", () => {
     const response = await page.goto("/work", { waitUntil: "domcontentloaded" }).catch(() => null);
     if (!response || !response.ok()) test.skip(true, "CLIMATE server not available");
 
+    await expect(sidebar(page).getByText("Dashboard", { exact: true })).toBeVisible();
+    await expect(sidebar(page).getByText("CLIMATE Chat", { exact: true })).toBeVisible();
+    await expect(sidebar(page).getByText("Settings", { exact: true })).toBeVisible();
     await expect(sidebar(page).getByText("Code Workspace", { exact: true })).toBeVisible();
     await expect(sidebar(page).getByText("Repositories", { exact: true })).toBeVisible();
-    await expect(sidebar(page).getByText("CLIMATE Chat", { exact: true })).toBeVisible();
-    await expect(sidebar(page).getByText("Dashboard", { exact: true })).toBeVisible();
-    await expect(sidebar(page).getByText("Settings", { exact: true })).toBeVisible();
+    await expect(sidebar(page).getByText("Workspace Assistant", { exact: true })).toBeVisible();
+    await expect(sidebar(page).getByText("AiriX", { exact: true })).toHaveCount(0);
+
+    const sideText = await sidebar(page).innerText();
+    expect(sideText.indexOf("Settings")).toBeLessThan(sideText.indexOf("Code Workspace"));
+    expect(sideText.indexOf("Code Workspace")).toBeLessThan(sideText.indexOf("Repositories"));
 
     await page.locator(".workspace-btn", { hasText: "ARCTIC" }).click();
     await page.waitForURL(/\/personal(?:\/|$|\?)/);

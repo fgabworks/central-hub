@@ -196,15 +196,20 @@ class WorkspaceNavRouteTests(unittest.TestCase):
         self.assertIn("Audit", work_html)
         self.assertIn("Settings", work_html)
         self.assertNotIn("Personal Notebook", work_html)
-        # VANTA CLIMATE order: Dashboard, Chat, Code Workspace, Tasks, Notebook, Repositories.
+        # Shared CLIMATE: Dashboard, Chat, Tasks, Notebook, Settings.
+        # VANTA tools (Code Workspace, Repositories, …) follow that group.
         w_side = work_html[
             work_html.find('class="sidebar-nav"') : work_html.find('class="sidebar-actions"')
         ]
         self.assertLess(w_side.index(">Dashboard<"), w_side.index("CLIMATE Chat"))
-        self.assertLess(w_side.index("CLIMATE Chat"), w_side.index("Code Workspace"))
-        self.assertLess(w_side.index("Code Workspace"), w_side.index(">Tasks<"))
+        self.assertLess(w_side.index("CLIMATE Chat"), w_side.index(">Tasks<"))
         self.assertLess(w_side.index(">Tasks<"), w_side.index("Notebook"))
-        self.assertLess(w_side.index("Notebook"), w_side.index("Repositories"))
+        self.assertLess(w_side.index("Notebook"), w_side.index("Settings"))
+        self.assertLess(w_side.index("Settings"), w_side.index("Code Workspace"))
+        self.assertLess(w_side.index("Code Workspace"), w_side.index("Repositories"))
+        self.assertLess(w_side.index("Repositories"), w_side.index("SQL Workspace"))
+        self.assertIn("Workspace Assistant", w_side)
+        self.assertNotIn(">AiriX<", w_side)
         self.assertIn("SQL Workspace", w_side)
         self.assertIn("/sql", w_side)
         self.assertNotIn("Personal Files", w_side)
@@ -391,6 +396,8 @@ class WorkspaceNavRouteTests(unittest.TestCase):
         self.assertIn("SQL Workspace", work_side)
         self.assertIn("Code Workspace", work_side)
         self.assertIn("Repositories", work_side)
+        self.assertIn("Workspace Assistant", work_side)
+        self.assertNotIn(">AiriX<", work_side)
         self.assertNotIn("SQL Workspace", personal_side)
         self.assertNotIn("Code Workspace", personal_side)
         self.assertNotIn(">Repositories<", personal_side)
