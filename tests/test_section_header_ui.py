@@ -21,6 +21,7 @@ REPRESENTATIVE_PAGES = [
     ("/system/ai-connections", "AI Connections"),
     ("/audit", "Audit"),
     ("/settings", "Settings"),
+    ("/settings/ai-providers", "Settings"),
 ]
 
 

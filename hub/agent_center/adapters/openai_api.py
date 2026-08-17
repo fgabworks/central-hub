@@ -13,8 +13,20 @@ from hub.agent_center.openai_settings import OpenAISettings, load_openai_setting
 
 class OpenAIApiAdapter:
     is_api_adapter = True
+    credential_type = "api_key"
+    env_keys = ("OPENAI_API_KEY",)
+    preferred_write_key = "OPENAI_API_KEY"
+    enabled_env = "OPENAI_ENABLED"
+    enabled_defaults_to_key = False
+    enable_when_key_set = True
     authentication_method = "Server-side OPENAI_API_KEY (optional separate billing)"
     credential_storage = "Environment only"
+    settings_help = (
+        "Uses OPENAI_API_KEY. Saving a key also sets OPENAI_ENABLED=true for this process."
+    )
+    settings_display_name = "OpenAI"
+    settings_mark = "O"
+    settings_blurb = "Add your OpenAI API key to enable OpenAI models."
 
     def __init__(self, descriptor: AgentDescriptor | None = None, *, settings: OpenAISettings | None = None, client: OpenAIClient | None = None) -> None:
         self.settings = settings or load_openai_settings()
@@ -22,6 +34,10 @@ class OpenAIApiAdapter:
         self.descriptor = descriptor or AgentDescriptor(
             id="openai-api", label="OpenAI API", provider="openai_api", executable="", modes=list(MODES)
         )
+
+    def reload_settings(self) -> None:
+        self.settings = load_openai_settings()
+        self.client = OpenAIClient(self.settings)
 
     def capabilities(self) -> dict[str, Any]:
         return {

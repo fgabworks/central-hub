@@ -62,6 +62,10 @@ Scope: personal, local-first tool. Canonical agent rules: [AGENTS.md](AGENTS.md)
     `agent login`; their logout/status commands remain provider-owned.
   - OpenAI and xAI keys are environment-only (`OPENAI_API_KEY`, `XAI_API_KEY`). Disconnecting
     an API provider disables it in Hub metadata and never reads, returns, or deletes the env key.
+  - **Settings → AI Providers:** Set/Replace/Remove writes allowlisted keys to gitignored
+    `data/ai_provider_secrets.env` (and removes matching lines from `.env`). APIs, UI, logs,
+    and audit details expose only metadata (`configured`, env **names**, status). Stored values
+    are never returned. Existing process/`.env` variables continue to work.
   - Provider audit records contain provider ID, action, and boolean outcome; account labels,
     command output, model-list payloads, and credentials are excluded.
   - No assistant tool exists for file edits, commands, SQL execution, mail/calendar

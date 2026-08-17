@@ -174,22 +174,37 @@ class ClimateService:
         payload["workspace"] = ws
         return payload
 
-    def conversations(self, workspace: str, *, repository_id: str = "", limit: int = 50) -> list[dict[str, Any]]:
+    def conversations(
+        self,
+        workspace: str,
+        *,
+        repository_id: str = "",
+        surface: str = "",
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
         ws = normalize_workspace(workspace)
         if repository_id:
             self.require_repo(ws, repository_id)
         return self.coding.conversations(
-            workspace=ws, repository_id=repository_id, limit=limit
+            workspace=ws, repository_id=repository_id, surface=surface, limit=limit
         )
 
     def conversation(
-        self, workspace: str, conversation_id: str, *, repository_id: str = ""
+        self,
+        workspace: str,
+        conversation_id: str,
+        *,
+        repository_id: str = "",
+        surface: str = "",
     ) -> dict[str, Any]:
         ws = normalize_workspace(workspace)
         if repository_id:
             self.require_repo(ws, repository_id)
         return self.coding.conversation(
-            conversation_id, workspace=ws, repository_id=repository_id
+            conversation_id,
+            workspace=ws,
+            repository_id=repository_id,
+            surface=surface,
         )
 
     def rename_conversation(
@@ -199,6 +214,7 @@ class ClimateService:
         *,
         title: str,
         repository_id: str = "",
+        surface: str = "",
     ) -> dict[str, Any]:
         ws = normalize_workspace(workspace)
         if repository_id:
@@ -208,6 +224,7 @@ class ClimateService:
             workspace=ws,
             title=title,
             repository_id=repository_id,
+            surface=surface,
         )
 
     def _attach_selected_file_bodies(
@@ -228,6 +245,53 @@ class ClimateService:
                 f"Selected file {path}:\n{str(data.get('content') or '')[:12_000]}"
             )
         return "\n\n".join(chunks).strip()[:40_000]
+
+    def execute_chat(self, workspace: str, **payload: Any) -> dict[str, Any]:
+        """General AiriX chat — no repository scan, file bodies, or editor context."""
+        ws = normalize_workspace(workspace)
+        prompt = str(payload.get("prompt") or "")
+        display_prompt = str(payload.get("display_prompt") or prompt)
+        provider = str(payload.get("provider") or "")
+        model = str(payload.get("model") or "")
+        result = self.coding.execute(
+            workspace=ws,
+            repository_id="",
+            provider=provider,
+            model=model,
+            prompt=prompt,
+            selected_files=[],
+            current_file="",
+            selection="",
+            include_repo_context=False,
+            task_mode="ask",
+            reuse_session=bool(payload.get("reuse_session", True))
+            and not bool(payload.get("handoff")),
+            handoff=bool(payload.get("handoff")),
+            conversation_id=str(payload.get("conversation_id") or ""),
+            repository_investigation=False,
+            execution_mode=DIRECT,
+            display_prompt=display_prompt,
+            surface="chat",
+        )
+        run_id = str(result.get("id") or "")
+        if run_id:
+            self._run_scope[run_id] = (ws, "")
+            self._run_meta[run_id] = {
+                "task_mode": "ask",
+                "selected_files": [],
+                "current_file": "",
+                "provider_invoked": True,
+                "sources": [],
+                "user_prompt": display_prompt or prompt,
+                "execution_mode": DIRECT,
+                "surface": "chat",
+                "conversation_id": result.get("conversation_id") or "",
+            }
+        result["task_mode"] = "ask"
+        result["execution_mode"] = DIRECT
+        result["sources"] = []
+        result["provider_invoked"] = True
+        return result
 
     def execute(self, workspace: str, repository_id: str, **payload: Any) -> dict[str, Any]:
         ws = normalize_workspace(workspace)

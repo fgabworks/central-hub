@@ -37,6 +37,14 @@ class GeminiRunner:
         self._streams: dict[str, Any] = {}
         self._lock = threading.Lock()
 
+    def reload_runtime(
+        self,
+        settings: GeminiSettings,
+        client: GeminiClient | None = None,
+    ) -> None:
+        self.settings = settings
+        self.client = client or GeminiClient(settings)
+
     def start(
         self,
         *,

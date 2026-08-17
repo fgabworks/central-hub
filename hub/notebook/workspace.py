@@ -93,6 +93,8 @@ def primary_endpoint(workspace: str) -> str:
 _WORKSPACE_SECTION_PAIRS = {
     "work_climate": "personal_climate",
     "personal_climate": "work_climate",
+    "work_climate_chat": "personal_climate_chat",
+    "personal_climate_chat": "work_climate_chat",
     "work_dashboard": "personal_dashboard",
     "personal_dashboard": "work_dashboard",
     "work_notebook": "personal_notebook",

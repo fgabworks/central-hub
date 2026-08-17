@@ -40,8 +40,11 @@ def run_cli_capture(
     )
 
 class BaseCliAdapter:
+    credential_type = "cli"
+    env_keys: tuple[str, ...] = ()
     authentication_method = "Provider CLI browser authentication"
     credential_storage = "Provider CLI managed"
+    settings_help = "Authenticate with the official CLI on AI Connections. Hub never stores CLI tokens."
 
     def __init__(self, descriptor: AgentDescriptor) -> None:
         self.descriptor = descriptor

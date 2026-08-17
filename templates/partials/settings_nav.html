@@ -1,0 +1,39 @@
+<nav class="settings-nav" aria-label="Settings">
+  <a class="settings-nav-item{% if settings_active_tab == 'overview' %} is-active{% endif %}"
+     href="{{ url_for('settings_page') }}"
+     {% if settings_active_tab == 'overview' %}aria-current="page"{% endif %}>
+    <span class="settings-nav-ico" aria-hidden="true">⚙</span>
+    <span>General</span>
+  </a>
+  <span class="settings-nav-item is-planned" title="Planned">
+    <span class="settings-nav-ico" aria-hidden="true">◐</span>
+    <span>Appearance</span>
+    <span class="settings-nav-badge">Planned</span>
+  </span>
+  <a class="settings-nav-item{% if settings_active_tab == 'ai_providers' %} is-active{% endif %}"
+     href="{{ url_for('settings_ai_providers') }}"
+     {% if settings_active_tab == 'ai_providers' %}aria-current="page"{% endif %}>
+    <span class="settings-nav-ico" aria-hidden="true">✦</span>
+    <span>AI Providers</span>
+  </a>
+  <span class="settings-nav-item is-planned" title="Planned">
+    <span class="settings-nav-ico" aria-hidden="true">⬡</span>
+    <span>Integrations</span>
+    <span class="settings-nav-badge">Planned</span>
+  </span>
+  <span class="settings-nav-item is-planned" title="Planned">
+    <span class="settings-nav-ico" aria-hidden="true">🔒</span>
+    <span>Security</span>
+    <span class="settings-nav-badge">Planned</span>
+  </span>
+  <span class="settings-nav-item is-planned" title="Planned">
+    <span class="settings-nav-ico" aria-hidden="true">🔔</span>
+    <span>Notifications</span>
+    <span class="settings-nav-badge">Planned</span>
+  </span>
+  <span class="settings-nav-item is-planned" title="Planned">
+    <span class="settings-nav-ico" aria-hidden="true">⋯</span>
+    <span>Advanced</span>
+    <span class="settings-nav-badge">Planned</span>
+  </span>
+</nav>

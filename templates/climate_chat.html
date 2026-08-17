@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}AiriX · CLIMATE Chat · {{ climate.workspace_label }}{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/climate.css') }}?v=34">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/climate_chat.css') }}?v=1">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/styles/github-dark.min.css">
+{% endblock %}
+{% block content %}
+<div class="ax-chat" id="ax-chat"
+     data-workspace="{{ climate.workspace }}"
+     data-api-root="/api/climate/{{ climate.workspace }}"
+     data-bootstrap='{{ climate|tojson }}'>
+  <aside class="ax-chat-sidebar" aria-label="Conversation history">
+    <div class="ax-chat-sidebar-head">
+      <button type="button" class="ax-chat-new" id="ax-chat-new">
+        <span aria-hidden="true">+</span> New Chat
+      </button>
+    </div>
+    <div class="ax-chat-history" id="ax-chat-history" role="list"></div>
+  </aside>
+
+  <section class="ax-chat-main">
+    <header class="ax-chat-header">
+      <div class="ax-chat-brand">
+        <img class="ax-chat-mark" src="{{ url_for('static', filename='img/climate-mark.png') }}" width="22" height="22" alt="">
+        <div>
+          <strong>AiriX · CLIMATE Chat</strong>
+          <small id="ax-chat-title">New chat</small>
+        </div>
+      </div>
+      <div class="ax-chat-header-actions">
+        <span class="ax-chat-state" id="ax-provider-state"><i aria-hidden="true"></i><span>Checking</span></span>
+        <button type="button" class="ax-icon-btn" id="ax-chat-rename" title="Rename chat" aria-label="Rename chat">✎</button>
+      </div>
+    </header>
+
+    <div class="ax-chat-feed" id="ax-chat-feed" aria-live="polite">
+      <div class="ax-chat-empty" id="ax-chat-empty">
+        <img src="{{ url_for('static', filename='img/climate-mark.png') }}" width="40" height="40" alt="">
+        <h1>AiriX</h1>
+        <p>Ask anything. Gemini (or another selected provider) powers the answer; AiriX remains your CLIMATE assistant.</p>
+      </div>
+    </div>
+
+    <div class="ax-chat-composer">
+      <div class="ax-compose-box">
+        <textarea id="ax-prompt" rows="1" placeholder="Ask AiriX…" aria-label="Ask AiriX"></textarea>
+        <div class="ax-compose-tools">
+          <button type="button" class="ax-stop-btn" id="ax-stop" hidden title="Stop">■ Stop</button>
+          <button type="button" class="ax-send-btn" id="ax-send" title="Send" aria-label="Send" disabled>➤</button>
+        </div>
+      </div>
+      <div class="ax-chat-controls">
+        <label class="ax-pill" title="Provider">
+          <i class="ax-pill-dot" id="ax-provider-dot" aria-hidden="true"></i>
+          <select id="ax-provider" aria-label="Provider"></select>
+        </label>
+        <label class="ax-pill ax-pill-model" title="Exact model — no silent fallback">
+          <select id="ax-model" aria-label="Model"><option value="">Select model</option></select>
+        </label>
+        <button type="button" class="ax-icon-btn" id="ax-model-refresh" title="Refresh models">↻</button>
+        <span class="ax-chat-hint">Ask-only · exact model · no repository upload</span>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/highlight.min.js"></script>
+<script src="{{ url_for('static', filename='js/climate_markdown.js') }}?v=3"></script>
+<script src="{{ url_for('static', filename='js/climate_chat.js') }}?v=1"></script>
+{% endblock %}

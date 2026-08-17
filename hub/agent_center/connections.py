@@ -7,6 +7,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Callable
 
+from hub.agent_center.provider_secrets import redact_known_secrets
 from hub.agent_center.redact import redact_text
 from hub.perf import TtlCache, coalesce, record_external, timed
 
@@ -233,10 +234,10 @@ class AgentConnectionRegistry:
                 disconnected=(normalized == "disconnect"),
                 last_check=_now(),
                 last_successful_check=_now() if success else None,
-                last_error="" if success else redact_text(str(result.get("detail") or ""), limit=500),
+                last_error="" if success else redact_known_secrets(str(result.get("detail") or ""), limit=500),
             )
         except Exception as exc:
-            result = {"ok": False, "state": "error", "detail": redact_text(str(exc), limit=500)}
+            result = {"ok": False, "state": "error", "detail": redact_known_secrets(str(exc), limit=500)}
             self.store.save_connection(agent_id, last_check=_now(), last_error=result["detail"])
             normalized = action
         self._status_cache.invalidate(f"status:{agent_id}")

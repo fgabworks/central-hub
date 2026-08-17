@@ -44,6 +44,14 @@ class OpenAIRunner:
             max_observation_chars=self._runtime_settings.max_observation_chars,
         )
 
+    def reload_runtime(
+        self,
+        settings: OpenAISettings,
+        client: OpenAIClient | None = None,
+    ) -> None:
+        self.settings = settings
+        self.client = client or OpenAIClient(settings)
+
     def start(
         self,
         *,

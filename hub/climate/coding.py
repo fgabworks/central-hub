@@ -77,6 +77,14 @@ def classify_task_mode(prompt: str, explicit: str | None = None) -> str:
     return "ask"
 
 
+def _is_general_chat_surface(surface: str) -> bool:
+    return str(surface or "").strip().lower() in {"chat", "general"}
+
+
+def _is_general_chat_conversation(runs: list[dict[str, Any]]) -> bool:
+    return all(not list(run.get("repository_ids") or []) for run in runs)
+
+
 class ClimateCodingError(ValueError):
     def __init__(self, message: str, *, code: str = "invalid_request") -> None:
         super().__init__(message)
@@ -103,22 +111,39 @@ class ClimateCodingAdapter:
     def coding_defaults(self) -> dict[str, Any]:
         return self.agent_center.connections.coding_defaults()
 
-    def conversations(self, *, workspace: str, repository_id: str = "", limit: int = 50) -> list[dict[str, Any]]:
+    def conversations(
+        self,
+        *,
+        workspace: str,
+        repository_id: str = "",
+        surface: str = "",
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
         profile_id = "okarun" if workspace == "work" else "aira"
         rows = self.agent_center.store.list_conversations(profile_id=profile_id, limit=limit)
-        if not repository_id:
+        general = _is_general_chat_surface(surface)
+        if not repository_id and not general:
             return rows
         filtered = []
         for row in rows:
             runs = self.agent_center.store.list_conversation_runs(
                 str(row.get("id") or ""), profile_id=profile_id, limit=100
             )
+            if general:
+                if _is_general_chat_conversation(runs):
+                    filtered.append(row)
+                continue
             if any(repository_id in list(run.get("repository_ids") or []) for run in runs):
                 filtered.append(row)
         return filtered
 
     def conversation(
-        self, conversation_id: str, *, workspace: str, repository_id: str = ""
+        self,
+        conversation_id: str,
+        *,
+        workspace: str,
+        repository_id: str = "",
+        surface: str = "",
     ) -> dict[str, Any]:
         profile_id = "okarun" if workspace == "work" else "aira"
         conversation = self.agent_center.store.get_conversation(
@@ -129,6 +154,8 @@ class ClimateCodingAdapter:
         runs = self.agent_center.store.list_conversation_runs(
             conversation_id, profile_id=profile_id, limit=200
         )
+        if _is_general_chat_surface(surface) and not _is_general_chat_conversation(runs):
+            raise ClimateCodingError("Conversation not found", code="not_found")
         if repository_id and not any(
             repository_id in list(run.get("repository_ids") or []) for run in runs
         ):
@@ -148,13 +175,15 @@ class ClimateCodingAdapter:
         workspace: str,
         title: str,
         repository_id: str = "",
+        surface: str = "",
     ) -> dict[str, Any]:
         profile_id = "okarun" if workspace == "work" else "aira"
-        if repository_id:
+        if repository_id or _is_general_chat_surface(surface):
             self.conversation(
                 conversation_id,
                 workspace=workspace,
                 repository_id=repository_id,
+                surface=surface,
             )
         conversation = self.agent_center.store.rename_conversation(
             conversation_id, profile_id=profile_id, title=title
@@ -204,6 +233,7 @@ class ClimateCodingAdapter:
         repository_investigation: bool = False,
         execution_mode: str = "",
         display_prompt: str = "",
+        surface: str = "",
     ) -> dict[str, Any]:
         self._require_provider(provider)
         if workspace not in {"work", "personal"}:
@@ -231,27 +261,50 @@ class ClimateCodingAdapter:
                 "Gemini v1 is read-only chat. Ask for an explanation or analysis; editing and agent actions are not enabled.",
                 code="mode_unsupported",
             )
+        general_chat = _is_general_chat_surface(surface)
+        if general_chat:
+            repository_investigation = False
+            include_repo_context = False
+            selected_files = []
+            current_file = ""
+            repository_id = ""
         repository_investigation = bool(repository_investigation and mode == "ask")
         files = list(dict.fromkeys(
             str(path).replace("\\", "/").lstrip("/")
             for path in ([current_file] + list(selected_files or []))
             if str(path).strip()
         ))
-        if mode == "edit":
+        if general_chat:
             context_note = [
-                "CLIMATE coding request (EDIT mode).",
-                "Stay read-only at runtime; propose file replacements only.",
-                "Return proposed file replacements in a fenced JSON object using this schema: ",
-                '{"edits":[{"path":"relative/path","content":"complete replacement content"}]}.',
-                "Do not apply edits or execute commands.",
-                (
-                    "Do not assume full chat history."
-                    if direct
-                    else "Use only the bounded context packet; do not assume full chat history."
-                ),
+                "AiriX · CLIMATE Chat (ASK).",
+                "Answer in clear human-readable prose (markdown allowed).",
+                "Use only the user prompt and any supplied bounded context.",
+                "Do not propose file edits, diffs, patches, or command execution.",
+                "Do not assume repository access unless bounded file context is supplied.",
             ]
+            if selection:
+                context_note.append("Bounded selected context:\n" + selection[:20_000])
+            if reuse_session and not handoff:
+                context_note.append(
+                    "Same-provider session: reuse prior provider context when supported."
+                )
+            packed_prompt = "\n\n".join(context_note + ["User prompt:", prompt.strip()])
+            has_packet = False
         else:
-            if direct:
+            if mode == "edit":
+                context_note = [
+                    "CLIMATE coding request (EDIT mode).",
+                    "Stay read-only at runtime; propose file replacements only.",
+                    "Return proposed file replacements in a fenced JSON object using this schema: ",
+                    '{"edits":[{"path":"relative/path","content":"complete replacement content"}]}.',
+                    "Do not apply edits or execute commands.",
+                    (
+                        "Do not assume full chat history."
+                        if direct
+                        else "Use only the bounded context packet; do not assume full chat history."
+                    ),
+                ]
+            elif direct:
                 context_note = [
                     "CLIMATE coding request (ASK / EXPLAIN mode).",
                     "Execution mode: Direct Provider.",
@@ -301,27 +354,27 @@ class ClimateCodingAdapter:
                         else "Do not apply edits or execute commands."
                     ),
                 ]
-            if is_logic_explanation_prompt(prompt):
+            if mode != "edit" and is_logic_explanation_prompt(prompt):
                 context_note.append(logic_explanation_instructions())
-        if selection:
-            context_note.append("Current editor selection:\n" + selection[:20_000])
-        if handoff:
-            context_note.append("Cross-provider compact handoff — do not replay full CLIMATE history.")
-        if reuse_session and not handoff:
-            context_note.append("Same-provider session: reuse prior provider context when supported.")
-        has_packet = (not direct) and (
-            "CLIMATE context packet" in prompt
-            or "CLIMATE preflight context packet" in prompt
-        )
-        if has_packet:
-            packed_prompt = "\n\n".join(context_note + [prompt.strip()])
-        elif direct:
-            packed_prompt = "\n\n".join(context_note + ["User prompt:", prompt.strip()])
-        else:
-            context_note.append(
-                "Repository context: " + ("enabled" if include_repo_context else "selected files only")
+            if selection:
+                context_note.append("Current editor selection:\n" + selection[:20_000])
+            if handoff:
+                context_note.append("Cross-provider compact handoff — do not replay full CLIMATE history.")
+            if reuse_session and not handoff:
+                context_note.append("Same-provider session: reuse prior provider context when supported.")
+            has_packet = (not direct) and (
+                "CLIMATE context packet" in prompt
+                or "CLIMATE preflight context packet" in prompt
             )
-            packed_prompt = "\n\n".join(context_note + [prompt.strip()])
+            if has_packet:
+                packed_prompt = "\n\n".join(context_note + [prompt.strip()])
+            elif direct:
+                packed_prompt = "\n\n".join(context_note + ["User prompt:", prompt.strip()])
+            else:
+                context_note.append(
+                    "Repository context: " + ("enabled" if include_repo_context else "selected files only")
+                )
+                packed_prompt = "\n\n".join(context_note + [prompt.strip()])
 
         profile_id = "okarun" if workspace == "work" else "aira"
         if workspace == "personal" and provider == "codex":

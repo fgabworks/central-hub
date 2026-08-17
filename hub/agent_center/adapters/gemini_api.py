@@ -11,8 +11,21 @@ from hub.agent_center.gemini_settings import GeminiSettings, load_gemini_setting
 
 class GeminiApiAdapter:
     is_api_adapter = True
+    credential_type = "api_key"
+    env_keys = ("GOOGLE_API_KEY", "GEMINI_API_KEY")
+    preferred_write_key = "GEMINI_API_KEY"
+    enabled_env = "GEMINI_ENABLED"
+    enabled_defaults_to_key = True
+    enable_when_key_set = True
     authentication_method = "Server-side GEMINI_API_KEY or GOOGLE_API_KEY"
     credential_storage = "Environment only"
+    settings_help = (
+        "Uses GEMINI_API_KEY or GOOGLE_API_KEY from the server environment. "
+        "If both are set, GOOGLE_API_KEY takes precedence."
+    )
+    settings_display_name = "Gemini"
+    settings_mark = "G"
+    settings_blurb = "Add your Gemini API key to enable Gemini in CLIMATE."
 
     def __init__(
         self,
@@ -30,6 +43,10 @@ class GeminiApiAdapter:
             executable="",
             modes=["ask"],
         )
+
+    def reload_settings(self) -> None:
+        self.settings = load_gemini_settings()
+        self.client = GeminiClient(self.settings)
 
     def capabilities(self) -> dict[str, Any]:
         return {

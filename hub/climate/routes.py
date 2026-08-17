@@ -49,6 +49,17 @@ def register_climate_routes(app: Flask) -> None:
             skip_global_notepad=True,
         )
 
+    def _chat_page(workspace: str):
+        ws = normalize_workspace(workspace)
+        bootstrap = _svc().bootstrap(ws, "")
+        return render_template(
+            "climate_chat.html",
+            climate=bootstrap,
+            workspace=ws,
+            skip_assistant_dock=True,
+            skip_workspace_console=True,
+        )
+
     @app.get("/work/climate")
     def work_climate():
         return _page("work")
@@ -56,6 +67,14 @@ def register_climate_routes(app: Flask) -> None:
     @app.get("/personal/climate")
     def personal_climate():
         return _page("personal")
+
+    @app.get("/work/chat")
+    def work_climate_chat():
+        return _chat_page("work")
+
+    @app.get("/personal/chat")
+    def personal_climate_chat():
+        return _chat_page("personal")
 
     @app.get("/api/climate/<workspace>/bootstrap")
     def api_climate_bootstrap(workspace: str):
@@ -80,6 +99,7 @@ def register_climate_routes(app: Flask) -> None:
             rows = _svc().conversations(
                 workspace,
                 repository_id=str(request.args.get("repository_id") or ""),
+                surface=str(request.args.get("surface") or ""),
                 limit=int(request.args.get("limit") or 50),
             )
             return jsonify({"ok": True, "conversations": rows})
@@ -95,6 +115,7 @@ def register_climate_routes(app: Flask) -> None:
                     workspace,
                     conversation_id,
                     repository_id=str(request.args.get("repository_id") or ""),
+                    surface=str(request.args.get("surface") or ""),
                 ),
             })
         except ClimateCodingError as exc:
@@ -111,6 +132,7 @@ def register_climate_routes(app: Flask) -> None:
                     conversation_id,
                     title=str(payload.get("title") or ""),
                     repository_id=str(request.args.get("repository_id") or ""),
+                    surface=str(payload.get("surface") or request.args.get("surface") or ""),
                 ),
             })
         except ClimateCodingError as exc:
@@ -217,6 +239,14 @@ def register_climate_routes(app: Flask) -> None:
     def api_climate_debug(workspace: str, repo_id: str):
         try:
             return jsonify(_svc().debug(workspace, repo_id))
+        except (ClimateCodingError, WorkspaceSecurityError) as exc:
+            return _error(exc)
+
+    @app.post("/api/climate/<workspace>/chat/runs")
+    def api_climate_chat_execute(workspace: str):
+        payload = request.get_json(silent=True) or {}
+        try:
+            return jsonify({"ok": True, "run": _svc().execute_chat(workspace, **payload)})
         except (ClimateCodingError, WorkspaceSecurityError) as exc:
             return _error(exc)
 

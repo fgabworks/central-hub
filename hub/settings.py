@@ -298,6 +298,9 @@ class Settings:
 def load_settings(env_file: Path | None = None) -> Settings:
     """Load settings from `.env` (if present) and process environment."""
     load_dotenv(env_file or (ROOT_DIR / ".env"), override=False)
+    from hub.agent_center.provider_secrets import load_secrets_into_environ
+
+    load_secrets_into_environ()
 
     config_path = os.getenv(
         "CENTRAL_HUB_REPOSITORIES_CONFIG",

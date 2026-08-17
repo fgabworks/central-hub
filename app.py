@@ -523,6 +523,7 @@ def create_app() -> Flask:
             "work_airix",
             "work_okarun",
             "work_climate",
+            "work_climate_chat",
             "dhis2",
             "jobs",
             "job_detail",
@@ -537,6 +538,7 @@ def create_app() -> Flask:
             "personal_calendar",
             "personal_aira",
             "personal_climate",
+            "personal_climate_chat",
             "arctic_dashboard",
             "arctic_profile",
             "arctic_files",
@@ -545,10 +547,16 @@ def create_app() -> Flask:
 
         personal_nav = [
             {
+                "endpoint": "personal_climate_chat",
+                "label": "CLIMATE Chat",
+                "icon": "✦",
+                "active_prefix": None,
+            },
+            {
                 "endpoint": "personal_climate",
                 "label": "Code Workspace",
                 "icon": "C",
-                "active_prefix": "personal_climate",
+                "active_prefix": None,
             },
             {
                 "endpoint": "personal_dashboard",
@@ -595,10 +603,16 @@ def create_app() -> Flask:
         ]
         work_core_nav = [
             {
+                "endpoint": "work_climate_chat",
+                "label": "CLIMATE Chat",
+                "icon": "✦",
+                "active_prefix": None,
+            },
+            {
                 "endpoint": "work_climate",
                 "label": "Code Workspace",
                 "icon": "C",
-                "active_prefix": "work_climate",
+                "active_prefix": None,
             },
             {
                 "endpoint": "work_dashboard",
@@ -712,7 +726,7 @@ def create_app() -> Flask:
                 "endpoint": "settings_page",
                 "label": "Settings",
                 "icon": "⚙",
-                "active_prefix": None,
+                "active_prefix": "settings",
             },
         ]
         if workspace == "work":

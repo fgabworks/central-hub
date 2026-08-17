@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}AI Providers · Settings · {{ app_name }}{% endblock %}
+{% block content %}
+{% set sh_title = "AI Providers" %}
+{% set sh_info = "Manage the AI providers and API keys used by AiriX. Credentials remain server-side and are never shown after saving." %}
+{% set settings_active_tab = "ai_providers" %}
+<div class="settings-layout">
+  <aside class="settings-nav-wrap">
+    {% include "partials/settings_nav.html" %}
+  </aside>
+  <div class="settings-main">
+    {% include "partials/section_header.html" %}
+    <p class="settings-lede">
+      Manage the AI providers and API keys used by AiriX.
+      Credentials remain server-side and are never shown after saving.
+    </p>
+
+    <section class="ai-provider-grid" id="ai-provider-settings" data-endpoint="/api/settings/ai-providers">
+      {% for item in providers %}
+      <article
+        class="ai-provider-card"
+        data-provider-id="{{ item.id }}"
+        data-credential-type="{{ item.credential_type }}"
+        data-configured="{{ '1' if item.configured else '0' }}"
+        data-planned="{{ '1' if item.planned else '0' }}"
+        data-display-name="{{ item.display_name }}"
+      >
+        <div class="ai-provider-identity">
+          <span class="ai-provider-mark" aria-hidden="true">{{ item.mark }}</span>
+          <div class="ai-provider-identity-text">
+            <div class="ai-provider-title-row">
+              <h2>{{ item.display_name }}</h2>
+              <span class="status-pill connection-status status-{{ item.state|replace('_', '-') }}">{{ item.status_label }}</span>
+            </div>
+            <p class="muted ai-provider-blurb js-blurb"{% if item.status_label == 'Connected' %} hidden{% endif %}>{{ item.blurb }}</p>
+          </div>
+        </div>
+        <div class="ai-provider-stat">
+          <span class="ai-provider-stat-label">Credential</span>
+          <span class="ai-provider-stat-value js-credential{% if item.credential_status == 'Missing' %} is-missing{% elif item.credential_status == 'Configured' %} is-configured{% endif %}">
+            <span class="ai-provider-stat-ico" aria-hidden="true">{% if item.credential_status == 'Configured' %}✓{% elif item.credential_status == 'Missing' %}!{% else %}○{% endif %}</span>
+            <span class="js-credential-text">{{ item.credential_status }}</span>
+          </span>
+        </div>
+        <div class="ai-provider-stat">
+          <span class="ai-provider-stat-label">Models</span>
+          <span class="ai-provider-stat-value js-models{% if item.models_count %} is-ready{% endif %}">{{ item.models_label }}</span>
+        </div>
+        <div class="ai-provider-stat ai-provider-last">
+          <span class="ai-provider-stat-label">Last test</span>
+          <span class="ai-provider-stat-value js-last-check">{{ item.last_check_label or "—" }}</span>
+          <span class="ai-provider-stat-note js-test-summary">{{ item.test_summary }}</span>
+        </div>
+        <div class="ai-provider-actions">
+          {% if item.id == "local-models" %}
+          <button type="button" class="btn btn-sm" data-action="configure" disabled title="Local model support is planned">Configure</button>
+          {% elif item.credential_type == "api_key" %}
+          <button type="button" class="btn btn-sm" data-action="set-key">{{ "Replace Key" if item.configured else "Add Key" }}</button>
+          {% endif %}
+          {% if item.supports_connection_test %}
+          <button type="button" class="btn btn-sm btn-ai-provider" data-action="test"{% if not item.configured %} disabled{% endif %}>Test Connection</button>
+          {% endif %}
+          <details class="ai-provider-overflow">
+            <summary class="btn btn-sm ai-provider-overflow-btn" aria-label="More actions">⋯</summary>
+            <div class="ai-provider-overflow-menu">
+              {% if item.credential_type == "api_key" %}
+              <button type="button" class="ai-provider-overflow-item" data-action="remove-key"{% if not item.configured %} disabled{% endif %}>Remove Key</button>
+              {% else %}
+              <span class="ai-provider-overflow-item is-muted">No key actions</span>
+              {% endif %}
+            </div>
+          </details>
+        </div>
+        <p class="banner banner-error js-error" {% if not item.last_error %}hidden{% endif %}>{{ item.last_error }}</p>
+      </article>
+      {% else %}
+      <p class="muted">No AI providers are registered.</p>
+      {% endfor %}
+    </section>
+
+    <p class="muted settings-footnote">
+      CLI providers such as Codex, Claude Code, and Cursor stay on
+      <a href="{{ url_for('ai_connections') }}">AI Connections</a>.
+      This page is driven by provider registry metadata, not a hardcoded Gemini-only list.
+    </p>
+
+    <aside class="ai-provider-security" role="note">
+      <span class="ai-provider-security-ico" aria-hidden="true">🔒</span>
+      <div>
+        <p>Your AI provider credentials are stored locally on this server.</p>
+        <p>They are never shown after saving and are not stored in CLIMATE conversation or run records.</p>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<dialog id="ai-provider-key-dialog" class="ai-provider-dialog">
+  <form method="dialog" id="ai-provider-key-form" autocomplete="off">
+    <h2 id="ai-provider-key-title">Configure provider</h2>
+    <label>
+      <span>API Key</span>
+      <input type="password" id="ai-provider-key-input" name="api_key" autocomplete="off" spellcheck="false">
+    </label>
+    <p class="muted" id="ai-provider-key-help">
+      The key is stored only on the local CLIMATE server and will not be displayed again after saving.
+    </p>
+    <div class="ai-provider-dialog-actions">
+      <button type="button" class="btn" id="ai-provider-key-cancel" value="cancel">Cancel</button>
+      <button type="submit" class="btn btn-ai-provider" value="save">Save Key</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/settings_ai_providers.js') }}?v=2" defer></script>
+{% endblock %}

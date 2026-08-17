@@ -25,6 +25,7 @@ from hub.agent_center.openai_runner import OpenAIRunner
 from hub.agent_center.openai_settings import OpenAISettings, load_openai_settings
 from hub.agent_center.openai_tools import AgentToolsContext
 from hub.agent_center.profiles import PROFILES, get_profile, normalize_tools
+from hub.agent_center.provider_settings import ProviderSettingsService
 from hub.agent_center.repository_context import agent_requires_repository
 from hub.agent_center.repository_intelligence import RepositoryIntelligenceService
 from hub.agent_center.runner import AgentRunner
@@ -112,6 +113,38 @@ class AgentCenterService:
         }
         provider_adapters = [a for a in self.adapters if a.descriptor.provider in connection_providers]
         self.connections = AgentConnectionRegistry(provider_adapters, self.store, audit=audit)
+        self.provider_settings = ProviderSettingsService(self)
+
+    def reload_provider_runtime(self, provider_id: str) -> None:
+        """Re-read env-backed adapter settings and swap in-process API clients."""
+        adapter = self.connections.adapters.get(provider_id)
+        if adapter is None:
+            for item in self.adapters:
+                if item.descriptor.id == provider_id:
+                    adapter = item
+                    break
+        if adapter is None:
+            return
+        if hasattr(adapter, "reload_settings"):
+            adapter.reload_settings()
+        settings = getattr(adapter, "settings", None)
+        client = getattr(adapter, "client", None)
+        runner = self.api_runners.get(provider_id)
+        if runner is not None and hasattr(runner, "reload_runtime") and settings is not None:
+            runner.reload_runtime(settings, client)
+        elif getattr(adapter, "is_api_adapter", False) and settings is not None:
+            if provider_id == "gemini":
+                self.api_runners[provider_id] = GeminiRunner(
+                    self.store, settings=settings, client=client, audit=self.audit
+                )
+            else:
+                self.api_runners[provider_id] = OpenAIRunner(
+                    self.store, settings=settings, client=client, audit=self.audit
+                )
+        if provider_id == "openai-api" and settings is not None:
+            self.openai_settings = settings
+            self.openai_runner = self.api_runners.get("openai-api") or self.openai_runner
+        self.connections.invalidate(provider_id)
 
     def list_modes(self) -> list[dict[str, Any]]:
         rows = [{"id": m, "label": mode_label(m), "enabled": True} for m in MODES]

@@ -9,6 +9,7 @@ from typing import Any
 
 from hub.agent_center.db import AgentCenterDb
 from hub.agent_center.models import MAX_ANSWER_CHARS, MAX_LOG_CHARS, public_run
+from hub.agent_center.provider_secrets import redact_known_secrets
 from hub.agent_center.redact import redact_text
 
 
@@ -45,7 +46,7 @@ class AgentCenterStore:
             "disconnected": int(disconnected if disconnected is not None else bool(current.get("disconnected"))),
             "last_check": last_check if last_check is not None else str(current.get("last_check") or ""),
             "last_successful_check": last_successful_check if last_successful_check is not None else str(current.get("last_successful_check") or ""),
-            "last_error": redact_text(last_error, limit=500) if last_error is not None else str(current.get("last_error") or ""),
+            "last_error": redact_known_secrets(last_error, limit=500) if last_error is not None else str(current.get("last_error") or ""),
         }
         with self.db.connect() as conn:
             conn.execute(

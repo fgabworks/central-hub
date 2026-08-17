@@ -2,12 +2,18 @@
 {% from "macros.html" import status_badge %}
 {% block title %}Settings · {{ app_name }}{% endblock %}
 {% block content %}
-{% set sh_title = "Settings" %}
+{% set sh_title = "General" %}
 {% set sh_info = "Environment and registry configuration overview." %}
+{% set settings_active_tab = "overview" %}
 {% set sh_meta %}
   <span class="badge badge-phase">Read-only</span>
 {% endset %}
-{% include "partials/section_header.html" %}
+<div class="settings-layout">
+  <aside class="settings-nav-wrap">
+    {% include "partials/settings_nav.html" %}
+  </aside>
+  <div class="settings-main">
+    {% include "partials/section_header.html" %}
 
 {% if flash_error %}<div class="banner banner-error">{{ flash_error }}</div>{% endif %}
 {% if flash_notice %}<div class="banner" style="background:rgba(59,130,246,0.12);border-color:rgba(59,130,246,0.35);color:#93c5fd">{{ flash_notice }}</div>{% endif %}
@@ -65,6 +71,8 @@
   <p class="muted" style="margin:0 0 0.75rem">
     Detect and connect Codex, Claude Code, and Cursor Agent for CLIMATE Code Workspace.
     Hub never reads browser cookies or stores provider credentials.
+    API keys are managed on
+    <a href="{{ url_for('settings_ai_providers') }}">Settings → AI Providers</a>.
     <a href="{{ url_for('ai_connections') }}">Open full AI Connections</a>
   </p>
   <div class="ai-provider-compact" id="ai-provider-compact" data-workspace="{{ workspace }}">
@@ -185,4 +193,6 @@
 </section>
 <script src="{{ url_for('static', filename='js/hub_perf.js') }}?v=perf-1"></script>
 <script src="{{ url_for('static', filename='js/ai_connections.js') }}?v=cli-conn-3" defer></script>
+  </div>
+</div>
 {% endblock %}

@@ -463,6 +463,45 @@ class ClimateGeminiSafetyTests(unittest.TestCase):
         self.assertIn("Selected file app.py", payload["prompt"])
         self.assertIn("value = 1", payload["prompt"])
 
+    def test_general_chat_omits_repository_and_keeps_display_prompt(self):
+        center = mock.Mock()
+        center.start_run.return_value = {
+            "id": "run-chat",
+            "status": "queued",
+            "agent_id": "gemini",
+            "model": "gemini-test-flash",
+            "conversation_id": "conversation-chat",
+        }
+        adapter = ClimateCodingAdapter(center)
+        adapter.availability = mock.Mock(
+            return_value={"id": "gemini", "state": "connected"}
+        )
+        adapter.execute(
+            workspace="work",
+            repository_id="work-repo",
+            provider="gemini",
+            model="gemini-test-flash",
+            prompt="Reply with exactly: AiriX Gemini connection successful.",
+            display_prompt="Reply with exactly: AiriX Gemini connection successful.",
+            task_mode="ask",
+            surface="chat",
+            include_repo_context=True,
+            current_file="app.py",
+            selected_files=["README.md"],
+        )
+        payload = center.start_run.call_args.args[0]
+        self.assertEqual(
+            payload["display_prompt"],
+            "Reply with exactly: AiriX Gemini connection successful.",
+        )
+        self.assertEqual(payload["repository_ids"], [])
+        self.assertEqual(payload["files"], {})
+        self.assertFalse(payload["repository_investigation"])
+        self.assertNotIn("Repository context:", payload["prompt"])
+        self.assertNotIn("CLIMATE coding request", payload["prompt"])
+        self.assertIn("AiriX · CLIMATE Chat", payload["prompt"])
+        self.assertIn("Reply with exactly: AiriX Gemini connection successful.", payload["prompt"])
+
 
 if __name__ == "__main__":
     unittest.main()

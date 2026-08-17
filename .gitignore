@@ -2,6 +2,7 @@
 .env
 .env.local
 *.pem
+data/ai_provider_secrets.env
 
 # Python
 __pycache__/

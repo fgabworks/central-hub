@@ -141,6 +141,13 @@ class WorkspaceNavRouteTests(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(resp.headers["Location"].endswith("/personal/notebook"))
+        # Chat ↔ Chat
+        resp = self.client.get(
+            "/workspace/personal?from_endpoint=work_climate_chat",
+            follow_redirects=False,
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(resp.headers["Location"].endswith("/personal/chat"))
         # Non-equivalent falls back to Code Workspace
         resp = self.client.get(
             "/workspace/personal?from_endpoint=repositories",
@@ -156,6 +163,7 @@ class WorkspaceNavRouteTests(unittest.TestCase):
         self.assertIn(">VANTA<", work_html)
         self.assertLess(work_html.index(">VANTA<"), work_html.index(">ARCTIC<"))
         self.assertIn("Code Workspace", work_html)
+        self.assertIn("CLIMATE Chat", work_html)
         self.assertIn("Repositories", work_html)
         self.assertIn("Notebook", work_html)
         self.assertIn("SQL Workspace", work_html)
@@ -169,6 +177,7 @@ class WorkspaceNavRouteTests(unittest.TestCase):
         w_side = work_html[
             work_html.find('class="sidebar-nav"') : work_html.find('class="sidebar-actions"')
         ]
+        self.assertLess(w_side.index("CLIMATE Chat"), w_side.index("Code Workspace"))
         self.assertLess(w_side.index("Code Workspace"), w_side.index(">Dashboard<"))
         # Quick Notepad opens from the activity rail (no floating pill).
         self.assertIn("id=\"qn-panel\"", work_html)
@@ -180,11 +189,13 @@ class WorkspaceNavRouteTests(unittest.TestCase):
         self.assertIn('class="climate-system-shell theme-personal"', personal_html)
         self.assertIn(">ARCTIC<", personal_html)
         self.assertIn("Code Workspace", personal_html)
+        self.assertIn("CLIMATE Chat", personal_html)
         self.assertIn("Notebook", personal_html)
         self.assertIn("Tasks", personal_html)
         p_side = personal_html[
             personal_html.find('class="sidebar-nav"') : personal_html.find('class="sidebar-actions"')
         ]
+        self.assertLess(p_side.index("CLIMATE Chat"), p_side.index("Code Workspace"))
         self.assertLess(p_side.index("Code Workspace"), p_side.index(">Dashboard<"))
         self.assertLess(p_side.index(">Dashboard<"), p_side.index("Personal Files"))
         self.assertNotIn("HCSC–RF", p_side)

@@ -117,6 +117,91 @@ def register_agent_center_routes(app: Flask) -> None:
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
 
+    def _provider_settings():
+        return _svc().provider_settings
+
+    def _provider_http_error(exc: Exception):
+        from hub.agent_center.provider_catalog import scrub_public_payload
+        from hub.agent_center.redact import redact_text
+
+        code = getattr(exc, "code", "invalid_request")
+        status = 404 if code == "not_found" else 400
+        return (
+            jsonify(
+                scrub_public_payload(
+                    {"ok": False, "error": redact_text(str(exc), limit=240), "code": code}
+                )
+            ),
+            status,
+        )
+
+    @app.get("/settings/ai-providers")
+    def settings_ai_providers():
+        providers = _provider_settings().list_providers(probe=False)
+        _audit("AI_PROVIDERS_VIEW", detail={"count": len(providers)})
+        return render_template(
+            "settings_ai_providers.html",
+            providers=providers,
+        )
+
+    @app.get("/api/settings/ai-providers")
+    def api_settings_ai_providers():
+        from hub.agent_center.provider_catalog import scrub_public_payload
+
+        probe = request.args.get("probe") == "1"
+        return jsonify(
+            scrub_public_payload({"ok": True, "providers": _provider_settings().list_providers(probe=probe)})
+        )
+
+    @app.post("/api/settings/ai-providers/<provider_id>/key")
+    @require_owner
+    def api_settings_ai_provider_set_key(provider_id: str):
+        from hub.agent_center.provider_catalog import scrub_public_payload
+        from hub.agent_center.provider_settings import ProviderSettingsError
+
+        payload = request.get_json(silent=True) or {}
+        try:
+            provider = _provider_settings().set_key(provider_id, str(payload.get("api_key") or ""))
+        except ProviderSettingsError as exc:
+            return _provider_http_error(exc)
+        except ValueError as exc:
+            return _provider_http_error(exc)
+        return jsonify(scrub_public_payload({"ok": True, "provider": provider}))
+
+    @app.delete("/api/settings/ai-providers/<provider_id>/key")
+    @require_owner
+    def api_settings_ai_provider_remove_key(provider_id: str):
+        from hub.agent_center.provider_catalog import scrub_public_payload
+        from hub.agent_center.provider_settings import ProviderSettingsError
+
+        try:
+            provider = _provider_settings().remove_key(provider_id)
+        except ProviderSettingsError as exc:
+            return _provider_http_error(exc)
+        except ValueError as exc:
+            return _provider_http_error(exc)
+        return jsonify(scrub_public_payload({"ok": True, "provider": provider}))
+
+    @app.post("/api/settings/ai-providers/<provider_id>/test")
+    @require_owner
+    def api_settings_ai_provider_test(provider_id: str):
+        from hub.agent_center.provider_catalog import scrub_public_payload
+        from hub.agent_center.provider_settings import ProviderSettingsError
+
+        try:
+            result = _provider_settings().test_connection(provider_id)
+        except ProviderSettingsError as exc:
+            return _provider_http_error(exc)
+        except KeyError:
+            return _provider_http_error(ProviderSettingsError("Unknown provider", code="not_found"))
+        except ValueError as exc:
+            return _provider_http_error(exc)
+        _audit(
+            "AI_PROVIDER_TEST",
+            detail={"provider_id": provider_id, "ok": bool(result.get("ok"))},
+        )
+        return jsonify(scrub_public_payload(result))
+
     @app.get("/personal/aira")
     def personal_aira():
         return _page("aira")

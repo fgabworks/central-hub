@@ -31,6 +31,7 @@ INSTRUCTION_FILENAMES = (
 
 # Path segments / names that must never be included in agent context.
 SECRET_NAME_PATTERNS = (
+    "ai_provider_secrets.env",
     ".env",
     ".env.local",
     ".env.production",

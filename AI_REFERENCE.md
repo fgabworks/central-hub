@@ -1,11 +1,17 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-17 (AiriX CLIMATE Chat + Gemini read-only provider).
+Last verified: 2026-08-17 (Settings → AI Providers + standalone CLIMATE Chat).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
 
-**CLIMATE Code Workspace v1** is implemented at `/work/climate` (VANTA) and
+**AiriX · CLIMATE Chat** is a standalone top-level Ask-only chat at `/work/chat`
+(VANTA) and `/personal/chat` (ARCTIC). It reuses Agent Center conversations/runs,
+the Gemini adapter, exact model discovery/selection, streaming, cancellation, and
+`display_prompt` separation. It does not scan or upload a repository. Coding
+diagnostics stay in the Workspace Assistant.
+
+**CLIMATE Code Workspace v1** (Workspace Assistant) remains at `/work/climate` (VANTA) and
 `/personal/climate` (ARCTIC). It reuses the guarded Repository Workspace file/Git
 services and existing Agent Center CLI adapters/runner. The IDE shell provides a
 read-only Monaco file viewer that fills the remaining editor area and scrolls long files (textarea fallback); AI answers link repository path/function traces into that viewer, Explorer/search, multiple tabs,
@@ -48,7 +54,9 @@ stream into the existing Agent Center run lifecycle. Gemini supports ASK only;
 it has no file-write, command, SQL, email, calendar, agent, or native repository-exploration
 capability. Configure it with an environment-only `GEMINI_API_KEY` or `GOOGLE_API_KEY`
 (`GOOGLE_API_KEY` takes precedence), then optionally constrain models with
-`GEMINI_ALLOWED_MODELS`. No new edit or command capability was added.
+`GEMINI_ALLOWED_MODELS`. Keys can also be set, replaced, or removed from
+**Settings → AI Providers** (`/settings/ai-providers`); stored values stay on the
+server and are never returned to the browser. No new edit or command capability was added.
 CLIMATE coding runs in Assisted mode use a deterministic zero-token Context Resolver
 (AGENTS/SKILLS/provider/nested instructions + RI/local search). Implementation questions
 rank executable files/symbols above docs/tests and expand locally once when evidence is
@@ -175,7 +183,8 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Registry + health | `config/repositories.yaml`, `${VAR:-default}` expansion, `hub/adapters/` |
 | Registry grouping | Optional `repository_group_id` merges adapters into one UI row (`hub/registry/grouping.py`); Workspace / Application / API statuses independent |
 | Registry management | Add / Edit / Enable / Disable via UI → YAML (`hub/registry/store.py`); no auto-clone |
-| CLIMATE Code Workspace | `/work/climate` (VANTA) + `/personal/climate` (ARCTIC); `hub/climate/`; Monaco IDE shell over existing safe file/Git and authenticated coding-provider services; exact provider/model, cancel/output, proposal diff Accept/Reject; no unrestricted shell |
+| CLIMATE Chat | `/work/chat` + `/personal/chat`; ChatGPT-like AiriX Ask-only UI over the existing Agent Center/Gemini stack; no editor, no repository upload |
+| CLIMATE Code Workspace | `/work/climate` (VANTA) + `/personal/climate` (ARCTIC); Workspace Assistant / Monaco IDE shell over existing safe file/Git and authenticated coding-provider services; exact provider/model, cancel/output, proposal diff Accept/Reject; no unrestricted shell |
 | Repository Workspace | Phases 1–2 + Connect + Run Profile Builder + Active Application + Repository Intelligence: General / Connection / Repository Intelligence / Files & Changes / Settings / Logs & History; process vs HTTP health reconciled (`hub/repository_workspace/run_status.py`); YAML templates + SQLite repo profiles |
 | DHIS2 Reports | `/dhis2/reports` — Phase 1 Standard Report Manager: sync Stage/Live `/api/reports` metadata cache, filters, View / Open in DHIS2 / HTML source / Download / Refresh; period+OU controls; iframe embed with Open-in-DHIS2 fallback. Catalog shortcuts remain for repository/static HTML (`hub/dhis2_reports/`) |
 | Central Hub HCSC–RF | `/dhis2/hcsc-indicators` — Phase 0–3 registry + batched Overview/report/category + Compare Sources (`hub/hcsc_indicators/`); quarters **2025Q3–2026Q4**; National (DHIS2 level-1 `Philippines`) plus Region → Province → Municipality/City → Barangay via env-isolated SQLite cache + DHIS2 GET refresh; National passes the root UID through the unchanged batched analytics/registry path without child enumeration; generated reports have server-side CSV download with result/N/D/source/scope/timestamp lineage; optional **Geographic Breakdown** remains batched below the selected level; Population Filter = All Households; no formula engine |
@@ -197,6 +206,7 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Activity Rail | Far-right icons for AI Assistant, Quick Notepad, Workspace Console (future utilities placeholders); reduces main width only |
 | App shell | Fixed sidebar 210–216px + `padding-left` on `.app-shell`; `.main-column` / `.content` `flex:1; min-width:0`; `.sidebar-scroll` for nav |
 | AI Connections | `/system/ai-connections`; Installed/Authenticated/Version/Last Checked + connect/test/capabilities/disconnect; Codex never stores tokens |
+| AI Provider Settings | `/settings/ai-providers`; Settings submenu + registry-driven cards for Gemini, Grok/xAI, OpenAI, Claude/Anthropic (planned adapter), Local Models (UI-ready); Add/Replace/Remove key + Test Connection; secrets in gitignored `data/ai_provider_secrets.env`; APIs return metadata only; CLI providers stay on AI Connections |
 | DHIS2 | GET client, discovery, UID mapping, preview builder |
 | UID index admin | LP-style controlled update: dry-run → preview → typed confirm → archive/versions/restore |
 | Metadata enrichment | Read-only DHIS2 enrich → local SQLite relationships + audit statuses |

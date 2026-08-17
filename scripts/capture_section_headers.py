@@ -21,6 +21,7 @@ PAGES = [
     ("data_explorer", "/data-explorer", "Work"),
     ("dhis2_reports", "/dhis2/reports", "Work"),
     ("settings", "/settings", "System"),
+    ("ai_providers", "/settings/ai-providers", "System"),
     ("audit", "/audit", "System"),
     ("ai_connections", "/system/ai-connections", "System"),
 ]

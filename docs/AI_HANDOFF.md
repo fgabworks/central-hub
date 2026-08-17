@@ -4,7 +4,46 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**AiriX CLIMATE Chat + Gemini read-only provider (2026-08-17)**
+**Settings → AI Providers visual Settings (2026-08-17)**
+
+`/settings/ai-providers` now uses the CLIMATE Settings submenu
+(General, Appearance, AI Providers, Integrations, Security, Notifications,
+Advanced) and horizontal provider cards from the Agent Center registry.
+API-key providers (Gemini, Grok/xAI, OpenAI) plus planned Claude/Anthropic
+and Local Models cards share one metadata contract. Add/Replace Key opens a
+password modal that never preloads or returns the stored value. Test
+Connection reuses the existing adapter probe and returns sanitized
+success/failure copy only. Secrets remain in gitignored
+`data/ai_provider_secrets.env` plus existing `.env` variables; storage is
+local/server-side, not encrypted. Gemini Chat still uses the same Ask-only
+adapter (`GEMINI_API_KEY` / `GOOGLE_API_KEY`, Google key wins). CLI
+providers stay on AI Connections.
+
+Prior: **Settings → AI Providers backend (2026-08-17)**
+
+CLIMATE can manage provider credentials from **Settings → AI Providers**
+(`/settings/ai-providers`). Cards are derived from the Agent Center connection
+registry. API-key providers support Set/Replace/Remove Key and Test Connection.
+Stored secrets stay in gitignored `data/ai_provider_secrets.env` plus existing
+`.env` variables; settings APIs return metadata only. Gemini still uses the
+same Agent Center adapter. Adding a future API provider is adapter + metadata
+registration, not a Settings rebuild.
+
+Prior: **Standalone AiriX · CLIMATE Chat (2026-08-17)**
+
+General CLIMATE Chat is now a top-level ChatGPT-like page at `/work/chat` and
+`/personal/chat`, with a sidebar **CLIMATE Chat** entry in VANTA and ARCTIC.
+The existing `/work/climate` and `/personal/climate` IDE remains the **Workspace
+Assistant** (editor, Explorer, diagnostics, repo-scoped AiriX panel).
+
+The standalone page reuses Agent Center SQLite conversations/runs, the Gemini
+adapter, dynamic exact-model discovery, streaming, Stop/cancel, rename, and
+`display_prompt` vs packed provider prompt. Chat runs send no repository IDs or
+file bodies. Gemini stays Ask-only with no silent model fallback and env-only
+keys. Conversation lists use `surface=chat` so editor threads stay in the
+Workspace Assistant.
+
+Prior: **AiriX CLIMATE Chat + Gemini read-only provider (2026-08-17)**
 
 The existing CLIMATE AI panel presents **AiriX · CLIMATE Chat** and explains that the
 selected provider powers AiriX rather than replacing its identity. CLIMATE reuses Agent

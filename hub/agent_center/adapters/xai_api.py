@@ -14,10 +14,24 @@ from hub.agent_center.openai_settings import OpenAISettings, load_openai_setting
 
 class XaiApiAdapter:
     is_api_adapter = True
+    credential_type = "api_key"
+    env_keys = ("XAI_API_KEY",)
+    preferred_write_key = "XAI_API_KEY"
+    enable_when_key_set = False
     authentication_method = "Server-side XAI_API_KEY"
     credential_storage = "Environment only"
+    settings_help = "Uses XAI_API_KEY from the server environment. Models are discovered from xAI."
+    settings_display_name = "Grok / xAI"
+    settings_mark = "X"
+    settings_blurb = "Add your xAI API key to enable Grok in CLIMATE."
 
     def __init__(self, descriptor: AgentDescriptor | None = None) -> None:
+        self.descriptor = descriptor or AgentDescriptor(
+            id="grok", label="Grok", provider="xai_api", executable="", modes=list(MODES)
+        )
+        self.reload_settings()
+
+    def reload_settings(self) -> None:
         base = load_openai_settings()
         key = (os.getenv("XAI_API_KEY") or "").strip() or None
         self.settings: OpenAISettings = replace(
@@ -29,9 +43,6 @@ class XaiApiAdapter:
             allowed_models=None,
         )
         self.client = OpenAIClient(self.settings)
-        self.descriptor = descriptor or AgentDescriptor(
-            id="grok", label="Grok", provider="xai_api", executable="", modes=list(MODES)
-        )
 
     def capabilities(self) -> dict[str, Any]:
         return _readonly_capabilities(self.descriptor.modes, api=True)
