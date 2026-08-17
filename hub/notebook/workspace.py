@@ -81,31 +81,174 @@ def dashboard_endpoint(workspace: str) -> str:
 
 
 def primary_endpoint(workspace: str) -> str:
-    """Shared primary surface: Code Workspace for both VANTA and ARCTIC."""
+    """VANTA lands on Code Workspace; ARCTIC lands on the personal dashboard."""
     return (
-        "personal_climate"
+        "personal_dashboard"
         if normalize_workspace(workspace) == "personal"
         else "work_climate"
     )
 
 
+def chat_endpoint(workspace: str) -> str:
+    return (
+        "personal_climate_chat"
+        if normalize_workspace(workspace) == "personal"
+        else "work_climate_chat"
+    )
+
+
+def tasks_endpoint(workspace: str) -> str:
+    return (
+        "personal_tasks"
+        if normalize_workspace(workspace) == "personal"
+        else "work_tasks"
+    )
+
+
+def _nav_item(
+    endpoint: str,
+    label: str,
+    icon: str,
+    *,
+    active_prefix: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "endpoint": endpoint,
+        "label": label,
+        "icon": icon,
+        "active_prefix": active_prefix,
+    }
+
+
+def climate_nav_sections(workspace: str) -> list[dict[str, Any]]:
+    """One CLIMATE shell: shared items plus VANTA- or ARCTIC-only tools."""
+    ws = normalize_workspace(workspace)
+    personal = ws == "personal"
+    shared = [
+        _nav_item(dashboard_endpoint(ws), "Dashboard", "⌂"),
+        _nav_item(chat_endpoint(ws), "CLIMATE Chat", "✦"),
+    ]
+    if not personal:
+        shared.append(_nav_item("work_climate", "Code Workspace", "C"))
+    shared.extend(
+        [
+            _nav_item(tasks_endpoint(ws), "Tasks", "☑"),
+            _nav_item(
+                notebook_endpoint(ws),
+                "Notebook",
+                "✎",
+                active_prefix="personal_notebook" if personal else "work_notebook",
+            ),
+        ]
+    )
+    if not personal:
+        shared.append(
+            _nav_item("repositories", "Repositories", "▣", active_prefix="repository")
+        )
+    shared.append(
+        _nav_item("settings_page", "Settings", "⚙", active_prefix="settings"),
+    )
+    sections: list[dict[str, Any]] = [
+        {"id": "climate", "label": "CLIMATE", "entries": shared},
+    ]
+    if personal:
+        sections.append(
+            {
+                "id": "arctic",
+                "label": "ARCTIC",
+                "entries": [
+                    _nav_item("arctic_dashboard", "Personal Files", "◈", active_prefix="arctic_"),
+                    _nav_item("personal_aira", "Aira", "AI", active_prefix="personal_aira"),
+                    _nav_item("personal_email", "Email", "✉", active_prefix="personal_email"),
+                    _nav_item("personal_calendar", "Calendar", "📅", active_prefix="personal_calendar"),
+                ],
+            }
+        )
+    else:
+        sections.append(
+            {
+                "id": "vanta",
+                "label": "VANTA",
+                "entries": [
+                    _nav_item("sql_workspace", "SQL Workspace", "▦", active_prefix="sql_workspace"),
+                    _nav_item("data_explorer", "Data Explorer", "▤", active_prefix="data_explorer"),
+                    _nav_item("work_airix", "AiriX", "AI", active_prefix="work_airix"),
+                    _nav_item("work_email", "Email", "✉", active_prefix="work_email"),
+                    _nav_item("work_calendar", "Calendar", "📅", active_prefix="work_calendar"),
+                ],
+            }
+        )
+        sections.append(
+            {
+                "id": "dhis2",
+                "label": "DHIS2",
+                "icon": "⬡",
+                "expandable": True,
+                "expand_prefix": "dhis2",
+                "entries": [
+                    _nav_item("dhis2", "Overview", "⬡"),
+                    _nav_item("dhis2_reports_library", "DHIS2 Reports", "▤", active_prefix="dhis2_reports"),
+                    _nav_item("dhis2_hcsc_indicators", "HCSC–RF", "▣", active_prefix="dhis2_hcsc"),
+                    _nav_item(
+                        "dhis2_hcsc_progress_compare",
+                        "Report Comparison",
+                        "⇄",
+                        active_prefix="dhis2_hcsc_progress",
+                    ),
+                ],
+            }
+        )
+    sections.append(
+        {
+            "id": "system",
+            "label": "System",
+            "entries": [
+                _nav_item("jobs", "Jobs", "▶", active_prefix="job"),
+                _nav_item("health", "Health", "♡"),
+                _nav_item("ai_connections", "Connections", "AI", active_prefix="ai_connections"),
+                _nav_item("audit", "Audit", "☰"),
+            ],
+        }
+    )
+    return sections
+
+
 # Preserve equivalent sections when switching VANTA ↔ ARCTIC.
+# Code Workspace and Repositories are VANTA-only, so they are omitted here.
 _WORKSPACE_SECTION_PAIRS = {
-    "work_climate": "personal_climate",
-    "personal_climate": "work_climate",
     "work_climate_chat": "personal_climate_chat",
     "personal_climate_chat": "work_climate_chat",
     "work_dashboard": "personal_dashboard",
     "personal_dashboard": "work_dashboard",
     "work_notebook": "personal_notebook",
     "personal_notebook": "work_notebook",
+    "work_tasks": "personal_tasks",
+    "personal_tasks": "work_tasks",
+    "work_email": "personal_email",
+    "personal_email": "work_email",
+    "work_calendar": "personal_calendar",
+    "personal_calendar": "work_calendar",
+}
+
+_SHARED_STAY_PREFIXES = ("settings", "api_settings")
+_SHARED_STAY_ENDPOINTS = {
+    "settings_page",
+    "settings_ai_providers",
+    "jobs",
+    "job_detail",
+    "health",
+    "audit",
+    "ai_connections",
 }
 
 
 def counterpart_endpoint(endpoint: str | None, target_workspace: str) -> str:
-    """Map current section to the other workspace; else fall back to Code Workspace."""
+    """Map current section to the other workspace; else fall back to primary."""
     target = normalize_workspace(target_workspace)
-    mapped = _WORKSPACE_SECTION_PAIRS.get(endpoint or "")
+    ep = endpoint or ""
+    if ep in _SHARED_STAY_ENDPOINTS or ep.startswith(_SHARED_STAY_PREFIXES):
+        return ep
+    mapped = _WORKSPACE_SECTION_PAIRS.get(ep)
     if mapped:
         if target == "personal" and mapped.startswith("personal"):
             return mapped

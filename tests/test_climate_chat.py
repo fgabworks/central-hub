@@ -54,8 +54,16 @@ class ClimateChatPageTests(unittest.TestCase):
         self.assertIn("Code Workspace", side)
         self.assertIn("/work/chat", side)
         self.assertIn("/work/climate", side)
+        self.assertLess(side.index(">Dashboard<"), side.index("CLIMATE Chat"))
         self.assertLess(side.index("CLIMATE Chat"), side.index("Code Workspace"))
-        self.assertLess(side.index("Code Workspace"), side.index(">Dashboard<"))
+        personal = self.client.get("/personal").get_data(as_text=True)
+        p_side = personal[
+            personal.find('class="sidebar-nav"') : personal.find('class="sidebar-actions"')
+        ]
+        self.assertIn("CLIMATE Chat", p_side)
+        self.assertNotIn("Code Workspace", p_side)
+        self.assertNotIn("/work/climate", p_side)
+        self.assertNotIn("/personal/climate", p_side)
 
     def test_chat_models_endpoint_does_not_leak_keys(self) -> None:
         resp = self.client.get("/api/climate/work/providers/gemini/models")

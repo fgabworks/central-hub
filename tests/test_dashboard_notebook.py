@@ -365,7 +365,7 @@ class DashboardRouteTests(unittest.TestCase):
         self.assertIn("Dash queue note", html)
         self.assertIn("stat-card-tasks", html)
         self.assertIn("severity-", html)
-        self.assertIn('href="/work/notebook?status=open"', html)
+        self.assertIn('href="/work/tasks"', html)
         self.assertIn("stat-card-link", html)
         self.assertIn("summary-compact", html)
         self.assertIn("urgent", html.lower())

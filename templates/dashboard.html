@@ -173,9 +173,9 @@
   </aside>
 </section>
 
-{# Row 2 (work): Connected Repositories + Recent Activity #}
+{# Row 2: workspace-filtered repositories. Work also repeats Recent Activity here because DHIS2 occupies the row-1 aside. #}
 {% if show_repos %}
-<section class="dash-grid dash-grid-lower">
+<section class="dash-grid dash-grid-lower{% if not show_dhis2 %} dash-grid-repos-only{% endif %}">
   <div class="stack dash-main-stack">
     <section class="panel panel-repos"{% if health_async|default(false) %} data-health-async="1"{% endif %}>
       <div class="panel-header">
@@ -204,6 +204,7 @@
       </div>
     </section>
   </div>
+  {% if show_dhis2 %}
   <aside class="stack dash-side-stack">
     <section class="panel panel-activity{% if not activity_rows %} is-empty{% endif %}">
       <div class="panel-header">
@@ -228,6 +229,7 @@
       </div>
     </section>
   </aside>
+  {% endif %}
 </section>
 {% endif %}
 </div>

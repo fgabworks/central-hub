@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Personal Tasks · {{ app_name }}{% endblock %}
+{% block title %}{{ page_title|default("Personal Tasks") }} · {{ app_name }}{% endblock %}
 {% block content %}
 <div class="dash-workspace">
 <div class="dash-workspace-main">
-{% set sh_title = "Personal Tasks" %}
-{% set sh_info = "Open personal notes and tasks — no repository required." %}
+{% set sh_title = page_title|default("Personal Tasks") %}
+{% set sh_info = page_sub|default("Open personal notes and tasks — no repository required.") %}
 {% set sh_meta %}
   <form method="post" action="{{ url_for(notebook_endpoint) }}">
     <input type="hidden" name="action" value="new">
@@ -40,7 +40,7 @@
             <td><a class="btn btn-sm" href="{{ url_for(notebook_endpoint, note=note.id) }}">Open</a></td>
           </tr>
         {% else %}
-          <tr><td colspan="5" class="muted">No open personal tasks yet.</td></tr>
+          <tr><td colspan="5" class="muted">No open tasks yet.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -50,7 +50,7 @@
 {% if other_notes %}
 <section class="panel" style="margin-top:1rem">
   <div class="panel-header">
-    <h2>Other open personal notes</h2>
+    <h2>Other open notes</h2>
   </div>
   <div class="table-wrap">
     <table class="data">

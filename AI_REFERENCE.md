@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-17 (Settings → AI Providers + standalone CLIMATE Chat).
+Last verified: 2026-08-17 (VANTA-scoped Code Workspace/Repositories + shared CLIMATE shell).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -113,8 +113,14 @@ The visible application shell is CLIMATE. Its switcher presents only VANTA and
 ARCTIC while retaining the existing `work` and `personal` route/storage identities.
 Code Workspace context labels use `VANTA / DOH / <Repository>` or
 `ARCTIC / <Personal Context>` without adding Work/Personal workspace subtitles.
-VANTA tools are direct navigation entries and Code Workspace reuses that navigation
-instead of rendering a second activity rail. Explorer trees hide generated/cache/temp
+VANTA tools are a workspace-specific submenu (Code Workspace, Repositories,
+SQL, Data Explorer, DHIS2, AiriX, Email, Calendar). ARCTIC tools are Personal
+Files, Aira, Email, and Calendar.
+Shared CLIMATE items (Dashboard, Chat, Tasks, Notebook, Settings) stay visible
+in both workspaces. Code Workspace and Repositories remain implemented at
+`/work/climate`, `/personal/climate`, and `/repositories` but are hidden from
+ARCTIC navigation. Code Workspace reuses
+that navigation instead of rendering a second activity rail. Explorer trees hide generated/cache/temp
 directories by default and can reveal them explicitly without exposing `.git` or
 blocked secret files.
 
@@ -192,7 +198,7 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Health probes | Parallel checks; states: Healthy / Unreachable / Not Cloned / Disabled; owner-gated Central Hub Process Manager |
 | Live Processing | `live-processing` (API GET-only) + `live-processing-local` (path + git_url) |
 | Data-Script / Report Template | Registered with GitHub URLs; local path optional (`DATA_SCRIPT_PATH`, `REPORT_TEMPLATE_PATH`) |
-| Workspaces | Personal / Work switcher (cookie + `hub_prefs`); System nav always visible |
+| Workspaces | VANTA / ARCTIC switcher over one CLIMATE shell (`work`/`personal` storage); shared Dashboard, Chat, Tasks, Notebook, Settings; VANTA-only Code Workspace, Repositories, SQL/DHIS2/Data Explorer; ARCTIC-only Personal Files |
 | Personal Dashboard | `/personal` — personal tasks/notes + upcoming calendar + floating Quick Notepad |
 | Work Dashboard | `/work` (legacy `/` redirects here by remembered workspace) — repos, work queue, DHIS2 |
 | Repository Notebook | Scoped notes (`personal` \| `work`); work keeps repo links; personal needs none |

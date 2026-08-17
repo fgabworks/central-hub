@@ -100,6 +100,7 @@ from hub.notebook.dashboard import (
 )
 from hub.notebook.workspace import (
     apply_workspace_cookie,
+    climate_nav_sections,
     counterpart_endpoint,
     dashboard_endpoint,
     notebook_endpoint,
@@ -154,6 +155,7 @@ from hub.data_explorer.service import DataExplorerService
 from hub.repository_workspace.service import RepositoryWorkspaceService
 from hub.climate import ClimateCodingAdapter, ClimateService
 from hub.climate.routes import register_climate_routes
+from hub.climate.service import repo_workspace as climate_repo_workspace
 from hub.registry import load_registry
 from hub.registry.git_util import default_search_roots, find_local_checkout, slugify_repo_id
 from hub.registry.loader import RegistryError
@@ -512,10 +514,7 @@ def create_app() -> Flask:
             "work_notebook_reference_file",
             "work_email",
             "work_calendar",
-            "repositories",
-            "repository_new",
-            "repository_edit",
-            "repository_detail",
+            "work_tasks",
             "sql_workspace",
             "live_data_export",
             "data_explorer",
@@ -525,10 +524,7 @@ def create_app() -> Flask:
             "work_climate",
             "work_climate_chat",
             "dhis2",
-            "jobs",
-            "job_detail",
-            "health",
-        } or (ep.startswith("dhis2") if ep else False) or (ep.startswith("repository") if ep else False) or (ep.startswith("sql_") if ep else False) or (ep.startswith("api_live_export") if ep else False) or (ep.startswith("live_data") if ep else False) or (ep.startswith("api_data_explorer") if ep else False) or (ep.startswith("data_explorer") if ep else False) or (ep.startswith("api_agent") if ep else False) or (ep.startswith("api_agents") if ep else False) or (ep.startswith("api_context") if ep else False) or (ep.startswith("api_prompts") if ep else False) or (ep.startswith("api_climate") and request.view_args and request.view_args.get("workspace") == "work" if ep else False):
+        } or (ep.startswith("dhis2") if ep else False) or (ep.startswith("sql_") if ep else False) or (ep.startswith("repositor") if ep else False) or (ep.startswith("api_live_export") if ep else False) or (ep.startswith("live_data") if ep else False) or (ep.startswith("api_data_explorer") if ep else False) or (ep.startswith("data_explorer") if ep else False) or (ep.startswith("api_agent") if ep else False) or (ep.startswith("api_agents") if ep else False) or (ep.startswith("api_context") if ep else False) or (ep.startswith("api_prompts") if ep else False) or (ep.startswith("api_climate") and request.view_args and request.view_args.get("workspace") == "work" if ep else False):
             workspace = "work"
         elif ep in {
             "personal_dashboard",
@@ -545,205 +541,7 @@ def create_app() -> Flask:
         } or (ep.startswith("api_arctic") if ep else False) or (ep.startswith("arctic_") if ep else False) or (ep.startswith("api_climate") and request.view_args and request.view_args.get("workspace") == "personal" if ep else False):
             workspace = "personal"
 
-        personal_nav = [
-            {
-                "endpoint": "personal_climate_chat",
-                "label": "CLIMATE Chat",
-                "icon": "✦",
-                "active_prefix": None,
-            },
-            {
-                "endpoint": "personal_climate",
-                "label": "Code Workspace",
-                "icon": "C",
-                "active_prefix": None,
-            },
-            {
-                "endpoint": "personal_dashboard",
-                "label": "Dashboard",
-                "icon": "⌂",
-                "active_prefix": None,
-            },
-            {
-                "endpoint": "arctic_dashboard",
-                "label": "Personal Files",
-                "icon": "◈",
-                "active_prefix": "arctic_",
-            },
-            {
-                "endpoint": "personal_notebook",
-                "label": "Notebook",
-                "icon": "✎",
-                "active_prefix": "personal_notebook",
-            },
-            {
-                "endpoint": "personal_tasks",
-                "label": "Tasks",
-                "icon": "☑",
-                "active_prefix": None,
-            },
-            {
-                "endpoint": "personal_aira",
-                "label": "Aira",
-                "icon": "AI",
-                "active_prefix": "personal_aira",
-            },
-            {
-                "endpoint": "personal_email",
-                "label": "Email",
-                "icon": "✉",
-                "active_prefix": "personal_email",
-            },
-            {
-                "endpoint": "personal_calendar",
-                "label": "Calendar",
-                "icon": "📅",
-                "active_prefix": "personal_calendar",
-            },
-        ]
-        work_core_nav = [
-            {
-                "endpoint": "work_climate_chat",
-                "label": "CLIMATE Chat",
-                "icon": "✦",
-                "active_prefix": None,
-            },
-            {
-                "endpoint": "work_climate",
-                "label": "Code Workspace",
-                "icon": "C",
-                "active_prefix": None,
-            },
-            {
-                "endpoint": "work_dashboard",
-                "label": "Dashboard",
-                "icon": "⌂",
-                "active_prefix": None,
-            },
-            {
-                "endpoint": "repositories",
-                "label": "Repositories",
-                "icon": "▣",
-                "active_prefix": "repository",
-            },
-            {
-                "endpoint": "work_notebook",
-                "label": "Notebook",
-                "icon": "✎",
-                "active_prefix": "work_notebook",
-            },
-            {
-                "endpoint": "sql_workspace",
-                "label": "SQL Workspace",
-                "icon": "▦",
-                "active_prefix": "sql_workspace",
-            },
-            {
-                "endpoint": "data_explorer",
-                "label": "Data Explorer",
-                "icon": "▤",
-                "active_prefix": "data_explorer",
-            },
-            {
-                "endpoint": "dhis2",
-                "label": "DHIS2",
-                "icon": "⬡",
-                "active_prefix": "dhis2",
-            },
-        ]
-        dhis2_nav = [
-            {
-                "endpoint": "dhis2",
-                "label": "Overview",
-                "icon": "⬡",
-                "active_prefix": None,
-            },
-            {
-                "endpoint": "dhis2_reports_library",
-                "label": "DHIS2 Reports",
-                "icon": "▤",
-                "active_prefix": "dhis2_reports",
-            },
-            {
-                "endpoint": "dhis2_hcsc_indicators",
-                "label": "HCSC–RF",
-                "icon": "▣",
-                "active_prefix": "dhis2_hcsc",
-            },
-            {
-                "endpoint": "dhis2_hcsc_progress_compare",
-                "label": "Report Comparison",
-                "icon": "⇄",
-                "active_prefix": "dhis2_hcsc_progress",
-            },
-        ]
-        ai_nav = [
-            {
-                "endpoint": "work_airix",
-                "label": "AiriX",
-                "icon": "AI",
-                "active_prefix": "work_airix",
-            },
-            {
-                "endpoint": "work_email",
-                "label": "Email",
-                "icon": "✉",
-                "active_prefix": "work_email",
-            },
-            {
-                "endpoint": "work_calendar",
-                "label": "Calendar",
-                "icon": "📅",
-                "active_prefix": "work_calendar",
-            },
-        ]
-        system_nav = [
-            {
-                "endpoint": "jobs",
-                "label": "Jobs",
-                "icon": "▶",
-                "active_prefix": "job",
-            },
-            {
-                "endpoint": "health",
-                "label": "Health",
-                "icon": "♡",
-                "active_prefix": None,
-            },
-            {
-                "endpoint": "ai_connections",
-                "label": "Connections",
-                "icon": "AI",
-                "active_prefix": "ai_connections",
-            },
-            {
-                "endpoint": "audit",
-                "label": "Audit",
-                "icon": "☰",
-                "active_prefix": None,
-            },
-            {
-                "endpoint": "settings_page",
-                "label": "Settings",
-                "icon": "⚙",
-                "active_prefix": "settings",
-            },
-        ]
-        if workspace == "work":
-            nav_sections = [
-                {"id": "vanta", "label": "VANTA", "entries": work_core_nav},
-                {"id": "communication", "label": "Communication", "entries": ai_nav[1:]},
-                {"id": "system", "label": "System", "entries": system_nav},
-            ]
-        else:
-            nav_sections = [
-                {
-                    "id": "arctic",
-                    "label": "ARCTIC",
-                    "entries": personal_nav,
-                },
-                {"id": "system", "label": "System", "entries": system_nav},
-            ]
+        nav_sections = climate_nav_sections(workspace)
         nav_items = [item for section in nav_sections for item in section["entries"]]
 
         work_actions = [
@@ -760,7 +558,7 @@ def create_app() -> Flask:
             {"label": "View Logs", "endpoint": "audit", "available": True},
         ]
         personal_actions = [
-            {"label": "ARCTIC", "endpoint": "arctic_dashboard", "available": True},
+            {"label": "Personal Files", "endpoint": "arctic_dashboard", "available": True},
             {"label": "New Personal Note", "endpoint": "personal_notebook", "available": True},
             {"label": "Personal Tasks", "endpoint": "personal_tasks", "available": True},
             {"label": "Email Center", "endpoint": "personal_email", "available": True},
@@ -896,10 +694,6 @@ def create_app() -> Flask:
                     "status": "ok" if events else "neutral",
                 },
             ]
-            live_repos: list = []
-            dhis2_tools_local: list = []
-            # Calendar is loaded asynchronously after shell render (never blocks navigation).
-            upcoming_events: list = []
             cards.insert(
                 2,
                 {
@@ -914,6 +708,18 @@ def create_app() -> Flask:
                     "status": "neutral",
                 },
             )
+            health_results: list = []
+            if adapters is not None:
+                health_results, _meta = adapters.cached_results(
+                    enabled_only=False, allow_stale=True
+                )
+            live_repos = _filter_rows_for_workspace(
+                _repos_from_health(registry, health_results) if health_results else [],
+                registry,
+                scope_n,
+            )
+            dhis2_tools_local: list = []
+            upcoming_events: list = []
         else:
             # Never probe repositories during dashboard navigation — use cache only.
             health_results: list = []
@@ -922,11 +728,17 @@ def create_app() -> Flask:
                 health_results, health_meta = adapters.cached_results(
                     enabled_only=False, allow_stale=True
                 )
-            live_repos = (
-                _repos_from_health(registry, health_results) if health_results else []
+            live_repos = _filter_rows_for_workspace(
+                _repos_from_health(registry, health_results) if health_results else [],
+                registry,
+                scope_n,
             )
-            healthy = sum(1 for item in health_results if item.get("ok"))
-            enabled = sum(1 for item in health_results if item.get("enabled"))
+            allowed_ids = _repo_ids_for_workspace(registry, scope_n)
+            scoped_health = [
+                item for item in health_results if item.get("repository_id") in allowed_ids
+            ]
+            healthy = sum(1 for item in scoped_health if item.get("ok"))
+            enabled = sum(1 for item in scoped_health if item.get("enabled"))
             repo_sub = (
                 f"{enabled} enabled · {healthy} healthy"
                 if health_meta.get("cached")
@@ -963,7 +775,7 @@ def create_app() -> Flask:
                 {
                     "kind": "default",
                     "label": "Repositories",
-                    "value": str(len(registry.repositories) if registry else 0),
+                    "value": str(len(allowed_ids)),
                     "sub": repo_sub,
                     "icon": "▣",
                     "href": url_for("repositories"),
@@ -984,7 +796,7 @@ def create_app() -> Flask:
                         "due_this_week": task_stats["due_this_week"],
                         "blocked": task_stats["blocked"],
                     },
-                    "href": url_for(notebook_ep, status="open"),
+                    "href": url_for("work_tasks"),
                     "link_label": "View all →",
                 },
                 {
@@ -1148,6 +960,32 @@ def create_app() -> Flask:
             if getattr(r, "status", None) in ACTIVE_RUN_STATUSES
         }
 
+    def _repo_ids_for_workspace(registry, workspace: str) -> set[str]:
+        if registry is None:
+            return set()
+        return {
+            repo.id
+            for repo in registry.repositories
+            if climate_repo_workspace(repo) == workspace
+        }
+
+    def _filter_rows_for_workspace(
+        rows: list,
+        registry,
+        workspace: str,
+        *,
+        id_keys: tuple[str, ...] = ("repo_id", "id", "repository_id"),
+    ) -> list:
+        allowed = _repo_ids_for_workspace(registry, workspace)
+        filtered = []
+        for row in rows:
+            ids = [str(row.get(key) or "") for key in id_keys if row.get(key)]
+            ids.extend(str(mid) for mid in (row.get("member_ids") or []) if mid)
+            ids = [item for item in ids if item]
+            if ids and all(item in allowed for item in ids):
+                filtered.append(row)
+        return filtered
+
     def _build_registry_rows(registry, health_results: list[dict] | None = None):
         adapters: AdapterManager | None = app.config["ADAPTERS"]
         results = health_results
@@ -1188,7 +1026,11 @@ def create_app() -> Flask:
             health_results, _meta = adapters.cached_results(
                 enabled_only=False, allow_stale=True
             )
-        rows = _build_registry_rows(registry, health_results)
+        rows = _filter_rows_for_workspace(
+            _build_registry_rows(registry, health_results),
+            registry,
+            "work",
+        )
         return render_template(
             "repositories.html",
             rows=rows,
@@ -1235,8 +1077,11 @@ def create_app() -> Flask:
             str(item.get("repository_id") or ""): item
             for item in (agent_center.repository_intelligence.list_statuses() if agent_center else [])
         }
+        allowed = _repo_ids_for_workspace(registry, "work")
         rows: list[dict] = []
         for repo in registry.repositories if registry else []:
+            if repo.id not in allowed:
+                continue
             if not repo.enabled or repo.type != "command":
                 continue
             item = dict(statuses.get(repo.id) or {
@@ -1264,8 +1109,11 @@ def create_app() -> Flask:
     def _section_picker_rows(registry, *, href_endpoint: str, extra_actions: list[tuple[str, str]] | None = None):
         from flask import url_for as _url_for
 
+        allowed = _repo_ids_for_workspace(registry, "work")
         rows = []
         for repo in registry.repositories if registry else []:
+            if repo.id not in allowed:
+                continue
             if not repo.enabled:
                 continue
             connection = repo.local_path or repo.working_directory or repo.base_url or "—"
@@ -2463,34 +2311,47 @@ def create_app() -> Flask:
 
     @app.get("/personal/tasks")
     def personal_tasks():
+        return _render_tasks(scope="personal")
+
+    @app.get("/work/tasks")
+    def work_tasks():
+        return _render_tasks(scope="work")
+
+    def _render_tasks(*, scope: str):
         store: NotebookStore = app.config["NOTEBOOK"]
+        scope_n = normalize_scope(scope)
         registered_ids: set[str] = set()
         queue = dashboard_work_queue(
             store,
             tab=(request.args.get("queue") or "open").strip().lower(),
             limit=50,
             registered_ids=registered_ids,
-            scope="personal",
+            scope=scope_n,
         )
-        # Prefer task-typed items but keep other open personal notes visible.
         task_notes = [
             n for n in queue["notes"] if str(n.get("note_type") or "") == "task"
         ]
         other_notes = [
             n for n in queue["notes"] if str(n.get("note_type") or "") != "task"
         ]
-        persist_workspace(store.db, "personal")
+        persist_workspace(store.db, scope_n)
         html = render_template(
             "personal_tasks.html",
             work_queue=queue,
             task_notes=task_notes,
             other_notes=other_notes,
-            notebook_endpoint="personal_notebook",
-            notepad=QuickNotepadStore(store.db, scope="personal").get(),
-            note_scope="personal",
+            notebook_endpoint=notebook_endpoint(scope_n),
+            notepad=QuickNotepadStore(store.db, scope=scope_n).get(),
+            note_scope=scope_n,
+            page_title="Personal Tasks" if scope_n == "personal" else "Tasks",
+            page_sub=(
+                "Open personal notes and tasks — no repository required."
+                if scope_n == "personal"
+                else "Open VANTA notes and tasks scoped to Work."
+            ),
         )
         resp = app.make_response(html)
-        return apply_workspace_cookie(resp, "personal")
+        return apply_workspace_cookie(resp, scope_n)
 
     @app.get("/notebook/<note_id>/export")
     def notebook_export(note_id: str):

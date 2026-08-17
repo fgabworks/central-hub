@@ -4,7 +4,28 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**Settings → AI Providers visual Settings (2026-08-17)**
+**VANTA-scoped Code Workspace / Repositories (2026-08-17)**
+
+Code Workspace and Repositories stay implemented, but their navigation,
+dashboard shortcuts, and workspace context are VANTA-only. ARCTIC keeps the
+shared Dashboard, CLIMATE Chat, Tasks, Notebook, and Settings, plus personal
+Files/Email/Calendar. Switching away from Code Workspace or Repositories lands
+on the ARCTIC dashboard. Direct `/work/climate`, `/personal/climate`, and
+`/repositories` routes remain.
+
+Prior: **Shared CLIMATE shell (2026-08-17)**
+
+VANTA and ARCTIC share one CLIMATE sidebar/shell. Switching the workspace
+selector keeps Dashboard, CLIMATE Chat, Tasks, Notebook, and Settings, and
+only swaps workspace-specific tools and data.
+VANTA-only: Code Workspace, Repositories, SQL Workspace, Data Explorer, DHIS2
+(expandable), AiriX, work Email/Calendar. ARCTIC-only: Personal Files, Aira,
+personal Email/Calendar. Notes/tasks stay scope-separated. `/work/tasks`
+reuses the personal tasks template. Shared pages (Settings, Jobs, Health,
+Audit) no longer force the VANTA workspace. Compatibility routes `/work/*`
+and `/personal/*` remain.
+
+Prior: **Settings → AI Providers visual Settings (2026-08-17)**
 
 `/settings/ai-providers` now uses the CLIMATE Settings submenu
 (General, Appearance, AI Providers, Integrations, Security, Notifications,

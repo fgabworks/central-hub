@@ -1312,6 +1312,9 @@ a.stat-card-tasks .stat-link {
 .dash-grid-lower {
   margin-top: 0.85rem;
 }
+.dash-grid-repos-only {
+  grid-template-columns: 1fr;
+}
 .dash-repo-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
