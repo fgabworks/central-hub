@@ -234,6 +234,7 @@ class ClimateCodingAdapter:
         execution_mode: str = "",
         display_prompt: str = "",
         surface: str = "",
+        context_scope: str = "",
     ) -> dict[str, Any]:
         self._require_provider(provider)
         if workspace not in {"work", "personal"}:

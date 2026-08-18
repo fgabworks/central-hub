@@ -584,11 +584,15 @@ class RepositoryIntelligenceService:
         prompt: str,
         *,
         limit: int = MAX_RETRIEVAL_ITEMS,
+        max_repositories: int = 3,
+        include_empty_fallback: bool = True,
     ) -> dict[str, Any]:
         tokens = {t.lower() for t in _TOKEN.findall(prompt or "")}
         items: list[dict[str, Any]] = []
         profiles: list[dict[str, Any]] = []
-        requested = [str(rid).strip() for rid in (repository_ids or []) if str(rid).strip()][:3]
+        requested = [str(rid).strip() for rid in (repository_ids or []) if str(rid).strip()]
+        if max_repositories > 0:
+            requested = requested[:max_repositories]
         skipped: list[dict[str, Any]] = []
         for repository_id in requested:
             prior = self._row(repository_id)
@@ -662,7 +666,7 @@ class RepositoryIntelligenceService:
         chosen = items[: max(1, min(limit, MAX_RETRIEVAL_ITEMS))] if items else []
         # When tokens match nothing but the profile is Current, still surface a
         # bounded guidance/architecture slice so Inspect never drops a learned repo.
-        if profiles and not chosen:
+        if include_empty_fallback and profiles and not chosen:
             for profile in profiles:
                 rid = str(profile.get("repository_id") or "")
                 with self.db.connect() as conn:

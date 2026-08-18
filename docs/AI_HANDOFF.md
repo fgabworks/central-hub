@@ -4,7 +4,17 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**CLIMATE Chat Direct is true provider chat (2026-08-18)**
+**CLIMATE Chat lightweight processing states (2026-08-18)**
+
+Standalone CLIMATE Chat shows CSS-only thinking, streaming, completed, cancelled,
+and compact error states. AiriX mode uses “AiriX is thinking…”; Direct uses
+“<Provider> is thinking…”. Stop stays visible only while a run is active.
+Mode/provider/model/repository controls dim and disable during the run, then
+restore. Investigation/provider logs stay under Details, not in the chat body.
+Backend streaming, cancellation, persistence, and provider/model selection are
+unchanged.
+
+Prior: **CLIMATE Chat Direct is true provider chat (2026-08-18)**
 
 Direct Chat sends the user prompt to the selected provider/model with only
 minimal system/identity context. It does not apply repository evidence gates,

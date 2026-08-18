@@ -2,7 +2,7 @@
 {% block title %}AiriX · CLIMATE Chat · {{ climate.workspace_label }}{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/climate.css') }}?v=36">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/climate_chat.css') }}?v=3">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/climate_chat.css') }}?v=4">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/styles/github-dark.min.css">
 {% endblock %}
 {% block content %}
@@ -46,7 +46,7 @@
       <div class="ax-compose-box">
         <textarea id="ax-prompt" rows="1" placeholder="Ask AiriX…" aria-label="Ask AiriX"></textarea>
         <div class="ax-compose-tools">
-          <button type="button" class="ax-stop-btn" id="ax-stop" hidden title="Stop">■ Stop</button>
+          <button type="button" class="ax-stop-btn" id="ax-stop" hidden title="Stop" aria-label="Stop">Stop</button>
           <button type="button" class="ax-send-btn" id="ax-send" title="Send" aria-label="Send" disabled>➤</button>
         </div>
       </div>
@@ -89,5 +89,5 @@
 <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/highlight.min.js"></script>
 <script src="{{ url_for('static', filename='js/climate_markdown.js') }}?v=3"></script>
 <script src="{{ url_for('static', filename='js/climate_select.js') }}?v=1"></script>
-<script src="{{ url_for('static', filename='js/climate_chat.js') }}?v=5"></script>
+<script src="{{ url_for('static', filename='js/climate_chat.js') }}?v=6"></script>
 {% endblock %}

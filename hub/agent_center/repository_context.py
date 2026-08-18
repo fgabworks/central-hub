@@ -15,7 +15,7 @@ from typing import Any
 # Coding CLIs that execute against a local connected repository path.
 REPO_REQUIRED_AGENTS = frozenset({"codex", "claude-code", "cursor-agent"})
 
-# Values that must never become a repository scope (Chat "No repository",
+# Values that must never become a repository scope (Chat General / All Repositories,
 # workspace ids, JSON nulls, and UI placeholders).
 _PLACEHOLDER_REPOSITORY_IDS = frozenset({
     "none",
@@ -27,6 +27,10 @@ _PLACEHOLDER_REPOSITORY_IDS = frozenset({
     "no-repository",
     "no_repository",
     "norepository",
+    "general",
+    "all",
+    "all-repositories",
+    "all_repositories",
     "work",
     "personal",
     "vanta",

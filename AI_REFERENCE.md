@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-18 (CLIMATE Chat Direct is true provider chat).
+Last verified: 2026-08-18 (CLIMATE Chat lightweight processing states).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -8,7 +8,10 @@ Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](doc
 **AiriX · CLIMATE Chat** is a standalone top-level Ask-only chat at `/work/chat`
 (VANTA) and `/personal/chat` (ARCTIC). It reuses Agent Center conversations/runs,
 the Gemini adapter, exact model discovery/selection, streaming, cancellation, and
-`display_prompt` separation. **No repository** is a valid Chat state in both
+`display_prompt` separation. Chat processing states are lightweight and CSS-only:
+thinking (“AiriX is thinking…” / Direct provider name), live streaming
+indicator, clean completion, compact cancel/error, and dimmed selectors while a
+run is active. Diagnostics stay under Details, not in the chat body. **No repository** is a valid Chat state in both
 AiriX and Direct; the VANTA workspace repo is never inherited. Repository
 scope is validated only when an explicit repository id is selected. Coding
 diagnostics stay in the Workspace Assistant.

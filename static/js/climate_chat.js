@@ -144,6 +144,55 @@
     if (!preferred && list.indexOf("__provider_default__") >= 0) return "__provider_default__";
     return "";
   }
+  function providerLabel(providerId) {
+    var p = connectedProvider(providerId || providerSelect.value);
+    if (p && (p.label || p.name)) return p.label || p.name;
+    var opt = providerSelect.options[providerSelect.selectedIndex];
+    return (opt && opt.textContent) || providerId || "Provider";
+  }
+  function currentThinkingLabel() {
+    if (currentChatMode() !== "direct") return "AiriX is thinking…";
+    return providerLabel(providerSelect.value) + " is thinking…";
+  }
+  function compactError(value) {
+    var line = String(value || "Request failed").trim().split(/\r?\n/)[0].trim();
+    if (!line) line = "Request failed";
+    return line.length > 180 ? (line.slice(0, 177) + "…") : line;
+  }
+  function streamTextFromLogs(logs) {
+    var raw = String(logs || "");
+    var cut = raw.search(/\n\s*\[[a-z][\w:-]*\]/i);
+    if (cut >= 0) raw = raw.slice(0, cut);
+    if (/^\s*\[[a-z][\w:-]*\]/i.test(raw)) return "";
+    return raw;
+  }
+  function displayTextFromRun(run) {
+    var answer = String((run && run.answer) || "");
+    if (answer.trim()) return answer;
+    return streamTextFromLogs((run && run.logs) || "");
+  }
+  function diagnosticsFromRun(run) {
+    var parts = [];
+    var error = String((run && run.error) || "").trim();
+    if (error) parts.push(error);
+    var logs = String((run && run.logs) || "");
+    var tagged = logs.match(/\[[a-z][\w:-]*\][\s\S]*$/i);
+    if (tagged) parts.push(tagged[0].trim());
+    else if (/^\s*\[[a-z][\w:-]*\]/i.test(logs)) parts.push(logs.trim());
+    var seen = {};
+    return parts.filter(function (part) {
+      if (seen[part]) return false;
+      seen[part] = true;
+      return !!part;
+    }).join("\n\n");
+  }
+  function assistantPhase(msg) {
+    if (msg.error || msg.status === "failed" || msg.status === "unavailable") return "error";
+    if (msg.status === "cancelled" || msg.stopNotice) return "cancelled";
+    if (msg.status === "completed" || msg.sealed) return "completed";
+    if (String(msg.text || "").trim()) return "streaming";
+    return "thinking";
+  }
   function titleFromPrompt(prompt) {
     var t = String(prompt || "").replace(/\s+/g, " ").trim();
     if (!t) return "New chat";
@@ -153,14 +202,41 @@
     promptEl.style.height = "auto";
     promptEl.style.height = Math.min(180, Math.max(44, promptEl.scrollHeight)) + "px";
   }
+  function setSessionBusy(busy) {
+    var controls = document.querySelector(".ax-chat-controls");
+    if (controls) controls.classList.toggle("is-busy", !!busy);
+    root.classList.toggle("is-busy", !!busy);
+    [providerSelect, modelSelect, document.getElementById("ax-repo-context")].forEach(function (el) {
+      if (el) el.disabled = !!busy;
+    });
+    document.querySelectorAll(".ax-pill-mode [data-execution-mode]").forEach(function (btn) {
+      btn.disabled = !!busy;
+    });
+    var refresh = document.getElementById("ax-model-refresh");
+    if (refresh) refresh.disabled = !!busy;
+    if (busy) {
+      document.querySelectorAll(".climate-dd.is-open").forEach(function (dd) {
+        dd.classList.remove("is-open");
+        var trigger = dd.querySelector(".climate-dd-trigger");
+        if (trigger) trigger.setAttribute("aria-expanded", "false");
+        var menu = dd._menu || dd.querySelector(".climate-dd-menu");
+        if (menu) {
+          menu.hidden = true;
+          menu.classList.remove("is-portal", "is-up");
+        }
+      });
+    }
+    enhanceChatSelects();
+  }
   function setRunControls(mode) {
     var idle = mode === "idle";
     var stopping = mode === "stopping";
+    setSessionBusy(!idle);
     sendBtn.hidden = !idle;
     sendBtn.disabled = idle ? !modelSelect.value : true;
     stopBtn.hidden = idle;
     stopBtn.disabled = stopping;
-    stopBtn.textContent = stopping ? "Stopping…" : "■ Stop";
+    stopBtn.textContent = stopping ? "Stopping…" : "Stop";
   }
   function setProviderChrome(providerId) {
     var p = connectedProvider(providerId);
@@ -234,20 +310,62 @@
     }
     emptyEl.hidden = true;
     feedEl.innerHTML = state.messages.map(function (msg) {
-      var cls = "ax-msg is-" + msg.role + (msg.error ? " is-error" : "");
+      var phase = msg.role === "assistant" ? assistantPhase(msg) : "";
+      var cls = "ax-msg is-" + msg.role + (msg.error ? " is-error" : "") + (phase ? " is-" + phase : "");
       var role = msg.role === "user" ? "You" : "AiriX";
-      var body = msg.role === "assistant" && !msg.error
-        ? '<div class="ax-msg-body climate-md" data-md="1"></div>'
-        : '<div class="ax-msg-body">' + escapeHtml(msg.text || "") + "</div>";
+      var statusHtml = "";
+      var body = "";
+      if (msg.role === "assistant" && phase === "thinking") {
+        statusHtml =
+          '<div class="ax-run-status is-thinking" role="status">' +
+            '<span class="ax-run-spinner" aria-hidden="true"></span>' +
+            '<div class="ax-run-status-copy">' +
+              "<strong>" + escapeHtml(msg.thinkingLabel || "AiriX is thinking…") + "</strong>" +
+              "<small>This may take a few seconds.</small>" +
+            "</div>" +
+          "</div>";
+      } else if (msg.role === "assistant" && phase === "streaming") {
+        statusHtml =
+          '<div class="ax-run-stream">' +
+            '<span class="ax-run-typing" aria-hidden="true"><i></i><i></i><i></i></span>' +
+            '<div class="ax-msg-body climate-md is-streaming" data-md="1"></div>' +
+          "</div>";
+        body = "";
+      } else if (msg.role === "assistant" && phase === "cancelled") {
+        statusHtml =
+          '<div class="ax-run-status is-cancelled" role="status">' +
+            '<span class="ax-run-cancelled-icon" aria-hidden="true">×</span>' +
+            '<div class="ax-run-status-copy">' +
+              "<strong>Response cancelled</strong>" +
+              "<small>You stopped this request.</small>" +
+            "</div>" +
+          "</div>";
+        if (String(msg.text || "").trim()) {
+          body = '<div class="ax-msg-body climate-md" data-md="1"></div>';
+        }
+      } else if (msg.role === "assistant" && phase === "error") {
+        statusHtml =
+          '<div class="ax-run-status is-error" role="status">' +
+            '<span class="ax-run-error-icon" aria-hidden="true">!</span>' +
+            '<div class="ax-run-status-copy">' +
+              "<strong>Request failed</strong>" +
+              "<small>" + escapeHtml(msg.errorMessage || compactError(msg.text) || "Request failed") + "</small>" +
+            "</div>" +
+          "</div>";
+      } else if (msg.role === "assistant") {
+        body = '<div class="ax-msg-body climate-md" data-md="1"></div>';
+      } else {
+        body = '<div class="ax-msg-body">' + escapeHtml(msg.text || "") + "</div>";
+      }
       var details = "";
-      if (msg.role === "assistant" && (msg.provider || msg.model || msg.status)) {
+      if (msg.role === "assistant" && phase !== "thinking" && phase !== "streaming" && (msg.provider || msg.model || msg.status || msg.diagnostics)) {
         details = '<details class="ax-msg-details"><summary>Details</summary>' +
-          escapeHtml([msg.provider, msg.model, msg.status].filter(Boolean).join(" · ")) +
-          (msg.stopNotice ? "<div>" + escapeHtml(msg.stopNotice) + "</div>" : "") +
+          "<div>" + escapeHtml([msg.provider, msg.model, msg.status].filter(Boolean).join(" · ")) + "</div>" +
+          (msg.diagnostics ? "<pre>" + escapeHtml(msg.diagnostics) + "</pre>" : "") +
           "</details>";
       }
       return '<article class="' + cls + '" data-id="' + escapeHtml(msg.id) + '">' +
-        '<div class="ax-msg-role">' + role + "</div>" + body + details + "</article>";
+        '<div class="ax-msg-role">' + role + "</div>" + statusHtml + body + details + "</article>";
     }).join("");
     feedEl.querySelectorAll("[data-md]").forEach(function (el) {
       var article = el.closest(".ax-msg");
@@ -278,16 +396,22 @@
       if (run.prompt) {
         messages.push({ id: uid("u"), role: "user", text: run.prompt, ts: run.created_at });
       }
-      var text = run.answer || run.logs || run.error || "";
+      var text = displayTextFromRun(run);
       if (text || run.status) {
         messages.push({
           id: run.id || uid("a"),
           role: "assistant",
-          text: text,
+          text: (run.status === "failed" || run.status === "unavailable") ? "" : text,
+          diagnostics: diagnosticsFromRun(run),
           status: run.status,
           provider: run.provider,
           model: run.model,
-          error: run.status === "failed" || run.status === "unavailable"
+          error: run.status === "failed" || run.status === "unavailable",
+          errorMessage: (run.status === "failed" || run.status === "unavailable")
+            ? compactError(run.error || text)
+            : "",
+          stopNotice: run.status === "cancelled" ? "You stopped this request." : "",
+          sealed: true
         });
       }
     });
@@ -339,18 +463,17 @@
       if (pollId !== state.runId) return;
       var run = data.run || {};
       var terminal = ["completed", "failed", "cancelled", "unavailable"].indexOf(run.status) >= 0;
-      var text = run.answer || run.logs || "";
-      if (state.stopRequested && !terminal) {
-        state.pollTimer = window.setTimeout(pollRun, 400);
-        return;
-      }
+      var text = displayTextFromRun(run);
+      var failed = run.status === "failed" || run.status === "unavailable";
       upsertAssistant({
-        text: text,
+        text: failed ? "" : text,
+        diagnostics: diagnosticsFromRun(run),
         status: run.status,
         provider: run.provider,
         model: run.model,
-        error: run.status === "failed" || run.status === "unavailable",
-        stopNotice: run.status === "cancelled" ? "Stopped by user" : "",
+        error: failed,
+        errorMessage: failed ? compactError(run.error || text) : "",
+        stopNotice: run.status === "cancelled" ? "You stopped this request." : "",
         sealed: terminal
       });
       if (!terminal) {
@@ -363,7 +486,13 @@
       setRunControls("idle");
       loadConversations(state.activeId);
     }).catch(function (err) {
-      upsertAssistant({ text: err.message || "Run failed", status: "failed", error: true, sealed: true });
+      upsertAssistant({
+        text: "",
+        status: "failed",
+        error: true,
+        errorMessage: compactError(err.message || "Run failed"),
+        sealed: true
+      });
       state.runActive = false;
       state.runId = "";
       setRunControls("idle");
@@ -381,7 +510,9 @@
       text: "",
       status: "running",
       provider: providerSelect.value,
-      model: modelSelect.value
+      model: modelSelect.value,
+      thinkingLabel: currentThinkingLabel(),
+      diagnostics: ""
     });
     promptEl.value = "";
     resizePrompt();
@@ -415,7 +546,13 @@
       state.runId = run.id;
       pollRun();
     }).catch(function (err) {
-      upsertAssistant({ text: err.message || "Request failed", status: "failed", error: true, sealed: true });
+      upsertAssistant({
+        text: "",
+        status: "failed",
+        error: true,
+        errorMessage: compactError(err.message || "Request failed"),
+        sealed: true
+      });
       state.runActive = false;
       setRunControls("idle");
     });
@@ -484,6 +621,7 @@
   });
   document.querySelectorAll(".ax-pill-mode [data-execution-mode]").forEach(function (btn) {
     btn.addEventListener("click", function () {
+      if (state.runActive) return;
       applyChatMode(btn.getAttribute("data-execution-mode"));
       saveChatSelection({ provider: providerSelect.value, model: modelSelect.value, mode: currentChatMode(), repositoryId: currentChatRepo() });
     });

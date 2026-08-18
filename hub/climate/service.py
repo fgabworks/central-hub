@@ -13,6 +13,12 @@ from hub.climate.file_view import as_read_only_file
 from hub.climate.coding import ClimateCodingAdapter, ClimateCodingError, classify_task_mode
 from hub.climate.codex_limits import get_codex_rate_limits_service
 from hub.climate.investigation_metrics import summarize_tool_activity
+from hub.climate.context_scope import (
+    ALL,
+    GENERAL,
+    REPOSITORY,
+    resolve_chat_scope,
+)
 from hub.climate.execution_mode import (
     CLIMATE_ASSISTED,
     DIRECT,
@@ -93,6 +99,55 @@ class ClimateService:
                 "branch": self._branch(repo) if availability.get("available") else None,
             })
         return rows
+
+    def hub_registry_facts(self, workspace: str) -> str:
+        """Compact CLIMATE-known registry facts — not repository file contents."""
+        ws = normalize_workspace(workspace)
+        lines = ["CLIMATE connected repositories (registry/config, not repository contents):"]
+        count = 0
+        for repo in self.registry.enabled_repositories():
+            if repo_workspace(repo) != ws:
+                continue
+            count += 1
+            kind = str(repo.type or "unknown")
+            desc = str(getattr(repo, "description", "") or "").replace("\n", " ").strip()
+            extra = f" — {desc[:160]}" if desc else ""
+            lines.append(f"- {repo.name} ({repo.id}), type={kind}{extra}")
+        if count == 0:
+            lines.append("- None connected in this workspace.")
+        return "\n".join(lines)[:4_000]
+
+    def _bounded_all_repository_context(self, workspace: str, prompt: str) -> str:
+        """Search all connected command repos; keep only relevant bounded hits."""
+        ws = normalize_workspace(workspace)
+        repo_ids = [
+            row["id"] for row in self.repositories(ws)
+            if row.get("available") and row.get("id")
+        ]
+        chunks = [self.hub_registry_facts(ws)]
+        intelligence = self._repository_intelligence() if ws == "work" else None
+        if intelligence is not None and repo_ids and hasattr(intelligence, "retrieve"):
+            knowledge = intelligence.retrieve(
+                repo_ids,
+                prompt,
+                limit=6,
+                max_repositories=max(1, len(repo_ids)),
+                include_empty_fallback=False,
+            )
+            items = [
+                item for item in list((knowledge or {}).get("items") or [])
+                if isinstance(item, dict) and str(item.get("path") or "").strip()
+            ][:6]
+            if items:
+                lines = ["Bounded relevant repository hits (not full repositories):"]
+                for item in items:
+                    summary = str(item.get("summary") or "").replace("\n", " ").strip()[:500]
+                    lines.append(
+                        f"- {item.get('repository_id')}:{item.get('path')}: {summary}"
+                    )
+                chunks.append("\n".join(lines))
+        text = "\n\n".join(chunk for chunk in chunks if str(chunk).strip()).strip()
+        return text[:12_000]
 
     def require_repo(self, workspace: str, repository_id: str) -> Repository:
         ws = normalize_workspace(workspace)
@@ -252,7 +307,7 @@ class ClimateService:
         return "\n\n".join(chunks).strip()[:40_000]
 
     def execute_chat(self, workspace: str, **payload: Any) -> dict[str, Any]:
-        """General AiriX chat — no implied repository scan or editor context."""
+        """General AiriX chat — scope is explicit; VANTA repo is never inherited."""
         ws = normalize_workspace(workspace)
         prompt = str(payload.get("prompt") or "")
         display_prompt = str(payload.get("display_prompt") or prompt)
@@ -260,7 +315,7 @@ class ClimateService:
         model = str(payload.get("model") or "")
         execution_mode = normalize_execution_mode(payload.get("execution_mode"))
         direct = is_direct_mode(execution_mode)
-        repo_id = explicit_repository_id(payload.get("repository_id"))
+        scope, repo_id = resolve_chat_scope(payload)
         selected_files = [
             str(path).replace("\\", "/")
             for path in list(payload.get("selected_files") or [])
@@ -268,12 +323,9 @@ class ClimateService:
         ]
         current_file = str(payload.get("current_file") or "").replace("\\", "/")
         selection = str(payload.get("selection") or "")
-        if repo_id:
-            self.require_repo(ws, repo_id)
-        include_repo_context = bool(payload.get("include_repo_context")) and bool(repo_id)
         extra_selection = selection
         packed_prompt = prompt
-        if include_repo_context:
+        if scope == REPOSITORY:
             repo = self.require_repo(ws, repo_id)
             if direct:
                 extra_selection = self._attach_selected_file_bodies(
@@ -307,6 +359,10 @@ class ClimateService:
                 if preflight.ok and preflight.packet:
                     packed_prompt = preflight.packet
                 extra_selection = selection
+        elif scope == ALL:
+            extra_selection = self._bounded_all_repository_context(ws, prompt)
+        elif not direct:
+            extra_selection = self.hub_registry_facts(ws)
         result = self.coding.execute(
             workspace=ws,
             repository_id="",
@@ -326,23 +382,26 @@ class ClimateService:
             execution_mode=execution_mode,
             display_prompt=display_prompt,
             surface="chat",
+            context_scope=scope,
         )
         run_id = str(result.get("id") or "")
         if run_id:
             self._run_scope[run_id] = (ws, "")
             self._run_meta[run_id] = {
                 "task_mode": "ask",
-                "selected_files": selected_files if include_repo_context else [],
-                "current_file": current_file if include_repo_context else "",
+                "selected_files": selected_files if scope == REPOSITORY else [],
+                "current_file": current_file if scope == REPOSITORY else "",
                 "provider_invoked": True,
                 "sources": [],
                 "user_prompt": display_prompt or prompt,
                 "execution_mode": execution_mode,
+                "context_scope": scope,
                 "surface": "chat",
                 "conversation_id": result.get("conversation_id") or "",
             }
         result["task_mode"] = "ask"
         result["execution_mode"] = execution_mode
+        result["context_scope"] = scope
         result["sources"] = []
         result["provider_invoked"] = True
         return result
