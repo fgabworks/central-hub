@@ -7,6 +7,7 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import Any
 
+from hub.agent_center.repository_context import explicit_repository_id
 from hub.agent_center.redact import redact_text
 from hub.climate.file_view import as_read_only_file
 from hub.climate.coding import ClimateCodingAdapter, ClimateCodingError, classify_task_mode
@@ -109,10 +110,14 @@ class ClimateService:
         repo = self.require_repo(workspace, repository_id)
         return as_read_only_file(self.repository_workspace.preview(repo, path))
 
-    def bootstrap(self, workspace: str, repository_id: str = "") -> dict[str, Any]:
+    def bootstrap(self, workspace: str, repository_id: str = "", *, surface: str = "") -> dict[str, Any]:
         ws = normalize_workspace(workspace)
         repos = self.repositories(ws)
-        active = repository_id or next((row["id"] for row in repos if row["available"]), "")
+        requested = explicit_repository_id(repository_id)
+        if str(surface or "").strip().lower() in {"chat", "general"}:
+            active = requested
+        else:
+            active = requested or next((row["id"] for row in repos if row["available"]), "")
         if active:
             self.require_repo(ws, active)
         active_repo = next((row for row in repos if row["id"] == active), None)
@@ -247,21 +252,70 @@ class ClimateService:
         return "\n\n".join(chunks).strip()[:40_000]
 
     def execute_chat(self, workspace: str, **payload: Any) -> dict[str, Any]:
-        """General AiriX chat — no repository scan, file bodies, or editor context."""
+        """General AiriX chat — no implied repository scan or editor context."""
         ws = normalize_workspace(workspace)
         prompt = str(payload.get("prompt") or "")
         display_prompt = str(payload.get("display_prompt") or prompt)
         provider = str(payload.get("provider") or "")
         model = str(payload.get("model") or "")
+        execution_mode = normalize_execution_mode(payload.get("execution_mode"))
+        direct = is_direct_mode(execution_mode)
+        repo_id = explicit_repository_id(payload.get("repository_id"))
+        selected_files = [
+            str(path).replace("\\", "/")
+            for path in list(payload.get("selected_files") or [])
+            if str(path).strip()
+        ]
+        current_file = str(payload.get("current_file") or "").replace("\\", "/")
+        selection = str(payload.get("selection") or "")
+        if repo_id:
+            self.require_repo(ws, repo_id)
+        include_repo_context = bool(payload.get("include_repo_context")) and bool(repo_id)
+        extra_selection = selection
+        packed_prompt = prompt
+        if include_repo_context:
+            repo = self.require_repo(ws, repo_id)
+            if direct:
+                extra_selection = self._attach_selected_file_bodies(
+                    repo,
+                    current_file=current_file,
+                    selected_files=selected_files,
+                    selection=selection,
+                )
+                if not extra_selection:
+                    extra_selection = (
+                        f"Explicit repository context selected: {repo.name} ({repo.id}). "
+                        "No files were attached."
+                    )
+            else:
+                preflight = resolve_climate_context(
+                    workspace=ws,
+                    repo=repo,
+                    repository_workspace=self.repository_workspace,
+                    prompt=prompt,
+                    provider=provider,
+                    model=model,
+                    task_mode="ask",
+                    current_file=current_file,
+                    selected_files=selected_files,
+                    selection=selection,
+                    include_repo_context=True,
+                    repository_intelligence=self._repository_intelligence() if ws == "work" else None,
+                    handoff=bool(payload.get("handoff")),
+                    repository_agent=False,
+                )
+                if preflight.ok and preflight.packet:
+                    packed_prompt = preflight.packet
+                extra_selection = selection
         result = self.coding.execute(
             workspace=ws,
             repository_id="",
             provider=provider,
             model=model,
-            prompt=prompt,
+            prompt=packed_prompt,
             selected_files=[],
             current_file="",
-            selection="",
+            selection=extra_selection,
             include_repo_context=False,
             task_mode="ask",
             reuse_session=bool(payload.get("reuse_session", True))
@@ -269,7 +323,7 @@ class ClimateService:
             handoff=bool(payload.get("handoff")),
             conversation_id=str(payload.get("conversation_id") or ""),
             repository_investigation=False,
-            execution_mode=DIRECT,
+            execution_mode=execution_mode,
             display_prompt=display_prompt,
             surface="chat",
         )
@@ -278,17 +332,17 @@ class ClimateService:
             self._run_scope[run_id] = (ws, "")
             self._run_meta[run_id] = {
                 "task_mode": "ask",
-                "selected_files": [],
-                "current_file": "",
+                "selected_files": selected_files if include_repo_context else [],
+                "current_file": current_file if include_repo_context else "",
                 "provider_invoked": True,
                 "sources": [],
                 "user_prompt": display_prompt or prompt,
-                "execution_mode": DIRECT,
+                "execution_mode": execution_mode,
                 "surface": "chat",
                 "conversation_id": result.get("conversation_id") or "",
             }
         result["task_mode"] = "ask"
-        result["execution_mode"] = DIRECT
+        result["execution_mode"] = execution_mode
         result["sources"] = []
         result["provider_invoked"] = True
         return result

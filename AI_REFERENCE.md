@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-17 (VANTA-scoped Code Workspace/Repositories + shared CLIMATE shell).
+Last verified: 2026-08-18 (CLIMATE Chat Direct is true provider chat).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -8,7 +8,9 @@ Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](doc
 **AiriX · CLIMATE Chat** is a standalone top-level Ask-only chat at `/work/chat`
 (VANTA) and `/personal/chat` (ARCTIC). It reuses Agent Center conversations/runs,
 the Gemini adapter, exact model discovery/selection, streaming, cancellation, and
-`display_prompt` separation. It does not scan or upload a repository. Coding
+`display_prompt` separation. **No repository** is a valid Chat state in both
+AiriX and Direct; the VANTA workspace repo is never inherited. Repository
+scope is validated only when an explicit repository id is selected. Coding
 diagnostics stay in the Workspace Assistant.
 
 **CLIMATE Code Workspace v1** (Workspace Assistant) remains at `/work/climate` (VANTA) and
@@ -33,15 +35,22 @@ Codex capacity in the AI usage chrome comes from authenticated `codex app-server
 (`account/rateLimits/read` + `account/rateLimits/updated`), not from session token
 estimates; unavailable/non–ChatGPT auth shows `Codex limit unavailable`.
 AI execution **Mode** is orchestration, separate from Provider and Model:
-`climate_assisted` (CLIMATE Assisted) or `direct` (Direct Provider). There is no Smart
-mode and no provider-specific Direct Codex mode. Assisted preserves the current Context
-Resolver flow (compact repo hints/packet; native provider investigation still allowed).
-Direct sends the raw user prompt plus the selected repo/cwd and normal provider/project
-instructions — no Context Resolver packet and no CLIMATE candidate-source/evidence hints.
-Direct bypasses CLIMATE retrieval assistance only; ASK read-only sandbox, approved repo
-boundary, controlled EDIT proposals, cancel, diagnostics, token accounting, and
-Git/terminal protections stay in force. Mode persists per workspace/repo prefs and per
-conversation. The CLIMATE AI panel is visibly identified as **AiriX · CLIMATE Chat**
+`climate_assisted` (**AiriX**) or `direct` (**Direct**). CLIMATE Chat and Code
+Workspace each have their own default mode/provider/model. There is no Smart
+mode and no provider-specific Direct Codex mode. AiriX preserves the current
+Context Resolver flow in Code Workspace (compact repo hints/packet; native
+provider investigation still allowed) and CLIMATE chat wrapping on Chat.
+Direct Chat sends the user prompt to the same selected provider/model with
+only minimal system/identity context — no evidence gates, investigation
+prompts, or repository-verification language unless the user attached
+repo/file context. Direct Code Workspace still skips the Context Resolver
+but keeps explicit file/repo rules. Direct bypasses CLIMATE retrieval
+assistance only; ASK read-only sandbox, approved repo boundary, controlled
+EDIT proposals, cancel, diagnostics, token accounting, and Git/terminal
+protections stay in force. AiriX Chat keeps CLIMATE wrapping and evidence
+rules.
+Mode persists per workspace/repo prefs and per conversation. The CLIMATE AI
+panel is visibly identified as **AiriX · CLIMATE Chat**
 while provider/model controls remain explicit. Browser sessions reconcile with the
 existing SQLite `agent_conversations` and `agent_runs` store through scoped CLIMATE
 conversation list/detail/rename APIs. Completed server runs can therefore be restored

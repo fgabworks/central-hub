@@ -15,24 +15,54 @@ from typing import Any
 # Coding CLIs that execute against a local connected repository path.
 REPO_REQUIRED_AGENTS = frozenset({"codex", "claude-code", "cursor-agent"})
 
+# Values that must never become a repository scope (Chat "No repository",
+# workspace ids, JSON nulls, and UI placeholders).
+_PLACEHOLDER_REPOSITORY_IDS = frozenset({
+    "none",
+    "null",
+    "undefined",
+    "n/a",
+    "na",
+    "-",
+    "no-repository",
+    "no_repository",
+    "norepository",
+    "work",
+    "personal",
+    "vanta",
+    "arctic",
+    "workspace",
+})
+
 
 def agent_requires_repository(agent_id: str) -> bool:
     """True for coding CLIs that need a connected local repository cwd."""
     return str(agent_id or "").strip().lower() in REPO_REQUIRED_AGENTS
 
 
+def is_placeholder_repository_id(value: Any) -> bool:
+    raw = str(value or "").strip().lower()
+    return not raw or raw in _PLACEHOLDER_REPOSITORY_IDS
+
+
+def explicit_repository_id(value: Any) -> str:
+    """Return a real repository id, or empty for none/placeholder/workspace ids."""
+    raw = str(value or "").strip()
+    return "" if is_placeholder_repository_id(raw) else raw
+
+
 def normalize_repository_ids(raw: Any) -> list[str]:
     if raw is None:
         return []
     if isinstance(raw, str):
-        value = raw.strip()
+        value = explicit_repository_id(raw)
         return [value] if value else []
     if not isinstance(raw, (list, tuple)):
         return []
     out: list[str] = []
     seen: set[str] = set()
     for item in raw:
-        rid = str(item or "").strip()
+        rid = explicit_repository_id(item)
         if not rid or rid in seen:
             continue
         seen.add(rid)
@@ -127,12 +157,17 @@ def resolve_repository_context(
     active_repository_id: str | None = None,
     selected_repository_id: str | None = None,
     repositories: list[dict[str, Any]] | None = None,
+    inherit: bool = True,
 ) -> dict[str, Any]:
     """
     Resolve repository IDs for a run.
 
     Returns keys: required, ok, repository_ids, source, error, code, needs_selection,
     selectable_count, selectable_ids.
+
+    inherit=False (standalone CLIMATE Chat): never copy persisted/active/sole
+    connected repositories. Empty/placeholder input is a valid empty scope for
+    agents that do not require a repository. Explicit ids are still validated.
     """
     required = agent_requires_repository(agent_id)
     selectable = list_selectable_ids(repositories)
@@ -140,10 +175,10 @@ def resolve_repository_context(
     aliases = _selectable_aliases(repositories)
     raw_explicit = normalize_repository_ids(repository_ids)
     explicit = [rid for rid in _resolve_alias_ids(raw_explicit, aliases) if rid in selectable_set]
-    persisted_raw = str(selected_repository_id or "").strip()
-    active_raw = str(active_repository_id or "").strip()
-    persisted = aliases.get(persisted_raw, persisted_raw)
-    active = aliases.get(active_raw, active_raw)
+    persisted_raw = explicit_repository_id(selected_repository_id)
+    active_raw = explicit_repository_id(active_repository_id)
+    persisted = aliases.get(persisted_raw, persisted_raw) if persisted_raw else ""
+    active = aliases.get(active_raw, active_raw) if active_raw else ""
 
     result: dict[str, Any] = {
         "required": required,
@@ -166,6 +201,22 @@ def resolve_repository_context(
         result["needs_selection"] = True
         result["source"] = "explicit"
         return result
+
+    if not inherit:
+        # Standalone Chat: empty is valid for API/chat agents. Never inherit the
+        # VANTA workspace repo, persisted dock selection, or sole connected repo.
+        persisted = ""
+        active = ""
+        if not explicit:
+            if required:
+                result["ok"] = False
+                result["error"] = (
+                    f"Agent '{agent_id}' requires a selected connected repository."
+                )
+                result["code"] = "repository_required"
+                result["needs_selection"] = True
+                result["source"] = "missing"
+            return result
 
     if not required:
         # Optional attachment still honors explicit / persisted / active selection so

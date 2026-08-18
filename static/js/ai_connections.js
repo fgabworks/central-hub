@@ -681,14 +681,37 @@
     var provider = document.getElementById(name + "-default-provider");
     var wrap = document.querySelector('[data-surface-model="' + name + '"]');
     var input = wrap && wrap.querySelector("input");
+    var mode = document.getElementById(name + "-default-mode");
     return {
       default_provider: provider ? provider.value : "",
       default_model: input ? input.value.trim() : "",
+      default_mode: mode && mode.value === "direct" ? "direct" : "climate_assisted",
     };
+  }
+
+  function applyModeSwitch(name, mode) {
+    var value = mode === "direct" ? "direct" : "climate_assisted";
+    var hidden = document.getElementById(name + "-default-mode");
+    if (hidden) hidden.value = value;
+    document.querySelectorAll('[data-mode-surface="' + name + '"] [data-execution-mode]').forEach(function (btn) {
+      btn.setAttribute("aria-pressed", btn.getAttribute("data-execution-mode") === value ? "true" : "false");
+    });
+  }
+
+  function bindModeSwitch(name) {
+    var root = document.querySelector('[data-mode-surface="' + name + '"]');
+    if (!root || root._aicModeBound) return;
+    root._aicModeBound = true;
+    root.addEventListener("click", function (event) {
+      var btn = event.target.closest("[data-execution-mode]");
+      if (!btn || !root.contains(btn)) return;
+      applyModeSwitch(name, btn.getAttribute("data-execution-mode"));
+    });
   }
 
   function applySurface(name, payload) {
     payload = payload || {};
+    applyModeSwitch(name, payload.default_mode);
     var provider = document.getElementById(name + "-default-provider");
     var wrap = document.querySelector('[data-surface-model="' + name + '"]');
     if (provider) {
@@ -747,6 +770,8 @@
     form.querySelectorAll("[data-default-model-for], [data-surface-model]").forEach(bindModelField);
     bindSurfaceProvider("chat");
     bindSurfaceProvider("workspace");
+    bindModeSwitch("chat");
+    bindModeSwitch("workspace");
     var reset = document.getElementById("coding-defaults-reset");
     if (reset) {
       reset.addEventListener("click", function () {

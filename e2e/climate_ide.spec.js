@@ -360,6 +360,8 @@ test.describe("CLIMATE execution mode selector", () => {
   }
 
   async function modeLabel(page) {
+    const pressed = page.locator("#climate-mode-pill [data-execution-mode][aria-pressed='true']");
+    if (await pressed.count()) return (await pressed.innerText()).trim();
     const trigger = page.locator("#climate-mode-pill .climate-dd-value");
     if (await trigger.count()) return (await trigger.innerText()).trim();
     return page.locator("#climate-execution-mode").evaluate((el) => {
@@ -369,6 +371,11 @@ test.describe("CLIMATE execution mode selector", () => {
   }
 
   async function selectMode(page, value) {
+    const btn = page.locator(`#climate-mode-pill [data-execution-mode="${value}"]`);
+    if (await btn.count()) {
+      await btn.click();
+      return;
+    }
     const trigger = page.locator("#climate-mode-pill .climate-dd-trigger");
     if (await trigger.count()) {
       await trigger.click();
@@ -461,13 +468,13 @@ test.describe("CLIMATE execution mode selector", () => {
       await expect(page.locator("#climate-mode-pill")).toBeVisible();
       await expect(page.locator("#climate-provider-panel")).toBeVisible();
       await expect(page.locator("#climate-model-panel")).toBeVisible();
-      expect(await modeLabel(page)).toBe("CLIMATE Assisted");
-      expect(await page.locator("#climate-mode-pill").getAttribute("title")).toContain("CLIMATE finds useful repo context first");
+      expect(await modeLabel(page)).toBe("AiriX");
+      expect(await page.locator("#climate-mode-pill").getAttribute("title")).toContain("CLIMATE orchestration");
 
       await selectMode(page, "direct");
-      expect(await modeLabel(page)).toBe("Direct Provider");
+      expect(await modeLabel(page)).toBe("Direct");
       expect(await page.locator("#climate-execution-mode")).toHaveValue("direct");
-      expect(await page.locator("#climate-mode-pill").getAttribute("title")).toContain("provider investigates the repo directly");
+      expect(await page.locator("#climate-mode-pill").getAttribute("title")).toContain("minimal CLIMATE orchestration");
 
       const overflow = await page.evaluate(() => {
         const footer = document.querySelector(".climate-chat-footer-controls");
@@ -493,10 +500,10 @@ test.describe("CLIMATE execution mode selector", () => {
         const el = document.getElementById("climate-execution-mode");
         return el && el.value === "direct";
       });
-      expect(await modeLabel(page)).toBe("Direct Provider");
+      expect(await modeLabel(page)).toBe("Direct");
 
       await selectMode(page, "climate_assisted");
-      expect(await modeLabel(page)).toBe("CLIMATE Assisted");
+      expect(await modeLabel(page)).toBe("AiriX");
     });
 
     test(`benchmark button wording follows mode at ${viewport.width}x${viewport.height}`, async ({ page }) => {

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ climate.context_label }} · CLIMATE{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/climate.css') }}?v=35">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/climate.css') }}?v=36">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/styles/github-dark.min.css">
 {% endblock %}
 {% block content %}
@@ -305,13 +305,17 @@
           </div>
         </div>
         <div class="climate-chat-footer-controls">
-          <label class="climate-chat-pill climate-chat-pill-mode" id="climate-mode-pill" title="CLIMATE Assisted — CLIMATE finds useful repo context first.">
-            <span class="climate-chat-pill-k">Mode</span>
-            <select id="climate-execution-mode" aria-label="Mode">
-              <option value="climate_assisted">CLIMATE Assisted</option>
-              <option value="direct">Direct Provider</option>
-            </select>
-          </label>
+            <div class="climate-chat-pill climate-chat-pill-mode" id="climate-mode-pill" title="AiriX — CLIMATE orchestration, then the selected provider/model.">
+              <span class="climate-chat-pill-k">Mode</span>
+              <div class="climate-mode-switch" role="radiogroup" aria-label="Execution mode">
+                <button type="button" data-execution-mode="climate_assisted" aria-pressed="true">AiriX</button>
+                <button type="button" data-execution-mode="direct" aria-pressed="false">Direct</button>
+              </div>
+              <select id="climate-execution-mode" hidden aria-hidden="true" tabindex="-1">
+                <option value="climate_assisted" selected>AiriX</option>
+                <option value="direct">Direct</option>
+              </select>
+            </div>
           <label class="climate-chat-pill" title="Provider">
             <i class="climate-chat-pill-dot" id="climate-provider-dot" aria-hidden="true"></i>
             <select id="climate-provider-panel" aria-label="Provider"></select>
@@ -356,5 +360,5 @@
 <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
 <script src="{{ url_for('static', filename='js/wc_terminal.js') }}?v=climate-5"></script>
 <script src="{{ url_for('static', filename='js/climate_markdown.js') }}?v=3"></script>
-<script src="{{ url_for('static', filename='js/climate.js') }}?v=31"></script>
+<script src="{{ url_for('static', filename='js/climate.js') }}?v=32"></script>
 {% endblock %}

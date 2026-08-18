@@ -186,6 +186,14 @@ class AgentCenterTests(unittest.TestCase):
         self.assertEqual(set(preview_multi["repository_ids"]), {"demo-repo", "demo-repo-2"})
         self.assertGreaterEqual(len(preview_multi["roots"]), 2)
 
+        empty = self.svc.preview_context(
+            {"profile_id": "okarun", "repository_ids": [], "mode": "ask", "prompt": "hello", "tool_ids": []}
+        )
+        self.assertTrue(empty["ok"])
+        self.assertEqual(empty["repository_ids"], [])
+        self.assertEqual(empty["missing_repository_ids"], [])
+        self.assertEqual(empty["scope_errors"], [])
+
         with self.assertRaises(AgentCenterError):
             self.svc.start_run(
                 {

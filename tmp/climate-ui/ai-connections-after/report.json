@@ -82,6 +82,7 @@
       "modelCols": "521.609px 521.625px",
       "hasAgentSafety": false,
       "reset": true,
+      "modeSwitches": 2,
       "fields_dark": true,
       "notice_not_red": true,
       "save_compact": true
@@ -168,6 +169,7 @@
       "modelCols": "323.719px 323.734px",
       "hasAgentSafety": false,
       "reset": true,
+      "modeSwitches": 2,
       "fields_dark": true,
       "notice_not_red": true,
       "save_compact": true
@@ -254,6 +256,7 @@
       "modelCols": "572.844px",
       "hasAgentSafety": false,
       "reset": true,
+      "modeSwitches": 2,
       "fields_dark": true,
       "notice_not_red": true,
       "save_compact": true
@@ -264,21 +267,31 @@
       "url": "/work/chat",
       "hasChatSelects": true,
       "hasWorkspaceSelects": false,
-      "chatProvider": "",
-      "workspaceProvider": "",
+      "hasModeSwitch": true,
+      "chatRepoOptional": true,
+      "workspaceRepoExplicit": false,
+      "chatProvider": "gemini",
+      "workspaceProvider": "codex",
+      "chatMode": "climate_assisted",
+      "workspaceMode": "climate_assisted",
       "hasChat": true,
       "hasWorkspace": true,
-      "aliasProvider": ""
+      "aliasProvider": "codex"
     },
     "workspace": {
       "url": "/work/climate",
       "hasChatSelects": false,
       "hasWorkspaceSelects": true,
-      "chatProvider": "",
-      "workspaceProvider": "",
+      "hasModeSwitch": true,
+      "chatRepoOptional": false,
+      "workspaceRepoExplicit": true,
+      "chatProvider": "gemini",
+      "workspaceProvider": "codex",
+      "chatMode": "climate_assisted",
+      "workspaceMode": "climate_assisted",
       "hasChat": true,
       "hasWorkspace": true,
-      "aliasProvider": ""
+      "aliasProvider": "codex"
     }
   }
 }

@@ -5026,10 +5026,14 @@ body.qn-maximized .qn-history[open] {
   min-width: 0;
 }
 
-.aic-field-caption {
+.aic-mode-switch {
+  width: fit-content;
+  height: 32px;
+}
+.aic-mode-switch button {
+  line-height: 30px;
   font-size: 12px;
-  font-weight: 650;
-  color: var(--climate-muted, var(--muted));
+  padding: 0 14px;
 }
 
 .aic-field {

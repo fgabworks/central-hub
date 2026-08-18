@@ -40,10 +40,10 @@ def _luma(rgb: tuple[int, int, int] | None) -> float | None:
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     app = create_app()
-    httpd = make_server("127.0.0.1", 8781, app)
+    httpd = make_server("127.0.0.1", 8783, app)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
-    base = "http://127.0.0.1:8781"
+    base = "http://127.0.0.1:8783"
     time.sleep(0.4)
     report: dict = {"pages": {}}
     try:
@@ -101,6 +101,7 @@ def main() -> None:
                         modelCols: getComputedStyle(q(".aic-model-grid")).gridTemplateColumns,
                         hasAgentSafety: !!q(".agent-safety"),
                         reset: !!(q("#coding-defaults-reset")),
+                        modeSwitches: qa(".aic-mode-switch").length,
                       };
                     }"""
                 )
@@ -133,10 +134,17 @@ def main() -> None:
                         url: location.pathname,
                         hasChatSelects: !!(document.getElementById("ax-provider") && document.getElementById("ax-model")),
                         hasWorkspaceSelects: !!(document.getElementById("climate-provider") && document.getElementById("climate-model")),
+                        hasModeSwitch: !!document.querySelector(".climate-mode-switch [data-execution-mode='climate_assisted']")
+                          && !!document.querySelector(".climate-mode-switch [data-execution-mode='direct']"),
+                        chatRepoOptional: !!(document.getElementById("ax-repo-context") &&
+                          Array.from(document.getElementById("ax-repo-context").options || []).some((opt) => opt.value === "")),
+                        workspaceRepoExplicit: !!document.getElementById("climate-repo-context"),
                         chatProvider: (defaults.chat || {}).default_provider || "",
                         workspaceProvider: (defaults.workspace || {}).default_provider || "",
-                        hasChat: !!(defaults.chat && "default_provider" in defaults.chat),
-                        hasWorkspace: !!(defaults.workspace && "default_provider" in defaults.workspace),
+                        chatMode: (defaults.chat || {}).default_mode || "",
+                        workspaceMode: (defaults.workspace || {}).default_mode || "",
+                        hasChat: !!(defaults.chat && "default_provider" in defaults.chat && "default_mode" in defaults.chat),
+                        hasWorkspace: !!(defaults.workspace && "default_provider" in defaults.workspace && "default_mode" in defaults.workspace),
                         aliasProvider: defaults.default_provider || "",
                       };
                     }"""
@@ -191,6 +199,8 @@ def main() -> None:
             failed.append(f"{name}: Chat defaults are not above Code Workspace")
         if not row.get("workspaceBeforeOverrides"):
             failed.append(f"{name}: Code Workspace defaults are not above Provider Overrides")
+        if row.get("modeSwitches", 0) < 2:
+            failed.append(f"{name}: missing Chat/Workspace mode switches")
         if "encrypted" in (row.get("noticeText") or "").lower() and "not encrypted" not in (row.get("noticeText") or "").lower():
             failed.append(f"{name}: notice claims encryption")
     chat = (report.get("surfaces") or {}).get("chat") or {}
@@ -203,6 +213,14 @@ def main() -> None:
         failed.append("chat: bootstrap is missing split coding_defaults.chat/workspace")
     if not workspace.get("hasChat") or not workspace.get("hasWorkspace"):
         failed.append("workspace: bootstrap is missing split coding_defaults.chat/workspace")
+    if not chat.get("hasModeSwitch"):
+        failed.append("chat: missing AiriX/Direct switch")
+    if not workspace.get("hasModeSwitch"):
+        failed.append("workspace: missing AiriX/Direct switch")
+    if not chat.get("chatRepoOptional"):
+        failed.append("chat: repository context is not optional")
+    if not workspace.get("workspaceRepoExplicit"):
+        failed.append("workspace: missing explicit repository context control")
     if failed:
         raise SystemExit("AI Connections UI validation failed:\n- " + "\n- ".join(failed))
     print("AI Connections UI validation passed")

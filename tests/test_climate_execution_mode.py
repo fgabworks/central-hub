@@ -9,7 +9,12 @@ from pathlib import Path
 from unittest import mock
 
 from hub.climate.coding import ClimateCodingAdapter, ClimateCodingError
-from hub.climate.execution_mode import CLIMATE_ASSISTED, DIRECT, normalize_execution_mode
+from hub.climate.execution_mode import (
+    CLIMATE_ASSISTED,
+    DIRECT,
+    coerce_execution_mode,
+    normalize_execution_mode,
+)
 from hub.climate.preflight import GATE_MESSAGE
 from hub.climate.retrieval_policy import ASK_INVESTIGATION_CONSTRAINTS
 from hub.climate.service import ClimateService, resolve_climate_context
@@ -25,9 +30,17 @@ class ExecutionModeNormalizeTests(unittest.TestCase):
     def test_aliases_and_default(self):
         self.assertEqual(normalize_execution_mode(""), CLIMATE_ASSISTED)
         self.assertEqual(normalize_execution_mode("assisted"), CLIMATE_ASSISTED)
+        self.assertEqual(normalize_execution_mode("airix"), CLIMATE_ASSISTED)
         self.assertEqual(normalize_execution_mode("direct_provider"), DIRECT)
         self.assertEqual(normalize_execution_mode("Direct Codex"), CLIMATE_ASSISTED)
         self.assertEqual(normalize_execution_mode("smart"), CLIMATE_ASSISTED)
+
+    def test_coerce_blank_is_airix_unknown_raises(self):
+        self.assertEqual(coerce_execution_mode(""), CLIMATE_ASSISTED)
+        self.assertEqual(coerce_execution_mode("airix"), CLIMATE_ASSISTED)
+        self.assertEqual(coerce_execution_mode("direct"), DIRECT)
+        with self.assertRaises(ValueError):
+            coerce_execution_mode("smart")
 
 
 class ExecutionModeServiceTests(unittest.TestCase):
@@ -82,7 +95,7 @@ class ExecutionModeServiceTests(unittest.TestCase):
         ids = [row["id"] for row in boot["execution_modes"]]
         self.assertEqual(ids, [CLIMATE_ASSISTED, DIRECT])
         labels = [row["label"] for row in boot["execution_modes"]]
-        self.assertEqual(labels, ["CLIMATE Assisted", "Direct Provider"])
+        self.assertEqual(labels, ["AiriX", "Direct"])
         blob = str(boot["execution_modes"])
         self.assertNotIn("Direct Codex", blob)
         self.assertNotIn("smart", blob.lower())
@@ -224,6 +237,50 @@ class ExecutionModeServiceTests(unittest.TestCase):
         self.assertEqual(self.coding.calls[0]["task_mode"], "edit")
         self.assertEqual(self.coding.calls[0]["prompt"], "Fix ANC Binary in app.py")
 
+    def test_chat_airix_and_direct_do_not_require_a_repository(self):
+        airix = self.service.execute_chat(
+            "work", provider="codex", model="m", prompt="hello there",
+        )
+        direct = self.service.execute_chat(
+            "work", provider="codex", model="m", prompt="hello there", execution_mode="direct",
+        )
+        self.assertEqual(airix["execution_mode"], CLIMATE_ASSISTED)
+        self.assertEqual(direct["execution_mode"], DIRECT)
+        self.assertEqual(self.coding.calls[0]["execution_mode"], CLIMATE_ASSISTED)
+        self.assertEqual(self.coding.calls[1]["execution_mode"], DIRECT)
+        self.assertEqual(self.coding.calls[0]["repository_id"], "")
+        self.assertEqual(self.coding.calls[1]["repository_id"], "")
+        self.assertEqual(self.coding.calls[0]["surface"], "chat")
+
+    def test_chat_explicit_repo_uses_resolver_only_for_airix(self):
+        packet = mock.Mock(ok=True, packet="CLIMATE context packet (ASK).\nhello")
+        with mock.patch("hub.climate.service.resolve_climate_context", return_value=packet) as resolver:
+            self.service.execute_chat(
+                "work",
+                provider="codex",
+                model="m",
+                prompt="hello",
+                repository_id="work-repo",
+                include_repo_context=True,
+                execution_mode="climate_assisted",
+            )
+        resolver.assert_called()
+        self.assertEqual(self.coding.calls[0]["prompt"], packet.packet)
+        self.assertEqual(self.coding.calls[0]["repository_id"], "")
+        with mock.patch("hub.climate.service.resolve_climate_context") as resolver:
+            self.service.execute_chat(
+                "work",
+                provider="codex",
+                model="m",
+                prompt="hello",
+                repository_id="work-repo",
+                include_repo_context=True,
+                execution_mode="direct",
+            )
+        resolver.assert_not_called()
+        self.assertEqual(self.coding.calls[1]["execution_mode"], DIRECT)
+        self.assertIn("Explicit repository context", self.coding.calls[1]["selection"])
+
 
 class ExecutionModeCodingAdapterTests(unittest.TestCase):
     def setUp(self):
@@ -319,6 +376,90 @@ class ExecutionModeCodingAdapterTests(unittest.TestCase):
         self.assertNotIn("Execution mode: Direct Provider.", packed)
         self.assertTrue(self.center.payload["bounded_evidence_only"])
 
+    def test_chat_airix_wraps_prompt_without_repository(self):
+        result = self.adapter.execute(
+            workspace="work",
+            repository_id="work-repo",
+            provider="codex",
+            model="m",
+            prompt="hello there",
+            surface="chat",
+            include_repo_context=True,
+            execution_mode="climate_assisted",
+        )
+        packed = self.center.payload["prompt"]
+        self.assertEqual(result["execution_mode"], CLIMATE_ASSISTED)
+        self.assertIn("AiriX · CLIMATE Chat", packed)
+        self.assertIn("User prompt:", packed)
+        self.assertIn("hello there", packed)
+        self.assertEqual(self.center.payload["repository_ids"], [])
+        self.assertEqual(self.center.payload["files"], {})
+
+    def test_chat_direct_uses_minimal_wrapping_without_repository(self):
+        result = self.adapter.execute(
+            workspace="work",
+            repository_id="work-repo",
+            provider="codex",
+            model="m",
+            prompt="what is PMNP?",
+            surface="chat",
+            include_repo_context=True,
+            execution_mode="direct",
+        )
+        packed = self.center.payload["prompt"]
+        self.assertEqual(result["execution_mode"], DIRECT)
+        self.assertEqual(packed, "what is PMNP?")
+        self.assertNotIn("AiriX · CLIMATE Chat", packed)
+        self.assertNotIn("User prompt:", packed)
+        self.assertNotIn("cannot verify", packed.lower())
+        self.assertNotIn("evidence packet", packed.lower())
+        self.assertTrue(self.center.payload.get("direct_provider_chat"))
+        self.assertTrue(self.center.payload.get("allow_general_knowledge"))
+        self.assertFalse(self.center.payload.get("bounded_evidence_only"))
+        self.assertFalse(self.center.payload.get("tool_runtime"))
+        self.assertEqual(self.center.payload["repository_ids"], [])
+        self.assertEqual(self.center.payload["files"], {})
+
+    def test_chat_direct_includes_explicit_attached_context(self):
+        result = self.adapter.execute(
+            workspace="work",
+            repository_id="work-repo",
+            provider="codex",
+            model="m",
+            prompt="explain this file",
+            surface="chat",
+            execution_mode="direct",
+            selection="Selected file app.py:\nvalue = 1\n",
+        )
+        packed = self.center.payload["prompt"]
+        self.assertEqual(result["execution_mode"], DIRECT)
+        self.assertIn("Attached context:", packed)
+        self.assertIn("Selected file app.py:", packed)
+        self.assertIn("value = 1", packed)
+        self.assertIn("explain this file", packed)
+        self.assertNotIn("cannot verify", packed.lower())
+        self.assertNotIn("evidence packet", packed.lower())
+        self.assertNotIn("AiriX · CLIMATE Chat", packed)
+        self.assertTrue(self.center.payload.get("direct_provider_chat"))
+
+    def test_chat_airix_keeps_climate_orchestration_language(self):
+        result = self.adapter.execute(
+            workspace="work",
+            repository_id="",
+            provider="codex",
+            model="m",
+            prompt="what is PMNP?",
+            surface="chat",
+            execution_mode="climate_assisted",
+        )
+        packed = self.center.payload["prompt"]
+        self.assertEqual(result["execution_mode"], CLIMATE_ASSISTED)
+        self.assertIn("AiriX · CLIMATE Chat", packed)
+        self.assertIn("Use only the user prompt and any supplied bounded context.", packed)
+        self.assertIn("what is PMNP?", packed)
+        self.assertFalse(self.center.payload.get("direct_provider_chat"))
+        self.assertNotEqual(packed, "what is PMNP?")
+
 
 class ExecutionModeUiContractTests(unittest.TestCase):
     def test_selector_persists_separately_from_provider(self):
@@ -326,20 +467,23 @@ class ExecutionModeUiContractTests(unittest.TestCase):
         template = (root / "templates" / "climate.html").read_text(encoding="utf-8")
         script = (root / "static" / "js" / "climate.js").read_text(encoding="utf-8")
         self.assertIn('id="climate-execution-mode"', template)
-        self.assertIn("CLIMATE Assisted", template)
-        self.assertIn("Direct Provider", template)
+        self.assertIn("climate-mode-switch", template)
+        self.assertIn(">AiriX<", template)
+        self.assertIn(">Direct<", template)
         self.assertIn("climate-chat-pill-mode", template)
+        self.assertNotIn("CLIMATE Assisted", template)
         self.assertNotIn("Direct Codex", template)
         self.assertNotIn("Smart mode", template)
         self.assertNotIn("smart_mode", script)
         self.assertIn("applyExecutionMode", script)
+        self.assertIn("syncExecutionModeSwitch", script)
         self.assertIn("executionMode: currentExecutionMode()", script)
         self.assertIn("execution_mode: currentExecutionMode()", script)
         self.assertIn("Compare with Direct", script)
         self.assertIn("Compare with CLIMATE", script)
         self.assertNotIn("Evaluate Token Savings", script)
-        self.assertIn("CLIMATE Assisted — CLIMATE finds useful repo context first.", script)
-        self.assertIn("Direct Provider — provider investigates the repo directly.", script)
+        self.assertIn("AiriX — CLIMATE orchestration, then the selected provider/model.", script)
+        self.assertIn("Direct — send the prompt to the selected provider/model with minimal CLIMATE orchestration.", script)
         save = script.split("function savePrefs()", 1)[1].split("\n  function ", 1)[0]
         self.assertIn("executionMode: currentExecutionMode()", save)
         send = script.split("function sendRun", 1)[1].split("\n  function ", 1)[0]

@@ -69,7 +69,9 @@
     try {
       sessionStorage.setItem(selectionKey, JSON.stringify({
         provider: (sel && sel.provider) || "",
-        model: (sel && sel.model) || ""
+        model: (sel && sel.model) || "",
+        mode: (sel && sel.mode) || currentChatMode(),
+        repositoryId: (sel && sel.repositoryId) || currentChatRepo()
       }));
     } catch (_) {}
   }
@@ -79,7 +81,46 @@
   }
   function chatSurfaceDefaults() {
     var defaults = bootstrap.coding_defaults || {};
-    return defaults.chat || { default_provider: "", default_model: "" };
+    return defaults.chat || { default_provider: "", default_model: "", default_mode: "climate_assisted" };
+  }
+  function currentChatMode() {
+    var sel = document.getElementById("ax-execution-mode");
+    return sel && sel.value === "direct" ? "direct" : "climate_assisted";
+  }
+  function currentChatRepo() {
+    var sel = document.getElementById("ax-repo-context");
+    var value = String((sel && sel.value) || "").trim();
+    var raw = value.toLowerCase();
+    if (!raw || [
+      "none", "null", "undefined", "n/a", "na", "-",
+      "no-repository", "no_repository", "norepository",
+      "work", "personal", "vanta", "arctic", "workspace"
+    ].indexOf(raw) >= 0) {
+      return "";
+    }
+    return value;
+  }
+  function preferredChatMode() {
+    var sel = loadChatSelection();
+    if (sel.mode === "direct" || sel.mode === "climate_assisted") return sel.mode;
+    return chatSurfaceDefaults().default_mode === "direct" ? "direct" : "climate_assisted";
+  }
+  function applyChatMode(mode) {
+    var next = mode === "direct" ? "direct" : "climate_assisted";
+    var hidden = document.getElementById("ax-execution-mode");
+    if (hidden) hidden.value = next;
+    document.querySelectorAll(".ax-pill-mode [data-execution-mode]").forEach(function (btn) {
+      btn.setAttribute("aria-pressed", btn.getAttribute("data-execution-mode") === next ? "true" : "false");
+    });
+    var pill = document.querySelector(".ax-pill-mode");
+    if (pill) {
+      pill.setAttribute(
+        "title",
+        next === "direct"
+          ? "Direct — send the prompt to the selected provider/model with minimal CLIMATE orchestration."
+          : "AiriX — CLIMATE orchestration, then the selected provider/model."
+      );
+    }
   }
   function preferredChatProvider() {
     var sel = loadChatSelection();
@@ -355,7 +396,10 @@
         display_prompt: prompt,
         task_mode: "ask",
         conversation_id: state.activeId || "",
-        reuse_session: true
+        reuse_session: true,
+        execution_mode: currentChatMode(),
+        repository_id: currentChatRepo(),
+        include_repo_context: !!currentChatRepo()
       })
     }).then(function (data) {
       var run = data.run || {};
@@ -386,7 +430,9 @@
   }
 
   function enhanceChatSelects() {
-    if (window.ClimateSelect) window.ClimateSelect.enhanceAll([providerSelect, modelSelect]);
+    if (window.ClimateSelect) {
+      window.ClimateSelect.enhanceAll([providerSelect, modelSelect, document.getElementById("ax-repo-context")]);
+    }
   }
 
   (bootstrap.providers || []).forEach(function (row) {
@@ -398,6 +444,10 @@
   });
   var preferred = preferredChatProvider();
   if (preferred) providerSelect.value = preferred;
+  applyChatMode(preferredChatMode());
+  var savedSel = loadChatSelection();
+  var repoSelect = document.getElementById("ax-repo-context");
+  if (repoSelect && savedSel.repositoryId) repoSelect.value = savedSel.repositoryId;
   enhanceChatSelects();
   selectProvider(providerSelect.value, { refresh: true });
 
@@ -425,13 +475,24 @@
     openConversation(btn.getAttribute("data-id"));
   });
   providerSelect.addEventListener("change", function () {
-    saveChatSelection({ provider: providerSelect.value, model: "" });
+    saveChatSelection({ provider: providerSelect.value, model: "", mode: currentChatMode(), repositoryId: currentChatRepo() });
     selectProvider(providerSelect.value, { refresh: true });
   });
   modelSelect.addEventListener("change", function () {
-    saveChatSelection({ provider: providerSelect.value, model: modelSelect.value });
+    saveChatSelection({ provider: providerSelect.value, model: modelSelect.value, mode: currentChatMode(), repositoryId: currentChatRepo() });
     if (!state.runActive) sendBtn.disabled = !modelSelect.value;
   });
+  document.querySelectorAll(".ax-pill-mode [data-execution-mode]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      applyChatMode(btn.getAttribute("data-execution-mode"));
+      saveChatSelection({ provider: providerSelect.value, model: modelSelect.value, mode: currentChatMode(), repositoryId: currentChatRepo() });
+    });
+  });
+  if (document.getElementById("ax-repo-context")) {
+    document.getElementById("ax-repo-context").addEventListener("change", function () {
+      saveChatSelection({ provider: providerSelect.value, model: modelSelect.value, mode: currentChatMode(), repositoryId: currentChatRepo() });
+    });
+  }
   sendBtn.addEventListener("click", sendRun);
   stopBtn.addEventListener("click", function () {
     if (!state.runActive) return;

@@ -84,6 +84,61 @@ class ResolveRepositoryContextTests(unittest.TestCase):
         self.assertFalse(resolved["ok"])
         self.assertNotIn("first", resolved["repository_ids"])
 
+    def test_gemini_empty_scope_does_not_inherit_active_or_placeholders(self) -> None:
+        repos = _repos("vanta-repo", "other")
+        empty = resolve_repository_context(
+            agent_id="gemini",
+            repository_ids=[],
+            active_repository_id="vanta-repo",
+            selected_repository_id="other",
+            repositories=repos,
+            inherit=False,
+        )
+        self.assertTrue(empty["ok"])
+        self.assertEqual(empty["repository_ids"], [])
+        self.assertEqual(empty["source"], "none")
+
+        for placeholder in ("none", "null", "work", "vanta", ""):
+            resolved = resolve_repository_context(
+                agent_id="gemini",
+                repository_ids=[placeholder],
+                active_repository_id="vanta-repo",
+                repositories=repos,
+                inherit=False,
+            )
+            self.assertTrue(resolved["ok"], placeholder)
+            self.assertEqual(resolved["repository_ids"], [], placeholder)
+
+        invalid = resolve_repository_context(
+            agent_id="gemini",
+            repository_ids=["missing-repo"],
+            repositories=repos,
+            inherit=False,
+        )
+        self.assertFalse(invalid["ok"])
+        self.assertEqual(invalid["code"], "repository_inaccessible")
+
+        explicit = resolve_repository_context(
+            agent_id="gemini",
+            repository_ids=["other"],
+            active_repository_id="vanta-repo",
+            repositories=repos,
+            inherit=False,
+        )
+        self.assertTrue(explicit["ok"])
+        self.assertEqual(explicit["repository_ids"], ["other"])
+
+    def test_chat_inherit_false_does_not_auto_pick_sole_codex_repo(self) -> None:
+        resolved = resolve_repository_context(
+            agent_id="codex",
+            repository_ids=[],
+            repositories=_repos("only-one"),
+            inherit=False,
+        )
+        self.assertFalse(resolved["ok"])
+        self.assertEqual(resolved["code"], "repository_required")
+        self.assertEqual(resolved["repository_ids"], [])
+
     def test_explicit_selection_wins(self) -> None:
         resolved = resolve_repository_context(
             agent_id="codex",

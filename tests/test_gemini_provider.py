@@ -12,7 +12,12 @@ from hub.agent_center.adapters import build_adapters, load_agent_descriptors
 from hub.agent_center.adapters.gemini_api import GeminiApiAdapter
 from hub.agent_center.db import AgentCenterDb
 from hub.agent_center.gemini_client import GeminiClient, response_text, response_usage
-from hub.agent_center.gemini_runner import GeminiRunner
+from hub.agent_center.gemini_runner import (
+    AIRIX_SYSTEM_INSTRUCTION,
+    DIRECT_SYSTEM_INSTRUCTION,
+    GeminiRunner,
+    gemini_system_instruction,
+)
 from hub.agent_center.gemini_settings import GeminiSettings, load_gemini_settings
 from hub.agent_center.redact import redact_text
 from hub.agent_center.store import AgentCenterStore
@@ -74,6 +79,19 @@ class FakeSession:
     def post(self, url, **kwargs):
         self.post_calls.append((url, kwargs))
         return self.stream_response
+
+
+class GeminiSystemInstructionTests(unittest.TestCase):
+    def test_direct_skips_evidence_bound_airix_instruction(self):
+        direct = gemini_system_instruction(direct_provider_chat=True)
+        airix = gemini_system_instruction(direct_provider_chat=False)
+        self.assertEqual(direct, DIRECT_SYSTEM_INSTRUCTION)
+        self.assertEqual(airix, AIRIX_SYSTEM_INSTRUCTION)
+        self.assertNotIn("bounded repository context", direct.lower())
+        self.assertNotIn("evidence packet", direct.lower())
+        self.assertNotIn("cannot verify", direct.lower())
+        self.assertIn("bounded repository context", airix.lower())
+        self.assertIn("You are AiriX", airix)
 
 
 class GeminiSettingsTests(unittest.TestCase):
@@ -496,6 +514,8 @@ class ClimateGeminiSafetyTests(unittest.TestCase):
         )
         self.assertEqual(payload["repository_ids"], [])
         self.assertEqual(payload["files"], {})
+        self.assertFalse(payload.get("inherit_repository_scope"))
+        self.assertIsNone(payload.get("active_repository_id"))
         self.assertFalse(payload["repository_investigation"])
         self.assertNotIn("Repository context:", payload["prompt"])
         self.assertNotIn("CLIMATE coding request", payload["prompt"])

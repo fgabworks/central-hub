@@ -1363,7 +1363,38 @@ body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:focus {
   color: var(--cl-text);
 }
 .climate-chat-pill-model { flex: 1 1 140px; }
-.climate-chat-pill-mode { flex: 1 1 168px; }
+.climate-chat-pill-mode { flex: 0 1 auto; align-items: center; }
+
+.climate-mode-switch {
+  display: inline-flex;
+  align-items: stretch;
+  height: 22px;
+  border: 1px solid var(--climate-border, var(--cl-border, #262b32));
+  border-radius: 999px;
+  overflow: hidden;
+  flex: 0 0 auto;
+  background: var(--climate-panel-2, var(--cl-panel-2, #1c2128));
+}
+.climate-mode-switch button {
+  border: 0;
+  background: transparent;
+  color: var(--climate-muted, var(--cl-muted, #9ea3a9));
+  padding: 0 10px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  line-height: 22px;
+}
+.climate-mode-switch button[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--workspace-accent, #26c6da) 28%, #1c2128);
+  color: #fff;
+}
+.climate-chat-pill-mode select[hidden],
+.ax-pill-mode select[hidden] {
+  display: none !important;
+}
 .climate-chat-pill-k {
   flex: 0 0 auto;
   color: var(--cl-muted);

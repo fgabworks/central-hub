@@ -39,8 +39,8 @@ class FakeCodingAdapter:
                 "cursor-agent": "",
             },
             "providers": ["codex", "claude-code", "cursor-agent"],
-            "chat": {"default_provider": "gemini", "default_model": "gemini-flash"},
-            "workspace": {"default_provider": "codex", "default_model": "codex-mini"},
+            "chat": {"default_provider": "gemini", "default_model": "gemini-flash", "default_mode": "climate_assisted"},
+            "workspace": {"default_provider": "codex", "default_model": "codex-mini", "default_mode": "direct"},
         }
 
     def execute(self, **payload):
@@ -142,10 +142,8 @@ class ClimateServiceTests(unittest.TestCase):
         self.assertEqual(boot["coding_defaults"]["default_provider"], "codex")
         self.assertEqual(boot["coding_defaults"]["workspace"]["default_provider"], "codex")
         self.assertEqual(boot["coding_defaults"]["chat"]["default_provider"], "gemini")
-        self.assertNotEqual(
-            boot["coding_defaults"]["chat"]["default_provider"],
-            boot["coding_defaults"]["workspace"]["default_provider"],
-        )
+        self.assertEqual(boot["coding_defaults"]["chat"]["default_mode"], "climate_assisted")
+        self.assertEqual(boot["coding_defaults"]["workspace"]["default_mode"], "direct")
         with self.assertRaises(ClimateCodingError) as ctx:
             self.service.require_repo("personal", "work-repo")
         self.assertEqual(ctx.exception.code, "workspace_isolation")
@@ -478,8 +476,8 @@ class ClimateUiContractTests(unittest.TestCase):
             'id="climate-stop"',
             'id="climate-stop-top"',
             'id="climate-execution-mode"',
-            'CLIMATE Assisted',
-            'Direct Provider',
+            'AiriX',
+            'Direct',
         ):
             self.assertIn(marker, template)
         self.assertNotIn('id="climate-cancel"', template)

@@ -193,7 +193,8 @@ class AiConnectionsTests(unittest.TestCase):
         self.assertIn("CLIMATE Chat", html)
         self.assertIn("Code Workspace", html)
         self.assertIn("Provider Overrides", html)
-        self.assertIn('id="chat-default-provider"', html)
+        self.assertIn('id="chat-default-mode"', html)
+        self.assertIn("climate-mode-switch", html)
         self.assertIn('id="workspace-default-provider"', html)
         self.assertNotIn('id="coding-default-provider"', html)
         self.assertIn("Configure AI providers and default models used across CLIMATE.", html)
@@ -254,9 +255,11 @@ class AiConnectionsTests(unittest.TestCase):
         self.assertEqual(defaults["workspace"]["default_provider"], "claude-code")
         self.assertEqual(defaults["chat"]["default_provider"], "")
         split = self.registry.set_coding_defaults(
-            chat={"default_provider": "gemini", "default_model": "gemini-flash"},
-            workspace={"default_provider": "codex", "default_model": "gpt-5"},
+            chat={"default_provider": "gemini", "default_model": "gemini-flash", "default_mode": "direct"},
+            workspace={"default_provider": "codex", "default_model": "gpt-5", "default_mode": "climate_assisted"},
         )
+        self.assertEqual(split["chat"]["default_mode"], "direct")
+        self.assertEqual(split["workspace"]["default_mode"], "climate_assisted")
         self.assertEqual(split["chat"]["default_provider"], "gemini")
         self.assertEqual(split["chat"]["default_model"], "gemini-flash")
         self.assertEqual(split["workspace"]["default_provider"], "codex")
@@ -266,7 +269,7 @@ class AiConnectionsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.registry.set_coding_defaults(default_provider="not-a-provider")
         with self.assertRaises(ValueError):
-            self.registry.set_coding_defaults(chat={"default_provider": "not-a-provider"})
+            self.registry.set_coding_defaults(chat={"default_mode": "smart"})
 
     def test_legacy_coding_defaults_migrate_to_both_surfaces(self):
         self.store.set_pref("coding_default_provider", "codex")
@@ -277,6 +280,8 @@ class AiConnectionsTests(unittest.TestCase):
         self.assertEqual(defaults["chat"]["default_model"], "")
         self.assertEqual(defaults["workspace"]["default_model"], "")
         self.assertEqual(defaults["default_models"]["codex"], "codex-mini")
+        self.assertEqual(defaults["chat"]["default_mode"], "climate_assisted")
+        self.assertEqual(defaults["workspace"]["default_mode"], "climate_assisted")
         self.registry.set_coding_defaults(
             chat={"default_provider": "gemini", "default_model": "gemini-flash"},
         )

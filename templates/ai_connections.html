@@ -156,6 +156,14 @@
 
   {% set chat_defaults = coding_defaults.chat or {} %}
   {% set workspace_defaults = coding_defaults.workspace or {} %}
+  {% macro aic_mode_switch(name, current_mode) %}
+    {% set mode = current_mode or 'climate_assisted' %}
+    <div class="climate-mode-switch aic-mode-switch" role="radiogroup" aria-label="{{ name }} execution mode" data-mode-surface="{{ name }}">
+      <button type="button" data-execution-mode="climate_assisted" aria-pressed="{{ 'true' if mode != 'direct' else 'false' }}">AiriX</button>
+      <button type="button" data-execution-mode="direct" aria-pressed="{{ 'true' if mode == 'direct' else 'false' }}">Direct</button>
+    </div>
+    <input type="hidden" id="{{ name }}-default-mode" value="{{ 'direct' if mode == 'direct' else 'climate_assisted' }}">
+  {% endmacro %}
   {% macro aic_provider_select(select_id, current_id) %}
     {% set current = connections|selectattr('id', 'equalto', current_id)|list %}
     <div class="aic-select-with-logo">
@@ -202,6 +210,9 @@
         <div class="aic-surface" data-surface="chat">
           <h3 id="aic-chat-defaults-title">CLIMATE Chat</h3>
           <div class="aic-surface-grid">
+            <label class="aic-field aic-field-wide"><span>Mode</span>
+              {{ aic_mode_switch('chat', chat_defaults.default_mode or 'climate_assisted') }}
+            </label>
             <label class="aic-field"><span>Provider</span>
               {{ aic_provider_select('chat-default-provider', chat_defaults.default_provider or '') }}
             </label>
@@ -214,6 +225,9 @@
         <div class="aic-surface" data-surface="workspace">
           <h3 id="aic-workspace-defaults-title">Code Workspace</h3>
           <div class="aic-surface-grid">
+            <label class="aic-field aic-field-wide"><span>Mode</span>
+              {{ aic_mode_switch('workspace', workspace_defaults.default_mode or 'climate_assisted') }}
+            </label>
             <label class="aic-field"><span>Provider</span>
               {{ aic_provider_select('workspace-default-provider', workspace_defaults.default_provider or '') }}
             </label>
@@ -321,5 +335,5 @@
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/climate_select.js') }}?v=1"></script>
-<script src="{{ url_for('static', filename='js/ai_connections.js') }}?v=cli-conn-6" defer></script>
+<script src="{{ url_for('static', filename='js/ai_connections.js') }}?v=cli-conn-7" defer></script>
 {% endblock %}

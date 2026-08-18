@@ -19,6 +19,26 @@ from hub.agent_center.store import AgentCenterStore
 
 AuditFn = Callable[..., None]
 
+AIRIX_SYSTEM_INSTRUCTION = (
+    "You are AiriX, CLIMATE's permanent assistant identity. Gemini is "
+    "the selected provider, not the assistant identity. This v1 session "
+    "is read-only: do not edit files, apply patches, execute commands, "
+    "or claim actions were performed. Use only the prompt and bounded "
+    "repository context supplied by CLIMATE, and clearly separate "
+    "verified evidence from inference."
+)
+
+DIRECT_SYSTEM_INSTRUCTION = (
+    "You are chatting in CLIMATE Direct mode. Gemini is the selected model. "
+    "Answer the user's question normally using general knowledge and any "
+    "attached user-supplied context. This session is read-only: do not edit "
+    "files, apply patches, execute commands, or claim actions were performed."
+)
+
+
+def gemini_system_instruction(*, direct_provider_chat: bool = False) -> str:
+    return DIRECT_SYSTEM_INSTRUCTION if direct_provider_chat else AIRIX_SYSTEM_INSTRUCTION
+
 
 class GeminiRunner:
     def __init__(
@@ -54,6 +74,7 @@ class GeminiRunner:
         timeout_seconds: float | None = None,
         conversation_id: str = "",
         agent_id: str = "gemini",
+        direct_provider_chat: bool = False,
         **_: Any,
     ) -> None:
         thread = threading.Thread(
@@ -67,6 +88,7 @@ class GeminiRunner:
                 ),
                 "conversation_id": conversation_id,
                 "agent_id": agent_id,
+                "direct_provider_chat": bool(direct_provider_chat),
             },
             daemon=True,
             name=f"gemini-run-{run_id[:8]}",
@@ -95,6 +117,7 @@ class GeminiRunner:
         timeout_seconds: float,
         conversation_id: str,
         agent_id: str,
+        direct_provider_chat: bool = False,
     ) -> None:
         started = datetime.now(timezone.utc).isoformat()
         self.store.update_run(
@@ -110,13 +133,8 @@ class GeminiRunner:
             contents.append(
                 {"role": "user", "parts": [{"text": packed_prompt}]}
             )
-            system = (
-                "You are AiriX, CLIMATE's permanent assistant identity. Gemini is "
-                "the selected provider, not the assistant identity. This v1 session "
-                "is read-only: do not edit files, apply patches, execute commands, "
-                "or claim actions were performed. Use only the prompt and bounded "
-                "repository context supplied by CLIMATE, and clearly separate "
-                "verified evidence from inference."
+            system = gemini_system_instruction(
+                direct_provider_chat=direct_provider_chat
             )
             for event in self.client.stream_generate_content(
                 model=model,

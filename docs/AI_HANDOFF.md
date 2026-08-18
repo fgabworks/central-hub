@@ -4,7 +4,36 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**Split CLIMATE Chat / Code Workspace AI defaults (2026-08-18)**
+**CLIMATE Chat Direct is true provider chat (2026-08-18)**
+
+Direct Chat sends the user prompt to the selected provider/model with only
+minimal system/identity context. It does not apply repository evidence gates,
+investigation prompts, or workspace evidence instructions unless the user
+explicitly attached repo/file context. AiriX Chat keeps CLIMATE
+orchestration/evidence wrapping. **No repository** stays valid in both modes.
+Streaming, persistence, cancellation, exact-model selection, and the provider
+registry are unchanged. Code Workspace Direct still skips the Context Resolver
+but keeps explicit file/repo rules.
+
+Prior: **CLIMATE Chat empty repository scope (2026-08-18)**
+
+Standalone CLIMATE Chat treats **No repository** as a valid run. Direct and
+AiriX general chat skip repository inheritance (active VANTA repo, persisted
+selection, sole connected). Agent Center preview no longer requires roots or
+Hub tools for an empty scope. Placeholders (`none`, empty, workspace ids) are
+not converted into a repository. Explicit invalid ids are still rejected.
+Code Workspace validation is unchanged.
+
+Prior: **AiriX / Direct execution modes on Chat and Code Workspace (2026-08-18)**
+
+Both CLIMATE Chat and Code Workspace now expose a compact `[ AiriX ] [ Direct ]`
+switch next to provider/model. IDs stay `climate_assisted` / `direct`; both
+modes reuse the existing provider registry. Chat no longer hard-codes Direct.
+Repository context is opt-in on Chat (`No repository` unless selected) and
+still explicit in Code Workspace file/repo checkboxes. Per-surface defaults
+include `default_mode`.
+
+Prior: **Split CLIMATE Chat / Code Workspace AI defaults (2026-08-18)**
 
 AI Connections now stores independent defaults for CLIMATE Chat and Code
 Workspace (`chat_default_*` / `workspace_default_*`), plus the existing

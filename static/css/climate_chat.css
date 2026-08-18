@@ -303,6 +303,8 @@
 }
 .ax-pill-dot.is-ok { background: #22c55e; }
 .ax-pill-dot.is-error { background: #e53935; }
+.ax-pill-mode { padding: 2px 4px 2px 4px; }
+.ax-pill-repo select { max-width: 160px; }
 .ax-chat-hint {
   margin-left: auto;
   color: var(--climate-muted-2, #6a7280);

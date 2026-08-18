@@ -11,6 +11,7 @@ from typing import Any, Callable
 from hub.agent_center.provider_catalog import credential_type_for, env_keys_for
 from hub.agent_center.provider_secrets import configured_env_keys, redact_known_secrets
 from hub.agent_center.redact import redact_text
+from hub.climate.execution_mode import CLIMATE_ASSISTED, coerce_execution_mode
 from hub.perf import TtlCache, coalesce, record_external, timed
 
 
@@ -29,8 +30,10 @@ PREF_DEFAULT_PROVIDER = "coding_default_provider"
 PREF_DEFAULT_MODEL_PREFIX = "coding_default_model:"
 PREF_CHAT_PROVIDER = "chat_default_provider"
 PREF_CHAT_MODEL = "chat_default_model"
+PREF_CHAT_MODE = "chat_default_mode"
 PREF_WORKSPACE_PROVIDER = "workspace_default_provider"
 PREF_WORKSPACE_MODEL = "workspace_default_model"
+PREF_WORKSPACE_MODE = "workspace_default_mode"
 PREF_SURFACE_DEFAULTS_V2 = "ai_surface_defaults_v2"
 
 _STATUS_TTL = float(os.getenv("CENTRAL_HUB_AI_CONNECTION_CACHE_TTL", "60"))
@@ -157,10 +160,12 @@ class AgentConnectionRegistry:
         chat = {
             "default_provider": self._clean_provider(self.store.get_pref(PREF_CHAT_PROVIDER, "")),
             "default_model": self.store.get_pref(PREF_CHAT_MODEL, "").strip(),
+            "default_mode": self._clean_mode(self.store.get_pref(PREF_CHAT_MODE, "")),
         }
         workspace = {
             "default_provider": self._clean_provider(self.store.get_pref(PREF_WORKSPACE_PROVIDER, "")),
             "default_model": self.store.get_pref(PREF_WORKSPACE_MODEL, "").strip(),
+            "default_mode": self._clean_mode(self.store.get_pref(PREF_WORKSPACE_MODE, "")),
         }
         return {
             # Legacy alias: Code Workspace provider. Chat is never implied by this field.
@@ -181,9 +186,11 @@ class AgentConnectionRegistry:
     ) -> dict[str, Any]:
         self._ensure_surface_defaults_migrated()
         if chat is not None:
-            self._set_surface_defaults(PREF_CHAT_PROVIDER, PREF_CHAT_MODEL, chat)
+            self._set_surface_defaults(PREF_CHAT_PROVIDER, PREF_CHAT_MODEL, PREF_CHAT_MODE, chat)
         if workspace is not None:
-            provider = self._set_surface_defaults(PREF_WORKSPACE_PROVIDER, PREF_WORKSPACE_MODEL, workspace)
+            provider = self._set_surface_defaults(
+                PREF_WORKSPACE_PROVIDER, PREF_WORKSPACE_MODEL, PREF_WORKSPACE_MODE, workspace
+            )
             if "default_provider" in workspace:
                 self.store.set_pref(PREF_DEFAULT_PROVIDER, provider)
         elif default_provider is not None:
@@ -211,9 +218,11 @@ class AgentConnectionRegistry:
         self.store.set_pref(PREF_WORKSPACE_PROVIDER, legacy_provider)
         self.store.set_pref(PREF_CHAT_MODEL, "")
         self.store.set_pref(PREF_WORKSPACE_MODEL, "")
+        self.store.set_pref(PREF_CHAT_MODE, CLIMATE_ASSISTED)
+        self.store.set_pref(PREF_WORKSPACE_MODE, CLIMATE_ASSISTED)
         self.store.set_pref(PREF_SURFACE_DEFAULTS_V2, "1")
 
-    def _set_surface_defaults(self, provider_key: str, model_key: str, payload: Any) -> str:
+    def _set_surface_defaults(self, provider_key: str, model_key: str, mode_key: str, payload: Any) -> str:
         if not isinstance(payload, dict):
             raise ValueError("Surface defaults must be an object")
         provider = self.store.get_pref(provider_key, "")
@@ -222,7 +231,15 @@ class AgentConnectionRegistry:
             self.store.set_pref(provider_key, provider)
         if "default_model" in payload:
             self.store.set_pref(model_key, str(payload.get("default_model") or "").strip())
+        if "default_mode" in payload:
+            self.store.set_pref(mode_key, coerce_execution_mode(payload.get("default_mode")))
         return self._clean_provider(provider)
+
+    def _clean_mode(self, value: Any) -> str:
+        try:
+            return coerce_execution_mode(value)
+        except ValueError:
+            return CLIMATE_ASSISTED
 
     def _clean_provider(self, value: Any, *, required: bool = False) -> str:
         provider = str(value or "").strip()

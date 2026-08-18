@@ -262,12 +262,21 @@ class ClimateCodingAdapter:
                 code="mode_unsupported",
             )
         general_chat = _is_general_chat_surface(surface)
+        explicit_files = bool(
+            str(current_file or "").strip()
+            or any(str(path or "").strip() for path in (selected_files or []))
+            or str(selection or "").strip()
+        )
         if general_chat:
+            # Chat never implies a repository. Keep ASK-only and omit repo/cwd
+            # unless the caller supplied explicit bounded context in `selection`.
             repository_investigation = False
             include_repo_context = False
             selected_files = []
             current_file = ""
             repository_id = ""
+            if not explicit_files:
+                selection = ""
         repository_investigation = bool(repository_investigation and mode == "ask")
         files = list(dict.fromkeys(
             str(path).replace("\\", "/").lstrip("/")
@@ -275,21 +284,33 @@ class ClimateCodingAdapter:
             if str(path).strip()
         ))
         if general_chat:
-            context_note = [
-                "AiriX · CLIMATE Chat (ASK).",
-                "Answer in clear human-readable prose (markdown allowed).",
-                "Use only the user prompt and any supplied bounded context.",
-                "Do not propose file edits, diffs, patches, or command execution.",
-                "Do not assume repository access unless bounded file context is supplied.",
-            ]
-            if selection:
-                context_note.append("Bounded selected context:\n" + selection[:20_000])
-            if reuse_session and not handoff:
-                context_note.append(
-                    "Same-provider session: reuse prior provider context when supported."
+            has_packet = (not direct) and (
+                "CLIMATE context packet" in prompt
+                or "CLIMATE preflight context packet" in prompt
+            )
+            if direct:
+                packed_parts = []
+                if selection:
+                    packed_parts.append("Attached context:\n" + selection[:20_000])
+                packed_parts.append(prompt.strip())
+                packed_prompt = "\n\n".join(packed_parts)
+            else:
+                context_note = [
+                    "AiriX · CLIMATE Chat (ASK).",
+                    "Answer in clear human-readable prose (markdown allowed).",
+                    "Use only the user prompt and any supplied bounded context.",
+                    "Do not propose file edits, diffs, patches, or command execution.",
+                    "Do not assume repository access unless bounded file context is supplied.",
+                ]
+                if selection:
+                    context_note.append("Bounded selected context:\n" + selection[:20_000])
+                if reuse_session and not handoff:
+                    context_note.append(
+                        "Same-provider session: reuse prior provider context when supported."
+                    )
+                packed_prompt = "\n\n".join(
+                    context_note + ([prompt.strip()] if has_packet else ["User prompt:", prompt.strip()])
                 )
-            packed_prompt = "\n\n".join(context_note + ["User prompt:", prompt.strip()])
-            has_packet = False
         else:
             if mode == "edit":
                 context_note = [
@@ -403,11 +424,22 @@ class ClimateCodingAdapter:
             "reuse_provider_session": bool(reuse_session) and not handoff,
             "repository_investigation": bool(repository_investigation),
         }
+        if general_chat:
+            payload["inherit_repository_scope"] = False
+            payload["active_repository_id"] = None
+            payload["selected_repository_id"] = None
+            payload["repository_ids"] = []
+            if direct:
+                payload["direct_provider_chat"] = True
+                payload["allow_general_knowledge"] = True
+                payload["tool_runtime"] = False
+                payload["bounded_evidence_only"] = False
         if conversation_id:
             payload["conversation_id"] = conversation_id
         if provider == "gemini":
             payload["tool_runtime_lean_context"] = True
-            payload["bounded_evidence_only"] = True
+            if not payload.get("direct_provider_chat"):
+                payload["bounded_evidence_only"] = True
             payload["repository_investigation"] = False
             payload["files"] = {}
             payload["tool_runtime"] = False

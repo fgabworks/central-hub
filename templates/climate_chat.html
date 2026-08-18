@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block title %}AiriX · CLIMATE Chat · {{ climate.workspace_label }}{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/climate.css') }}?v=35">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/climate_chat.css') }}?v=2">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/climate.css') }}?v=36">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/climate_chat.css') }}?v=3">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/styles/github-dark.min.css">
 {% endblock %}
 {% block content %}
@@ -51,6 +51,16 @@
         </div>
       </div>
       <div class="ax-chat-controls">
+        <div class="ax-pill ax-pill-mode" title="AiriX — CLIMATE orchestration, then the selected provider/model.">
+          <div class="climate-mode-switch" role="radiogroup" aria-label="Execution mode">
+            <button type="button" data-execution-mode="climate_assisted" aria-pressed="true">AiriX</button>
+            <button type="button" data-execution-mode="direct" aria-pressed="false">Direct</button>
+          </div>
+          <select id="ax-execution-mode" hidden aria-hidden="true" tabindex="-1">
+            <option value="climate_assisted" selected>AiriX</option>
+            <option value="direct">Direct</option>
+          </select>
+        </div>
         <div class="ax-pill" title="Provider">
           <i class="ax-pill-dot" id="ax-provider-dot" aria-hidden="true"></i>
           <select id="ax-provider" aria-label="Provider"></select>
@@ -58,8 +68,16 @@
         <div class="ax-pill ax-pill-model" title="Exact model — no silent fallback">
           <select id="ax-model" aria-label="Model"><option value="" disabled selected>Select exact model</option></select>
         </div>
+        <div class="ax-pill ax-pill-repo" title="Optional repository context — used only when selected">
+          <select id="ax-repo-context" aria-label="Optional repository context">
+            <option value="">No repository</option>
+            {% for repo in climate.repositories %}
+            <option value="{{ repo.id }}" {% if not repo.available %}disabled{% endif %}>{{ repo.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
         <button type="button" class="ax-icon-btn" id="ax-model-refresh" title="Refresh models">↻</button>
-        <span class="ax-chat-hint">Ask-only · exact model · no repository upload</span>
+        <span class="ax-chat-hint">Ask-only · exact model · repo optional</span>
       </div>
     </div>
   </section>
@@ -71,5 +89,5 @@
 <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/highlight.min.js"></script>
 <script src="{{ url_for('static', filename='js/climate_markdown.js') }}?v=3"></script>
 <script src="{{ url_for('static', filename='js/climate_select.js') }}?v=1"></script>
-<script src="{{ url_for('static', filename='js/climate_chat.js') }}?v=3"></script>
+<script src="{{ url_for('static', filename='js/climate_chat.js') }}?v=5"></script>
 {% endblock %}

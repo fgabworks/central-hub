@@ -51,7 +51,7 @@ def register_climate_routes(app: Flask) -> None:
 
     def _chat_page(workspace: str):
         ws = normalize_workspace(workspace)
-        bootstrap = _svc().bootstrap(ws, "")
+        bootstrap = _svc().bootstrap(ws, "", surface="chat")
         return render_template(
             "climate_chat.html",
             climate=bootstrap,

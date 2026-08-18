@@ -1,7 +1,8 @@
 """CLIMATE execution mode — orchestration, not provider identity.
 
-Assisted uses the Context Resolver as hints. Direct sends the raw prompt to the
-provider inside the same approved-repo / ASK-read-only / EDIT-proposal safety.
+AiriX uses the CLIMATE orchestration/context layer, then the selected provider.
+Direct sends the prompt to that same provider with minimal CLIMATE wrapping.
+Repository/file context is never implied; it is used only when explicitly selected.
 """
 
 from __future__ import annotations
@@ -11,13 +12,13 @@ DIRECT = "direct"
 EXECUTION_MODES = (CLIMATE_ASSISTED, DIRECT)
 
 MODE_LABELS = {
-    CLIMATE_ASSISTED: "CLIMATE Assisted",
-    DIRECT: "Direct Provider",
+    CLIMATE_ASSISTED: "AiriX",
+    DIRECT: "Direct",
 }
 
 MODE_TOOLTIPS = {
-    CLIMATE_ASSISTED: "CLIMATE Assisted — CLIMATE finds useful repo context first.",
-    DIRECT: "Direct Provider — provider investigates the repo directly.",
+    CLIMATE_ASSISTED: "AiriX — CLIMATE orchestration, then the selected provider/model.",
+    DIRECT: "Direct — send the prompt to the selected provider/model with minimal CLIMATE orchestration.",
 }
 
 _ALIASES = {
@@ -25,6 +26,7 @@ _ALIASES = {
     "climate-assisted": CLIMATE_ASSISTED,
     "assisted": CLIMATE_ASSISTED,
     "climate": CLIMATE_ASSISTED,
+    "airix": CLIMATE_ASSISTED,
     "direct": DIRECT,
     "direct_provider": DIRECT,
     "direct-provider": DIRECT,
@@ -32,8 +34,18 @@ _ALIASES = {
 
 
 def normalize_execution_mode(value: str | None) -> str:
-    raw = str(value or "").strip().lower().replace(" ", "_")
+    raw = str(value or "").strip().lower().replace(" ", "_").replace("-", "_")
     return _ALIASES.get(raw, CLIMATE_ASSISTED)
+
+
+def coerce_execution_mode(value: str | None) -> str:
+    """Strict parser for saved defaults. Blank becomes AiriX; unknown raises."""
+    raw = str(value or "").strip().lower().replace(" ", "_").replace("-", "_")
+    if not raw:
+        return CLIMATE_ASSISTED
+    if raw not in _ALIASES:
+        raise ValueError("Unknown execution mode")
+    return _ALIASES[raw]
 
 
 def is_direct_mode(value: str | None) -> bool:

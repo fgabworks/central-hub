@@ -112,6 +112,9 @@
       if (saved.model) modelSelect.dataset.saved = saved.model;
       if (saved.executionMode && executionModeSelect) {
         executionModeSelect.value = saved.executionMode === "direct" ? "direct" : "climate_assisted";
+      } else if (executionModeSelect) {
+        var defaultMode = (workspaceSurfaceDefaults().default_mode === "direct") ? "direct" : "climate_assisted";
+        executionModeSelect.value = defaultMode;
       }
       if (executionModePill) executionModePill.setAttribute("title", executionModeTooltip(currentExecutionMode()));
     } catch (_) {}
@@ -147,8 +150,14 @@
   }
   function executionModeTooltip(mode) {
     return mode === "direct"
-      ? "Direct Provider — provider investigates the repo directly."
-      : "CLIMATE Assisted — CLIMATE finds useful repo context first.";
+      ? "Direct — send the prompt to the selected provider/model with minimal CLIMATE orchestration."
+      : "AiriX — CLIMATE orchestration, then the selected provider/model.";
+  }
+  function syncExecutionModeSwitch(mode) {
+    var next = mode === "direct" ? "direct" : "climate_assisted";
+    document.querySelectorAll("#climate-mode-pill [data-execution-mode]").forEach(function (btn) {
+      btn.setAttribute("aria-pressed", btn.getAttribute("data-execution-mode") === next ? "true" : "false");
+    });
   }
   function applyExecutionMode(mode, opts) {
     opts = opts || {};
@@ -157,6 +166,7 @@
       executionModeSelect.value = next;
       if (executionModeSelect._climateDd) syncClimateDropdown(executionModeSelect);
     }
+    syncExecutionModeSwitch(next);
     if (executionModePill) executionModePill.setAttribute("title", executionModeTooltip(next));
     var session = activeSession();
     if (session && !opts.skipSession) {
@@ -1889,7 +1899,7 @@
     syncClimateDropdown(selectEl);
   }
   function enhanceProviderModelDropdowns() {
-    ["climate-provider", "climate-model", "climate-provider-panel", "climate-model-panel", "climate-execution-mode"].forEach(function (id) {
+    ["climate-provider", "climate-model", "climate-provider-panel", "climate-model-panel"].forEach(function (id) {
       var el = document.getElementById(id);
       if (el) enhanceClimateSelect(el);
     });
@@ -3342,6 +3352,12 @@
       applyExecutionMode(executionModeSelect.value);
     });
   }
+  document.querySelectorAll("#climate-mode-pill [data-execution-mode]").forEach(function(btn){
+    btn.addEventListener("click",function(){
+      applyExecutionMode(btn.getAttribute("data-execution-mode"));
+    });
+  });
+  syncExecutionModeSwitch(currentExecutionMode());
   document.getElementById("climate-model-refresh").addEventListener("click",function(){selectProvider(providerSelect.value,{refresh:true});});
   document.getElementById("climate-chat-new").addEventListener("click",function(){closeChatPopovers();newChatSession(false);promptEl.focus();});
   function renameActiveChat(){

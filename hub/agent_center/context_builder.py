@@ -194,9 +194,7 @@ def build_context_preview(
         "packed_prompt_chars": len(packed_prompt),
         "packed_prompt_preview": packed_prompt[:1200],
         "packed_prompt": packed_prompt,
-        "ok": (bool(roots) or bool(selected_tools) or (profile is not None and not profile.repositories_allowed))
-        and not scope_errors
-        and not missing,
+        "ok": not scope_errors and not missing,
         "profile": profile.public() if profile else None,
         "included_sources": included,
         "excluded_sources": _excluded_sources(profile, selected_tools or []),
@@ -212,6 +210,62 @@ def build_context_preview(
                 "(fallback docs like README.md may still be included)."
             ]
         ),
+    }
+
+
+def build_direct_provider_preview(
+    *,
+    prompt: str,
+    profile: AssistantProfile | None = None,
+) -> dict[str, Any]:
+    """Lean preview for CLIMATE Chat Direct: user prompt only, no evidence gates."""
+    prompt = (prompt or "")[:MAX_PROMPT_CHARS]
+    return {
+        "mode": "ask",
+        "mode_label": mode_label("ask"),
+        "prompt": prompt,
+        "repository_ids": [],
+        "missing_repository_ids": [],
+        "roots": [],
+        "instructions": [],
+        "instruction_contents": [],
+        "files": [],
+        "file_contents": [],
+        "excluded_secrets": [],
+        "scope_errors": [],
+        "packed_prompt_chars": len(prompt),
+        "packed_prompt_preview": prompt[:1200],
+        "packed_prompt": prompt,
+        "ok": True,
+        "profile": profile.public() if profile else None,
+        "included_sources": [],
+        "excluded_sources": _excluded_sources(profile, []),
+        "evidence_packet": {},
+        "repository_intelligence": {
+            "profiles": [],
+            "items": [],
+            "item_count": 0,
+            "include_full_index": False,
+            "diagnostics": {"used": False, "knowledge_entries_used": 0},
+        },
+        "bounded_evidence_only": False,
+        "grounding_rules": "",
+        "notes": [],
+        "direct_provider_chat": True,
+        "tools": {
+            "enabled": [],
+            "disabled": [
+                "edit",
+                "terminal",
+                "sql_execute",
+                "email_action",
+                "calendar_action",
+                "dhis2_write",
+                "repository_run",
+                "auto_apply",
+            ],
+        },
+        "grounding": {"required": False, "usable": False},
     }
 
 

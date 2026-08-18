@@ -10,7 +10,11 @@ from hub.agent_center.adapters import build_adapters
 from hub.agent_center.adapters.base import AgentAdapter, public_availability
 from hub.agent_center.adapters.codex import CodexAdapter
 from hub.agent_center.codex_safety import assert_safe_codex_argv, resolve_approved_repo_cwd
-from hub.agent_center.context_builder import build_context_preview, selectable_repositories
+from hub.agent_center.context_builder import (
+    build_context_preview,
+    build_direct_provider_preview,
+    selectable_repositories,
+)
 from hub.agent_center.gemini_runner import GeminiRunner
 from hub.agent_center.connections import AgentConnectionRegistry
 from hub.agent_center.models import (
@@ -272,13 +276,14 @@ class AgentCenterService:
         active_repository_id: str | None = None,
         selected_repository_id: str | None = None,
         raise_on_error: bool = True,
+        inherit: bool = True,
     ) -> list[str]:
         """
         Resolve repository scope for a run.
 
         Priority: explicit → persisted selection → active workspace → sole connected.
         Never blind-picks the first of many. Raises when a coding CLI needs a repo
-        and none can be resolved.
+        and none can be resolved. inherit=False skips those fallbacks (CLIMATE Chat).
         """
         from hub.agent_center.repository_context import resolve_repository_context
 
@@ -292,6 +297,7 @@ class AgentCenterService:
             active_repository_id=active_repository_id,
             selected_repository_id=selected_repository_id,
             repositories=selectable,
+            inherit=inherit,
         )
         if not resolved["ok"]:
             if raise_on_error:
@@ -415,6 +421,11 @@ class AgentCenterService:
             profile = get_profile(str(payload.get("profile_id") or "okarun"))
         except ValueError as exc:
             raise AgentCenterError(str(exc), code="unknown_profile") from exc
+        if payload.get("direct_provider_chat"):
+            return build_direct_provider_preview(
+                prompt=str(payload.get("prompt") or ""),
+                profile=profile,
+            )
         requested_tools = payload.get("tool_ids")
         selected_tools = normalize_tools(
             profile, list(requested_tools) if isinstance(requested_tools, list) else None
@@ -594,24 +605,31 @@ class AgentCenterService:
                 f"{adapter.descriptor.label} is available for AiriX only in this MVP",
                 code="profile_unsupported",
             )
+        inherit_scope = payload.get("inherit_repository_scope")
+        if inherit_scope is None:
+            inherit_scope = True
         resolved_repos = self.resolve_repository_ids(
             profile.id,
             repository_ids=list(payload.get("repository_ids") or []),
             agent_id=agent_id,
             active_repository_id=str(payload.get("active_repository_id") or "").strip() or None,
             selected_repository_id=str(payload.get("selected_repository_id") or "").strip() or None,
+            inherit=bool(inherit_scope),
         )
         payload = {**payload, "repository_ids": resolved_repos}
+        direct_chat = bool(payload.get("direct_provider_chat"))
         # Always load server-owned RI. Never accept cached knowledge supplied by a
         # run caller as authoritative evidence.
-        repository_knowledge = self.repository_intelligence.retrieve(
-            resolved_repos, prompt
-        ) if resolved_repos else {
-            "profiles": [], "items": [], "item_count": 0,
-            "include_full_index": False,
-            "diagnostics": {"used": False, "knowledge_entries_used": 0},
-        }
-        if bool(payload.get("bounded_evidence_only")):
+        repository_knowledge = (
+            {
+                "profiles": [], "items": [], "item_count": 0,
+                "include_full_index": False,
+                "diagnostics": {"used": False, "knowledge_entries_used": 0},
+            }
+            if direct_chat or not resolved_repos
+            else self.repository_intelligence.retrieve(resolved_repos, prompt)
+        )
+        if (not direct_chat) and bool(payload.get("bounded_evidence_only")):
             packet = payload.get("evidence_packet")
             packet = packet if isinstance(packet, dict) else {}
             allowed = {
@@ -659,33 +677,48 @@ class AgentCenterService:
             evaluate_answer_grounding,
             format_cannot_verify,
         )
-        grounding = self.prepare_grounding(
-            prompt,
-            profile_id=profile.id,
-            repository_ids=resolved_repos,
-            tool_ids=list(payload.get("tool_ids") or []) or None,
-            evidence_packet=payload.get("evidence_packet")
-            if isinstance(payload.get("evidence_packet"), dict)
-            else None,
-        )
-        grounding = self._grounding_with_repository_intelligence(
-            grounding,
-            repository_knowledge,
-            prompt=prompt,
-            repository_ids=resolved_repos,
-        )
-        payload["evidence_packet"] = grounding.get("evidence_packet")
-        payload["grounding_rules"] = grounding.get("grounding_rules")
-        capabilities = adapter.capabilities() if hasattr(adapter, "capabilities") else {}
-        repository_investigation = bool(
-            payload.get("repository_investigation")
-            and resolved_repos
-            and capabilities.get("native_repository_investigation")
-        )
-        payload["repository_investigation"] = repository_investigation
+        if direct_chat:
+            grounding = {
+                "required": False,
+                "usable": False,
+                "evidence_packet": {},
+                "grounding_rules": "",
+                "allow_general_knowledge": True,
+                "scope": {"allow_general_knowledge": True},
+            }
+            payload["evidence_packet"] = {}
+            payload["grounding_rules"] = ""
+            payload["repository_investigation"] = False
+            repository_investigation = False
+        else:
+            grounding = self.prepare_grounding(
+                prompt,
+                profile_id=profile.id,
+                repository_ids=resolved_repos,
+                tool_ids=list(payload.get("tool_ids") or []) or None,
+                evidence_packet=payload.get("evidence_packet")
+                if isinstance(payload.get("evidence_packet"), dict)
+                else None,
+            )
+            grounding = self._grounding_with_repository_intelligence(
+                grounding,
+                repository_knowledge,
+                prompt=prompt,
+                repository_ids=resolved_repos,
+            )
+            payload["evidence_packet"] = grounding.get("evidence_packet")
+            payload["grounding_rules"] = grounding.get("grounding_rules")
+            capabilities = adapter.capabilities() if hasattr(adapter, "capabilities") else {}
+            repository_investigation = bool(
+                payload.get("repository_investigation")
+                and resolved_repos
+                and capabilities.get("native_repository_investigation")
+            )
+            payload["repository_investigation"] = repository_investigation
         # Coding CLIs have no Hub tool loop — never send project questions without evidence.
         if (
-            grounding.get("required")
+            not direct_chat
+            and grounding.get("required")
             and agent_requires_repository(agent_id)
             and not grounding.get("usable")
             and not repository_investigation
@@ -967,12 +1000,14 @@ class AgentCenterService:
             interaction_mode = normalize_interaction_mode(
                 str(payload.get("interaction_mode") or payload.get("routing_mode") or mode)
             )
-            use_tool_runtime = bool(payload.get("tool_runtime")) or tool_runtime_needed(
-                interaction_mode=interaction_mode,
-                classification=None,
-                t0_solved=False,
-                adapter_is_api=True,
-                force=bool(payload.get("tool_runtime")),
+            use_tool_runtime = False if direct_chat else (
+                bool(payload.get("tool_runtime")) or tool_runtime_needed(
+                    interaction_mode=interaction_mode,
+                    classification=None,
+                    t0_solved=False,
+                    adapter_is_api=True,
+                    force=bool(payload.get("tool_runtime")),
+                )
             )
             enabled_tools = set(preview["tools"]["enabled"])
             if use_tool_runtime:
@@ -1062,6 +1097,7 @@ class AgentCenterService:
                     if isinstance(payload.get("repository_intelligence"), dict)
                     else preview.get("repository_intelligence")
                 ),
+                direct_provider_chat=direct_chat,
             )
             return self.store.get_run(run["id"]) or run
 
