@@ -21,7 +21,7 @@ Verified state: [AI_REFERENCE.md](AI_REFERENCE.md).
 | Live Processing (GET-only API + path health) | `config/repositories.yaml` |
 | Data-Script / Report Template (git + optional path) | `config/repositories.yaml` |
 | Live dashboard (health / notebook queue / audit) | `/work` (legacy `/` redirects) |
-| Personal / Work workspace switcher | `/workspace/<name>`, cookie + `hub_prefs`; CLIMATE nav is shared; Code Workspace + Repositories live under VANTA; CSS weather-galaxy sky on non-editor pages, quiet/static in Code Workspace |
+| Personal / Work workspace switcher | `/workspace/<name>`, cookie + `hub_prefs`; CLIMATE nav is shared; Code Workspace + Repositories live under VANTA; restrained CSS atmosphere (`climate-sky`) on Dashboard/Settings/AI Connections/Chat, quiet/static in Code Workspace |
 | Personal Dashboard + Tasks + Quick Notepad | `/personal`, `/personal/tasks`; shared Tasks framework also at `/work/tasks` |
 | **ARCTIC** (CLIMATE / Personal) | `/personal/arctic` — Profile + Document Registry (Local/Drive refs); Dashboard\|Profile\|Files; Career Pack logical view; Primary CV = latest CV; AiriX context explicit-only; Drive sync deferred (`hub/arctic/`, `data/arctic.db`) |
 | Official References (Work Notebook) | `/work/notebook?view=references` — Year→Type library for memoranda/advisories/guidelines; local upload and/or external link; files under `data/work-notebook/references/{year}/`; editable Subject with bounded PDF/DOCX/TXT detection (no OCR/LLM); Quick Add autofill via `/api/notebook/references/detect-meta`; search/year/type filters (`hub/notebook/references.py`) |

@@ -4,7 +4,18 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**Code Workspace compact Code Assistant (2026-08-19)**
+**CLIMATE atmosphere polish (2026-08-19)**
+
+Non-editor CLIMATE surfaces sit on a restrained CSS atmosphere: dark navy/
+charcoal, a faint starfield, slow cloud-like nebula drift, a low-opacity blue
+glow, plus a VANTA crimson or ARCTIC cyan horizon tint. Opacity stays low so
+text and cards remain readable. Dashboard, Settings, AI Connections, and
+CLIMATE Chat use the full (still subtle) motion. Code Workspace keeps a nearly
+static, much weaker wash. `prefers-reduced-motion` disables animation; hidden
+or unfocused tabs pause it. No WebGL, no shooting stars, no layout/route/
+provider/chat/workspace behavior changes. Uploaded branding is untouched.
+
+Prior: **Code Workspace compact Code Assistant (2026-08-19)**
 
 The Code Workspace right panel stays **AiriX · Code Assistant** and is visually
 distinct from standalone CLIMATE Chat. AiriX/Direct, Provider, Model, Context

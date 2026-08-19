@@ -174,7 +174,7 @@
 .ax-chat-feed {
   overflow: auto;
   padding: 28px 20px 18px;
-  background: color-mix(in srgb, var(--climate-bg, #0d0f12) 88%, transparent);
+  background: color-mix(in srgb, var(--climate-bg, #0d0f12) 80%, transparent);
 }
 .ax-chat-empty {
   height: 100%;

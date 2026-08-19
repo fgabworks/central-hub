@@ -103,11 +103,11 @@ body.climate-system-shell.theme-personal {
 
 html,
 body.climate-system-shell {
-  background-color: #07090d;
+  background-color: #06080c;
   color: var(--climate-text);
 }
 
-/* Weather-galaxy sky lives in .climate-sky; body stays a solid navy fallback. */
+/* Atmosphere lives in .climate-sky; body stays a solid navy/charcoal fallback. */
 body.climate-system-shell {
   background-image: none;
 }
@@ -128,80 +128,94 @@ body.climate-system-shell .app-shell {
   contain: strict;
   isolation: isolate;
   background:
-    radial-gradient(ellipse 90% 70% at 50% -8%, rgba(18, 36, 68, 0.55), transparent 58%),
-    radial-gradient(ellipse 70% 50% at 100% 100%, rgba(12, 28, 52, 0.35), transparent 55%),
-    #07090d;
+    radial-gradient(ellipse 88% 58% at 48% -10%, rgba(14, 28, 52, 0.38), transparent 64%),
+    #06080c;
 }
 
 .climate-sky-layer {
   position: absolute;
-  inset: -8%;
+  inset: -10%;
 }
 
 .climate-sky-stars {
   inset: 0;
-  opacity: 0.55;
+  opacity: 0.26;
   background-image:
-    radial-gradient(1px 1px at 8% 12%, rgba(255, 255, 255, 0.55), transparent),
-    radial-gradient(1px 1px at 22% 38%, rgba(210, 230, 255, 0.4), transparent),
-    radial-gradient(1.5px 1.5px at 41% 18%, rgba(255, 255, 255, 0.35), transparent),
-    radial-gradient(1px 1px at 63% 28%, rgba(190, 220, 255, 0.32), transparent),
-    radial-gradient(1px 1px at 81% 14%, rgba(255, 255, 255, 0.42), transparent),
-    radial-gradient(1px 1px at 91% 44%, rgba(210, 230, 255, 0.28), transparent),
-    radial-gradient(1.5px 1.5px at 14% 62%, rgba(255, 255, 255, 0.3), transparent),
-    radial-gradient(1px 1px at 33% 74%, rgba(200, 225, 255, 0.26), transparent),
-    radial-gradient(1px 1px at 52% 58%, rgba(255, 255, 255, 0.38), transparent),
-    radial-gradient(1px 1px at 71% 81%, rgba(190, 220, 255, 0.24), transparent),
-    radial-gradient(1px 1px at 88% 69%, rgba(255, 255, 255, 0.34), transparent),
-    radial-gradient(1px 1px at 6% 88%, rgba(210, 230, 255, 0.22), transparent),
-    radial-gradient(1.5px 1.5px at 47% 91%, rgba(255, 255, 255, 0.2), transparent),
-    radial-gradient(1px 1px at 76% 6%, rgba(230, 240, 255, 0.28), transparent);
+    radial-gradient(1px 1px at 8% 12%, rgba(220, 230, 245, 0.28), transparent),
+    radial-gradient(1px 1px at 22% 38%, rgba(190, 214, 240, 0.18), transparent),
+    radial-gradient(1px 1px at 41% 18%, rgba(255, 255, 255, 0.16), transparent),
+    radial-gradient(1px 1px at 63% 28%, rgba(186, 214, 240, 0.14), transparent),
+    radial-gradient(1px 1px at 81% 14%, rgba(230, 238, 250, 0.2), transparent),
+    radial-gradient(1px 1px at 91% 44%, rgba(200, 220, 240, 0.12), transparent),
+    radial-gradient(1px 1px at 14% 62%, rgba(255, 255, 255, 0.14), transparent),
+    radial-gradient(1px 1px at 33% 74%, rgba(186, 210, 235, 0.12), transparent),
+    radial-gradient(1px 1px at 52% 58%, rgba(230, 238, 250, 0.16), transparent),
+    radial-gradient(1px 1px at 71% 81%, rgba(186, 214, 240, 0.1), transparent),
+    radial-gradient(1px 1px at 88% 69%, rgba(220, 230, 245, 0.14), transparent),
+    radial-gradient(1px 1px at 6% 88%, rgba(190, 214, 240, 0.1), transparent),
+    radial-gradient(1px 1px at 47% 91%, rgba(255, 255, 255, 0.1), transparent),
+    radial-gradient(1px 1px at 76% 6%, rgba(210, 226, 245, 0.12), transparent);
   background-size: 100% 100%;
-  animation: climate-sky-drift 140s linear infinite;
+  animation: climate-sky-drift 180s linear infinite;
 }
 
 .climate-sky-weather {
-  opacity: 0.7;
+  opacity: 0.34;
   background:
-    radial-gradient(ellipse 42% 26% at 18% 32%, rgba(62, 102, 148, 0.22), transparent 72%),
-    radial-gradient(ellipse 36% 22% at 78% 18%, rgba(48, 86, 128, 0.18), transparent 74%),
-    radial-gradient(ellipse 48% 28% at 58% 48%, rgba(70, 88, 118, 0.14), transparent 76%),
-    radial-gradient(ellipse 28% 18% at 32% 72%, rgba(90, 78, 88, 0.08), transparent 70%);
-  animation: climate-sky-drift 95s ease-in-out infinite alternate;
+    radial-gradient(ellipse 48% 30% at 16% 30%, rgba(48, 78, 118, 0.16), transparent 74%),
+    radial-gradient(ellipse 40% 26% at 78% 22%, rgba(36, 68, 104, 0.14), transparent 76%),
+    radial-gradient(ellipse 54% 32% at 52% 58%, rgba(58, 74, 102, 0.1), transparent 78%),
+    radial-gradient(ellipse 32% 22% at 34% 78%, rgba(72, 64, 78, 0.06), transparent 72%);
+  animation: climate-sky-cloud 160s ease-in-out infinite alternate;
 }
 
 .climate-sky-galaxy {
-  width: min(58vw, 760px);
-  height: min(58vw, 760px);
+  width: min(72vw, 920px);
+  height: min(46vw, 560px);
   inset: auto;
-  top: -12%;
-  left: 38%;
+  top: -16%;
+  left: 22%;
   border-radius: 50%;
-  opacity: 0.42;
+  opacity: 0.2;
   background:
-    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.2) 0 1.6%, rgba(170, 210, 255, 0.1) 6%, transparent 16%),
-    radial-gradient(ellipse 46% 16% at 50% 50%, rgba(120, 175, 230, 0.16), transparent 72%),
-    conic-gradient(from 210deg, transparent 0 38%, rgba(90, 150, 214, 0.1) 46%, transparent 56%, rgba(186, 214, 255, 0.07) 68%, transparent 80%);
-  animation: climate-sky-spin 180s linear infinite;
+    radial-gradient(ellipse 70% 55% at 50% 48%, rgba(64, 124, 188, 0.16), transparent 72%),
+    radial-gradient(ellipse 40% 30% at 42% 46%, rgba(120, 176, 230, 0.08), transparent 70%);
+  animation: climate-sky-breathe 120s ease-in-out infinite alternate;
 }
 
 .climate-sky-horizon {
   inset: auto 0 0 0;
-  height: 46%;
-  opacity: 0.85;
+  height: 42%;
+  opacity: 0.55;
   background:
-    radial-gradient(ellipse 82% 70% at 58% 120%, rgba(36, 118, 196, 0.32), transparent 62%),
-    radial-gradient(ellipse 36% 40% at 12% 110%, rgba(196, 72, 48, 0.08), transparent 70%);
+    radial-gradient(ellipse 88% 78% at 52% 122%, rgba(28, 90, 158, 0.16), transparent 64%);
 }
 
-@keyframes climate-sky-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+body.theme-work .climate-sky-horizon {
+  background:
+    radial-gradient(ellipse 88% 78% at 52% 122%, rgba(28, 90, 158, 0.14), transparent 64%),
+    radial-gradient(ellipse 38% 48% at 8% 120%, rgba(196, 54, 48, 0.07), transparent 74%);
+}
+
+body.theme-personal .climate-sky-horizon {
+  background:
+    radial-gradient(ellipse 88% 78% at 52% 122%, rgba(18, 98, 122, 0.16), transparent 64%),
+    radial-gradient(ellipse 44% 52% at 90% 120%, rgba(38, 198, 218, 0.1), transparent 74%);
 }
 
 @keyframes climate-sky-drift {
   from { transform: translate3d(0, 0, 0); }
-  to { transform: translate3d(-2.4%, 1.6%, 0); }
+  to { transform: translate3d(-1.8%, 1.2%, 0); }
+}
+
+@keyframes climate-sky-cloud {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(2.2%, -1.4%, 0) scale(1.04); }
+}
+
+@keyframes climate-sky-breathe {
+  from { transform: translate3d(0, 0, 0) scale(1); opacity: 0.16; }
+  to { transform: translate3d(-1.2%, 1.6%, 0) scale(1.06); opacity: 0.24; }
 }
 
 body.is-sky-paused .climate-sky-layer,
@@ -209,14 +223,15 @@ body.climate-sky-quiet .climate-sky-layer {
   animation-play-state: paused;
 }
 
-/* Code Workspace: faint static navy only — no moving galaxy over the editor. */
+/* Code Workspace: faint static navy only — no moving atmosphere over the editor. */
 body.climate-sky-quiet .climate-sky {
-  opacity: 0.16;
-  filter: saturate(0.65);
+  opacity: 0.1;
+  filter: saturate(0.55);
 }
 body.climate-sky-quiet .climate-sky-galaxy,
 body.climate-sky-quiet .climate-sky-weather,
-body.climate-sky-quiet .climate-sky-stars {
+body.climate-sky-quiet .climate-sky-stars,
+body.climate-sky-quiet .climate-sky-horizon {
   animation: none;
 }
 
@@ -224,11 +239,27 @@ body.climate-sky-quiet .climate-sky-stars {
   .climate-sky-layer {
     animation: none !important;
   }
+  .climate-sky-galaxy { opacity: 0.14; }
+  .climate-sky-horizon { opacity: 0.4; }
 }
 
 @media (max-width: 720px) {
-  .climate-sky-galaxy { left: 18%; opacity: 0.28; }
-  .climate-sky-horizon { height: 38%; }
+  .climate-sky-galaxy { left: 8%; opacity: 0.14; }
+  .climate-sky-horizon { height: 34%; }
+  .climate-sky-stars { opacity: 0.18; }
+}
+
+/* Keep panels readable over the atmosphere without changing layout. */
+body.climate-system-shell .sidebar {
+  box-shadow: 10px 0 28px rgba(0, 0, 0, 0.22);
+}
+body.climate-system-shell:not(.climate-sky-quiet) .panel,
+body.climate-system-shell:not(.climate-sky-quiet) .stat-card,
+body.climate-system-shell:not(.climate-sky-quiet) .aic-card,
+body.climate-system-shell:not(.climate-sky-quiet) .settings-card {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 10px 28px rgba(0, 0, 0, 0.14);
 }
 
 a {

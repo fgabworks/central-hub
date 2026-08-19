@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-19 (CLIMATE weather-galaxy sky).
+Last verified: 2026-08-19 (CLIMATE atmosphere polish).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -269,7 +269,7 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | AI Assistant Center | Aira at `/personal/aira`; AiriX at `/work/airix` (legacy `/work/okarun` redirects); full-height right dock + fixed composer (`hub/agent_center/dock.py`); **Smart Routing Phase 5** + **Routing Mode** Smart vs Direct Agent (`hub/agent_center/routing/` — cost intelligence, RBAC, relevance findings, budgets, orchestration; `/api/assistants/airix/routing/*`); Find/Ask/Plan/Review; Codex CLI, Claude Code, Cursor, Grok, OpenAI |
 | Workspace Console | Bottom panel under main content only (`left: var(--sidebar-w)`); bounded height; Ctrl+J; collapsed by default |
 | Activity Rail | Far-right icons for AI Assistant, Quick Notepad, Workspace Console (future utilities placeholders); reduces main width only |
-| App shell | Fixed sidebar 210–216px + `padding-left` on `.app-shell`; `.main-column` / `.content` `flex:1; min-width:0`; `.sidebar-scroll` for nav; CSS weather-galaxy sky behind non-editor pages (`climate-sky`), quiet/static on Code Workspace |
+| App shell | Fixed sidebar 210–216px + `padding-left` on `.app-shell`; `.main-column` / `.content` `flex:1; min-width:0`; `.sidebar-scroll` for nav; restrained CSS atmosphere (`climate-sky`) on Dashboard/Settings/AI Connections/Chat; quiet/static on Code Workspace |
 | AI Connections | `/system/ai-connections`; CLIMATE provider cards with local logos, API Key/CLI method, Test Connection + Manage; Gemini keys reuse `data/ai_provider_secrets.env` (never returned, not encrypted); CLI auth unchanged; compact split AI Defaults for CLIMATE Chat (General) and Code Workspace (Coding) plus a one-row Provider Overrides (Auto) grid |
 | Settings shell | Compact shared layout (`settings-layout`, max 1080px): left nav, `settings-card` / `settings-form` / banners; live pages General, Branding, AI Providers; planned placeholders Appearance / Integrations / Security / Notifications / Advanced |
 | AI Provider Settings | `/settings/ai-providers`; Settings submenu + registry-driven cards for Gemini, Grok/xAI, OpenAI, Claude/Anthropic (planned adapter), Local Models (UI-ready); Add/Replace/Remove key + Test Connection; secrets in gitignored `data/ai_provider_secrets.env`; APIs return metadata only; CLI providers stay on AI Connections |

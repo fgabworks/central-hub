@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=mission-control-15">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/climate-theme.css') }}?v=6">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/climate-theme.css') }}?v=7">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/assistant_dock_maximize.css') }}?v=2">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/climate-shell.css') }}?v=13">
   <link rel="icon" type="{{ branding.favicon_type if branding is defined else 'image/png' }}" href="{{ branding.icon_url if branding is defined and branding.icon_url else url_for('static', filename='img/climate-mark.png') }}">
@@ -263,7 +263,7 @@
   <script src="{{ url_for('static', filename='js/quick_notepad.js') }}?v=qn-rail-2"></script>
   {% endif %}
   <script src="{{ url_for('static', filename='js/hub_perf.js') }}?v=perf-1"></script>
-  <script src="{{ url_for('static', filename='js/climate_sky.js') }}?v=1"></script>
+  <script src="{{ url_for('static', filename='js/climate_sky.js') }}?v=2"></script>
   {% if assistant_dock and not skip_assistant_dock|default(false) %}
   <script src="{{ url_for('static', filename='js/assistant_dock.js') }}?v=shell-dock-30"></script>
   {% endif %}
