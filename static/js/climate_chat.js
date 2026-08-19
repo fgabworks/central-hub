@@ -291,6 +291,8 @@
       gemini: "img/providers/gemini.svg",
       openai: "img/providers/codex.svg",
       "openai-api": "img/providers/codex.svg",
+      "anthropic-api": "img/providers/claude-code.svg",
+      anthropic: "img/providers/claude-code.svg",
       codex: "img/providers/codex.svg",
       "claude-code": "img/providers/claude-code.svg",
       claude: "img/providers/claude-code.svg",

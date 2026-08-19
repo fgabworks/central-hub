@@ -31,21 +31,6 @@ _ERROR_FIELDS = {"detail", "last_error", "error", "models_error", "message"}
 # Future-ready Settings cards. A real adapter with the same id replaces the stub.
 PLANNED_PROVIDER_SPECS: tuple[dict[str, Any], ...] = (
     {
-        "id": "anthropic-api",
-        "display_name": "Claude / Anthropic",
-        "mark": "C",
-        "provider": "anthropic_api",
-        "credential_type": "api_key",
-        "credential_required": True,
-        "env_keys": ("ANTHROPIC_API_KEY",),
-        "preferred_write_key": "ANTHROPIC_API_KEY",
-        "supports_models": False,
-        "supports_connection_test": False,
-        "help": "Add your Anthropic API key to enable Claude models.",
-        "blurb": "Add your Anthropic API key to enable Claude models.",
-        "planned": True,
-    },
-    {
         "id": "local-models",
         "display_name": "Local Models",
         "mark": "L",

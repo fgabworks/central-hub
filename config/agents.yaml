@@ -35,7 +35,16 @@ agents:
     enabled: true
     modes: [find, ask, plan, review]
     models_managed: []
-    notes: "OpenAI Responses API. Models loaded dynamically when OPENAI_ENABLED=true. Read-only tools only."
+    notes: "OpenAI Responses API. Models load dynamically from OPENAI_API_KEY. CLIMATE Chat/Workspace are ASK-only."
+
+  - id: anthropic-api
+    label: Anthropic
+    provider: anthropic_api
+    executable: ""
+    enabled: true
+    modes: [ask]
+    models_managed: []
+    notes: "Anthropic Messages API read-only chat. Models load dynamically from ANTHROPIC_API_KEY; no edits or command execution. Distinct from Claude Code CLI."
 
   - id: grok
     label: Grok
@@ -44,7 +53,7 @@ agents:
     enabled: true
     modes: [find, ask, plan, review]
     models_managed: []
-    notes: "xAI Responses API. Models loaded dynamically from XAI_API_KEY. Read-only tools only."
+    notes: "xAI Responses API. Models load dynamically from XAI_API_KEY in the local secret store or environment. CLIMATE Chat/Workspace are ASK-only."
 
   - id: claude-code
     label: Claude Code

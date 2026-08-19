@@ -15,6 +15,7 @@ from hub.agent_center.context_builder import (
     build_direct_provider_preview,
     selectable_repositories,
 )
+from hub.agent_center.anthropic_runner import AnthropicRunner
 from hub.agent_center.gemini_runner import GeminiRunner
 from hub.agent_center.connections import AgentConnectionRegistry
 from hub.agent_center.models import (
@@ -150,6 +151,13 @@ class AgentCenterService:
                     client=adapter.client,
                     audit=audit,
                 )
+            elif adapter.descriptor.id == "anthropic-api" and hasattr(adapter, "settings"):
+                self.api_runners["anthropic-api"] = AnthropicRunner(
+                    self.store,
+                    settings=adapter.settings,
+                    client=adapter.client,
+                    audit=audit,
+                )
         connection_providers = {
             "codex",
             "claude_code",
@@ -157,6 +165,7 @@ class AgentCenterService:
             "openai_api",
             "xai_api",
             "gemini_api",
+            "anthropic_api",
         }
         provider_adapters = [a for a in self.adapters if a.descriptor.provider in connection_providers]
         self.connections = AgentConnectionRegistry(provider_adapters, self.store, audit=audit)
@@ -182,6 +191,10 @@ class AgentCenterService:
         elif getattr(adapter, "is_api_adapter", False) and settings is not None:
             if provider_id == "gemini":
                 self.api_runners[provider_id] = GeminiRunner(
+                    self.store, settings=settings, client=client, audit=self.audit
+                )
+            elif provider_id == "anthropic-api":
+                self.api_runners[provider_id] = AnthropicRunner(
                     self.store, settings=settings, client=client, audit=self.audit
                 )
             else:
@@ -1053,12 +1066,14 @@ class AgentCenterService:
                 str(payload.get("interaction_mode") or payload.get("routing_mode") or mode)
             )
             use_tool_runtime = False if direct_chat else (
-                bool(payload.get("tool_runtime")) or tool_runtime_needed(
-                    interaction_mode=interaction_mode,
-                    classification=None,
-                    t0_solved=False,
-                    adapter_is_api=True,
-                    force=bool(payload.get("tool_runtime")),
+                False if payload.get("tool_runtime") is False else (
+                    bool(payload.get("tool_runtime")) or tool_runtime_needed(
+                        interaction_mode=interaction_mode,
+                        classification=None,
+                        t0_solved=False,
+                        adapter_is_api=True,
+                        force=bool(payload.get("tool_runtime")),
+                    )
                 )
             )
             enabled_tools = set(preview["tools"]["enabled"])
@@ -1150,6 +1165,7 @@ class AgentCenterService:
                     else preview.get("repository_intelligence")
                 ),
                 direct_provider_chat=direct_chat,
+                api_chat=bool(payload.get("api_chat")),
             )
             return self.store.get_run(run["id"]) or run
 

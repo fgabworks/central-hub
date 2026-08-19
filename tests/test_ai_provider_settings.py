@@ -267,7 +267,6 @@ class ProviderSettingsServiceTests(unittest.TestCase):
         listed = self.service.list_providers()
         ids = [row["id"] for row in listed]
         self.assertEqual(ids[0], "fake-api")
-        self.assertIn("anthropic-api", ids)
         self.assertIn("local-models", ids)
         self.assertNotIn("claude-code", ids)
         by_id = {row["id"]: row for row in listed}
@@ -275,7 +274,8 @@ class ProviderSettingsServiceTests(unittest.TestCase):
         self.assertEqual(by_id["fake-api"]["credential_status"], "Missing")
         self.assertEqual(by_id["local-models"]["credential_status"], "Optional")
         self.assertEqual(by_id["local-models"]["status_label"], "Not configured")
-        self.assertTrue(by_id["anthropic-api"]["planned"])
+        self.assertNotIn("anthropic-api", ids)
+        self.assertTrue(by_id["local-models"]["planned"])
         self.assertFalse(by_id["local-models"]["supports_connection_test"])
 
         gemini_like = decorate_settings_card(
@@ -290,19 +290,11 @@ class ProviderSettingsServiceTests(unittest.TestCase):
         )
         self.assertEqual(gemini_like["status_label"], "Not configured")
 
-    def test_planned_anthropic_key_save_never_returns_secret(self):
-        saved = self.service.set_key("anthropic-api", SECRET)
-        self.assertTrue(saved["configured"])
-        self.assertEqual(saved["credential_status"], "Configured")
-        self.assertNotIn(SECRET, json.dumps(saved))
-        self.assertEqual(os.environ.get("ANTHROPIC_API_KEY"), SECRET)
+    def test_planned_local_models_cannot_store_a_key(self):
+        with self.assertRaises(ProviderSettingsError):
+            self.service.set_key("anthropic-api", SECRET)
         with self.assertRaises(ProviderSettingsError):
             self.service.set_key("local-models", SECRET)
-        with self.assertRaises(ProviderSettingsError):
-            self.service.test_connection("anthropic-api")
-        removed = self.service.remove_key("anthropic-api")
-        self.assertFalse(removed["configured"])
-        self.assertIsNone(os.environ.get("ANTHROPIC_API_KEY"))
 
     def test_connection_success_uses_existing_adapter(self):
         self.service.set_key("fake-api", SECRET)
@@ -413,7 +405,7 @@ class AiProviderSettingsHttpTests(unittest.TestCase):
                 os.environ[key] = value
         svc = self.app.config.get("AGENT_CENTER")
         if svc is not None:
-            for provider_id in ("gemini", "openai-api", "grok"):
+            for provider_id in ("gemini", "openai-api", "grok", "anthropic-api"):
                 svc.reload_provider_runtime(provider_id)
         self.temp.cleanup()
 

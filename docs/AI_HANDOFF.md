@@ -4,7 +4,21 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**CLIMATE atmosphere polish (2026-08-19)**
+**CLIMATE provider expansion: OpenAI, Anthropic, xAI (2026-08-19)**
+
+CLIMATE Chat and Code Workspace now offer production API providers besides Gemini:
+OpenAI (Responses API), Anthropic (Messages API), and xAI/Grok (OpenAI-compatible
+Responses API). All three use the existing provider registry and AI Connections
+cards (API Key method, Connected only after a successful credential test, discovered
+model count). Keys are stored in gitignored `data/ai_provider_secrets.env` and are
+never returned to the browser, logs, conversations, or run metadata. Exact-model
+selection is required; AiriX/Direct, context scopes, streaming, and cancellation
+are unchanged. CLIMATE surfaces stay ASK-only for these API adapters (no native
+repo investigation). Claude Code / Codex / Cursor remain CLI. Gemini behavior is
+unchanged. Chat, Code Workspace, Settings chrome, Branding, and atmosphere were
+not redesigned.
+
+Prior: **CLIMATE atmosphere polish (2026-08-19)**
 
 Non-editor CLIMATE surfaces sit on a restrained CSS atmosphere: dark navy/
 charcoal, a faint starfield, slow cloud-like nebula drift, a low-opacity blue

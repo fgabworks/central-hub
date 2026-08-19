@@ -1151,6 +1151,8 @@
       gemini: "/static/img/providers/gemini.svg",
       openai: "/static/img/providers/codex.svg",
       "openai-api": "/static/img/providers/codex.svg",
+      "anthropic-api": "/static/img/providers/claude-code.svg",
+      anthropic: "/static/img/providers/claude-code.svg",
       codex: "/static/img/providers/codex.svg",
       "claude-code": "/static/img/providers/claude-code.svg",
       claude: "/static/img/providers/claude-code.svg",

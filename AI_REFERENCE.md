@@ -102,16 +102,17 @@ Agent Center store, filtered by `surface`. Provider/model controls remain explic
 existing SQLite `agent_conversations` and `agent_runs` store through scoped CLIMATE
 conversation list/detail/rename APIs. Completed server runs can therefore be restored
 when browser storage is unavailable without creating a second chat database; local UI
-state remains a fast mirror for in-progress rendering. Gemini is the first API-backed
-CLIMATE Chat provider: models are discovered from Google's Models API, the selected exact
-model is required (no silent fallback), and Gemini receives the user prompt plus only
-explicitly selected file bodies and/or the bounded Context Resolver packet. Responses
-stream into the existing Agent Center run lifecycle. Gemini supports ASK only;
-it has no file-write, command, SQL, email, calendar, agent, or native repository-exploration
-capability. Configure it with a server-side `GEMINI_API_KEY` or `GOOGLE_API_KEY`
-(`GOOGLE_API_KEY` takes precedence), then optionally constrain models with
-`GEMINI_ALLOWED_MODELS`. Keys can also be set, replaced, or removed from
-**Settings → AI Providers** (`/settings/ai-providers`); stored values stay on the
+state remains a fast mirror for in-progress rendering. CLIMATE Chat/Workspace API
+providers are Gemini, OpenAI, Anthropic, and xAI/Grok. Models are discovered from
+each provider's Models API; the selected exact model is required (no silent fallback).
+API adapters receive the user prompt plus only explicitly selected file bodies and/or
+the bounded Context Resolver packet. Responses stream into the existing Agent Center
+run lifecycle and can be cancelled. These API providers support ASK only in CLIMATE;
+they have no file-write, command, SQL, email, calendar, agent, or native
+repository-exploration capability. Gemini remains configured with `GEMINI_API_KEY`
+or `GOOGLE_API_KEY` (`GOOGLE_API_KEY` takes precedence). OpenAI, Anthropic, and xAI
+use `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `XAI_API_KEY`. Keys can also be set,
+replaced, or removed from **Settings → AI Providers** (`/settings/ai-providers`); stored values stay on the
 server and are never returned to the browser. Gemini can also accept or replace its key
 directly from **AI Connections** (`/system/ai-connections`), which reuses the same
 gitignored local secret store and connection-test/model-discovery flow. No new edit or
@@ -248,7 +249,7 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Registry + health | `config/repositories.yaml`, `${VAR:-default}` expansion, `hub/adapters/` |
 | Registry grouping | Optional `repository_group_id` merges adapters into one UI row (`hub/registry/grouping.py`); Workspace / Application / API statuses independent |
 | Registry management | Add / Edit / Enable / Disable via UI → YAML (`hub/registry/store.py`); no auto-clone |
-| CLIMATE Chat | `/work/chat` + `/personal/chat`; compact conversation UI (answer, Sources, Details); AiriX avatar vs provider icons; Ask-only over Agent Center/Gemini; no editor, no repository upload |
+| CLIMATE Chat | `/work/chat` + `/personal/chat`; compact conversation UI (answer, Sources, Details); AiriX avatar vs provider icons; Ask-only over Agent Center API (Gemini/OpenAI/Anthropic/Grok) and coding CLIs; no editor, no repository upload |
 | CLIMATE Code Workspace | `/work/climate` (VANTA) + `/personal/climate` (ARCTIC); IDE-native AiriX · Code Assistant; Monaco viewer; compact Mode/Provider/Model/Scope; clickable Sources; nested Details/Token Efficiency; exact provider/model, cancel/output, proposal Accept/Reject; no unrestricted shell |
 | Repository Workspace | Phases 1–2 + Connect + Run Profile Builder + Active Application + Repository Intelligence: General / Connection / Repository Intelligence / Files & Changes / Settings / Logs & History; process vs HTTP health reconciled (`hub/repository_workspace/run_status.py`); YAML templates + SQLite repo profiles |
 | DHIS2 Reports | `/dhis2/reports` — Phase 1 Standard Report Manager: sync Stage/Live `/api/reports` metadata cache, filters, View / Open in DHIS2 / HTML source / Download / Refresh; period+OU controls; iframe embed with Open-in-DHIS2 fallback. Catalog shortcuts remain for repository/static HTML (`hub/dhis2_reports/`) |
@@ -270,9 +271,9 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Workspace Console | Bottom panel under main content only (`left: var(--sidebar-w)`); bounded height; Ctrl+J; collapsed by default |
 | Activity Rail | Far-right icons for AI Assistant, Quick Notepad, Workspace Console (future utilities placeholders); reduces main width only |
 | App shell | Fixed sidebar 210–216px + `padding-left` on `.app-shell`; `.main-column` / `.content` `flex:1; min-width:0`; `.sidebar-scroll` for nav; restrained CSS atmosphere (`climate-sky`) on Dashboard/Settings/AI Connections/Chat; quiet/static on Code Workspace |
-| AI Connections | `/system/ai-connections`; CLIMATE provider cards with local logos, API Key/CLI method, Test Connection + Manage; Gemini keys reuse `data/ai_provider_secrets.env` (never returned, not encrypted); CLI auth unchanged; compact split AI Defaults for CLIMATE Chat (General) and Code Workspace (Coding) plus a one-row Provider Overrides (Auto) grid |
+| AI Connections | `/system/ai-connections`; CLIMATE provider cards with local logos, API Key/CLI method, Test Connection + Manage; Gemini/OpenAI/Anthropic/xAI keys reuse `data/ai_provider_secrets.env` (never returned, not encrypted); CLI auth unchanged; compact split AI Defaults for CLIMATE Chat (General) and Code Workspace (Coding) plus a one-row Provider Overrides (Auto) grid |
 | Settings shell | Compact shared layout (`settings-layout`, max 1080px): left nav, `settings-card` / `settings-form` / banners; live pages General, Branding, AI Providers; planned placeholders Appearance / Integrations / Security / Notifications / Advanced |
-| AI Provider Settings | `/settings/ai-providers`; Settings submenu + registry-driven cards for Gemini, Grok/xAI, OpenAI, Claude/Anthropic (planned adapter), Local Models (UI-ready); Add/Replace/Remove key + Test Connection; secrets in gitignored `data/ai_provider_secrets.env`; APIs return metadata only; CLI providers stay on AI Connections |
+| AI Provider Settings | `/settings/ai-providers`; Settings submenu + registry-driven cards for Gemini, Grok/xAI, OpenAI, Claude/Anthropic, Local Models (UI-ready); Add/Replace/Remove key + Test Connection; secrets in gitignored `data/ai_provider_secrets.env`; APIs return metadata only; CLI providers stay on AI Connections |
 | CLIMATE Branding | `/settings/branding`; two local files under `data/branding/` (`logo.*` app branding, `avatar.*` AiriX icon) plus display JSON (not base64); Wordmark / Full logo for sidebar/header with contain-fit only; AiriX avatar is a dedicated padded icon (`avatar_url`, default `climate-mark.png`, never the full logo); Replace/Remove per asset; live header + Chat + Code Assistant previews; Direct provider icons unchanged |
 | DHIS2 | GET client, discovery, UID mapping, preview builder |
 | UID index admin | LP-style controlled update: dry-run → preview → typed confirm → archive/versions/restore |

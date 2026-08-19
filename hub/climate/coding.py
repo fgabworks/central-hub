@@ -25,9 +25,10 @@ from hub.climate.execution_mode import (
 )
 from hub.climate.context_scope import ALL, CONTEXT_SCOPES, GENERAL, REPOSITORY, normalize_context_scope
 from hub.climate.investigation_metrics import summarize_tool_activity
+from hub.agent_center.connections import API_CHAT_PROVIDER_IDS, CODING_CLI_PROVIDER_IDS
 
 
-CODING_PROVIDERS = ("gemini", "codex", "claude-code", "cursor-agent")
+CODING_PROVIDERS = CODING_CLI_PROVIDER_IDS
 
 _ASK_RE = re.compile(
     r"\b("
@@ -326,9 +327,15 @@ class ClimateCodingAdapter:
                 mode = "edit"
             elif "CLIMATE context packet (ASK)" in prompt or "CLIMATE preflight context packet (ASK)" in prompt:
                 mode = "ask"
-        if provider == "gemini" and mode != "ask":
+        if provider in API_CHAT_PROVIDER_IDS and mode != "ask":
+            if provider == "gemini":
+                raise ClimateCodingError(
+                    "Gemini v1 is read-only chat. Ask for an explanation or analysis; editing and agent actions are not enabled.",
+                    code="mode_unsupported",
+                )
+            label = provider_display_label(provider)
             raise ClimateCodingError(
-                "Gemini v1 is read-only chat. Ask for an explanation or analysis; editing and agent actions are not enabled.",
+                f"{label} is read-only chat in CLIMATE. Ask for an explanation or analysis; editing and agent actions are not enabled.",
                 code="mode_unsupported",
             )
         general_chat = _is_general_chat_surface(surface)
@@ -531,13 +538,14 @@ class ClimateCodingAdapter:
                 payload["bounded_evidence_only"] = False
         if conversation_id:
             payload["conversation_id"] = conversation_id
-        if provider == "gemini":
+        if provider in API_CHAT_PROVIDER_IDS:
             payload["tool_runtime_lean_context"] = True
             if not payload.get("direct_provider_chat") and not payload.get("allow_general_knowledge"):
                 payload["bounded_evidence_only"] = True
             payload["repository_investigation"] = False
             payload["files"] = {}
             payload["tool_runtime"] = False
+            payload["api_chat"] = True
         elif isinstance(evidence_packet, dict):
             payload["evidence_packet"] = evidence_packet
         try:

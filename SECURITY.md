@@ -60,11 +60,11 @@ Scope: personal, local-first tool. Canonical agent rules: [AGENTS.md](AGENTS.md)
     accepts passwords, browser cookies, private sessions, or CLI tokens. Codex uses
     `codex login`, Claude Code uses `claude auth login`, and Cursor uses
     `agent login`; their logout/status commands remain provider-owned.
-    Gemini API keys on this page reuse **Settings → AI Providers** storage
+    Gemini, OpenAI, Anthropic, and xAI API keys on this page reuse **Settings → AI Providers** storage
     (`data/ai_provider_secrets.env`); saved values are never returned. Storage is
     local/server-side, not encrypted at rest.
-  - OpenAI and xAI keys are environment-only (`OPENAI_API_KEY`, `XAI_API_KEY`). Disconnecting
-    an API provider disables it in Hub metadata and never reads, returns, or deletes the env key.
+  - Disconnecting an API provider disables it in Hub metadata and never reads or returns the key.
+    Remove Key deletes allowlisted lines from `data/ai_provider_secrets.env` and matching `.env` keys.
   - **Settings → AI Providers:** Set/Replace/Remove writes allowlisted keys to gitignored
     `data/ai_provider_secrets.env` (and removes matching lines from `.env`). APIs, UI, logs,
     and audit details expose only metadata (`configured`, env **names**, status). Stored values

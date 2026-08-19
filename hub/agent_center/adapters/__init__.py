@@ -8,6 +8,7 @@ from typing import Any
 import yaml
 
 from hub.agent_center.adapters.base import AgentAdapter, AgentDescriptor
+from hub.agent_center.adapters.anthropic_api import AnthropicApiAdapter
 from hub.agent_center.adapters.claude_code import ClaudeCodeAdapter
 from hub.agent_center.adapters.codex import CodexAdapter
 from hub.agent_center.adapters.cursor_agent import CursorAgentAdapter
@@ -23,6 +24,7 @@ _ADAPTER_TYPES = {
     "openai_api": OpenAIApiAdapter,
     "xai_api": XaiApiAdapter,
     "gemini_api": GeminiApiAdapter,
+    "anthropic_api": AnthropicApiAdapter,
     "claude_code": ClaudeCodeAdapter,
     "cursor_agent": CursorAgentAdapter,
     "codex": CodexAdapter,
@@ -115,6 +117,14 @@ def _builtin_descriptors() -> list[AgentDescriptor]:
             modes=list(MODES),
             models_managed=[],
             notes="OpenAI Responses API; models loaded dynamically when enabled.",
+        ),
+        AgentDescriptor(
+            id="anthropic-api",
+            label="Anthropic",
+            provider="anthropic_api",
+            executable="",
+            modes=["ask"],
+            notes="Anthropic Messages API read-only chat; models loaded dynamically from ANTHROPIC_API_KEY.",
         ),
         AgentDescriptor(
             id="claude-code",

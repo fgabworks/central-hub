@@ -1,4 +1,4 @@
-"""OpenAI API settings for Prompting & Agent Center (secrets from env only)."""
+"""OpenAI API settings for Prompting & Agent Center (secrets from env or local store)."""
 
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ class OpenAISettings:
 def load_openai_settings() -> OpenAISettings:
     key = (os.getenv("OPENAI_API_KEY") or "").strip() or None
     return OpenAISettings(
-        enabled=_as_bool(os.getenv("OPENAI_ENABLED"), default=False),
+        enabled=_as_bool(os.getenv("OPENAI_ENABLED"), default=bool(key)),
         api_key=key,
         default_model=(os.getenv("OPENAI_DEFAULT_MODEL") or "").strip(),
         allowed_models=parse_allowed_models(os.getenv("OPENAI_ALLOWED_MODELS")),

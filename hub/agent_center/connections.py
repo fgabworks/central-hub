@@ -22,9 +22,17 @@ PUBLIC_STATES = {
     "error": "Error",
 }
 
+# API chat providers used by CLIMATE Chat / Code Workspace (ASK-only, no CLI).
+API_CHAT_PROVIDER_IDS = ("gemini", "openai-api", "anthropic-api", "grok")
+
 # Providers surfaced in CLIMATE's compact provider/model controls. The legacy
 # constant name is retained because settings/API callers already depend on it.
-CODING_CLI_PROVIDER_IDS = ("gemini", "codex", "claude-code", "cursor-agent")
+CODING_CLI_PROVIDER_IDS = (
+    *API_CHAT_PROVIDER_IDS,
+    "codex",
+    "claude-code",
+    "cursor-agent",
+)
 
 PREF_DEFAULT_PROVIDER = "coding_default_provider"
 PREF_DEFAULT_MODEL_PREFIX = "coding_default_model:"

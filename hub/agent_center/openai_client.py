@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import threading
 import time
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 import requests
 
@@ -110,6 +110,8 @@ class OpenAIClient:
         body: dict[str, Any],
         *,
         timeout: float | None = None,
+        should_cancel: Callable[..., bool] | None = None,
+        on_response: Callable[[Any], None] | None = None,
     ) -> Iterator[dict[str, Any]]:
         """Yield parsed SSE event payloads from POST /responses?stream=true."""
         payload = dict(body)
@@ -211,8 +213,12 @@ class OpenAIClient:
                 status=resp.status_code,
             )
 
+        if on_response:
+            on_response(resp)
         try:
             for raw in resp.iter_lines(decode_unicode=True):
+                if should_cancel and should_cancel():
+                    break
                 if not raw:
                     continue
                 line = raw.strip()

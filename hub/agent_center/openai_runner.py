@@ -8,6 +8,8 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Callable
 
+from hub.agent_center.api_chat import api_chat_system_instruction
+from hub.agent_center.conversation_history import prior_completed_turns
 from hub.agent_center.openai_client import OpenAIClient, OpenAIClientError
 from hub.agent_center.openai_settings import OpenAISettings
 from hub.agent_center.openai_tools import AgentToolsContext, load_instructions_for_scope, tool_definitions
@@ -37,6 +39,7 @@ class OpenAIRunner:
         self.client = client or OpenAIClient(settings)
         self.audit = audit
         self._threads: dict[str, threading.Thread] = {}
+        self._streams: dict[str, Any] = {}
         self._lock = threading.Lock()
         self._runtime_settings = load_tool_runtime_settings()
         self._executor = UnifiedToolExecutor(
@@ -74,9 +77,10 @@ class OpenAIRunner:
         t0_continuation: dict[str, Any] | None = None,
         repository_intelligence: dict[str, Any] | None = None,
         direct_provider_chat: bool = False,
+        api_chat: bool = False,
     ) -> None:
         thread = threading.Thread(
-            target=self._run,
+            target=self._run_chat if api_chat or (not use_tool_runtime and direct_provider_chat) else self._run,
             kwargs={
                 "run_id": run_id,
                 "model": model,
@@ -106,7 +110,138 @@ class OpenAIRunner:
         thread.start()
 
     def cancel(self, run_id: str) -> dict[str, Any] | None:
-        return self.store.request_cancel(run_id)
+        updated = self.store.request_cancel(run_id)
+        with self._lock:
+            stream = self._streams.get(run_id)
+        if stream is not None:
+            try:
+                stream.close()
+            except Exception:
+                pass
+        return updated
+
+    def _run_chat(
+        self,
+        *,
+        run_id: str,
+        model: str,
+        packed_prompt: str,
+        timeout_seconds: float,
+        conversation_id: str = "",
+        agent_id: str = "openai-api",
+        direct_provider_chat: bool = False,
+        tools_ctx: AgentToolsContext | None = None,
+        **_: Any,
+    ) -> None:
+        started = datetime.now(timezone.utc).isoformat()
+        self.store.update_run(run_id, status="running", started_at=started, model=model)
+        answer_parts: list[str] = []
+        usage: dict[str, Any] = {}
+        ctx = tools_ctx
+        if ctx is None:
+            raise TypeError("tools_ctx is required")
+        try:
+            turns = prior_completed_turns(
+                self.store,
+                run_id=run_id,
+                conversation_id=conversation_id,
+                agent_id=agent_id,
+                model=model,
+            )
+            history_reused = bool(turns)
+            input_messages: list[dict[str, Any]] = []
+            for prompt, answer in turns:
+                input_messages.append({"role": "user", "content": prompt})
+                input_messages.append({"role": "assistant", "content": answer})
+            input_messages.append({"role": "user", "content": packed_prompt})
+            body: dict[str, Any] = {
+                "model": model,
+                "instructions": api_chat_system_instruction(
+                    direct_provider_chat=direct_provider_chat
+                ),
+                "input": input_messages,
+                "max_output_tokens": self.settings.max_output_tokens,
+            }
+            for event in self.client.create_response_stream(
+                body,
+                timeout=timeout_seconds,
+                should_cancel=lambda: self._cancelled(run_id),
+                on_response=lambda response: self._set_stream(run_id, response),
+            ):
+                if self._cancelled(run_id):
+                    self._finish_cancelled(run_id, answer_parts, ctx, usage)
+                    return
+                etype = str(event.get("type") or "")
+                if etype in {"response.output_text.delta", "response.text.delta"}:
+                    delta = event.get("delta") or ""
+                    if delta:
+                        answer_parts.append(str(delta))
+                        self.store.append_log(run_id, str(delta))
+                elif etype == "response.completed":
+                    resp = event.get("response") or {}
+                    usage.update(_extract_usage(resp.get("usage") or event.get("usage") or {}))
+                    if not answer_parts:
+                        answer_parts.extend(_extract_output_text(resp))
+                elif etype == "error" or etype.endswith(".error"):
+                    err_payload = event.get("error") or event.get("message") or event
+                    raise OpenAIClientError(
+                        str(err_payload),
+                        code=_classify_stream_error_code(err_payload, default="stream_error"),
+                    )
+                elif etype == "response.failed":
+                    resp = event.get("response") or {}
+                    err = resp.get("error") or event.get("error") or "response.failed"
+                    raise OpenAIClientError(
+                        str(err),
+                        code=_classify_stream_error_code(err, default="failed"),
+                    )
+            answer = redact_text("".join(answer_parts))
+            if not answer.strip():
+                self._fail(
+                    run_id,
+                    answer_parts,
+                    ctx,
+                    usage,
+                    "OpenAI completed without a text answer",
+                    code="empty_answer",
+                )
+                return
+            self.store.update_run(
+                run_id,
+                status="completed",
+                answer=answer,
+                finished_at=datetime.now(timezone.utc).isoformat(),
+                usage={
+                    **usage,
+                    "provider": agent_id,
+                    "model": model,
+                    "session_reused": history_reused,
+                },
+            )
+            if self.audit:
+                self.audit(
+                    action="AGENT_RUN_COMPLETED",
+                    detail={"run_id": run_id, "provider": agent_id, "model": model, "usage": usage},
+                )
+        except OpenAIClientError as exc:
+            self._fail(run_id, answer_parts, ctx, usage, str(exc), code=exc.code)
+        except Exception as exc:  # noqa: BLE001
+            self._fail(
+                run_id,
+                answer_parts,
+                ctx,
+                usage,
+                redact_text(str(exc), limit=500),
+                code="error",
+            )
+        finally:
+            with self._lock:
+                self._threads.pop(run_id, None)
+                self._streams.pop(run_id, None)
+
+    def _set_stream(self, run_id: str, response: Any) -> None:
+        with self._lock:
+            self._streams[run_id] = response
 
     def _run(
         self,
@@ -296,7 +431,10 @@ class OpenAIRunner:
                 status = ""
 
                 for event in self.client.create_response_stream(
-                    body, timeout=max(5.0, deadline - time.monotonic())
+                    body,
+                    timeout=max(5.0, deadline - time.monotonic()),
+                    should_cancel=lambda: self._cancelled(run_id),
+                    on_response=lambda response: self._set_stream(run_id, response),
                 ):
                     if self._cancelled(run_id):
                         self._finish_cancelled(
@@ -665,6 +803,7 @@ class OpenAIRunner:
         finally:
             with self._lock:
                 self._threads.pop(run_id, None)
+                self._streams.pop(run_id, None)
 
     def _cancelled(self, run_id: str) -> bool:
         run = self.store.get_run(run_id)

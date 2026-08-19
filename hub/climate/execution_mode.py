@@ -61,6 +61,8 @@ PROVIDER_LABELS = {
     "grok": "Grok",
     "claude": "Claude",
     "claude-code": "Claude Code",
+    "anthropic": "Anthropic",
+    "anthropic-api": "Anthropic",
     "codex": "Codex",
     "cursor-agent": "Cursor Agent",
 }

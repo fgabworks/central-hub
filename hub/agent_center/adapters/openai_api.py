@@ -17,15 +17,18 @@ class OpenAIApiAdapter:
     env_keys = ("OPENAI_API_KEY",)
     preferred_write_key = "OPENAI_API_KEY"
     enabled_env = "OPENAI_ENABLED"
-    enabled_defaults_to_key = False
+    enabled_defaults_to_key = True
     enable_when_key_set = True
     authentication_method = "Server-side OPENAI_API_KEY (optional separate billing)"
-    credential_storage = "Environment only"
+    credential_storage = "Gitignored local server file or server environment"
     settings_help = (
-        "Uses OPENAI_API_KEY. Saving a key also sets OPENAI_ENABLED=true for this process."
+        "Uses OPENAI_API_KEY from CLIMATE's local secret store or server environment. "
+        "Saving a key also sets OPENAI_ENABLED=true for this process. Codex CLI login is a separate provider."
     )
     settings_display_name = "OpenAI"
     settings_mark = "O"
+    settings_vendor = "OpenAI"
+    settings_logo = "img/providers/codex.svg"
     settings_blurb = "Add your OpenAI API key to enable OpenAI models."
 
     def __init__(self, descriptor: AgentDescriptor | None = None, *, settings: OpenAISettings | None = None, client: OpenAIClient | None = None) -> None:
@@ -45,6 +48,7 @@ class OpenAIApiAdapter:
             "dynamic_models": True, "read_only": True, "api": True,
             "file_write": False, "command_execution": False, "sql_execution": False,
             "email_actions": False, "repository_runs": False,
+            "native_repository_investigation": False,
         }
 
     def list_models(self) -> tuple[list[str], str]:
@@ -83,16 +87,34 @@ class OpenAIApiAdapter:
         ids = list(details["models"])
         requested = (requested_model or "").strip()
         if requested and requested not in ids:
-            return {"ok": False, "code": "model_unavailable", "error": f"Model {requested!r} is not accessible with this API key"}
+            return {
+                "ok": False,
+                "code": "model_unavailable",
+                "error": f"Model {requested!r} is not accessible with this API key",
+                "selected_model": requested,
+                "resolved_model": "",
+            }
         model = requested or details.get("recommended_model")
         if not model:
-            return {"ok": False, "code": "model_unavailable", "error": details.get("error") or "No text models are accessible for this API key"}
+            return {
+                "ok": False,
+                "code": "model_unavailable" if requested else "model_required",
+                "error": details.get("error") or (
+                    "Select an exact OpenAI model before running"
+                    if not requested
+                    else "No text models are accessible for this API key"
+                ),
+                "selected_model": requested,
+                "resolved_model": "",
+            }
         if requested and model != requested:
             # Never silently substitute a different model for an explicit selection.
             return {
                 "ok": False,
                 "code": "model_unavailable",
                 "error": f"Model {requested!r} resolved to {model!r}; refusing silent substitute",
+                "selected_model": requested,
+                "resolved_model": str(model),
             }
         spec = get_spec(model)
         is_pro = bool(spec and spec.is_pro)

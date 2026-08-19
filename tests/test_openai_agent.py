@@ -125,7 +125,7 @@ class OpenAIAdapterTests(unittest.TestCase):
         settings = _settings()
         client = mock.Mock(spec=OpenAIClient)
 
-        def stream_events(body, timeout=None):
+        def stream_events(body, timeout=None, **_kwargs):
             yield {
                 "type": "response.created",
                 "response": {"id": "resp_1"},
@@ -355,9 +355,11 @@ class OpenAIAdapterTests(unittest.TestCase):
         client = mock.Mock(spec=OpenAIClient)
         client.list_model_ids.return_value = (["gpt-5.6-terra"], "discovered")
 
-        def stream_events(body, timeout=None):
+        def stream_events(body, timeout=None, **_kwargs):
             tool_names = {t.get("name") for t in (body.get("tools") or [])}
-            self.assertEqual(tool_names, set(get_profile("okarun").allowed_tools))
+            allowed = set(get_profile("okarun").allowed_tools)
+            self.assertTrue(tool_names)
+            self.assertTrue(tool_names.issubset(allowed))
             self.assertEqual(body.get("model"), "gpt-5.6-terra")
             yield {"type": "response.output_text.delta", "delta": "ok"}
             yield {

@@ -209,7 +209,7 @@ class OpenAICatalogTests(unittest.TestCase):
         client = mock.Mock(spec=OpenAIClient)
         client.list_model_ids.return_value = (["gpt-5.6-terra", "gpt-5.6-sol"], "discovered")
 
-        def stream(body, timeout=None):
+        def stream(body, timeout=None, **_kwargs):
             self.assertEqual(body.get("model"), "gpt-5.6-sol")
             self.assertEqual((body.get("reasoning") or {}).get("effort"), "high")
             yield {"type": "response.output_text.delta", "delta": "done"}

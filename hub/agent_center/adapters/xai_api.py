@@ -17,12 +17,16 @@ class XaiApiAdapter:
     credential_type = "api_key"
     env_keys = ("XAI_API_KEY",)
     preferred_write_key = "XAI_API_KEY"
-    enable_when_key_set = False
+    enable_when_key_set = True
     authentication_method = "Server-side XAI_API_KEY"
-    credential_storage = "Environment only"
-    settings_help = "Uses XAI_API_KEY from the server environment. Models are discovered from xAI."
+    credential_storage = "Gitignored local server file or server environment"
+    settings_help = (
+        "Uses XAI_API_KEY from CLIMATE's local secret store or server environment. "
+        "Models are discovered from xAI."
+    )
     settings_display_name = "Grok / xAI"
     settings_mark = "X"
+    settings_vendor = "xAI"
     settings_blurb = "Add your xAI API key to enable Grok in CLIMATE."
 
     def __init__(self, descriptor: AgentDescriptor | None = None) -> None:
@@ -96,10 +100,22 @@ class XaiApiAdapter:
         if not model or model not in models:
             return {
                 "ok": False,
-                "code": "model_unavailable",
-                "error": details.get("error") or "No Grok models are accessible for this API key",
+                "code": "model_unavailable" if requested else "model_required",
+                "error": details.get("error") or (
+                    "Select an exact Grok model before running"
+                    if not requested
+                    else "No Grok models are accessible for this API key"
+                ),
                 "selected_model": requested,
                 "resolved_model": "",
+            }
+        if requested and model != requested:
+            return {
+                "ok": False,
+                "code": "model_unavailable",
+                "error": f"Model {requested!r} resolved to {model!r}; refusing silent substitute",
+                "selected_model": requested,
+                "resolved_model": str(model),
             }
         return {
             "ok": True,
@@ -129,4 +145,5 @@ def _readonly_capabilities(modes: list[str], *, api: bool = False) -> dict[str, 
         "modes": list(modes), "streaming": True, "cancel": True, "dynamic_models": True,
         "read_only": True, "api": api, "file_write": False, "command_execution": False,
         "sql_execution": False, "email_actions": False, "repository_runs": False,
+        "native_repository_investigation": False,
     }
