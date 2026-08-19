@@ -263,6 +263,7 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Activity Rail | Far-right icons for AI Assistant, Quick Notepad, Workspace Console (future utilities placeholders); reduces main width only |
 | App shell | Fixed sidebar 210–216px + `padding-left` on `.app-shell`; `.main-column` / `.content` `flex:1; min-width:0`; `.sidebar-scroll` for nav; CSS weather-galaxy sky behind non-editor pages (`climate-sky`), quiet/static on Code Workspace |
 | AI Connections | `/system/ai-connections`; CLIMATE provider cards with local logos, API Key/CLI method, Test Connection + Manage; Gemini keys reuse `data/ai_provider_secrets.env` (never returned, not encrypted); CLI auth unchanged; compact split AI Defaults for CLIMATE Chat (General) and Code Workspace (Coding) plus a one-row Provider Overrides (Auto) grid |
+| Settings shell | Compact shared layout (`settings-layout`, max 1080px): left nav, `settings-card` / `settings-form` / banners; live pages General, Branding, AI Providers; planned placeholders Appearance / Integrations / Security / Notifications / Advanced |
 | AI Provider Settings | `/settings/ai-providers`; Settings submenu + registry-driven cards for Gemini, Grok/xAI, OpenAI, Claude/Anthropic (planned adapter), Local Models (UI-ready); Add/Replace/Remove key + Test Connection; secrets in gitignored `data/ai_provider_secrets.env`; APIs return metadata only; CLI providers stay on AI Connections |
 | CLIMATE Branding | `/settings/branding`; two local files under `data/branding/` (`logo.*` app branding, `avatar.*` AiriX icon) plus display JSON (not base64); Wordmark / Full logo for sidebar/header with contain-fit only; AiriX avatar is a dedicated padded icon (`avatar_url`, default `climate-mark.png`, never the full logo); Replace/Remove per asset; live header + Chat + Code Assistant previews; Direct provider icons unchanged |
 | DHIS2 | GET client, discovery, UID mapping, preview builder |
@@ -274,7 +275,7 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | API exec (Phase 4) | GET/HEAD only from YAML `http_path` |
 | Files (Phase 5) | Uploads/results under `data/{uploads,results}/{job_id}/` |
 | Safeguards (Phase 6) | Dry-run default, confirm for apply, max concurrent, owner token |
-| Tests | `tests/` — includes `test_branding.py`, `test_perf_navigation.py`, `test_ai_assistant_center.py`, `test_openai_catalog.py`, `test_openai_agent.py`, `test_agent_center.py` |
+| Tests | `tests/` — includes `test_settings_ui.py`, `test_branding.py`, `test_perf_navigation.py`, `test_ai_assistant_center.py`, `test_openai_catalog.py`, `test_openai_agent.py`, `test_agent_center.py` |
 | DHIS2 writes | **Disabled** |
 | Gmail writes | **Disabled** (no send/reply/delete/label/mark-read) |
 | Calendar writes | **Disabled** (no create/update/delete/RSVP) |

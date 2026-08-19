@@ -4432,6 +4432,68 @@ def create_app() -> Flask:
             coding_cli_connections=coding_cli_connections,
         )
 
+    _SETTINGS_PLANNED = {
+        "appearance": {
+            "tab": "appearance",
+            "title": "Appearance",
+            "info": "Theme density and chrome options will live here.",
+            "lede": "CLIMATE currently uses the workspace navy/slate theme. Extra appearance controls are planned.",
+            "copy": "Light/dark density, accent intensity, and chrome density are not configurable yet.",
+        },
+        "integrations": {
+            "tab": "integrations",
+            "title": "Integrations",
+            "info": "Connected-system integration settings will live here.",
+            "lede": "Repository, DHIS2, Google, and other connections stay on their existing pages.",
+            "copy": "This page does not add, edit, or store integration credentials. Use Repositories, Google Connections, and AI Connections for current setup.",
+        },
+        "security": {
+            "tab": "security",
+            "title": "Security",
+            "info": "Dedicated security controls will live here.",
+            "lede": "Owner token and read-only defaults remain on General until a Security page is implemented.",
+            "copy": "No additional access-control or encryption settings are saved from this page.",
+        },
+        "notifications": {
+            "tab": "notifications",
+            "title": "Notifications",
+            "info": "Notification preferences will live here.",
+            "lede": "CLIMATE does not send outbound notifications from Settings yet.",
+            "copy": "Mail, calendar, and job alerts stay on their existing read-only surfaces.",
+        },
+        "advanced": {
+            "tab": "advanced",
+            "title": "Advanced",
+            "info": "Advanced runtime options will live here.",
+            "lede": "Host, timeouts, registry, and audit paths remain on General.",
+            "copy": "This page does not change environment variables or hidden flags.",
+        },
+    }
+
+    def _settings_planned_page(slug: str):
+        planned = _SETTINGS_PLANNED[slug]
+        return render_template("settings_planned.html", planned=planned)
+
+    @app.get("/settings/appearance")
+    def settings_appearance():
+        return _settings_planned_page("appearance")
+
+    @app.get("/settings/integrations")
+    def settings_integrations():
+        return _settings_planned_page("integrations")
+
+    @app.get("/settings/security")
+    def settings_security():
+        return _settings_planned_page("security")
+
+    @app.get("/settings/notifications")
+    def settings_notifications():
+        return _settings_planned_page("notifications")
+
+    @app.get("/settings/advanced")
+    def settings_advanced():
+        return _settings_planned_page("advanced")
+
     @app.get("/api/healthz")
     def api_healthz():
         registry = app.config["REGISTRY"]

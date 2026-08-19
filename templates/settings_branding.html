@@ -11,12 +11,11 @@
   <div class="settings-main">
     {% include "partials/section_header.html" %}
     <p class="settings-lede">
-      App branding is a PNG, SVG, or WEBP full logo for the sidebar and headers, always
-      <code>object-fit: contain</code>. AiriX chat avatars use a separate padded icon.
-      If none is uploaded, the default CLIMATE mark is used. Direct replies keep provider icons.
+      Full logo for sidebar and headers; separate padded AiriX icon for Chat and Code Assistant.
+      Direct replies keep provider icons.
     </p>
 
-    <section class="panel panel-body branding-panel" id="branding-settings"
+    <section class="panel panel-body branding-panel settings-card" id="branding-settings"
              data-endpoint="/api/settings/branding"
              data-reset="/api/settings/branding/reset"
              data-default-icon="{{ url_for('static', filename='img/climate-mark.png') }}"
@@ -117,7 +116,7 @@
           <div class="branding-controls">
             <fieldset class="branding-options">
               <legend>App Branding</legend>
-              <p class="muted branding-option-hint">Sidebar, top-left header, and larger branding areas. Contain-fit only.</p>
+              <p class="muted branding-option-hint">Sidebar, top-left header, and larger branding areas. PNG, SVG, or WEBP. Contain-fit only.</p>
               <p class="branding-asset-meta" id="branding-logo-meta">
                 {% if branding.custom_logo %}
                   {{ branding.original_name or branding.filename }}{% if branding.logo_width and branding.logo_height %} · {{ branding.logo_width }} × {{ branding.logo_height }}{% endif %} · {{ branding.logo_kind }}
@@ -138,7 +137,7 @@
 
             <fieldset class="branding-options">
               <legend>AiriX Chat Avatar</legend>
-              <p class="muted branding-option-hint">Used in CLIMATE Chat and Code Assistant. Never derived from the full wordmark.</p>
+              <p class="muted branding-option-hint">Used in CLIMATE Chat and Code Assistant. PNG, SVG, or WEBP. Never derived from the full wordmark.</p>
               <p class="branding-asset-meta" id="branding-avatar-meta">
                 {% if branding.custom_avatar %}
                   {{ branding.avatar_original_name or branding.avatar_filename }}{% if branding.avatar_width and branding.avatar_height %} · {{ branding.avatar_width }} × {{ branding.avatar_height }}{% endif %} · {{ branding.avatar_kind }}
@@ -155,7 +154,7 @@
             </fieldset>
 
             <p class="banner banner-error" id="branding-error" hidden></p>
-            <p class="banner branding-ok" id="branding-ok" hidden></p>
+            <p class="banner banner-ok" id="branding-ok" hidden></p>
             <div class="branding-actions">
               <button type="button" class="btn" id="branding-reset">Reset to defaults</button>
               <button type="submit" class="btn btn-primary" id="branding-save">Save changes</button>

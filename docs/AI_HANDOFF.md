@@ -4,7 +4,16 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**CLIMATE branding: production-ready logo and AiriX avatar (2026-08-19)**
+**CLIMATE Settings compact layout system (2026-08-19)**
+
+Settings pages now share one compact layout: 1080px max-width, sticky left nav,
+section header + lede, and `settings-card` / `settings-form` treatment with
+inline banners. General, Branding, and AI Providers keep their existing
+routes, persistence, and APIs. Appearance, Integrations, Security,
+Notifications, and Advanced are planned placeholder pages in the same chrome
+(no saved settings). AI Connections and Code Workspace/Chat were not redesigned.
+
+Prior: **CLIMATE branding: production-ready logo and AiriX avatar (2026-08-19)**
 
 `Settings → Branding` stores two independent local files under `data/branding/`
 (paths in JSON, never base64): `logo.*` for App Branding and `avatar.*` for the

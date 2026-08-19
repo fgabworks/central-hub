@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}{{ planned.title }} · Settings · {{ app_name }}{% endblock %}
+{% block content %}
+{% set sh_title = planned.title %}
+{% set sh_info = planned.info %}
+{% set settings_active_tab = planned.tab %}
+{% set sh_meta %}
+  <span class="badge badge-phase">Planned</span>
+{% endset %}
+<div class="settings-layout">
+  <aside class="settings-nav-wrap">
+    {% include "partials/settings_nav.html" %}
+  </aside>
+  <div class="settings-main">
+    {% include "partials/section_header.html" %}
+    <p class="settings-lede">{{ planned.lede }}</p>
+    <section class="panel panel-body settings-card settings-planned-card">
+      <h2 class="settings-card-title">{{ planned.title }}</h2>
+      <p class="settings-planned-copy">{{ planned.copy }}</p>
+      <p class="settings-card-hint">No settings are saved from this page yet. Use General, Branding, and AI Providers for current configuration.</p>
+    </section>
+  </div>
+</div>
+{% endblock %}

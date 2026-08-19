@@ -512,6 +512,7 @@ class BrandingCssContractTests(unittest.TestCase):
         self.assertIn("Reset to defaults", template)
         self.assertIn("branding-error", template)
         self.assertIn("branding-ok", template)
+        self.assertIn("banner-ok", template)
         base = (ROOT / "templates" / "base.html").read_text(encoding="utf-8")
         self.assertIn("import brand_icon, brand_logo with context", base)
         macros = (ROOT / "templates" / "macros.html").read_text(encoding="utf-8")

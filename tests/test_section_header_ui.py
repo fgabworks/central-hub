@@ -23,6 +23,7 @@ REPRESENTATIVE_PAGES = [
     ("/settings", "Settings"),
     ("/settings/ai-providers", "Settings"),
     ("/settings/branding", "Settings"),
+    ("/settings/appearance", "Settings"),
 ]
 
 

@@ -11,35 +11,45 @@
     <span class="settings-nav-ico" aria-hidden="true">◈</span>
     <span>Branding</span>
   </a>
-  <span class="settings-nav-item is-planned" title="Planned">
+  <a class="settings-nav-item is-planned{% if settings_active_tab == 'appearance' %} is-active{% endif %}"
+     href="{{ url_for('settings_appearance') }}"
+     {% if settings_active_tab == 'appearance' %}aria-current="page"{% endif %}>
     <span class="settings-nav-ico" aria-hidden="true">◐</span>
     <span>Appearance</span>
     <span class="settings-nav-badge">Planned</span>
-  </span>
+  </a>
   <a class="settings-nav-item{% if settings_active_tab == 'ai_providers' %} is-active{% endif %}"
      href="{{ url_for('settings_ai_providers') }}"
      {% if settings_active_tab == 'ai_providers' %}aria-current="page"{% endif %}>
     <span class="settings-nav-ico" aria-hidden="true">✦</span>
     <span>AI Providers</span>
   </a>
-  <span class="settings-nav-item is-planned" title="Planned">
+  <a class="settings-nav-item is-planned{% if settings_active_tab == 'integrations' %} is-active{% endif %}"
+     href="{{ url_for('settings_integrations') }}"
+     {% if settings_active_tab == 'integrations' %}aria-current="page"{% endif %}>
     <span class="settings-nav-ico" aria-hidden="true">⬡</span>
     <span>Integrations</span>
     <span class="settings-nav-badge">Planned</span>
-  </span>
-  <span class="settings-nav-item is-planned" title="Planned">
+  </a>
+  <a class="settings-nav-item is-planned{% if settings_active_tab == 'security' %} is-active{% endif %}"
+     href="{{ url_for('settings_security') }}"
+     {% if settings_active_tab == 'security' %}aria-current="page"{% endif %}>
     <span class="settings-nav-ico" aria-hidden="true">🔒</span>
     <span>Security</span>
     <span class="settings-nav-badge">Planned</span>
-  </span>
-  <span class="settings-nav-item is-planned" title="Planned">
+  </a>
+  <a class="settings-nav-item is-planned{% if settings_active_tab == 'notifications' %} is-active{% endif %}"
+     href="{{ url_for('settings_notifications') }}"
+     {% if settings_active_tab == 'notifications' %}aria-current="page"{% endif %}>
     <span class="settings-nav-ico" aria-hidden="true">🔔</span>
     <span>Notifications</span>
     <span class="settings-nav-badge">Planned</span>
-  </span>
-  <span class="settings-nav-item is-planned" title="Planned">
+  </a>
+  <a class="settings-nav-item is-planned{% if settings_active_tab == 'advanced' %} is-active{% endif %}"
+     href="{{ url_for('settings_advanced') }}"
+     {% if settings_active_tab == 'advanced' %}aria-current="page"{% endif %}>
     <span class="settings-nav-ico" aria-hidden="true">⋯</span>
     <span>Advanced</span>
     <span class="settings-nav-badge">Planned</span>
-  </span>
+  </a>
 </nav>

@@ -14,12 +14,13 @@
   </aside>
   <div class="settings-main">
     {% include "partials/section_header.html" %}
+    <p class="settings-lede">Runtime, owner access, DHIS2, CLI connections, and AiriX Smart Routing.</p>
 
 {% if flash_error %}<div class="banner banner-error">{{ flash_error }}</div>{% endif %}
-{% if flash_notice %}<div class="banner" style="background:rgba(59,130,246,0.12);border-color:rgba(59,130,246,0.35);color:#93c5fd">{{ flash_notice }}</div>{% endif %}
+{% if flash_notice %}<div class="banner banner-ok">{{ flash_notice }}</div>{% endif %}
 
-<section class="panel panel-body">
-  <h2 style="margin:0 0 0.75rem;font-size:14px">Runtime</h2>
+<section class="panel panel-body settings-card">
+  <h2 class="settings-card-title">Runtime</h2>
   <dl class="detail-list">
     <div><dt>App name</dt><dd>{{ app_name }}</dd></div>
     <div><dt>Environment</dt><dd><span class="badge badge-env">{{ env_profile }}</span></dd></div>
@@ -34,22 +35,24 @@
   </dl>
 </section>
 
-<section class="panel panel-body" style="margin-top:0.85rem">
-  <h2 style="margin:0 0 0.75rem;font-size:14px">Owner role (Phase 6)</h2>
+<section class="panel panel-body settings-card">
+  <h2 class="settings-card-title">Owner role (Phase 6)</h2>
   {% if settings_view.owner_token_configured %}
-    <p class="muted">Owner token is configured. Sign in to submit/cancel jobs.</p>
-    <form method="post" class="builder-form">
+    <p class="settings-card-hint">Owner token is configured. Sign in to submit/cancel jobs.</p>
+    <form method="post" class="settings-form">
       <input type="hidden" name="action" value="owner_login">
       <label><span>Owner token</span><input type="password" name="owner_token" autocomplete="current-password"></label>
-      <button class="btn btn-primary" type="submit">Sign in as owner</button>
+      <div class="settings-actions">
+        <button class="btn btn-primary" type="submit">Sign in as owner</button>
+      </div>
     </form>
   {% else %}
-    <p class="muted">Open local mode: no <code>CENTRAL_HUB_OWNER_TOKEN</code> set — actor is always <code>owner</code>.</p>
+    <p class="settings-card-hint">Open local mode: no <code>CENTRAL_HUB_OWNER_TOKEN</code> set — actor is always <code>owner</code>.</p>
   {% endif %}
 </section>
 
-<section class="panel panel-body" style="margin-top:0.85rem">
-  <h2 style="margin:0 0 0.75rem;font-size:14px">DHIS2 (read-only)</h2>
+<section class="panel panel-body settings-card">
+  <h2 class="settings-card-title">DHIS2 (read-only)</h2>
   <dl class="detail-list">
     <div><dt>Configured</dt><dd>{% if dhis2_config.configured %}yes{% else %}no{% endif %}</dd></div>
     <div><dt>Enabled</dt><dd>{{ dhis2_config.enabled }}</dd></div>
@@ -66,9 +69,9 @@
   </dl>
 </section>
 
-<section class="panel panel-body" style="margin-top:0.85rem">
-  <h2 style="margin:0 0 0.5rem;font-size:14px">AI Provider Connections</h2>
-  <p class="muted" style="margin:0 0 0.75rem">
+<section class="panel panel-body settings-card">
+  <h2 class="settings-card-title">AI Provider Connections</h2>
+  <p class="settings-card-hint">
     Detect and connect Codex, Claude Code, and Cursor Agent for CLIMATE Code Workspace.
     Hub never reads browser cookies or stores provider credentials.
     API keys are managed on
@@ -114,42 +117,48 @@
   </div>
 </section>
 
-<section class="panel panel-body" style="margin-top:0.85rem">
-  <h2 style="margin:0 0 0.75rem;font-size:14px">AiriX Smart Routing (Phase 5)</h2>
-  <p class="muted" style="margin-top:0">Cost intelligence, RBAC, relevant findings, budgets, and orchestration. Token budgets stay authoritative; Codex still requires approval.</p>
+<section class="panel panel-body settings-card">
+  <h2 class="settings-card-title">AiriX Smart Routing (Phase 5)</h2>
+  <p class="settings-card-hint">Cost intelligence, RBAC, relevant findings, budgets, and orchestration. Token budgets stay authoritative; Codex still requires approval.</p>
   {% if workspace == 'work' and routing_settings %}
-  <form method="post" class="builder-form" style="margin-top:0.75rem">
+  <form method="post" class="settings-form settings-form-wide">
     <input type="hidden" name="action" value="airix_routing_settings">
-    <label><span>Mode</span>
-      <select name="mode">
-        <option value="balanced" {% if routing_settings.mode == 'balanced' %}selected{% endif %}>Balanced</option>
-        <option value="cheapest" {% if routing_settings.mode == 'cheapest' %}selected{% endif %}>Cheapest</option>
-        <option value="best_quality" {% if routing_settings.mode == 'best_quality' %}selected{% endif %}>Best Quality</option>
-        <option value="max_speed" {% if routing_settings.mode == 'max_speed' %}selected{% endif %}>Maximum Speed</option>
-      </select>
-    </label>
-    <label class="nb-check"><input type="checkbox" name="prefer_deterministic" value="1" {% if routing_settings.prefer_deterministic %}checked{% endif %}> Prefer deterministic/free</label>
-    <label class="nb-check"><input type="checkbox" name="prefer_grok_for_routine" value="1" {% if routing_settings.prefer_grok_for_routine %}checked{% endif %}> Prefer Grok for routine work</label>
-    <label class="nb-check"><input type="checkbox" name="require_approval_before_codex" value="1" {% if routing_settings.require_approval_before_codex %}checked{% endif %}> Require approval before Codex</label>
-    <label class="nb-check"><input type="checkbox" name="allow_escalation" value="1" {% if routing_settings.allow_escalation %}checked{% endif %}> Allow escalation</label>
-    <label class="nb-check"><input type="checkbox" name="use_history" value="1" {% if routing_settings.use_history %}checked{% endif %}> Use performance history</label>
-    <label class="nb-check"><input type="checkbox" name="enable_orchestration" value="1" {% if routing_settings.enable_orchestration %}checked{% endif %}> Enable multi-step orchestration</label>
-    <label class="nb-check"><input type="checkbox" name="warn_before_expensive_escalation" value="1" {% if routing_settings.warn_before_expensive_escalation %}checked{% endif %}> Warn before expensive escalation</label>
-    <label class="nb-check"><input type="checkbox" name="enable_cost_estimates" value="1" {% if routing_settings.enable_cost_estimates %}checked{% endif %}> Enable estimated USD cost (from public rates)</label>
-    <label><span>Max retries</span><input type="number" name="max_retries" min="0" max="5" value="{{ routing_settings.max_retries }}"></label>
-    <label><span>Max orchestration steps</span><input type="number" name="max_orchestration_steps" min="1" max="8" value="{{ routing_settings.max_orchestration_steps }}"></label>
-    <label><span>Daily token budget (0=unlimited)</span><input type="number" name="daily_token_budget" min="0" value="{{ routing_settings.daily_token_budget }}"></label>
-    <label><span>Monthly token budget (0=unlimited)</span><input type="number" name="monthly_token_budget" min="0" value="{{ routing_settings.monthly_token_budget }}"></label>
-    <label><span>Per-task max tokens (0=unlimited)</span><input type="number" name="per_task_max_tokens" min="0" value="{{ routing_settings.per_task_max_tokens }}"></label>
-    <label><span>Grok USD / 1M tokens (optional)</span><input type="number" step="0.0001" min="0" name="price_grok" value="{{ routing_settings.price_per_mtok.grok if routing_settings.price_per_mtok and routing_settings.price_per_mtok.grok is defined else 0 }}"></label>
-    <label><span>Codex USD / 1M tokens (optional)</span><input type="number" step="0.0001" min="0" name="price_codex" value="{{ routing_settings.price_per_mtok.codex if routing_settings.price_per_mtok and routing_settings.price_per_mtok.codex is defined else 0 }}"></label>
-    <label><span>Default USD / 1M tokens (optional)</span><input type="number" step="0.0001" min="0" name="price_default" value="{{ routing_settings.price_per_mtok.default if routing_settings.price_per_mtok and routing_settings.price_per_mtok.default is defined else 0 }}"></label>
-    <button class="btn btn-primary" type="submit">Save Smart Routing settings</button>
+    <div class="settings-form-grid">
+      <label><span>Mode</span>
+        <select name="mode">
+          <option value="balanced" {% if routing_settings.mode == 'balanced' %}selected{% endif %}>Balanced</option>
+          <option value="cheapest" {% if routing_settings.mode == 'cheapest' %}selected{% endif %}>Cheapest</option>
+          <option value="best_quality" {% if routing_settings.mode == 'best_quality' %}selected{% endif %}>Best Quality</option>
+          <option value="max_speed" {% if routing_settings.mode == 'max_speed' %}selected{% endif %}>Maximum Speed</option>
+        </select>
+      </label>
+      <label><span>Max retries</span><input type="number" name="max_retries" min="0" max="5" value="{{ routing_settings.max_retries }}"></label>
+      <label><span>Max orchestration steps</span><input type="number" name="max_orchestration_steps" min="1" max="8" value="{{ routing_settings.max_orchestration_steps }}"></label>
+      <label><span>Daily token budget (0=unlimited)</span><input type="number" name="daily_token_budget" min="0" value="{{ routing_settings.daily_token_budget }}"></label>
+      <label><span>Monthly token budget (0=unlimited)</span><input type="number" name="monthly_token_budget" min="0" value="{{ routing_settings.monthly_token_budget }}"></label>
+      <label><span>Per-task max tokens (0=unlimited)</span><input type="number" name="per_task_max_tokens" min="0" value="{{ routing_settings.per_task_max_tokens }}"></label>
+      <label><span>Grok USD / 1M tokens (optional)</span><input type="number" step="0.0001" min="0" name="price_grok" value="{{ routing_settings.price_per_mtok.grok if routing_settings.price_per_mtok and routing_settings.price_per_mtok.grok is defined else 0 }}"></label>
+      <label><span>Codex USD / 1M tokens (optional)</span><input type="number" step="0.0001" min="0" name="price_codex" value="{{ routing_settings.price_per_mtok.codex if routing_settings.price_per_mtok and routing_settings.price_per_mtok.codex is defined else 0 }}"></label>
+      <label><span>Default USD / 1M tokens (optional)</span><input type="number" step="0.0001" min="0" name="price_default" value="{{ routing_settings.price_per_mtok.default if routing_settings.price_per_mtok and routing_settings.price_per_mtok.default is defined else 0 }}"></label>
+    </div>
+    <div class="settings-checks">
+      <label class="nb-check"><input type="checkbox" name="prefer_deterministic" value="1" {% if routing_settings.prefer_deterministic %}checked{% endif %}> Prefer deterministic/free</label>
+      <label class="nb-check"><input type="checkbox" name="prefer_grok_for_routine" value="1" {% if routing_settings.prefer_grok_for_routine %}checked{% endif %}> Prefer Grok for routine work</label>
+      <label class="nb-check"><input type="checkbox" name="require_approval_before_codex" value="1" {% if routing_settings.require_approval_before_codex %}checked{% endif %}> Require approval before Codex</label>
+      <label class="nb-check"><input type="checkbox" name="allow_escalation" value="1" {% if routing_settings.allow_escalation %}checked{% endif %}> Allow escalation</label>
+      <label class="nb-check"><input type="checkbox" name="use_history" value="1" {% if routing_settings.use_history %}checked{% endif %}> Use performance history</label>
+      <label class="nb-check"><input type="checkbox" name="enable_orchestration" value="1" {% if routing_settings.enable_orchestration %}checked{% endif %}> Enable multi-step orchestration</label>
+      <label class="nb-check"><input type="checkbox" name="warn_before_expensive_escalation" value="1" {% if routing_settings.warn_before_expensive_escalation %}checked{% endif %}> Warn before expensive escalation</label>
+      <label class="nb-check"><input type="checkbox" name="enable_cost_estimates" value="1" {% if routing_settings.enable_cost_estimates %}checked{% endif %}> Enable estimated USD cost (from public rates)</label>
+    </div>
+    <div class="settings-actions">
+      <button class="btn btn-primary" type="submit">Save Smart Routing settings</button>
+    </div>
   </form>
   {% if routing_analytics %}
-  <div class="panel panel-body" style="margin-top:1rem;padding:0.75rem 1rem">
-    <h3 style="margin:0 0 0.5rem;font-size:13px">Routing diagnostics</h3>
-    <dl class="meta-grid" style="margin:0">
+  <div class="settings-subcard">
+    <h3>Routing diagnostics</h3>
+    <dl class="detail-list">
       <div><dt>Executions</dt><dd>{{ routing_analytics.executions_total }}</dd></div>
       <div><dt>Success rate</dt><dd>{% if routing_analytics.success_rate is not none %}{{ (routing_analytics.success_rate * 100)|round(0) }}%{% else %}—{% endif %}</dd></div>
       <div><dt>Retries</dt><dd>{{ routing_analytics.retries_total }}</dd></div>
@@ -176,19 +185,19 @@
       {% endif %}
     </dl>
     {% if routing_analytics.executions_by_tier %}
-    <p class="muted" style="margin:0.65rem 0 0;font-size:12px">By tier:
+    <p class="muted settings-footnote">By tier:
       {% for tier, n in routing_analytics.executions_by_tier.items() %}{{ tier }}={{ n }}{% if not loop.last %}, {% endif %}{% endfor %}
     </p>
     {% endif %}
     {% if routing_analytics.executions_by_provider %}
-    <p class="muted" style="margin:0.35rem 0 0;font-size:12px">By provider:
+    <p class="muted settings-footnote">By provider:
       {% for pid, n in routing_analytics.executions_by_provider.items() %}{{ pid }}={{ n }}{% if not loop.last %}, {% endif %}{% endfor %}
     </p>
     {% endif %}
   </div>
   {% endif %}
   {% else %}
-  <p class="muted">Switch to the Work workspace to edit AiriX routing settings.</p>
+  <p class="settings-card-hint">Switch to the Work workspace to edit AiriX routing settings.</p>
   {% endif %}
 </section>
 <script src="{{ url_for('static', filename='js/hub_perf.js') }}?v=perf-1"></script>
