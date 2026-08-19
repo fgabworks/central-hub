@@ -3,32 +3,37 @@
 {% block content %}
 {% set sh_title = "Google Connections" %}
 {% set sh_info %}
-Shared Google accounts for Email and Calendar. Tokens are encrypted server-side.
-Grant Gmail (<code>gmail.readonly</code>) and Calendar
-(<code>calendar.calendarlist.readonly</code>, <code>calendar.events.readonly</code>) incrementally.
-Assign each account to Personal or Work. No passwords stored. No agent access to mail or calendar content.
+Shared Google accounts for Email, Calendar, and Drive. Tokens are encrypted server-side.
+Grant Gmail (<code>gmail.readonly</code>), Calendar
+(<code>calendar.calendarlist.readonly</code>, <code>calendar.events.readonly</code>),
+and Drive (<code>drive.readonly</code>) incrementally.
+Assign each account to Personal or Work. No passwords stored. No agent access to mail, calendar, or Drive content except bounded AiriX General retrieval.
 {% endset %}
 {% include "partials/section_header.html" %}
 
 {% if not oauth.configured %}
 <div class="banner banner-error">
   Set <code>GMAIL_CLIENT_ID</code> and <code>GMAIL_CLIENT_SECRET</code> in <code>.env</code>.
-  Redirect URI: <code>{{ oauth.redirect_uri }}</code>. Enable Gmail API and Google Calendar API in Google Cloud.
+  Redirect URI: <code>{{ oauth.redirect_uri }}</code>. Enable Gmail API, Google Calendar API, and Google Drive API in Google Cloud.
 </div>
 {% endif %}
 
 <div class="card" style="padding:1rem;margin-bottom:1rem">
   <p class="muted" style="margin:0 0 0.75rem;font-size:13px">
-    In Google Cloud Console, enable <strong>Gmail API</strong> and <strong>Google Calendar API</strong>
+    In Google Cloud Console, enable <strong>Gmail API</strong>, <strong>Google Calendar API</strong>,
+    and <strong>Google Drive API</strong>
     for the same OAuth client. Then connect Gmail first, and use <strong>Enable Calendar</strong>
-    on the account row (approve Calendar on the consent screen).
+    or <strong>Enable Drive</strong>
+    on the account row (approve the extra scopes on the consent screen).
   </p>
   <div class="email-actions">
     {% if oauth.configured and oauth.enabled %}
     <a class="btn btn-sm btn-primary" href="{{ url_for('email_oauth_start', workspace='personal') }}">+ Connect (Gmail)</a>
     <a class="btn btn-sm" href="{{ url_for('email_oauth_calendar_start', workspace='personal') }}">+ Connect (Calendar)</a>
+    <a class="btn btn-sm" href="{{ url_for('email_oauth_drive_start', workspace='personal') }}">+ Connect (Drive)</a>
     <a class="btn btn-sm" href="{{ url_for('email_oauth_start', workspace='work') }}">+ Work Gmail</a>
     <a class="btn btn-sm" href="{{ url_for('email_oauth_calendar_start', workspace='work') }}">+ Work Calendar</a>
+    <a class="btn btn-sm" href="{{ url_for('email_oauth_drive_start', workspace='work') }}">+ Work Drive</a>
     {% endif %}
   </div>
 </div>
@@ -41,6 +46,7 @@ Assign each account to Personal or Work. No passwords stored. No agent access to
       <th>Status</th>
       <th>Gmail</th>
       <th>Calendar</th>
+      <th>Drive</th>
       <th>Actions</th>
     </tr>
   </thead>
@@ -56,6 +62,7 @@ Assign each account to Personal or Work. No passwords stored. No agent access to
       </td>
       <td>{% if acct.has_gmail %}Yes{% else %}No{% endif %}</td>
       <td>{% if acct.has_calendar %}Yes{% else %}No{% endif %}</td>
+      <td>{% if acct.has_drive %}Yes{% else %}No{% endif %}</td>
       <td>
         <div class="email-account-actions">
           <form method="post" action="{{ url_for('email_account_assign', account_id=acct.id) }}" class="email-inline-form">
@@ -68,6 +75,9 @@ Assign each account to Personal or Work. No passwords stored. No agent access to
           </form>
           {% if not acct.has_calendar and oauth.configured %}
           <a class="btn btn-sm" href="{{ url_for('email_oauth_calendar_start', workspace=acct.workspace, account=acct.id) }}">Enable Calendar</a>
+          {% endif %}
+          {% if not acct.has_drive and oauth.configured %}
+          <a class="btn btn-sm" href="{{ url_for('email_oauth_drive_start', workspace=acct.workspace, account=acct.id) }}">Enable Drive</a>
           {% endif %}
           {% if not acct.has_gmail and oauth.configured %}
           <a class="btn btn-sm" href="{{ url_for('email_oauth_start', workspace=acct.workspace, account=acct.id) }}">Enable Gmail</a>
@@ -90,7 +100,7 @@ Assign each account to Personal or Work. No passwords stored. No agent access to
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="6" class="muted">No Google accounts connected yet.</td></tr>
+    <tr><td colspan="7" class="muted">No Google accounts connected yet.</td></tr>
     {% endfor %}
   </tbody>
 </table>

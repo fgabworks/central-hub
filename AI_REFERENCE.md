@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-19 (AiriX Context Expansion Phase 1).
+Last verified: 2026-08-20 (AiriX Context Expansion Phase 3).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -23,16 +23,22 @@ mode/provider/model/scope/repository. The VANTA workspace repo is never inherite
 Repository scope is validated only when a specific repository is selected. Coding
 diagnostics stay in the Workspace Assistant.
 
-In AiriX mode, CLIMATE uses one provider-agnostic internal context registry for
-Repositories, Tasks, Notebook/Notes, SQL Workspace metadata/history, and
-Repository Activity. Each source exposes id/type, availability, bounded
-search/retrieve, and source metadata. The resolver ranks candidates globally,
-keeps a small per-run evidence packet, isolates source failures, and persists
-sources considered/queried/used plus evidence references on the existing Agent
-Center run. General remains repository-free, Specific Repository filters linked
-stores to that repository, and All Repositories uses bounded multi-repository
-evidence. Direct never invokes this registry or automatically retrieves CLIMATE
-context; only explicit user attachments remain eligible.
+In AiriX mode, CLIMATE uses one provider-agnostic context registry for
+Repositories, Tasks, Notebook/Notes, SQL Workspace metadata/history,
+Repository Activity, (General scope only) Gmail, Google Drive, and Google
+Calendar, and (General / VANTA only) bounded DHIS2 operational sources:
+environment/config metadata, UID Index, enrichment/relationship audit,
+explorer metadata search, report/org-unit metadata, and recent DHIS2
+jobs/audit (`hub/climate/dhis2_sources.py`). Each source exposes id/type,
+availability, bounded search/retrieve, and source metadata. The resolver ranks
+candidates globally, keeps a small per-run evidence packet, isolates source
+failures, and persists sources considered/queried/used plus evidence references
+on the existing Agent Center run. General may use connected Google and DHIS2
+sources when they are available. Specific Repository and All Repositories keep
+those external/DHIS2 sources unavailable. Direct never invokes this registry or
+automatically retrieves CLIMATE context; only explicit user attachments remain
+eligible. DHIS2 retrieval is GET-only and never dumps analytics, linelists,
+report HTML, credentials, or prompt-driven SQL.
 
 **Code Workspace** uses the same `[ AiriX | Direct ] [ Provider ] [ Model ]
 [ Context Scope ]` architecture in an IDE-native **AiriX · Code Assistant**
@@ -252,7 +258,8 @@ size alongside the existing token, Task Solved, and Grounded fields.
 + DHIS2 Reports — Standard Report Manager Phase 1 (sync/view) + catalog shortcuts.**
 Hub coordinates repos via registry/adapters; DHIS2 stays GET-only; jobs run
 allowlisted capabilities only; Gmail is `gmail.readonly`; Calendar is
-`calendar.calendarlist.readonly` + `calendar.events.readonly` only.
+`calendar.calendarlist.readonly` + `calendar.events.readonly`; Drive is
+`drive.readonly` only.
 Agent Center invokes external CLIs with allowlisted argv only (`shell=False`),
 or the OpenAI Responses API with read-only function tools when enabled.
 
@@ -276,7 +283,7 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Repository Notebook | Scoped notes (`personal` \| `work`); work keeps repo links; personal needs none |
 | Email Center | Shared Gmail service; accounts assigned Personal/Work; readonly OAuth |
 | Calendar Center | Shared Calendar service + FullCalendar grid (month/week/day) + agenda/upcoming |
-| Google Connections | System page to connect/assign/enable Gmail+Calendar scopes |
+| Google Connections | System page to connect/assign/enable Gmail+Calendar+Drive scopes |
 | SQL Workspace | Read-only query library/runner (`/sql`); sqlglot allowlist; optional trusted-host-key Stage/Live SSH tunnels; Live warning; layout `minmax(260px,320px) | 1fr` under shell |
 | Data Explorer | `/data-explorer` — unified RO schema/data/relationship/lineage browser plus allowlisted CSV/XLSX/csv.gz exports, large jobs, presets, history, masking, and audit. `/live-data-export` redirects to `?tab=export`; one runtime service/store/export engine with shared SELECT/security primitives; no ad-hoc SQL or arbitrary table input; Stage/Live remain isolated |
 | AI Assistant Center | Aira at `/personal/aira`; AiriX at `/work/airix` (legacy `/work/okarun` redirects); full-height right dock + fixed composer (`hub/agent_center/dock.py`); **Smart Routing Phase 5** + **Routing Mode** Smart vs Direct Agent (`hub/agent_center/routing/` — cost intelligence, RBAC, relevance findings, budgets, orchestration; `/api/assistants/airix/routing/*`); Find/Ask/Plan/Review; Codex CLI, Claude Code, Cursor, Grok, OpenAI |
@@ -300,6 +307,7 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | DHIS2 writes | **Disabled** |
 | Gmail writes | **Disabled** (no send/reply/delete/label/mark-read) |
 | Calendar writes | **Disabled** (no create/update/delete/RSVP) |
+| Drive writes | **Disabled** (no upload/update/delete/share) |
 
 ## Connected repositories (active registry)
 
@@ -501,7 +509,7 @@ dot + badge, left accent) vs muted read rows; hover / selected / focus-visible s
 distinct. Opening a message does **not** mark it read (`gmail.readonly` only).
 No push notifications; limited TTL cache + manual refresh. **No automatic agent access
 to email content.** Passwords never stored; tokens never rendered in UI/logs.
-OAuth supports **incremental scopes** (`include_granted_scopes=true`) so Calendar can be
+OAuth supports **incremental scopes** (`include_granted_scopes=true`) so Calendar or Drive can be
 added to an existing Gmail account without dropping mail access.
 
 ## Calendar Center (Google Calendar readonly)
@@ -517,8 +525,9 @@ Personal|Work assignment from Email Center. Scopes (incremental):
 | `/calendar` | Redirect by remembered workspace |
 | `/api/calendar/accounts/<id>/events` | JSON feed for FullCalendar (reuses `CalendarService` cache) |
 | `/api/calendar/.../events/<id>` | JSON event detail (sanitized description) for read-only drawer |
-| `/system/google-connections` | Connect, assign workspace, enable Gmail/Calendar scopes, disconnect |
+| `/system/google-connections` | Connect, assign workspace, enable Gmail/Calendar/Drive scopes, disconnect |
 | `/email/oauth/calendar/start` | Incremental Calendar OAuth start |
+| `/email/oauth/drive/start` | Incremental Drive OAuth start (`drive.readonly`) |
 | `/calendar/.../events/<id>` | HTML event detail (attendees, location, sanitized description, Meet) |
 | POST convert-note / convert-task / link-repo | Notebook actions (repo link Work-only) |
 
@@ -604,8 +613,9 @@ No LP apply/write proxies. No import of LP Python packages for business logic.
 
 ## Next
 
-**AiriX Unified Tool Runtime Phase 2 is implemented.** See [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
-Phase 3+ (MCP, browser, scheduler, shell/`run_command`, write tools, workflow editor,
+**AiriX Context Expansion Phase 3 is implemented.** See [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
+AiriX Unified Tool Runtime Phase 2 remains implemented. Phase 3+ of that runtime
+(MCP, browser, scheduler, shell/`run_command`, write tools, workflow editor,
 CLI native tool loops) stays deferred.
 
 **Interactive repository terminal is implemented** (PTY + WebSocket + xterm.js).
@@ -621,4 +631,4 @@ Repository Workspace Phase 3+ (commit/push/pull UI and autonomous/unreviewed age
 stays deferred. CLIMATE file viewing is read-only; save/Git write UI is not exposed.
 AI replacement edits still require review-gated Accept/Reject.
 Do **not** enable DHIS2 writes without [docs/DHIS2_SAFETY.md](docs/DHIS2_SAFETY.md).
-Do **not** expand Gmail or Calendar beyond readonly without an explicit safety design.
+Do **not** expand Gmail, Calendar, or Drive beyond readonly without an explicit safety design.

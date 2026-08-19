@@ -23,7 +23,7 @@ from hub.calendar.models import (
 )
 from hub.email.models import (
     CALENDAR_SCOPES,
-    GMAIL_SCOPES,
+    google_api_scopes_for_account,
     has_calendar_scopes,
 )
 from hub.email.service import EmailService, EmailServiceError
@@ -75,12 +75,50 @@ class CalendarService:
         Requesting Calendar alone can yield a token that drops Gmail access and looks
         like the account "disconnected" from Email Center.
         """
-        scopes = tuple(dict.fromkeys([*GMAIL_SCOPES, *CALENDAR_SCOPES]))
+        acct = self.store.get_account(account_id) if account_id else None
+        scopes = google_api_scopes_for_account(acct, extra=CALENDAR_SCOPES)
         return self.email.start_oauth(
             workspace=workspace,
             account_id=account_id,
             scopes=scopes,
         )
+
+    def search_events(
+        self,
+        workspace: str,
+        *,
+        q: str,
+        limit: int = 8,
+    ) -> list[dict[str, Any]]:
+        """Bounded query/time-range events for AiriX — never a full calendar dump."""
+        ws = normalize_workspace(workspace)
+        query = (q or "").strip()[:300]
+        size = max(1, min(int(limit), 12))
+        if not query:
+            return []
+        out: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for acct in self.list_accounts(ws):
+            if not acct.get("has_calendar") or acct.get("status") != "connected":
+                continue
+            try:
+                listing = self.list_events(
+                    acct["id"],
+                    view="agenda",
+                    q=query,
+                    page_size=size,
+                )
+            except CalendarServiceError:
+                continue
+            for event in listing.get("events") or []:
+                key = f"{acct['id']}:{event.get('calendar_id')}:{event.get('id')}"
+                if key in seen:
+                    continue
+                seen.add(key)
+                out.append({**event, "account_email": acct.get("email"), "account_id": acct["id"]})
+                if len(out) >= size:
+                    return out
+        return out
 
     def list_calendars(
         self, account_id: str, *, force_refresh: bool = False

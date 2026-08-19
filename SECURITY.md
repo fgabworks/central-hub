@@ -27,6 +27,9 @@ Scope: personal, local-first tool. Canonical agent rules: [AGENTS.md](AGENTS.md)
   - Gmail scope is **`gmail.readonly` only** (no modify/send).
   - Calendar scopes (incremental): **`calendar.calendarlist.readonly`** and
     **`calendar.events.readonly`** only (no create/update/delete/RSVP/drag/resize).
+  - Drive scope (incremental): **`drive.readonly` only** (no upload/update/delete/share).
+    AiriX General may search/retrieve bounded file metadata and Google Docs/Sheets/Slides
+    export snippets; it never downloads whole drives or binary files.
   - Event description HTML is **allowlist-sanitized** before drawer/detail display.
   - Refresh/access tokens encrypted at rest (Fernet from `CENTRAL_HUB_SECRET_KEY`)
     in `data/email.db`; never returned to templates, JSON, or audit detail.
@@ -36,7 +39,16 @@ Scope: personal, local-first tool. Canonical agent rules: [AGENTS.md](AGENTS.md)
     and streams through the hub (Google tokens stay server-side).
   - AI Assistant Center never preloads mailbox/calendar content. Explicitly
     selected `email_search` / `calendar_lookup` tools are read-only and force
-    the active Personal or Work account scope.
+    the active Personal or Work account scope. AiriX General context retrieval
+    reuses the same Gmail/Calendar/Drive services (read-only, bounded, failure-isolated);
+    Direct mode never auto-queries them.
+  - **AiriX DHIS2 context (VANTA General only):** reuses existing GET-only DHIS2
+    client, UID index, enrichment store, reports metadata, and jobs/audit
+    (`hub/climate/dhis2_sources.py`). Never writes/updates/deletes, never dumps
+    analytics/tracker tables/linelists/report HTML, never executes prompt SQL,
+    and never includes credentials or raw auth. Unavailable or failed DHIS2
+    sources are skipped without blocking the run. Specific Repository, All
+    Repositories, ARCTIC, and Direct never auto-query DHIS2.
 - **AI Assistant Center:** read-only Find/Ask/Plan/Review only.
   - Aira and Okarun are server-side policies. Run lookup, cancel, retry, prompts,
     histories, conversations, summaries, tools, and sources are profile-filtered;

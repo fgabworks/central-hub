@@ -83,6 +83,16 @@ class ClimateService:
         notebook_store: Any | None = None,
         sql_workspace_store: Any | None = None,
         context_resolver: ClimateContextResolver | None = None,
+        email_service: Any | None = None,
+        calendar_service: Any | None = None,
+        drive_service: Any | None = None,
+        dhis2_client: Any | None = None,
+        uid_index: Any | None = None,
+        enrichment_store: Any | None = None,
+        dhis2_reports: Any | None = None,
+        job_store: Any | None = None,
+        audit_store: Any | None = None,
+        dhis2_instance: str = "",
     ) -> None:
         self.registry = registry
         self.repository_workspace = repository_workspace
@@ -101,6 +111,16 @@ class ClimateService:
             # Resolve through this module so existing tests and callers can
             # replace the established repository resolver seam.
             context_loader=lambda **kwargs: resolve_climate_context(**kwargs),
+            email_service=email_service,
+            calendar_service=calendar_service,
+            drive_service=drive_service,
+            dhis2_client=dhis2_client,
+            uid_index=uid_index,
+            enrichment_store=enrichment_store,
+            dhis2_reports=dhis2_reports,
+            job_store=job_store,
+            audit_store=audit_store,
+            dhis2_instance=dhis2_instance,
         )
 
     def _repository_intelligence(self) -> Any | None:

@@ -13,7 +13,8 @@ from hub.calendar.fc_events import event_detail_payload
 from hub.calendar.models import CALENDAR_VIEWS, normalize_calendar_view, normalize_workspace
 from hub.calendar.sanitize import sanitize_html
 from hub.calendar.service import CalendarService, CalendarServiceError
-from hub.email.models import ACCOUNT_STATUS_LABELS, CALENDAR_SCOPES, GMAIL_SCOPES
+from hub.drive.service import DriveService, DriveServiceError
+from hub.email.models import ACCOUNT_STATUS_LABELS, CALENDAR_SCOPES, DRIVE_SCOPES, GMAIL_SCOPES
 from hub.email.service import EmailService, EmailServiceError
 from hub.notebook import NotebookStore
 from hub.notebook.workspace import apply_workspace_cookie, persist_workspace, read_workspace
@@ -22,6 +23,9 @@ from hub.notebook.workspace import apply_workspace_cookie, persist_workspace, re
 def register_calendar_routes(app: Flask) -> None:
     def _calendar() -> CalendarService:
         return app.config["CALENDAR"]
+
+    def _drive() -> DriveService:
+        return app.config["DRIVE"]
 
     def _email() -> EmailService:
         return app.config["EMAIL"]
@@ -248,6 +252,27 @@ def register_calendar_routes(app: Flask) -> None:
         )
         return redirect(started["authorization_url"])
 
+    @app.get("/email/oauth/drive/start")
+    def email_oauth_drive_start():
+        """Incremental Drive readonly scope grant for an existing or new Google account."""
+        workspace = normalize_workspace(request.args.get("workspace") or "work")
+        account_id = (request.args.get("account") or "").strip() or None
+        try:
+            started = _drive().start_drive_oauth(
+                workspace=workspace, account_id=account_id
+            )
+        except (DriveServiceError, EmailServiceError) as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("google_connections"))
+        _audit().append(
+            action=audit_actions.DRIVE_OAUTH_START,
+            target=account_id or workspace,
+            detail="Incremental Drive OAuth start",
+            ok=True,
+            metadata={"workspace": workspace, "scopes": list(DRIVE_SCOPES)},
+        )
+        return redirect(started["authorization_url"])
+
     @app.get("/system/google-connections")
     def google_connections():
         email = _email()
@@ -273,6 +298,7 @@ def register_calendar_routes(app: Flask) -> None:
             status_labels=ACCOUNT_STATUS_LABELS,
             gmail_scopes=GMAIL_SCOPES,
             calendar_scopes=CALENDAR_SCOPES,
+            drive_scopes=DRIVE_SCOPES,
         )
 
     @app.get("/calendar/accounts/<account_id>/calendars/<path:calendar_id>/events/<path:event_id>")

@@ -4,7 +4,50 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**AiriX Context Expansion Phase 1 (2026-08-19)**
+**AiriX Context Expansion Phase 3 (2026-08-20)**
+
+AiriX General (VANTA) can retrieve bounded, read-only DHIS2 / CLIMATE operational
+evidence through the existing context registry. Six sources are registered:
+`dhis2_environment`, `dhis2_uid_index`, `dhis2_enrichment`, `dhis2_explorer`,
+`dhis2_reports`, and `dhis2_operations`. They reuse existing GET-only DHIS2
+client, UID index `filter_records`, enrichment search/relationships, reports
+library/org-unit metadata, and recent jobs/audit — no parallel data-access
+layer, no provider-specific packets, and no Chat/Code Workspace redesign.
+Disabled, unconfigured, or unreachable DHIS2 sources are marked unavailable and
+skipped; one source failure does not block the run. Specific Repository stays
+strict, All Repositories stays repository-only, ARCTIC does not query DHIS2, and
+Direct never auto-queries DHIS2. Ranking caps stay
+`12 / 8 / 12_000 / 2_400`. Persistence still records sources
+considered/queried/used, evidence references, and isolated failures.
+Writes, analytics/linelists, report HTML bodies, prompt SQL, and credentials
+are never included.
+
+Tests: `tests/test_climate_context_expansion_phase3.py` plus Phase 1/2
+regressions.
+
+Prior: **AiriX Context Expansion Phase 2 (2026-08-19)**
+
+AiriX General can now use three external read-only Google sources through the
+existing provider-agnostic context registry: Gmail, Google Drive, and Google
+Calendar. Each source implements the same id/type, availability, bounded
+search/retrieve, and metadata contract. Disconnected or unscoped integrations
+are marked unavailable and skipped. One source failure does not block the run.
+Repository and All Repositories scopes keep these Google sources off. Direct
+mode never auto-queries them. Ranking caps and packet limits are unchanged.
+Providers still receive one plain bounded packet with no source-specific logic.
+Chat and Code Workspace UI were not redesigned. Persistence still records
+sources considered/queried/used, evidence references, and isolated failures.
+
+Reuse: `EmailService.search_messages` / `get_message` (never threads),
+`CalendarService.search_events` (agenda window + query, never a full calendar),
+and a new thin `hub/drive/` GET client/service over shared Google tokens
+(`drive.readonly`, bounded Docs/Sheets/Slides export only). Incremental Drive
+OAuth follows the Calendar pattern on Google Connections.
+
+Tests: `tests/test_climate_context_expansion_phase2.py` plus Phase 1 registry
+regressions.
+
+Prior: **AiriX Context Expansion Phase 1 (2026-08-19)**
 
 AiriX now has one provider-agnostic, read-only internal context registry over
 Repositories, Tasks, Notebook/Notes, SQL Workspace metadata/history, and

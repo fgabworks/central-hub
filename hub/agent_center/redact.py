@@ -15,7 +15,7 @@ _XAI_KEY = re.compile(r"\b(xai-[A-Za-z0-9_\-]{8,})\b")
 _BEARER = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9\-._~+/]+=*")
 _JWT = re.compile(r"\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\b")
 _CMD_SECRET = re.compile(
-    r"(?i)((?:--?(?:api[_-]?key|token|password|secret)\s+)|(?:(?:CODEX_API_KEY|OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY|XAI_API_KEY|ANTHROPIC_API_KEY)\s*=\s*))(\S+)"
+    r"(?i)((?:(?:^|(?<=\s))--?(?:api[_-]?key|token|password|secret)\s+)|(?:(?:CODEX_API_KEY|OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY|XAI_API_KEY|ANTHROPIC_API_KEY)\s*=\s*))(\S+)"
 )
 _ENV_INLINE = re.compile(
     r"(?i)\b([A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|COOKIE)[A-Z0-9_]*)=([^\s]+)"

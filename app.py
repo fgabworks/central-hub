@@ -120,6 +120,7 @@ from hub.arctic.routes import register_arctic_routes
 from hub.arctic.service import ArcticService
 from hub.arctic.store import ArcticStore
 from hub.calendar.service import CalendarService
+from hub.drive.service import DriveService
 from hub.email.db import EmailDatabase
 from hub.email.routes import register_email_routes
 from hub.email.service import EmailService
@@ -292,6 +293,10 @@ def create_app() -> Flask:
         email_store,
         email_service=app.config["EMAIL"],
     )
+    app.config["DRIVE"] = DriveService(
+        email_store,
+        email_service=app.config["EMAIL"],
+    )
     arctic_db_path = os.environ.get("CENTRAL_HUB_ARCTIC_DATABASE") or str(
         ROOT_DIR / "data" / "arctic.db"
     )
@@ -396,6 +401,16 @@ def create_app() -> Flask:
         ClimateCodingAdapter(app.config["AGENT_CENTER"]),
         notebook_store=app.config["NOTEBOOK"],
         sql_workspace_store=app.config["SQL_WS_STORE"],
+        email_service=app.config["EMAIL"],
+        calendar_service=app.config["CALENDAR"],
+        drive_service=app.config["DRIVE"],
+        dhis2_client=app.config.get("DHIS2"),
+        uid_index=app.config.get("DHIS2_UID_INDEX"),
+        enrichment_store=app.config.get("DHIS2_ENRICHMENT_STORE"),
+        dhis2_reports=lambda: app.config.get("DHIS2_REPORTS"),
+        job_store=app.config.get("JOB_STORE"),
+        audit_store=app.config.get("AUDIT"),
+        dhis2_instance=str(app.config.get("DHIS2_INSTANCE") or ""),
     )
     register_climate_routes(app)
     app.config["BRANDING"] = BrandingService()

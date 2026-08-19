@@ -420,6 +420,8 @@ class CalendarRouteTests(unittest.TestCase):
         body = r3.get_data(as_text=True)
         self.assertIn("Google Connections", body)
         self.assertIn("Connect (Calendar)", body)
+        self.assertIn("Connect (Drive)", body)
+        self.assertIn("drive.readonly", body)
 
     def test_calendar_oauth_start(self) -> None:
         r = self.client.get("/email/oauth/calendar/start?workspace=personal")
@@ -427,6 +429,14 @@ class CalendarRouteTests(unittest.TestCase):
         loc = r.headers.get("Location", "")
         self.assertIn("accounts.google.com", loc)
         self.assertIn("calendar.events.readonly", loc)
+        self.assertIn("gmail.readonly", loc)
+
+    def test_drive_oauth_start(self) -> None:
+        r = self.client.get("/email/oauth/drive/start?workspace=personal")
+        self.assertEqual(r.status_code, 302)
+        loc = r.headers.get("Location", "")
+        self.assertIn("accounts.google.com", loc)
+        self.assertIn("drive.readonly", loc)
         self.assertIn("gmail.readonly", loc)
 
     def test_personal_dashboard_upcoming_section(self) -> None:

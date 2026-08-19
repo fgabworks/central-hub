@@ -13,6 +13,7 @@ from hub.email.models import (
     CACHE_TTL_SECONDS,
     OAUTH_STATE_TTL_SECONDS,
     has_calendar_scopes,
+    has_drive_scopes,
     has_gmail_scopes,
     normalize_account_status,
     normalize_workspace,
@@ -448,6 +449,7 @@ class EmailStore:
         public["scopes"] = scopes
         public["has_gmail"] = has_gmail_scopes(scopes)
         public["has_calendar"] = has_calendar_scopes(scopes)
+        public["has_drive"] = has_drive_scopes(scopes)
         return public
 
     def invalidate_calendar_cache(self, account_id: str) -> None:

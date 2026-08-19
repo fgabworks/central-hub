@@ -8,12 +8,12 @@ from typing import Any, Callable
 from hub.email.crypto import decrypt_token_blob
 from hub.email.gmail_api import GmailApiError, GmailClient, parse_message_detail, parse_message_summary
 from hub.email.models import (
-    CALENDAR_SCOPES,
     DEFAULT_PAGE_SIZE,
     FORBIDDEN_GMAIL_ACTIONS,
     GMAIL_SCOPES,
     MAILBOX_VIEWS,
     MAX_PAGE_SIZE,
+    google_api_scopes_for_account,
     merge_scope_strings,
     normalize_mailbox_view,
     normalize_workspace,
@@ -100,9 +100,9 @@ class EmailService:
                 raise EmailServiceError("Account not found", code="not_found")
             hint = hint or acct.get("email") or None
         if scopes is None:
-            # Reconnecting / enabling Gmail on a Calendar account must keep Calendar.
-            if acct and acct.get("has_calendar"):
-                scope_tuple = with_identity_scopes((*GMAIL_SCOPES, *CALENDAR_SCOPES))
+            # Reconnecting must keep Calendar/Drive grants already on the account.
+            if acct:
+                scope_tuple = with_identity_scopes(google_api_scopes_for_account(acct))
             else:
                 scope_tuple = with_identity_scopes(GMAIL_SCOPES)
         else:
@@ -359,6 +359,65 @@ class EmailService:
         self.store.touch_sync(account_id)
         result["account"] = acct
         return result
+
+    def search_messages(
+        self,
+        account_id: str,
+        *,
+        q: str,
+        page_size: int = 8,
+    ) -> dict[str, Any]:
+        """Bounded Gmail search — query-relevant messages only, never a mailbox dump."""
+        acct = self._require_usable_account(account_id)
+        if acct.get("has_gmail") is False:
+            raise EmailServiceError(
+                "Gmail scopes not granted — enable Gmail on Google Connections",
+                code="missing_scopes",
+            )
+        query = (q or "").strip()[:300]
+        if not query:
+            return {"ok": True, "account": acct, "query": "", "messages": []}
+        size = max(1, min(int(page_size), 12))
+        access = self._access_token(account_id)
+        try:
+            raw = self.gmail.list_messages(access, query=query, max_results=size)
+        except GmailApiError as exc:
+            self._handle_api_error(account_id, exc)
+            raise EmailServiceError(str(exc), code="gmail_api") from exc
+        messages: list[dict[str, Any]] = []
+        for item in list(raw.get("messages") or [])[:size]:
+            mid = str((item or {}).get("id") or "")
+            if not mid:
+                continue
+            try:
+                full = self.gmail.get_message(
+                    access,
+                    mid,
+                    fmt="metadata",
+                    metadata_headers=["From", "To", "Subject", "Date"],
+                )
+                summary = parse_message_summary(full)
+            except GmailApiError:
+                summary = {
+                    "id": mid,
+                    "thread_id": str((item or {}).get("threadId") or ""),
+                    "snippet": "",
+                    "subject": "(unavailable)",
+                    "from_addr": "",
+                    "to_addr": "",
+                    "date_header": "",
+                    "internal_date": "",
+                    "label_ids": [],
+                    "is_unread": False,
+                    "is_starred": False,
+                }
+            messages.append(summary)
+        return {
+            "ok": True,
+            "account": acct,
+            "query": query,
+            "messages": messages,
+        }
 
     def get_message(
         self,

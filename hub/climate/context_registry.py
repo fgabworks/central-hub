@@ -1,8 +1,9 @@
-"""Provider-agnostic, bounded internal context for AiriX.
+"""Provider-agnostic, bounded context for AiriX.
 
-Sources search CLIMATE-owned stores only.  The resolver ranks candidates,
-retrieves a small evidence set, and returns one plain-text packet so provider
-adapters never need source-specific logic.
+Sources search CLIMATE-owned stores and registered external read-only
+connectors.  The resolver ranks candidates, retrieves a small evidence set,
+and returns one plain-text packet so provider adapters never need
+source-specific logic.
 """
 
 from __future__ import annotations
@@ -223,7 +224,7 @@ class ClimateContextResolver:
         if not evidence:
             return ""
         lines = [
-            "CLIMATE internal context packet (bounded, read-only).",
+            "CLIMATE context packet (bounded, read-only).",
             f"Scope: {request.scope}" + (
                 f" / {request.repository_id}" if request.scope == REPOSITORY else ""
             ),
@@ -665,7 +666,31 @@ def build_default_context_resolver(
     sql_workspace_store: Any = None,
     intelligence_loader: Callable[[], Any | None],
     context_loader: Callable[..., Any] = resolve_climate_context,
+    email_service: Any = None,
+    calendar_service: Any = None,
+    drive_service: Any = None,
+    dhis2_client: Any = None,
+    uid_index: Any = None,
+    enrichment_store: Any = None,
+    dhis2_reports: Any = None,
+    job_store: Any = None,
+    audit_store: Any = None,
+    dhis2_instance: str = "",
 ) -> ClimateContextResolver:
+    from hub.climate.dhis2_sources import (
+        Dhis2EnrichmentContextSource,
+        Dhis2EnvironmentContextSource,
+        Dhis2ExplorerContextSource,
+        Dhis2OperationsContextSource,
+        Dhis2ReportsContextSource,
+        Dhis2UidIndexContextSource,
+    )
+    from hub.climate.external_sources import (
+        CalendarContextSource,
+        DriveContextSource,
+        GmailContextSource,
+    )
+
     sources = ClimateContextRegistry()
     sources.register(RepositoriesContextSource(
         registry, repository_workspace, intelligence_loader, context_loader
@@ -674,4 +699,13 @@ def build_default_context_resolver(
     sources.register(NotebookContextSource(notebook_store, tasks=False))
     sources.register(SqlWorkspaceContextSource(sql_workspace_store))
     sources.register(RepositoryActivityContextSource(registry, repository_workspace))
+    sources.register(GmailContextSource(email_service))
+    sources.register(DriveContextSource(drive_service))
+    sources.register(CalendarContextSource(calendar_service))
+    sources.register(Dhis2EnvironmentContextSource(dhis2_client, instance=dhis2_instance))
+    sources.register(Dhis2UidIndexContextSource(uid_index))
+    sources.register(Dhis2EnrichmentContextSource(enrichment_store))
+    sources.register(Dhis2ExplorerContextSource(dhis2_client))
+    sources.register(Dhis2ReportsContextSource(dhis2_reports))
+    sources.register(Dhis2OperationsContextSource(job_store, audit_store))
     return ClimateContextResolver(sources)

@@ -80,7 +80,10 @@ class ContextRegistryUnitTests(unittest.TestCase):
         )
         self.assertEqual(
             [source.id for source in defaults.registry.sources()],
-            ["repositories", "tasks", "notebook_notes", "sql_workspace", "repository_activity"],
+            ["repositories", "tasks", "notebook_notes", "sql_workspace",
+             "repository_activity", "gmail", "google_drive", "google_calendar",
+             "dhis2_environment", "dhis2_uid_index", "dhis2_enrichment",
+             "dhis2_explorer", "dhis2_reports", "dhis2_operations"],
         )
 
     def test_availability_skips_unavailable_sources(self) -> None:

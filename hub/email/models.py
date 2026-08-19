@@ -22,6 +22,10 @@ CALENDAR_SCOPES = (
     CALENDAR_EVENTS_READONLY_SCOPE,
 )
 
+# Drive readonly (incremental — request with include_granted_scopes).
+DRIVE_READONLY_SCOPE = "https://www.googleapis.com/auth/drive.readonly"
+DRIVE_SCOPES = (DRIVE_READONLY_SCOPE,)
+
 
 def with_identity_scopes(scopes: tuple[str, ...] | list[str] | None) -> tuple[str, ...]:
     """Always include OpenID identity scopes alongside API scopes."""
@@ -44,6 +48,30 @@ def has_calendar_scopes(granted: str | None) -> bool:
     return scopes_include(granted, CALENDAR_SCOPES)
 
 
+def has_drive_scopes(granted: str | None) -> bool:
+    return scopes_include(granted, DRIVE_SCOPES)
+
+
+def google_api_scopes_for_account(
+    acct: dict | None,
+    *,
+    extra: tuple[str, ...] | list[str] = (),
+) -> tuple[str, ...]:
+    """Gmail plus any already-granted Calendar/Drive scopes, then extras.
+
+    Incremental enable must re-request existing API scopes so Google does not
+    issue a narrower token that looks like a disconnect.
+    """
+    scopes: list[str] = list(GMAIL_SCOPES)
+    granted = str((acct or {}).get("scopes") or "")
+    if bool((acct or {}).get("has_calendar")) or has_calendar_scopes(granted):
+        scopes.extend(CALENDAR_SCOPES)
+    if bool((acct or {}).get("has_drive")) or has_drive_scopes(granted):
+        scopes.extend(DRIVE_SCOPES)
+    scopes.extend(extra)
+    return tuple(dict.fromkeys(scopes))
+
+
 def merge_scope_strings(*parts: str | None) -> str:
     seen: list[str] = []
     for part in parts:
@@ -51,6 +79,8 @@ def merge_scope_strings(*parts: str | None) -> str:
             if scope and scope not in seen:
                 seen.append(scope)
     return " ".join(seen)
+
+
 ACCOUNT_STATUSES = (
     "connected",
     "needs_reauth",
@@ -110,6 +140,8 @@ __all__ = [
     "CALENDAR_CALENDARLIST_READONLY_SCOPE",
     "CALENDAR_EVENTS_READONLY_SCOPE",
     "CALENDAR_SCOPES",
+    "DRIVE_READONLY_SCOPE",
+    "DRIVE_SCOPES",
     "DEFAULT_PAGE_SIZE",
     "DEFAULT_VIEW",
     "DEFAULT_WORKSPACE",
@@ -122,7 +154,9 @@ __all__ = [
     "MAX_PAGE_SIZE",
     "OAUTH_STATE_TTL_SECONDS",
     "WORKSPACES",
+    "google_api_scopes_for_account",
     "has_calendar_scopes",
+    "has_drive_scopes",
     "has_gmail_scopes",
     "merge_scope_strings",
     "normalize_account_status",
