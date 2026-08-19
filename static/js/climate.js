@@ -49,7 +49,7 @@
   var stopTopBtn = document.getElementById("climate-stop-top");
   var proposalActions = document.getElementById("climate-proposal-actions");
   var state = {
-    tabs: [], active: "", selectedFiles: [], showExcluded: false, panel: "problems",
+    tabs: [], active: "", selectedFiles: [], attachedContext: [], showExcluded: false, panel: "problems",
     runId: "", run: null, streamText: "", git: null, gitPath: "", tePoll: {},
     chat: { activeId: "", sessions: [] }, streamingMsgId: "",
     activityExploreOpen: {},
@@ -90,6 +90,7 @@
       state.tabs = Array.isArray(saved.tabs) ? saved.tabs.slice(0, 16).map(function (path) { return {path:path, content:"", original:"", language:"plaintext", loaded:false, dirty:false}; }) : [];
       state.active = saved.active || (state.tabs[0] || {}).path || "";
       state.selectedFiles = Array.isArray(saved.selectedFiles) ? saved.selectedFiles.slice(0, 24) : [];
+      state.attachedContext = normalizeAttachedList(saved.attachedContext, state.selectedFiles);
       state.showExcluded = !!saved.showExcluded;
       document.getElementById("climate-show-excluded").checked = state.showExcluded;
       if (saved.left) workbench.style.setProperty("--left", saved.left + "px");
@@ -116,6 +117,15 @@
         var defaultMode = (workspaceSurfaceDefaults().default_mode === "direct") ? "direct" : "climate_assisted";
         executionModeSelect.value = defaultMode;
       }
+      var scopeSelect = document.getElementById("climate-context-scope");
+      if (scopeSelect) {
+        if (saved.contextScope === "general" || saved.contextScope === "all") scopeSelect.value = saved.contextScope;
+        else if (saved.contextScope && Array.prototype.some.call(scopeSelect.options, function (opt) { return opt.value === saved.contextScope; })) {
+          scopeSelect.value = saved.contextScope;
+        } else if (repoId() && Array.prototype.some.call(scopeSelect.options, function (opt) { return opt.value === repoId(); })) {
+          scopeSelect.value = repoId();
+        }
+      }
       if (executionModePill) executionModePill.setAttribute("title", executionModeTooltip(currentExecutionMode()));
     } catch (_) {}
   }
@@ -126,8 +136,9 @@
       : (parseInt(css.getPropertyValue("--right"), 10) || AI_DEFAULT);
     localStorage.setItem(storageKey(), JSON.stringify({
       tabs: state.tabs.map(function (tab) { return tab.path; }), active: state.active,
-      selectedFiles: state.selectedFiles, showExcluded: state.showExcluded, provider: providerSelect.value, model: modelSelect.value,
+      selectedFiles: state.selectedFiles, attachedContext: state.attachedContext, showExcluded: state.showExcluded, provider: providerSelect.value, model: modelSelect.value,
       executionMode: currentExecutionMode(),
+      contextScope: currentWorkspaceScope().scope === "repository" ? currentWorkspaceScope().repositoryId : currentWorkspaceScope().scope,
       left: parseInt(css.getPropertyValue("--left"), 10) || 230,
       right: Math.max(AI_MIN, rightPx),
       aiPrevRight: parseInt(workbench.dataset.aiPrevRight, 10) || Math.max(AI_MIN, rightPx),
@@ -144,6 +155,261 @@
   var AI_MIN = 340;
   var AI_DEFAULT = 360;
   var AI_RAIL = 48;
+  function repoName(id) {
+    var rid = String(id || "");
+    if (!repoSelect || !rid) return rid;
+    var match = Array.prototype.find.call(repoSelect.options || [], function (opt) { return opt.value === rid; });
+    return (match && String(match.textContent || "").trim()) || rid;
+  }
+  function normalizeAttachedList(saved, legacyPaths) {
+    var rows = [];
+    (Array.isArray(saved) ? saved : []).forEach(function (item) {
+      if (!item || !item.path) return;
+      rows.push({
+        repositoryId: String(item.repositoryId || item.repository_id || repoId() || ""),
+        path: String(item.path).replace(/\\/g, "/"),
+        startLine: parseInt(item.startLine || item.start_line || 0, 10) || 0,
+        endLine: parseInt(item.endLine || item.end_line || 0, 10) || 0,
+        kind: item.kind === "selection" ? "selection" : "file"
+      });
+    });
+    if (!rows.length && Array.isArray(legacyPaths)) {
+      legacyPaths.forEach(function (path) {
+        if (!path) return;
+        rows.push({ repositoryId: repoId(), path: String(path).replace(/\\/g, "/"), startLine: 0, endLine: 0, kind: "file" });
+      });
+    }
+    return rows.slice(0, 12);
+  }
+  function attachedKey(item) {
+    return [item.repositoryId || "", item.path || "", item.startLine || 0, item.endLine || 0].join(":");
+  }
+  function currentWorkspaceScope() {
+    var sel = document.getElementById("climate-context-scope");
+    var value = String((sel && sel.value) || "").trim();
+    var raw = value.toLowerCase();
+    if (!raw || raw === "general" || [
+      "none", "null", "undefined", "n/a", "na", "-",
+      "no-repository", "no_repository", "norepository",
+      "work", "personal", "vanta", "arctic", "workspace"
+    ].indexOf(raw) >= 0) {
+      return { scope: "general", repositoryId: "" };
+    }
+    if (raw === "all" || raw === "all-repositories" || raw === "all_repositories") {
+      return { scope: "all", repositoryId: "" };
+    }
+    return { scope: "repository", repositoryId: value };
+  }
+  function canAttachFromRepo(repositoryId) {
+    var scope = currentWorkspaceScope();
+    if (scope.scope === "general" || scope.scope === "all") return true;
+    return !!repositoryId && repositoryId === scope.repositoryId;
+  }
+  function syncSelectedFilesFromAttached() {
+    var rid = repoId();
+    state.selectedFiles = state.attachedContext.filter(function (item) {
+      return item.repositoryId === rid && item.kind !== "selection";
+    }).map(function (item) { return item.path; });
+    var countEl = document.getElementById("climate-context-count");
+    if (countEl) countEl.textContent = String(state.attachedContext.length);
+  }
+  function renderAttached() {
+    var wrap = document.getElementById("climate-attached");
+    var chips = document.getElementById("climate-attached-chips");
+    var countEl = document.getElementById("climate-attached-count");
+    if (countEl) countEl.textContent = String(state.attachedContext.length);
+    if (wrap) wrap.hidden = !state.attachedContext.length;
+    if (chips) {
+      chips.innerHTML = state.attachedContext.map(function (item) {
+        var name = String(item.path || "").split("/").pop();
+        var meta = [];
+        if (item.startLine) meta.push("L" + item.startLine + (item.endLine && item.endLine !== item.startLine ? "-" + item.endLine : ""));
+        if (item.repositoryId && item.repositoryId !== repoId()) meta.push(repoName(item.repositoryId));
+        return '<span class="climate-chip" data-attached="' + escapeHtml(attachedKey(item)) + '">' +
+          '<span class="climate-chip-name" title="' + escapeHtml(item.path) + '">' + escapeHtml(name) + "</span>" +
+          (meta.length ? '<span class="climate-chip-meta">' + escapeHtml(meta.join(" · ")) + "</span>" : "") +
+          '<button type="button" class="climate-chip-remove" data-remove-attached="' + escapeHtml(attachedKey(item)) + '" aria-label="Remove">×</button></span>';
+      }).join("");
+      chips.querySelectorAll("[data-remove-attached]").forEach(function (btn) {
+        btn.addEventListener("click", function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          removeAttached(btn.getAttribute("data-remove-attached"));
+        });
+      });
+    }
+    renderContextSummary();
+    syncSelectedFilesFromAttached();
+    highlightTree();
+  }
+  function renderContextSummary() {
+    var summary = document.getElementById("climate-context-summary");
+    var list = document.getElementById("climate-context-file-list");
+    var scope = currentWorkspaceScope();
+    if (summary) {
+      if (scope.scope === "general") summary.textContent = "General — no repository limitation.";
+      else if (scope.scope === "all") summary.textContent = "All Repositories — relevant bounded hits only.";
+      else summary.textContent = "Specific Repository: " + (repoName(scope.repositoryId) || scope.repositoryId) + " — only this repository is used.";
+    }
+    if (list) {
+      list.innerHTML = state.attachedContext.length
+        ? state.attachedContext.map(function (item) {
+            var range = item.startLine ? (" L" + item.startLine + (item.endLine ? "-" + item.endLine : "")) : "";
+            return "<div>" + escapeHtml(item.path) + escapeHtml(range) + "</div>";
+          }).join("")
+        : '<div class="climate-context-hint">No files attached.</div>';
+    }
+  }
+  function addAttached(item, opts) {
+    opts = opts || {};
+    var next = {
+      repositoryId: String(item.repositoryId || repoId() || ""),
+      path: String(item.path || "").replace(/\\/g, "/"),
+      startLine: parseInt(item.startLine || 0, 10) || 0,
+      endLine: parseInt(item.endLine || 0, 10) || 0,
+      kind: item.kind === "selection" ? "selection" : "file"
+    };
+    if (!next.path) return false;
+    if (!next.repositoryId) {
+      setStatus("Open a repository in Explorer before attaching files");
+      return false;
+    }
+    if (!canAttachFromRepo(next.repositoryId)) {
+      setStatus("That file is outside the selected repository scope");
+      return false;
+    }
+    var key = attachedKey(next);
+    if (state.attachedContext.some(function (row) { return attachedKey(row) === key; })) {
+      if (!opts.silent) setStatus("Already attached · " + next.path);
+      return false;
+    }
+    if (state.attachedContext.length >= 12) {
+      setStatus("Attachment limit is 12 files");
+      return false;
+    }
+    state.attachedContext.push(next);
+    renderAttached();
+    savePrefs();
+    if (!opts.silent) setStatus("Attached · " + next.path);
+    return true;
+  }
+  function removeAttached(key) {
+    state.attachedContext = state.attachedContext.filter(function (item) { return attachedKey(item) !== key; });
+    renderAttached();
+    savePrefs();
+  }
+  function clearAttached() {
+    state.attachedContext = [];
+    renderAttached();
+    savePrefs();
+    setStatus("Cleared attached context");
+  }
+  function addCurrentFileToChat() {
+    var tab = currentTab();
+    if (!tab || !tab.path) { setStatus("Open a file first"); return; }
+    addAttached({ repositoryId: repoId(), path: tab.path, kind: "file" });
+  }
+  function addCurrentSelectionToChat() {
+    var tab = currentTab();
+    var text = currentSelection();
+    if (!tab || !tab.path) { setStatus("Open a file first"); return; }
+    if (!String(text || "").trim()) { setStatus("Select code in the editor first"); return; }
+    var start = 0, end = 0;
+    if (editor && editor.getSelection) {
+      var sel = editor.getSelection();
+      if (sel && !sel.isEmpty()) {
+        start = sel.startLineNumber;
+        end = sel.endLineNumber;
+      }
+    }
+    addAttached({ repositoryId: repoId(), path: tab.path, startLine: start, endLine: end, kind: "selection" });
+  }
+  function pruneAttachedForScope() {
+    var before = state.attachedContext.length;
+    state.attachedContext = state.attachedContext.filter(function (item) {
+      return canAttachFromRepo(item.repositoryId);
+    });
+    if (state.attachedContext.length !== before) {
+      setStatus("Removed attachments outside the selected repository");
+      renderAttached();
+      savePrefs();
+    } else {
+      renderContextSummary();
+    }
+  }
+  function knownFilePaths() {
+    var paths = [];
+    state.tabs.forEach(function (tab) { if (tab.path && paths.indexOf(tab.path) < 0) paths.push(tab.path); });
+    if (treeEl) {
+      treeEl.querySelectorAll(".climate-file-row[data-path]").forEach(function (row) {
+        var path = row.getAttribute("data-path");
+        if (path && paths.indexOf(path) < 0) paths.push(path);
+      });
+    }
+    return paths;
+  }
+  function attachMentionsFromPrompt(prompt) {
+    var known = knownFilePaths();
+    (String(prompt || "").match(/@([A-Za-z0-9_./-]+)/g) || []).forEach(function (token) {
+      var name = token.slice(1);
+      var match = known.find(function (path) {
+        return path === name || path.split("/").pop() === name || path.slice(-(name.length + 1)) === "/" + name;
+      });
+      if (match) addAttached({ repositoryId: repoId(), path: match, kind: "file" }, { silent: true });
+    });
+  }
+  function mentionNeedle() {
+    if (!promptEl) return null;
+    var start = promptEl.selectionStart || 0;
+    var slice = promptEl.value.slice(0, start);
+    var match = slice.match(/@([A-Za-z0-9_./-]*)$/);
+    return match ? match[1] : null;
+  }
+  function renderMentionMenu() {
+    var menu = document.getElementById("climate-mention");
+    if (!menu) return;
+    var needle = mentionNeedle();
+    if (needle == null) { menu.hidden = true; return; }
+    var q = needle.toLowerCase();
+    var matches = knownFilePaths().filter(function (path) {
+      return !q || path.toLowerCase().indexOf(q) >= 0 || path.split("/").pop().toLowerCase().indexOf(q) >= 0;
+    }).slice(0, 8);
+    if (!matches.length) { menu.hidden = true; return; }
+    menu.hidden = false;
+    menu.innerHTML = matches.map(function (path) {
+      return '<button type="button" data-mention="' + escapeHtml(path) + '">' + escapeHtml(path.split("/").pop()) + "<small>" + escapeHtml(path) + "</small></button>";
+    }).join("");
+    menu.querySelectorAll("[data-mention]").forEach(function (btn) {
+      btn.addEventListener("click", function (event) {
+        event.preventDefault();
+        applyMention(btn.getAttribute("data-mention"));
+      });
+    });
+  }
+  function applyMention(path) {
+    if (!promptEl || !path) return;
+    var start = promptEl.selectionStart || 0;
+    var value = promptEl.value;
+    var slice = value.slice(0, start);
+    var prefix = slice.replace(/@[A-Za-z0-9_./-]*$/, "@" + path.split("/").pop() + " ");
+    promptEl.value = prefix + value.slice(start);
+    promptEl.selectionStart = promptEl.selectionEnd = prefix.length;
+    addAttached({ repositoryId: repoId(), path: path, kind: "file" }, { silent: true });
+    var menu = document.getElementById("climate-mention");
+    if (menu) menu.hidden = true;
+    promptEl.focus();
+  }
+  function insertMentionTrigger() {
+    if (!promptEl) return;
+    var start = promptEl.selectionStart || promptEl.value.length;
+    var value = promptEl.value;
+    if (value.slice(Math.max(0, start - 1), start) !== "@") {
+      promptEl.value = value.slice(0, start) + "@" + value.slice(start);
+      promptEl.selectionStart = promptEl.selectionEnd = start + 1;
+    }
+    promptEl.focus();
+    renderMentionMenu();
+  }
   function currentExecutionMode() {
     var value = executionModeSelect && executionModeSelect.value === "direct" ? "direct" : "climate_assisted";
     return value;
@@ -661,32 +927,88 @@
   function renderTree(nodes, depth) {
     depth = depth || 0;
     return (nodes || []).map(function (node) {
-      if (node.type === "dir") return '<details '+(depth<1?'open':'')+'><summary style="padding-left:'+(7+depth*10)+'px">▸ '+escapeHtml(node.name)+'</summary>'+renderTree(node.children || [],depth+1)+'</details>';
-      var checked = state.selectedFiles.indexOf(node.path) >= 0 ? " checked" : "";
-      var mark = node.git_status && node.git_status !== "clean" ? '<span class="climate-git-mark">'+escapeHtml(node.git_status.charAt(0).toUpperCase())+'</span>' : "";
-      return '<button class="climate-file-row" data-path="'+escapeHtml(node.path)+'" style="padding-left:'+(9+depth*11)+'px"><input type="checkbox" data-context="'+escapeHtml(node.path)+'" aria-label="Include '+escapeHtml(node.name)+' in AI context"'+checked+'><span class="climate-file-name">'+escapeHtml(node.name)+'</span>'+mark+'</button>';
+      if (node.type === "dir") {
+        return '<details data-folder="' + escapeHtml(node.path || node.name) + '" ' + (depth < 1 ? "open" : "") + '><summary style="padding-left:' + (7 + depth * 10) + 'px">▸ ' + escapeHtml(node.name) +
+          '<button type="button" class="climate-add-chat" data-add-folder="' + escapeHtml(node.path || node.name) + '" title="Add folder to Chat">Add</button></summary>' +
+          renderTree(node.children || [], depth + 1) + "</details>";
+      }
+      var attached = state.attachedContext.some(function (item) { return item.repositoryId === repoId() && item.path === node.path; });
+      var mark = node.git_status && node.git_status !== "clean" ? '<span class="climate-git-mark">' + escapeHtml(node.git_status.charAt(0).toUpperCase()) + "</span>" : "";
+      return '<div class="climate-file-row' + (attached ? " is-attached" : "") + '" data-path="' + escapeHtml(node.path) + '" style="padding-left:' + (9 + depth * 11) + 'px" role="treeitem">' +
+        '<span class="climate-file-name">' + escapeHtml(node.name) + "</span>" + mark +
+        '<button type="button" class="climate-add-chat" data-add-chat="' + escapeHtml(node.path) + '" title="Add to Chat">Add</button></div>';
     }).join("");
   }
   function bindFileRows(container) {
     container.querySelectorAll(".climate-file-row").forEach(function (row) {
       row.addEventListener("click", function (event) {
-        if (event.target.hasAttribute("data-context")) { event.stopPropagation(); toggleContext(event.target.getAttribute("data-context"), event.target.checked); return; }
+        if (event.target.closest("[data-add-chat]")) return;
         openFile(row.getAttribute("data-path"));
+      });
+      row.addEventListener("contextmenu", function (event) {
+        event.preventDefault();
+        showTreeMenu(event.clientX, event.clientY, row.getAttribute("data-path"), false);
+      });
+    });
+    container.querySelectorAll("[data-add-chat]").forEach(function (btn) {
+      btn.addEventListener("click", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        addAttached({ repositoryId: repoId(), path: btn.getAttribute("data-add-chat"), kind: "file" });
+      });
+    });
+    container.querySelectorAll("[data-add-folder]").forEach(function (btn) {
+      btn.addEventListener("click", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        addFolderToChat(btn.getAttribute("data-add-folder"), btn.closest("details"));
       });
     });
   }
-  function toggleContext(path, enabled) {
-    state.selectedFiles = state.selectedFiles.filter(function (item) { return item !== path; });
-    if (enabled) state.selectedFiles.push(path);
-    document.getElementById("climate-context-count").textContent = state.selectedFiles.length;
-    document.getElementById("climate-related-count").textContent = state.selectedFiles.length; savePrefs();
+  function addFolderToChat(folderPath, detailsEl) {
+    var paths = [];
+    if (detailsEl) {
+      detailsEl.querySelectorAll(".climate-file-row[data-path]").forEach(function (row) {
+        var path = row.getAttribute("data-path");
+        if (path) paths.push(path);
+      });
+    }
+    var added = 0;
+    paths.slice(0, 8).forEach(function (path) {
+      if (addAttached({ repositoryId: repoId(), path: path, kind: "file" }, { silent: true })) added += 1;
+    });
+    setStatus(added ? ("Attached " + added + " file" + (added === 1 ? "" : "s") + " from " + folderPath) : ("No files added from " + folderPath));
   }
-  function highlightTree() { treeEl.querySelectorAll(".climate-file-row").forEach(function (row) { row.classList.toggle("is-active",row.getAttribute("data-path")===state.active); }); }
+  function showTreeMenu(x, y, path, isFolder) {
+    var menu = document.getElementById("climate-tree-menu");
+    if (!menu || !path) return;
+    menu.hidden = false;
+    menu.style.left = Math.max(8, x) + "px";
+    menu.style.top = Math.max(8, y) + "px";
+    menu.dataset.path = path;
+    menu.dataset.folder = isFolder ? "1" : "";
+  }
+  function toggleContext(path, enabled) {
+    if (enabled) addAttached({ repositoryId: repoId(), path: path, kind: "file" });
+    else {
+      var key = attachedKey({ repositoryId: repoId(), path: path, startLine: 0, endLine: 0 });
+      removeAttached(key);
+    }
+  }
+  function highlightTree() {
+    treeEl.querySelectorAll(".climate-file-row").forEach(function (row) {
+      var path = row.getAttribute("data-path");
+      row.classList.toggle("is-active", path === state.active);
+      row.classList.toggle("is-attached", state.attachedContext.some(function (item) {
+        return item.repositoryId === repoId() && item.path === path;
+      }));
+    });
+  }
   function loadTree() {
     if (!repoId()) { treeEl.innerHTML='<div class="climate-ai-empty">No repository in this workspace.</div>'; return; }
     treeEl.textContent="Loading…";
     jsonFetch(endpoint("/repositories/"+encodeURIComponent(repoId())+"/tree?show_excluded="+(state.showExcluded?"1":"0"))).then(function (data) {
-      treeEl.innerHTML=renderTree(data.entries || [],0); bindFileRows(treeEl); highlightTree(); document.getElementById("climate-context-count").textContent=state.selectedFiles.length; document.getElementById("climate-related-count").textContent=state.selectedFiles.length;
+      treeEl.innerHTML=renderTree(data.entries || [],0); bindFileRows(treeEl); highlightTree(); renderAttached();
     }).catch(function (error) { treeEl.textContent=error.message; });
   }
   function runSearch() {
@@ -1691,21 +2013,27 @@
     }));
   }
   function captureContextPrefs() {
+    var scope = currentWorkspaceScope();
     return {
-      currentFile: !!document.getElementById("climate-current-file").checked,
-      selection: !!document.getElementById("climate-selection").checked,
-      selectedFiles: !!document.getElementById("climate-selected-files").checked,
-      repoContext: !!document.getElementById("climate-repo-context").checked,
+      contextScope: scope.scope,
+      repositoryId: scope.repositoryId,
+      attachedContext: state.attachedContext.slice(0, 12),
       selectedFilePaths: state.selectedFiles.slice(0, 24),
       activeFile: state.active || ""
     };
   }
   function applyContextPrefs(ctx) {
     if (!ctx) return;
-    document.getElementById("climate-current-file").checked = ctx.currentFile !== false;
-    document.getElementById("climate-selection").checked = ctx.selection !== false;
-    document.getElementById("climate-selected-files").checked = !!ctx.selectedFiles;
-    document.getElementById("climate-repo-context").checked = !!ctx.repoContext;
+    var scopeSelect = document.getElementById("climate-context-scope");
+    if (scopeSelect) {
+      if (ctx.contextScope === "general" || ctx.contextScope === "all") scopeSelect.value = ctx.contextScope;
+      else if (ctx.repositoryId) scopeSelect.value = ctx.repositoryId;
+      if (scopeSelect._climateDd && window.ClimateSelect) window.ClimateSelect.sync(scopeSelect);
+    }
+    if (Array.isArray(ctx.attachedContext)) {
+      state.attachedContext = normalizeAttachedList(ctx.attachedContext, []);
+      renderAttached();
+    }
   }
   function newChatSession(silent) {
     var session = {
@@ -1903,6 +2231,9 @@
       var el = document.getElementById(id);
       if (el) enhanceClimateSelect(el);
     });
+    if (window.ClimateSelect) {
+      window.ClimateSelect.enhance(document.getElementById("climate-context-scope"));
+    }
   }
   function renderHistoryList() {
     if (!historyList) return;
@@ -2436,7 +2767,9 @@
   }
   function sendRun() {
     var prompt = promptEl.value.trim();
-    if (!prompt || !repoId() || !providerSelect.value || !modelSelect.value) return;
+    var scope = currentWorkspaceScope();
+    if (!prompt || !providerSelect.value || !modelSelect.value) return;
+    if (scope.scope === "repository" && !(scope.repositoryId || repoId())) return;
     if (state.runActive || state.runId || state.stopRequested) {
       setStatus("A run is already active — Stop it first");
       return;
@@ -2463,6 +2796,7 @@
     session.branch = (branchSelect && branchSelect.value) || "";
     session.context = captureContextPrefs();
     session.updatedAt = Date.now();
+    attachMentionsFromPrompt(prompt);
     saveChatStore();
     renderChat();
     promptEl.value = "";
@@ -2482,8 +2816,19 @@
       stoppedByUser: false,
       proposal: null
     });
-    var tab = currentTab(), files = document.getElementById("climate-selected-files").checked ? state.selectedFiles : [];
-    jsonFetch(endpoint("/repositories/" + encodeURIComponent(repoId()) + "/runs"), {
+    var targetRepo = scope.scope === "repository" ? (scope.repositoryId || repoId()) : "";
+    var runPath = targetRepo
+      ? "/repositories/" + encodeURIComponent(targetRepo) + "/runs"
+      : "/workspace/runs";
+    var attachedFiles = state.attachedContext.map(function (item) {
+      return {
+        repository_id: item.repositoryId,
+        path: item.path,
+        start_line: item.startLine || 0,
+        end_line: item.endLine || 0
+      };
+    });
+    jsonFetch(endpoint(runPath), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -2492,10 +2837,15 @@
         prompt: outboundPrompt,
         display_prompt: prompt,
         task_mode: taskMode,
-        current_file: document.getElementById("climate-current-file").checked && tab ? tab.path : "",
-        selection: document.getElementById("climate-selection").checked ? currentSelection() : "",
-        selected_files: files,
-        include_repo_context: document.getElementById("climate-repo-context").checked,
+        context_scope: scope.scope,
+        repository_id: scope.repositoryId,
+        attached_files: attachedFiles,
+        current_file: "",
+        selection: "",
+        selected_files: attachedFiles.filter(function (item) {
+          return targetRepo && item.repository_id === targetRepo;
+        }).map(function (item) { return item.path; }),
+        include_repo_context: false,
         execution_mode: currentExecutionMode(),
         handoff: crossProvider,
         reuse_session: !crossProvider,
@@ -3419,9 +3769,41 @@
       menuPanel.hidden=true;
     });
   });
-  document.getElementById("climate-ctx-mention").addEventListener("click",function(){historyPanel.hidden=true;menuPanel.hidden=true;contextPanel.hidden=!contextPanel.hidden;});
-  document.getElementById("climate-ctx-files").addEventListener("click",function(){document.getElementById("climate-selected-files").checked=true;contextPanel.hidden=false;});
-  document.getElementById("climate-ctx-attach").addEventListener("click",function(){contextPanel.hidden=!contextPanel.hidden;});
+  document.getElementById("climate-ctx-mention").addEventListener("click",function(){
+    historyPanel.hidden=true;menuPanel.hidden=true;contextPanel.hidden=true;
+    insertMentionTrigger();
+  });
+  document.getElementById("climate-ctx-files").addEventListener("click",function(){addCurrentFileToChat();});
+  document.getElementById("climate-ctx-attach").addEventListener("click",function(){historyPanel.hidden=true;menuPanel.hidden=true;contextPanel.hidden=!contextPanel.hidden;renderContextSummary();});
+  var attachedAdd=document.getElementById("climate-attached-add");
+  if(attachedAdd) attachedAdd.addEventListener("click",function(){contextPanel.hidden=!contextPanel.hidden;renderContextSummary();});
+  var attachedClear=document.getElementById("climate-attached-clear");
+  if(attachedClear) attachedClear.addEventListener("click",function(){clearAttached();});
+  var addCurrentBtn=document.getElementById("climate-context-add-current");
+  if(addCurrentBtn) addCurrentBtn.addEventListener("click",addCurrentFileToChat);
+  var addSelBtn=document.getElementById("climate-context-add-selection");
+  if(addSelBtn) addSelBtn.addEventListener("click",addCurrentSelectionToChat);
+  var scopeSelect=document.getElementById("climate-context-scope");
+  if(scopeSelect){
+    scopeSelect.addEventListener("change",function(){
+      pruneAttachedForScope();
+      renderContextSummary();
+      savePrefs();
+    });
+  }
+  var treeMenu=document.getElementById("climate-tree-menu");
+  if(treeMenu){
+    treeMenu.querySelectorAll("[data-tree-menu]").forEach(function(btn){
+      btn.addEventListener("click",function(){
+        var path=treeMenu.dataset.path||"";
+        var action=btn.getAttribute("data-tree-menu");
+        treeMenu.hidden=true;
+        if(!path) return;
+        if(action==="open") openFile(path);
+        else if(action==="add") addAttached({ repositoryId: repoId(), path: path, kind: "file" });
+      });
+    });
+  }
   document.getElementById("climate-review").addEventListener("click",function(){
     var session=activeSession();
     var pending=session&&session.messages.slice().reverse().find(function(msg){return msg.proposal&&msg.proposal.state==="pending";});
@@ -3431,8 +3813,10 @@
   document.addEventListener("click",function(event){
     var ai=document.getElementById("climate-ai");
     if(!event.target.closest(".climate-dd") && !event.target.closest(".climate-dd-menu")) closeClimateDropdowns();
-    if(!ai||ai.contains(event.target)||event.target.closest(".climate-dd-menu"))return;
+    if(!ai||ai.contains(event.target)||event.target.closest(".climate-dd-menu")||event.target.closest(".climate-tree-menu"))return;
     closeChatPopovers();
+    var treeMenu=document.getElementById("climate-tree-menu");
+    if(treeMenu) treeMenu.hidden=true;
   });
   document.addEventListener("keydown",function(event){
     if(event.key==="Escape") closeClimateDropdowns();
@@ -3453,6 +3837,8 @@
       sendRun();
     }
   });
+  promptEl.addEventListener("input", function () { renderMentionMenu(); });
+  promptEl.addEventListener("click", function () { renderMentionMenu(); });
   if(stopBtn) stopBtn.addEventListener("click", stopRun);
   if(sendTopBtn) sendTopBtn.addEventListener("click", sendRun);
   if(stopTopBtn) stopTopBtn.addEventListener("click", stopRun);
@@ -3551,7 +3937,7 @@
     }
     scheduleEditorLayout();
   });
-  loadPrefs();normalizeAiPanelState();syncAiMaximizeChrome();renderTabs();renderProviders();enhanceProviderModelDropdowns();loadChatStore();hydrateServerHistory();
+  loadPrefs();normalizeAiPanelState();syncAiMaximizeChrome();renderTabs();renderProviders();enhanceProviderModelDropdowns();renderAttached();loadChatStore();hydrateServerHistory();
   (function syncModeAfterLoad(){
     var session=activeSession();
     applyExecutionMode((session&&session.executionMode)||currentExecutionMode(),{skipSession:true,skipPrefs:true});

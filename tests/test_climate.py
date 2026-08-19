@@ -476,6 +476,10 @@ class ClimateUiContractTests(unittest.TestCase):
             'id="climate-stop"',
             'id="climate-stop-top"',
             'id="climate-execution-mode"',
+            'id="climate-context-scope"',
+            'id="climate-attached"',
+            'Add to Chat',
+            'Attached Context',
             'AiriX',
             'Direct',
         ):
@@ -553,6 +557,14 @@ class ClimateUiContractTests(unittest.TestCase):
         self.assertIn("newChatSession", script)
         self.assertIn("restoreChatSession", script)
         self.assertIn("compactHandoffPrompt", script)
+        self.assertIn("currentWorkspaceScope", script)
+        self.assertIn("attached_files", script)
+        self.assertIn("addAttached", script)
+        self.assertIn("clearAttached", script)
+        self.assertIn("data-add-chat", script)
+        self.assertIn("/workspace/runs", script)
+        self.assertNotIn("climate-repo-context", script)
+        self.assertNotIn("climate-selected-files", script)
         self.assertIn("climate-token-pill", template)
         self.assertIn("Session usage", template)
         self.assertIn("climate-run-summary", script)

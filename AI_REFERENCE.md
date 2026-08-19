@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-18 (CLIMATE Chat lightweight processing states).
+Last verified: 2026-08-18 (Code Workspace context scope + explicit file chips).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -11,10 +11,20 @@ the Gemini adapter, exact model discovery/selection, streaming, cancellation, an
 `display_prompt` separation. Chat processing states are lightweight and CSS-only:
 thinking (“AiriX is thinking…” / Direct provider name), live streaming
 indicator, clean completion, compact cancel/error, and dimmed selectors while a
-run is active. Diagnostics stay under Details, not in the chat body. **No repository** is a valid Chat state in both
-AiriX and Direct; the VANTA workspace repo is never inherited. Repository
-scope is validated only when an explicit repository id is selected. Coding
+run is active. Diagnostics stay under Details, not in the chat body. Context
+scope defaults to **General** (no repository limitation). **All Repositories**
+searches connected repos and keeps only relevant bounded hits. A specific
+repository stays strictly scoped. The VANTA workspace repo is never inherited.
+Repository scope is validated only when a specific repository is selected. Coding
 diagnostics stay in the Workspace Assistant.
+
+**Code Workspace** uses the same `[ AiriX | Direct ] [ Provider ] [ Model ]
+[ Context Scope ]` architecture. Scope defaults to the active explorer
+repository (Specific). General and All Repositories are opt-in and do not
+inherit VANTA. Files are never attached silently: Explorer **Add to Chat**,
+composer attach actions, and `@filename` create removable chips above the
+composer. Attached files are high-priority bounded context (not whole
+repositories). Specific-repository EDIT/ASK behavior is unchanged.
 
 **CLIMATE Code Workspace v1** (Workspace Assistant) remains at `/work/climate` (VANTA) and
 `/personal/climate` (ARCTIC). It reuses the guarded Repository Workspace file/Git
@@ -45,8 +55,15 @@ Context Resolver flow in Code Workspace (compact repo hints/packet; native
 provider investigation still allowed) and CLIMATE chat wrapping on Chat.
 Direct Chat sends the user prompt to the same selected provider/model with
 only minimal system/identity context — no evidence gates, investigation
-prompts, or repository-verification language unless the user attached
-repo/file context. Direct Code Workspace still skips the Context Resolver
+prompts, or repository-verification language unless Context Scope is
+**All Repositories** or a specific repository (or the user attached files).
+**General** is the Chat default: no repository limitation and no implied
+VANTA inheritance. AiriX General also receives compact hub registry facts
+(connected repository names/ids/types from config) so CLIMATE-known questions
+can be answered without repository file contents. **All Repositories** searches
+connected command repos through existing Repository Intelligence and keeps
+only relevant bounded hits — never entire repositories. A specific repository
+keeps strict validation and that repo’s evidence only. Direct Code Workspace still skips the Context Resolver
 but keeps explicit file/repo rules. Direct bypasses CLIMATE retrieval
 assistance only; ASK read-only sandbox, approved repo boundary, controlled
 EDIT proposals, cancel, diagnostics, token accounting, and Git/terminal

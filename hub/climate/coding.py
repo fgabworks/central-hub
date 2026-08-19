@@ -14,6 +14,7 @@ from hub.climate.logic_format import (
 )
 from hub.climate.retrieval_policy import ASK_INVESTIGATION_CONSTRAINTS
 from hub.climate.execution_mode import is_direct_mode, normalize_execution_mode
+from hub.climate.context_scope import ALL, CONTEXT_SCOPES, GENERAL, normalize_context_scope
 
 
 CODING_PROVIDERS = ("gemini", "codex", "claude-code", "cursor-agent")
@@ -263,6 +264,14 @@ class ClimateCodingAdapter:
                 code="mode_unsupported",
             )
         general_chat = _is_general_chat_surface(surface)
+        raw_scope = str(context_scope or "").strip().lower()
+        chat_scope = raw_scope if raw_scope in CONTEXT_SCOPES else normalize_context_scope(context_scope)
+        if (
+            not general_chat
+            and str(surface or "").strip().lower() == "workspace"
+            and chat_scope in {GENERAL, ALL}
+        ):
+            general_chat = True
         explicit_files = bool(
             str(current_file or "").strip()
             or any(str(path or "").strip() for path in (selected_files or []))
@@ -435,11 +444,14 @@ class ClimateCodingAdapter:
                 payload["allow_general_knowledge"] = True
                 payload["tool_runtime"] = False
                 payload["bounded_evidence_only"] = False
+            elif chat_scope in {GENERAL, ALL}:
+                payload["allow_general_knowledge"] = True
+                payload["bounded_evidence_only"] = False
         if conversation_id:
             payload["conversation_id"] = conversation_id
         if provider == "gemini":
             payload["tool_runtime_lean_context"] = True
-            if not payload.get("direct_provider_chat"):
+            if not payload.get("direct_provider_chat") and not payload.get("allow_general_knowledge"):
                 payload["bounded_evidence_only"] = True
             payload["repository_investigation"] = False
             payload["files"] = {}

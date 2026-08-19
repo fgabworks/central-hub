@@ -4,7 +4,28 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**CLIMATE Chat lightweight processing states (2026-08-18)**
+**Code Workspace context scope + explicit file chips (2026-08-18)**
+
+Code Workspace now shares Chat’s `[ AiriX | Direct ] [ Provider ] [ Model ]
+[ Context Scope ]` architecture. Context Scope is General / All Repositories /
+specific repository (default = active explorer repo). Files are attached only
+when the user adds them: Explorer **Add to Chat**, composer attach, current
+file/selection, or `@filename`. Attached files show as removable chips with
+Clear All and are sent as high-priority bounded context. Entire repositories
+are never sent. Specific-repository ASK/EDIT, streaming, cancel, and
+exact-model selection are unchanged.
+
+Prior: **CLIMATE Chat context scope selector (2026-08-18)**
+
+The Chat repository control is now a Context Scope selector: **General**
+(default, no repo limitation), **All Repositories** (search connected repos and
+pass only relevant bounded hits), and each connected command repository under
+**Repositories**. VANTA is never inherited. AiriX General can answer
+CLIMATE-known registry facts (connected repos) without repository file
+contents. Direct/AiriX, provider/model, streaming, and cancellation are
+unchanged.
+
+Prior: **CLIMATE Chat lightweight processing states (2026-08-18)**
 
 Standalone CLIMATE Chat shows CSS-only thinking, streaming, completed, cancelled,
 and compact error states. AiriX mode uses “AiriX is thinking…”; Direct uses

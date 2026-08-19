@@ -37,7 +37,6 @@ _ALL_ALIASES = {
     "all-repositories",
     "all_repositories",
     "all repositories",
-    "repositories",
 }
 
 
@@ -46,10 +45,10 @@ def normalize_context_scope(value: Any, repository_id: Any = "") -> str:
     repo_id = explicit_repository_id(repository_id)
     if raw in _ALL_ALIASES:
         return ALL
-    if raw in _GENERAL_ALIASES or is_placeholder_repository_id(raw):
-        return REPOSITORY if repo_id else GENERAL
     if raw in {"repository", "repo", "specific"}:
-        return REPOSITORY if repo_id else GENERAL
+        return REPOSITORY
+    if raw in _GENERAL_ALIASES or is_placeholder_repository_id(raw):
+        return GENERAL
     if explicit_repository_id(raw):
         return REPOSITORY
     return REPOSITORY if repo_id else GENERAL
@@ -66,6 +65,6 @@ def resolve_chat_scope(payload: dict[str, Any] | None) -> tuple[str, str]:
         return GENERAL, ""
     scope = normalize_context_scope(raw_scope, repo_id)
     if scope == REPOSITORY:
-        rid = explicit_repository_id(raw_scope) or repo_id
+        rid = repo_id or explicit_repository_id(raw_scope)
         return (REPOSITORY, rid) if rid else (GENERAL, "")
     return scope, ""

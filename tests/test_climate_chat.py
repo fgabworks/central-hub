@@ -34,7 +34,11 @@ class ClimateChatPageTests(unittest.TestCase):
             self.assertIn('id="ax-provider"', html)
             self.assertIn('id="ax-execution-mode"', html)
             self.assertIn("climate-mode-switch", html)
-            self.assertIn("No repository", html)
+            self.assertIn("General", html)
+            self.assertIn("All Repositories", html)
+            self.assertIn("Repositories", html)
+            self.assertIn('id="ax-context-scope"', html)
+            self.assertNotIn("No repository", html)
             self.assertIn("climate_chat.js", html)
             self.assertRegex(html, r'"active_repository_id":\s*""')
             self.assertRegex(html, r'"chat":\s*\{[^}]*"default_provider"')
@@ -97,6 +101,7 @@ class ClimateChatApiTests(unittest.TestCase):
         self.adapter.availability = mock.Mock(
             return_value={"id": "gemini", "state": "connected"}
         )
+        self.center.repository_intelligence = None
         repo = Repository(
             id="work-repo",
             name="Work",
@@ -133,6 +138,9 @@ class ClimateChatApiTests(unittest.TestCase):
         self.assertEqual(self.service._run_scope["run-chat"], ("work", ""))
         self.assertEqual(result["execution_mode"], "climate_assisted")
         self.assertIn("AiriX · CLIMATE Chat", payload["prompt"])
+        self.assertIn("CLIMATE connected repositories", payload["prompt"])
+        self.assertTrue(payload.get("allow_general_knowledge"))
+        self.assertFalse(payload.get("bounded_evidence_only"))
         self.assertFalse(payload.get("direct_provider_chat"))
         self.assertFalse(payload.get("inherit_repository_scope"))
         self.assertIsNone(payload.get("active_repository_id"))
@@ -197,7 +205,7 @@ class ClimateChatApiTests(unittest.TestCase):
         self.assertEqual(payload["repository_ids"], [])
 
     def test_placeholder_repository_ids_do_not_become_scope(self) -> None:
-        for placeholder in ("", "none", "null", "work", "vanta"):
+        for placeholder in ("", "none", "null", "work", "vanta", "general", "all"):
             self.center.start_run.reset_mock()
             result = self.service.execute_chat(
                 "work",
@@ -212,6 +220,91 @@ class ClimateChatApiTests(unittest.TestCase):
             self.assertEqual(payload["repository_ids"], [], placeholder)
             self.assertFalse(payload.get("inherit_repository_scope"), placeholder)
             self.assertEqual(result["execution_mode"], "direct")
+
+    def test_airix_general_answers_connected_repos_from_registry(self) -> None:
+        result = self.service.execute_chat(
+            "work",
+            provider="gemini",
+            model="gemini-test-flash",
+            prompt="what are my repositories connected to this app",
+            context_scope="general",
+            execution_mode="climate_assisted",
+        )
+        payload = self.center.start_run.call_args.args[0]
+        packed = str(payload["prompt"])
+        self.assertEqual(result["context_scope"], "general")
+        self.assertIn("CLIMATE connected repositories", packed)
+        self.assertIn("Work (work-repo)", packed)
+        self.assertTrue(payload.get("allow_general_knowledge"))
+        self.assertFalse(payload.get("inherit_repository_scope"))
+        self.assertEqual(payload["repository_ids"], [])
+
+    def test_all_repositories_uses_bounded_hits_not_full_repos(self) -> None:
+        intelligence = mock.Mock()
+        intelligence.retrieve.return_value = {
+            "items": [
+                {
+                    "repository_id": "work-repo",
+                    "path": "hub/climate/service.py",
+                    "summary": "execute_chat handles general chat",
+                }
+            ]
+        }
+        self.center.repository_intelligence = intelligence
+        self.service.repository_workspace.availability.return_value = {"available": True}
+        result = self.service.execute_chat(
+            "work",
+            provider="gemini",
+            model="gemini-test-flash",
+            prompt="where is execute_chat?",
+            context_scope="all",
+            execution_mode="climate_assisted",
+        )
+        payload = self.center.start_run.call_args.args[0]
+        packed = str(payload["prompt"])
+        self.assertEqual(result["context_scope"], "all")
+        intelligence.retrieve.assert_called()
+        called = intelligence.retrieve.call_args
+        self.assertIn("work-repo", called.args[0])
+        self.assertGreaterEqual(called.kwargs.get("max_repositories") or 0, 1)
+        self.assertFalse(called.kwargs.get("include_empty_fallback"))
+        self.assertIn("Bounded relevant repository hits", packed)
+        self.assertIn("hub/climate/service.py", packed)
+        self.assertTrue(payload.get("allow_general_knowledge"))
+        self.assertEqual(payload["repository_ids"], [])
+
+    def test_all_repositories_direct_attaches_bounded_context(self) -> None:
+        self.center.repository_intelligence = mock.Mock()
+        self.center.repository_intelligence.retrieve.return_value = {"items": []}
+        self.service.repository_workspace.availability.return_value = {"available": True}
+        result = self.service.execute_chat(
+            "work",
+            provider="gemini",
+            model="gemini-test-flash",
+            prompt="list connected repos",
+            context_scope="all",
+            execution_mode="direct",
+        )
+        payload = self.center.start_run.call_args.args[0]
+        packed = str(payload["prompt"])
+        self.assertEqual(result["execution_mode"], "direct")
+        self.assertTrue(payload.get("direct_provider_chat"))
+        self.assertIn("Attached context:", packed)
+        self.assertIn("CLIMATE connected repositories", packed)
+        self.assertIn("list connected repos", packed)
+
+    def test_specific_repository_scope_stays_strict(self) -> None:
+        with self.assertRaises(ClimateCodingError) as caught:
+            self.service.execute_chat(
+                "work",
+                provider="gemini",
+                model="gemini-test-flash",
+                prompt="hello",
+                context_scope="repository",
+                repository_id="missing-repo",
+            )
+        self.assertEqual(caught.exception.code, "not_found")
+        self.center.start_run.assert_not_called()
 
     def test_explicit_invalid_repository_is_rejected(self) -> None:
         with self.assertRaises(ClimateCodingError) as caught:
@@ -277,6 +370,30 @@ class ClimateChatApiTests(unittest.TestCase):
         self.assertEqual(payload["repository_ids"], [])
         self.assertFalse(payload.get("inherit_repository_scope"))
         self.assertIn("Explicit repository context selected", payload["prompt"])
+        self.assertEqual(result["context_scope"], "repository")
+
+    def test_specific_repository_airix_stays_strict(self) -> None:
+        packet = mock.Mock(ok=True, packet="CLIMATE context packet (ASK).\nhello")
+        with mock.patch("hub.climate.service.resolve_climate_context", return_value=packet) as resolver:
+            result = self.service.execute_chat(
+                "work",
+                provider="gemini",
+                model="gemini-test-flash",
+                prompt="hello",
+                context_scope="repository",
+                repository_id="work-repo",
+                execution_mode="climate_assisted",
+            )
+        resolver.assert_called()
+        payload = self.center.start_run.call_args.args[0]
+        self.assertEqual(result["context_scope"], "repository")
+        self.assertIn(packet.packet, payload["prompt"])
+        self.assertIn("AiriX · CLIMATE Chat", payload["prompt"])
+        self.assertFalse(payload.get("allow_general_knowledge"))
+        self.assertTrue(payload.get("bounded_evidence_only"))
+        self.assertNotIn("CLIMATE connected repositories", payload["prompt"])
+        self.assertEqual(payload["repository_ids"], [])
+        self.assertFalse(payload.get("inherit_repository_scope"))
 
 
 class ClimateChatGeminiScopeTests(unittest.TestCase):
@@ -504,10 +621,13 @@ class ClimateChatUiContractTests(unittest.TestCase):
         self.assertIn("requestStop", script)
         self.assertIn("execution_mode: currentChatMode()", script)
         self.assertIn("currentChatRepo()", script)
+        self.assertIn("currentChatScope()", script)
+        self.assertIn("ax-context-scope", script)
+        self.assertIn("context_scope: currentChatScope().scope", script)
+        self.assertNotIn("ax-repo-context", script)
         self.assertIn("no-repository", script)
         self.assertIn("applyChatMode", script)
         self.assertIn("ax-execution-mode", script)
-        self.assertIn("ax-repo-context", script)
         self.assertNotIn("include_repo_context: true", script)
         self.assertIn("AiriX is thinking", script)
         self.assertIn(" is thinking", script)
@@ -526,6 +646,14 @@ class ClimateChatUiContractTests(unittest.TestCase):
         self.assertNotIn("success banner", script)
         template = (root / "templates" / "climate_chat.html").read_text(encoding="utf-8")
         self.assertIn("Ask AiriX", template)
+        self.assertIn("General", template)
+        self.assertIn("All Repositories", template)
+        self.assertIn('id="ax-context-scope"', template)
+        self.assertIn('label="Repositories"', template)
+        self.assertIn("data-icon=\"globe\"", template)
+        self.assertIn("data-icon=\"search\"", template)
+        self.assertIn("data-rich-menu", template)
+        self.assertNotIn("No repository", template)
         self.assertIn('id="ax-stop"', template)
         self.assertIn(">Stop<", template)
         self.assertNotIn("■ Stop", template)
@@ -537,6 +665,9 @@ class ClimateChatUiContractTests(unittest.TestCase):
         self.assertIn("climate-dd-menu", select_js)
         self.assertIn("is-portal", select_js)
         self.assertIn("is-placeholder", select_js)
+        self.assertIn("OPTGROUP", select_js)
+        self.assertIn("optionIcon", select_js)
+        self.assertIn("is-rich", select_js)
         css = (root / "static" / "css" / "climate_chat.css").read_text(encoding="utf-8")
         self.assertIn("color-scheme: dark", css)
         self.assertIn(".ax-pill .climate-dd", css)

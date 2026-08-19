@@ -250,6 +250,15 @@ def register_climate_routes(app: Flask) -> None:
         except (ClimateCodingError, WorkspaceSecurityError) as exc:
             return _error(exc)
 
+    @app.post("/api/climate/<workspace>/workspace/runs")
+    def api_climate_workspace_execute(workspace: str):
+        payload = request.get_json(silent=True) or {}
+        repo_id = str(payload.get("repository_id") or "")
+        try:
+            return jsonify({"ok": True, "run": _svc().execute(workspace, repo_id, **payload)})
+        except (ClimateCodingError, WorkspaceSecurityError) as exc:
+            return _error(exc)
+
     @app.post("/api/climate/<workspace>/repositories/<repo_id>/runs")
     def api_climate_execute(workspace: str, repo_id: str):
         payload = request.get_json(silent=True) or {}

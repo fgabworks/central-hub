@@ -71,7 +71,8 @@
         provider: (sel && sel.provider) || "",
         model: (sel && sel.model) || "",
         mode: (sel && sel.mode) || currentChatMode(),
-        repositoryId: (sel && sel.repositoryId) || currentChatRepo()
+        repositoryId: (sel && sel.repositoryId) || currentChatRepo(),
+        contextScope: (sel && sel.contextScope) || currentChatScope().scope
       }));
     } catch (_) {}
   }
@@ -87,18 +88,24 @@
     var sel = document.getElementById("ax-execution-mode");
     return sel && sel.value === "direct" ? "direct" : "climate_assisted";
   }
-  function currentChatRepo() {
-    var sel = document.getElementById("ax-repo-context");
-    var value = String((sel && sel.value) || "").trim();
+  function currentChatScope() {
+    var sel = document.getElementById("ax-context-scope");
+    var value = String((sel && sel.value) || "general").trim();
     var raw = value.toLowerCase();
-    if (!raw || [
+    if (!raw || raw === "general" || [
       "none", "null", "undefined", "n/a", "na", "-",
       "no-repository", "no_repository", "norepository",
       "work", "personal", "vanta", "arctic", "workspace"
     ].indexOf(raw) >= 0) {
-      return "";
+      return { scope: "general", repositoryId: "" };
     }
-    return value;
+    if (raw === "all" || raw === "all-repositories" || raw === "all_repositories") {
+      return { scope: "all", repositoryId: "" };
+    }
+    return { scope: "repository", repositoryId: value };
+  }
+  function currentChatRepo() {
+    return currentChatScope().repositoryId;
   }
   function preferredChatMode() {
     var sel = loadChatSelection();
@@ -206,7 +213,7 @@
     var controls = document.querySelector(".ax-chat-controls");
     if (controls) controls.classList.toggle("is-busy", !!busy);
     root.classList.toggle("is-busy", !!busy);
-    [providerSelect, modelSelect, document.getElementById("ax-repo-context")].forEach(function (el) {
+    [providerSelect, modelSelect, document.getElementById("ax-context-scope")].forEach(function (el) {
       if (el) el.disabled = !!busy;
     });
     document.querySelectorAll(".ax-pill-mode [data-execution-mode]").forEach(function (btn) {
@@ -529,8 +536,9 @@
         conversation_id: state.activeId || "",
         reuse_session: true,
         execution_mode: currentChatMode(),
-        repository_id: currentChatRepo(),
-        include_repo_context: !!currentChatRepo()
+        context_scope: currentChatScope().scope,
+        repository_id: currentChatScope().repositoryId,
+        include_repo_context: currentChatScope().scope === "repository"
       })
     }).then(function (data) {
       var run = data.run || {};
@@ -568,7 +576,7 @@
 
   function enhanceChatSelects() {
     if (window.ClimateSelect) {
-      window.ClimateSelect.enhanceAll([providerSelect, modelSelect, document.getElementById("ax-repo-context")]);
+      window.ClimateSelect.enhanceAll([providerSelect, modelSelect, document.getElementById("ax-context-scope")]);
     }
   }
 
@@ -583,8 +591,13 @@
   if (preferred) providerSelect.value = preferred;
   applyChatMode(preferredChatMode());
   var savedSel = loadChatSelection();
-  var repoSelect = document.getElementById("ax-repo-context");
-  if (repoSelect && savedSel.repositoryId) repoSelect.value = savedSel.repositoryId;
+  var scopeSelect = document.getElementById("ax-context-scope");
+  if (scopeSelect) {
+    if (savedSel.contextScope === "all") scopeSelect.value = "all";
+    else if (savedSel.repositoryId) scopeSelect.value = savedSel.repositoryId;
+    else scopeSelect.value = "general";
+    if (!scopeSelect.value) scopeSelect.value = "general";
+  }
   enhanceChatSelects();
   selectProvider(providerSelect.value, { refresh: true });
 
@@ -612,23 +625,23 @@
     openConversation(btn.getAttribute("data-id"));
   });
   providerSelect.addEventListener("change", function () {
-    saveChatSelection({ provider: providerSelect.value, model: "", mode: currentChatMode(), repositoryId: currentChatRepo() });
+    saveChatSelection({ provider: providerSelect.value, model: "", mode: currentChatMode(), repositoryId: currentChatRepo(), contextScope: currentChatScope().scope });
     selectProvider(providerSelect.value, { refresh: true });
   });
   modelSelect.addEventListener("change", function () {
-    saveChatSelection({ provider: providerSelect.value, model: modelSelect.value, mode: currentChatMode(), repositoryId: currentChatRepo() });
+    saveChatSelection({ provider: providerSelect.value, model: modelSelect.value, mode: currentChatMode(), repositoryId: currentChatRepo(), contextScope: currentChatScope().scope });
     if (!state.runActive) sendBtn.disabled = !modelSelect.value;
   });
   document.querySelectorAll(".ax-pill-mode [data-execution-mode]").forEach(function (btn) {
     btn.addEventListener("click", function () {
       if (state.runActive) return;
       applyChatMode(btn.getAttribute("data-execution-mode"));
-      saveChatSelection({ provider: providerSelect.value, model: modelSelect.value, mode: currentChatMode(), repositoryId: currentChatRepo() });
+      saveChatSelection({ provider: providerSelect.value, model: modelSelect.value, mode: currentChatMode(), repositoryId: currentChatRepo(), contextScope: currentChatScope().scope });
     });
   });
-  if (document.getElementById("ax-repo-context")) {
-    document.getElementById("ax-repo-context").addEventListener("change", function () {
-      saveChatSelection({ provider: providerSelect.value, model: modelSelect.value, mode: currentChatMode(), repositoryId: currentChatRepo() });
+  if (document.getElementById("ax-context-scope")) {
+    document.getElementById("ax-context-scope").addEventListener("change", function () {
+      saveChatSelection({ provider: providerSelect.value, model: modelSelect.value, mode: currentChatMode(), repositoryId: currentChatRepo(), contextScope: currentChatScope().scope });
     });
   }
   sendBtn.addEventListener("click", sendRun);

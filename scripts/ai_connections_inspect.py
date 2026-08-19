@@ -136,9 +136,11 @@ def main() -> None:
                         hasWorkspaceSelects: !!(document.getElementById("climate-provider") && document.getElementById("climate-model")),
                         hasModeSwitch: !!document.querySelector(".climate-mode-switch [data-execution-mode='climate_assisted']")
                           && !!document.querySelector(".climate-mode-switch [data-execution-mode='direct']"),
-                        chatRepoOptional: !!(document.getElementById("ax-repo-context") &&
-                          Array.from(document.getElementById("ax-repo-context").options || []).some((opt) => opt.value === "")),
-                        workspaceRepoExplicit: !!document.getElementById("climate-repo-context"),
+                        chatRepoOptional: !!(document.getElementById("ax-context-scope") &&
+                          Array.from(document.getElementById("ax-context-scope").options || []).some((opt) => opt.value === "general")),
+                        workspaceRepoExplicit: !!(document.getElementById("climate-context-scope") &&
+                          Array.from(document.getElementById("climate-context-scope").options || []).some((opt) => opt.value === "general") &&
+                          Array.from(document.getElementById("climate-context-scope").options || []).some((opt) => opt.value === "all")),
                         chatProvider: (defaults.chat || {}).default_provider || "",
                         workspaceProvider: (defaults.workspace || {}).default_provider || "",
                         chatMode: (defaults.chat || {}).default_mode || "",

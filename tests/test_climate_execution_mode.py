@@ -251,6 +251,9 @@ class ExecutionModeServiceTests(unittest.TestCase):
         self.assertEqual(self.coding.calls[0]["repository_id"], "")
         self.assertEqual(self.coding.calls[1]["repository_id"], "")
         self.assertEqual(self.coding.calls[0]["surface"], "chat")
+        self.assertEqual(self.coding.calls[0]["context_scope"], "general")
+        self.assertIn("CLIMATE connected repositories", self.coding.calls[0]["selection"])
+        self.assertFalse(self.coding.calls[1]["selection"])
 
     def test_chat_explicit_repo_uses_resolver_only_for_airix(self):
         packet = mock.Mock(ok=True, packet="CLIMATE context packet (ASK).\nhello")
@@ -279,7 +282,86 @@ class ExecutionModeServiceTests(unittest.TestCase):
             )
         resolver.assert_not_called()
         self.assertEqual(self.coding.calls[1]["execution_mode"], DIRECT)
+        self.assertEqual(self.coding.calls[1]["context_scope"], "repository")
         self.assertIn("Explicit repository context", self.coding.calls[1]["selection"])
+
+    def test_chat_all_repositories_uses_bounded_selection(self):
+        result = self.service.execute_chat(
+            "work",
+            provider="codex",
+            model="m",
+            prompt="where is execute_chat?",
+            context_scope="all",
+        )
+        self.assertEqual(result["context_scope"], "all")
+        self.assertEqual(self.coding.calls[0]["context_scope"], "all")
+        self.assertIn("CLIMATE connected repositories", self.coding.calls[0]["selection"])
+        self.assertNotIn("execute_chat handles", self.coding.calls[0]["selection"])
+
+    def test_workspace_general_does_not_require_a_repository(self):
+        result = self.service.execute(
+            "work",
+            "",
+            provider="codex",
+            model="m",
+            prompt="hello there",
+            context_scope="general",
+        )
+        self.assertEqual(result["context_scope"], "general")
+        self.assertEqual(self.coding.calls[0]["repository_id"], "")
+        self.assertEqual(self.coding.calls[0]["context_scope"], "general")
+        self.assertEqual(self.coding.calls[0]["surface"], "workspace")
+        self.assertIn("CLIMATE connected repositories", self.coding.calls[0]["selection"])
+
+    def test_workspace_all_repositories_uses_bounded_selection(self):
+        result = self.service.execute(
+            "work",
+            "work-repo",
+            provider="codex",
+            model="m",
+            prompt="hello",
+            context_scope="all",
+            execution_mode="direct",
+        )
+        self.assertEqual(result["context_scope"], "all")
+        self.assertEqual(result["execution_mode"], DIRECT)
+        self.assertEqual(self.coding.calls[0]["repository_id"], "")
+        self.assertIn("CLIMATE connected repositories", self.coding.calls[0]["selection"])
+
+    def test_workspace_attached_files_reach_provider(self):
+        result = self.service.execute(
+            "work",
+            "work-repo",
+            provider="codex",
+            model="m",
+            prompt="explain this",
+            execution_mode="direct",
+            attached_files=[
+                {"repository_id": "work-repo", "path": "app.py", "start_line": 1, "end_line": 1},
+                {"repository_id": "work-repo", "path": "docs/anc.md"},
+            ],
+        )
+        call = self.coding.calls[0]
+        self.assertEqual(result["execution_mode"], DIRECT)
+        self.assertIn("Explicit attached file context", call["selection"])
+        self.assertIn("app.py", call["selection"])
+        self.assertIn("docs/anc.md", call["selection"])
+        self.assertIn("value = 1", call["selection"])
+        self.assertIn("explain this", call["prompt"])
+        self.assertEqual(call["selected_files"], ["app.py", "docs/anc.md"])
+
+    def test_workspace_specific_rejects_foreign_attachment(self):
+        with self.assertRaises(ClimateCodingError) as caught:
+            self.service.execute(
+                "work",
+                "work-repo",
+                provider="codex",
+                model="m",
+                prompt="hello",
+                attached_files=[{"repository_id": "personal-repo", "path": "note.md"}],
+            )
+        self.assertEqual(caught.exception.code, "workspace_isolation")
+        self.assertEqual(self.coding.calls, [])
 
 
 class ExecutionModeCodingAdapterTests(unittest.TestCase):

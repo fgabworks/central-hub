@@ -306,6 +306,95 @@ class ClimateService:
             )
         return "\n\n".join(chunks).strip()[:40_000]
 
+    def _parse_attached_files(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        for raw in list(payload.get("attached_files") or []):
+            if isinstance(raw, str):
+                path = raw.replace("\\", "/").strip()
+                if path:
+                    items.append({"repository_id": "", "path": path, "start_line": 0, "end_line": 0})
+                continue
+            if not isinstance(raw, dict):
+                continue
+            path = str(raw.get("path") or "").replace("\\", "/").strip()
+            if not path:
+                continue
+            try:
+                start = int(raw.get("start_line") or raw.get("startLine") or 0)
+            except (TypeError, ValueError):
+                start = 0
+            try:
+                end = int(raw.get("end_line") or raw.get("endLine") or 0)
+            except (TypeError, ValueError):
+                end = 0
+            items.append({
+                "repository_id": str(raw.get("repository_id") or raw.get("repositoryId") or "").strip(),
+                "path": path,
+                "start_line": start if start > 0 else 0,
+                "end_line": end if end > 0 else 0,
+            })
+        return items[:12]
+
+    def _validate_attached_files(
+        self,
+        ws: str,
+        scope: str,
+        scoped_repo_id: str,
+        items: list[dict[str, Any]],
+        default_repo_id: str = "",
+    ) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        scoped = explicit_repository_id(scoped_repo_id)
+        default = explicit_repository_id(default_repo_id)
+        for item in items:
+            rid = explicit_repository_id(item.get("repository_id")) or scoped or default
+            if scope == REPOSITORY:
+                if not scoped:
+                    raise ClimateCodingError("Repository not found", code="not_found")
+                if rid and rid != scoped:
+                    raise ClimateCodingError(
+                        "Attached file is outside the selected repository",
+                        code="workspace_isolation",
+                    )
+                rid = scoped
+            elif not rid:
+                raise ClimateCodingError("Attached file is missing a repository", code="invalid_request")
+            repo = self.require_repo(ws, rid)
+            out.append({**item, "repository_id": rid, "repo": repo})
+        return out
+
+    def _attach_explicit_file_bodies(
+        self,
+        items: list[dict[str, Any]],
+        *,
+        selection: str = "",
+    ) -> str:
+        """Pack user-selected files as high-priority bounded context — never whole repos."""
+        chunks = [selection] if str(selection or "").strip() else []
+        if items:
+            chunks.append("Explicit attached file context (user-selected, high-priority):")
+        for item in items[:8]:
+            repo = item.get("repo")
+            path = str(item.get("path") or "").strip()
+            if repo is None or not path:
+                continue
+            data = self.repository_workspace.preview(repo, path)
+            if data.get("binary") or data.get("error"):
+                continue
+            content = str(data.get("content") or "")
+            start = int(item.get("start_line") or 0)
+            end = int(item.get("end_line") or 0)
+            if start > 0:
+                lines = content.splitlines()
+                last = end if end >= start else start
+                sliced = lines[start - 1:last][:400]
+                content = "\n".join(sliced)
+                label = f"{item.get('repository_id')}:{path} L{start}-{start + len(sliced) - 1}"
+            else:
+                label = f"{item.get('repository_id')}:{path}"
+            chunks.append(f"Attached file {label}:\n{content[:12_000]}")
+        return "\n\n".join(chunk for chunk in chunks if str(chunk).strip()).strip()[:40_000]
+
     def execute_chat(self, workspace: str, **payload: Any) -> dict[str, Any]:
         """General AiriX chat — scope is explicit; VANTA repo is never inherited."""
         ws = normalize_workspace(workspace)
@@ -408,7 +497,13 @@ class ClimateService:
 
     def execute(self, workspace: str, repository_id: str, **payload: Any) -> dict[str, Any]:
         ws = normalize_workspace(workspace)
-        repo = self.require_repo(ws, repository_id)
+        scope, scoped_repo = resolve_chat_scope({
+            "context_scope": payload.get("context_scope"),
+            "repository_id": payload.get("repository_id") or repository_id,
+        })
+        if scope != REPOSITORY:
+            return self._execute_workspace_open_scope(ws, scope, str(repository_id or ""), payload)
+        repo = self.require_repo(ws, scoped_repo or repository_id)
         if not self.repository_workspace.availability(repo).get("available"):
             raise ClimateCodingError("Local repository unavailable", code="repository_unavailable")
         current_file = str(payload.get("current_file") or "").replace("\\", "/")
@@ -417,13 +512,22 @@ class ClimateService:
             for path in list(payload.get("selected_files") or [])
             if str(path).strip()
         ))
+        attached = self._validate_attached_files(
+            ws, scope, repo.id, self._parse_attached_files(payload), repo.id
+        )
+        attached_paths = [str(item["path"]) for item in attached]
+        selected_files = list(dict.fromkeys(selected_files + attached_paths))
         # ARCTIC deliberately does not enter the Work/AiriX repository profile.
         # Pack only the explicitly selected personal files into the user-owned
         # prompt so the existing provider runner remains isolated.
         selection = str(payload.get("selection") or "")
+        if attached:
+            selection = self._attach_explicit_file_bodies(attached, selection=selection)
         if ws == "personal":
             personal_context = []
             for path in list(dict.fromkeys(([current_file] if current_file else []) + selected_files))[:12]:
+                if path in attached_paths:
+                    continue
                 data = self.repository_workspace.preview(repo, path)
                 if data.get("binary") or data.get("error"):
                     continue
@@ -435,7 +539,7 @@ class ClimateService:
         prompt = str(payload.get("prompt") or "")
         provider = str(payload.get("provider") or "")
         model = str(payload.get("model") or "")
-        if provider == "gemini" and ws == "work":
+        if provider == "gemini" and ws == "work" and not attached:
             selection = self._attach_selected_file_bodies(
                 repo,
                 current_file=current_file,
@@ -521,7 +625,7 @@ class ClimateService:
             prompt=augmented_prompt,
             selected_files=list(dict.fromkeys(selected_files + clean_sources))[:16],
             current_file=current_file,
-            selection=selection if (ws == "personal" or provider == "gemini") else "",
+            selection=selection if (attached or ws == "personal" or provider == "gemini") else "",
             include_repo_context=False,  # packet already carries ranked evidence
             task_mode=preflight.task_mode,
             reuse_session=bool(payload.get("reuse_session", True)) and not handoff,
@@ -560,6 +664,7 @@ class ClimateService:
             repository_investigation=can_investigate,
             execution_mode=CLIMATE_ASSISTED,
             display_prompt=str(payload.get("display_prompt") or prompt),
+            context_scope=REPOSITORY,
         )
         self._run_scope[str(result["id"])] = (ws, repo.id)
         self._run_meta[str(result["id"])] = {
@@ -606,6 +711,80 @@ class ClimateService:
             )
         return result
 
+    def _execute_workspace_open_scope(
+        self,
+        ws: str,
+        scope: str,
+        explorer_repo_id: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """General / All Repositories in Code Workspace — no implied repo inheritance."""
+        prompt = str(payload.get("prompt") or "")
+        display_prompt = str(payload.get("display_prompt") or prompt)
+        provider = str(payload.get("provider") or "")
+        model = str(payload.get("model") or "")
+        execution_mode = normalize_execution_mode(payload.get("execution_mode"))
+        direct = is_direct_mode(execution_mode)
+        attached = self._validate_attached_files(
+            ws, scope, "", self._parse_attached_files(payload), ""
+        )
+        extra = ""
+        if scope == ALL:
+            extra = self._bounded_all_repository_context(ws, prompt)
+        elif not direct:
+            extra = self.hub_registry_facts(ws)
+        file_block = self._attach_explicit_file_bodies(attached)
+        selection_parts = [extra, file_block, str(payload.get("selection") or "")]
+        extra_selection = "\n\n".join(
+            part.strip() for part in selection_parts if str(part).strip()
+        ).strip()
+        result = self.coding.execute(
+            workspace=ws,
+            repository_id="",
+            provider=provider,
+            model=model,
+            prompt=prompt,
+            selected_files=[],
+            current_file="",
+            selection=extra_selection,
+            include_repo_context=False,
+            task_mode="ask",
+            reuse_session=bool(payload.get("reuse_session", True))
+            and not bool(payload.get("handoff")),
+            handoff=bool(payload.get("handoff")),
+            conversation_id=str(payload.get("conversation_id") or "").strip(),
+            repository_investigation=False,
+            execution_mode=execution_mode,
+            display_prompt=display_prompt,
+            surface="workspace",
+            context_scope=scope,
+        )
+        run_id = str(result.get("id") or "")
+        if run_id:
+            self._run_scope[run_id] = (ws, explicit_repository_id(explorer_repo_id) or "")
+            self._run_meta[run_id] = {
+                "task_mode": "ask",
+                "selected_files": [str(item.get("path") or "") for item in attached],
+                "current_file": "",
+                "provider_invoked": True,
+                "sources": [
+                    f"{item.get('repository_id')}:{item.get('path')}"
+                    for item in attached
+                    if item.get("path")
+                ],
+                "user_prompt": display_prompt or prompt,
+                "execution_mode": execution_mode,
+                "context_scope": scope,
+                "surface": "workspace",
+                "conversation_id": result.get("conversation_id") or "",
+            }
+        result["task_mode"] = "ask"
+        result["execution_mode"] = execution_mode
+        result["context_scope"] = scope
+        result["provider_invoked"] = True
+        result["sources"] = list((self._run_meta.get(run_id) or {}).get("sources") or [])[:24]
+        return result
+
     def _execute_direct(
         self,
         *,
@@ -637,7 +816,7 @@ class ClimateService:
             prompt=prompt,
             selected_files=list(selected_files)[:16],
             current_file=current_file,
-            selection=selection if (ws == "personal" or provider == "gemini") else "",
+            selection=selection if (str(selection or "").strip() or ws == "personal" or provider == "gemini") else "",
             include_repo_context=False,
             task_mode=task_mode,
             reuse_session=bool(payload.get("reuse_session", True)) and not handoff,
@@ -648,6 +827,7 @@ class ClimateService:
             repository_investigation=can_investigate,
             execution_mode=DIRECT,
             display_prompt=str(payload.get("display_prompt") or prompt),
+            context_scope=REPOSITORY,
         )
         preflight = {
             "ok": True,

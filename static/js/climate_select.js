@@ -6,6 +6,24 @@
 (function (global) {
   "use strict";
 
+  function escapeHtml(value) {
+    return String(value == null ? "" : value).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function optionIcon(name) {
+    var key = String(name || "").trim().toLowerCase();
+    if (key === "globe") {
+      return '<svg class="climate-dd-glyph" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2 8h12M8 2c2 2.2 2 9.8 0 12M8 2C6 4.2 6 11.8 8 14" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>';
+    }
+    if (key === "search") {
+      return '<svg class="climate-dd-glyph" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+    }
+    if (key === "folder") {
+      return '<svg class="climate-dd-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.5h4l1.2 1.5H13.5v7H2.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>';
+    }
+    return "";
+  }
   function closeClimateDropdowns(except) {
     document.querySelectorAll(".climate-dd.is-open").forEach(function (dd) {
       if (except && dd === except) return;
@@ -58,7 +76,9 @@
     menu.style.zIndex = "10050";
     menu.style.right = "auto";
     menu.style.bottom = "auto";
-    var width = Math.max(rect.width, 168);
+    var native = wrap.querySelector("select.climate-dd-native") || wrap.querySelector("select");
+    var minWidth = parseInt((native && native.getAttribute("data-menu-min-width")) || "0", 10) || 0;
+    var width = Math.max(rect.width, minWidth || 168);
     var left = rect.left;
     if (left + width > viewportW - 8) left = Math.max(8, viewportW - width - 8);
     if (left < 8) left = 8;
@@ -105,11 +125,26 @@
     var menu = dd._menu || dd.querySelector(".climate-dd-menu");
     if (!menu || !valueEl) return;
     var selected = selectEl.options[selectEl.selectedIndex];
-    valueEl.textContent = selected ? selected.textContent : (selectEl.value || "Select");
+    var selectedIcon = selected ? optionIcon(selected.getAttribute("data-icon")) : "";
+    valueEl.innerHTML = selectedIcon + '<span class="climate-dd-label">' +
+      escapeHtml(selected ? selected.textContent : (selectEl.value || "Select")) + "</span>";
     valueEl.classList.toggle("is-placeholder", !selectEl.value);
     dd.classList.toggle("is-disabled", !!selectEl.disabled);
+    dd.setAttribute("data-scope", selectEl.value || "general");
+    if (selectEl.getAttribute("data-rich-menu")) {
+      menu.classList.add("is-rich");
+    }
     menu.innerHTML = "";
+    var lastGroup = "";
     Array.prototype.forEach.call(selectEl.options, function (opt) {
+      var group = opt.parentElement;
+      if (group && group.tagName === "OPTGROUP" && group.label && group.label !== lastGroup) {
+        lastGroup = group.label;
+        var hdr = document.createElement("div");
+        hdr.className = "climate-dd-group";
+        hdr.textContent = group.label;
+        menu.appendChild(hdr);
+      }
       var btn = document.createElement("button");
       btn.type = "button";
       btn.className = "climate-dd-option" + (opt.selected ? " is-selected" : "") + (opt.disabled ? " is-disabled" : "");
@@ -120,7 +155,16 @@
       if (opt.getAttribute("data-unavailable")) {
         btn.setAttribute("data-unavailable", opt.getAttribute("data-unavailable"));
       }
-      btn.textContent = opt.textContent;
+      var icon = optionIcon(opt.getAttribute("data-icon"));
+      var desc = opt.getAttribute("data-description") || "";
+      if (icon || desc) {
+        btn.classList.add("is-rich");
+        btn.innerHTML = (icon || '<span class="climate-dd-glyph"></span>') +
+          '<span class="climate-dd-copy"><span class="climate-dd-title">' + escapeHtml(opt.textContent) + "</span>" +
+          (desc ? "<small>" + escapeHtml(desc) + "</small>" : "") + "</span>";
+      } else {
+        btn.textContent = opt.textContent;
+      }
       btn.addEventListener("click", function (event) {
         event.preventDefault();
         event.stopPropagation();

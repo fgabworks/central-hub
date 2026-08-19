@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block title %}AiriX · CLIMATE Chat · {{ climate.workspace_label }}{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/climate.css') }}?v=36">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/climate_chat.css') }}?v=4">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/climate.css') }}?v=39">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/climate_chat.css') }}?v=5">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/styles/github-dark.min.css">
 {% endblock %}
 {% block content %}
@@ -68,16 +68,21 @@
         <div class="ax-pill ax-pill-model" title="Exact model — no silent fallback">
           <select id="ax-model" aria-label="Model"><option value="" disabled selected>Select exact model</option></select>
         </div>
-        <div class="ax-pill ax-pill-repo" title="Optional repository context — used only when selected">
-          <select id="ax-repo-context" aria-label="Optional repository context">
-            <option value="">No repository</option>
-            {% for repo in climate.repositories %}
-            <option value="{{ repo.id }}" {% if not repo.available %}disabled{% endif %}>{{ repo.name }}</option>
-            {% endfor %}
+        <div class="ax-pill ax-pill-scope" title="Context scope — General, all connected repositories, or one repository">
+          <select id="ax-context-scope" aria-label="Context scope" data-rich-menu="1" data-menu-min-width="320">
+            <option value="general" selected data-icon="globe" data-description="General conversation (no source limitation)">General</option>
+            <option value="all" data-icon="search" data-description="Search across all connected repositories">All Repositories</option>
+            {% if climate.repositories %}
+            <optgroup label="Repositories">
+              {% for repo in climate.repositories %}
+              <option value="{{ repo.id }}" data-icon="folder" {% if not repo.available %}disabled{% endif %}>{{ repo.name }}</option>
+              {% endfor %}
+            </optgroup>
+            {% endif %}
           </select>
         </div>
         <button type="button" class="ax-icon-btn" id="ax-model-refresh" title="Refresh models">↻</button>
-        <span class="ax-chat-hint">Ask-only · exact model · repo optional</span>
+        <span class="ax-chat-hint">Ask-only · exact model</span>
       </div>
     </div>
   </section>
@@ -88,6 +93,6 @@
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/highlight.min.js"></script>
 <script src="{{ url_for('static', filename='js/climate_markdown.js') }}?v=3"></script>
-<script src="{{ url_for('static', filename='js/climate_select.js') }}?v=1"></script>
-<script src="{{ url_for('static', filename='js/climate_chat.js') }}?v=6"></script>
+<script src="{{ url_for('static', filename='js/climate_select.js') }}?v=3"></script>
+<script src="{{ url_for('static', filename='js/climate_chat.js') }}?v=8"></script>
 {% endblock %}

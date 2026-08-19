@@ -98,7 +98,7 @@ class ResolveRepositoryContextTests(unittest.TestCase):
         self.assertEqual(empty["repository_ids"], [])
         self.assertEqual(empty["source"], "none")
 
-        for placeholder in ("none", "null", "work", "vanta", ""):
+        for placeholder in ("none", "null", "work", "vanta", "", "general", "all", "all-repositories", "repository"):
             resolved = resolve_repository_context(
                 agent_id="gemini",
                 repository_ids=[placeholder],
