@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ climate.context_label }} · CLIMATE{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/climate.css') }}?v=46">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/climate.css') }}?v=47">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/styles/github-dark.min.css">
 {% endblock %}
 {% block content %}
@@ -241,7 +241,7 @@
               </span>
             </span>
           </button>
-          <span class="climate-provider-state" id="climate-provider-state" hidden><i class="climate-provider-state-dot" aria-hidden="true"></i><span class="climate-provider-state-text">Checking</span></span>
+          <span class="climate-provider-state" id="climate-provider-state"><i class="climate-provider-state-dot" aria-hidden="true"></i><span class="climate-provider-state-text">Checking</span></span>
           <div class="climate-assistant-actions">
             <button type="button" class="climate-icon-btn climate-chat-secondary" id="climate-chat-new" title="New session" aria-label="New session">+</button>
             <button type="button" class="climate-icon-btn climate-chat-secondary" id="climate-chat-history" title="Sessions" aria-label="Sessions">◷</button>
@@ -288,13 +288,10 @@
           <button type="button" class="climate-compose-tool" id="climate-model-refresh" title="Refresh models">↻</button>
         </div>
         <div class="climate-assistant-context" id="climate-assistant-context" aria-label="Coding context">
-          <span id="climate-assistant-context-scope">Repository</span>
-          <span class="climate-assistant-dot" aria-hidden="true">·</span>
-          <span id="climate-assistant-context-file">No file open</span>
-          <span class="climate-assistant-dot" aria-hidden="true">·</span>
-          <span id="climate-assistant-context-sel">No selection</span>
-          <span class="climate-assistant-dot" aria-hidden="true">·</span>
-          <span id="climate-assistant-context-attached">0 attached</span>
+          <span class="climate-assistant-ctx"><b>Repo</b> <span id="climate-assistant-context-scope">Repository</span></span>
+          <span class="climate-assistant-ctx"><b>File</b> <span id="climate-assistant-context-file">No file open</span></span>
+          <span class="climate-assistant-ctx"><b>Sel</b> <span id="climate-assistant-context-sel">No selection</span></span>
+          <span class="climate-assistant-ctx"><b>Attached</b> <span id="climate-assistant-context-attached">0 attached</span></span>
         </div>
         <div class="climate-attached" id="climate-attached" hidden>
           <div class="climate-attached-head">
@@ -367,7 +364,7 @@
             <button type="button" class="climate-compose-tool" id="climate-ctx-files" title="Add current file">#</button>
             <button type="button" class="climate-compose-tool" id="climate-ctx-attach" title="Add file or selection">⧉</button>
             <span class="climate-spacer"></span>
-            <button type="button" class="climate-stop-btn" id="climate-stop" hidden title="Stop active run" aria-label="Stop active run">■ Stop</button>
+            <button type="button" class="climate-stop-btn" id="climate-stop" hidden title="Stop" aria-label="Stop">Stop</button>
             <button type="button" class="climate-send-fab" id="climate-send" title="Send" aria-label="Send">➤</button>
           </div>
         </div>
@@ -416,5 +413,5 @@
 <script src="{{ url_for('static', filename='js/wc_terminal.js') }}?v=climate-5"></script>
 <script src="{{ url_for('static', filename='js/climate_markdown.js') }}?v=3"></script>
 <script src="{{ url_for('static', filename='js/climate_select.js') }}?v=3"></script>
-<script src="{{ url_for('static', filename='js/climate.js') }}?v=38"></script>
+<script src="{{ url_for('static', filename='js/climate.js') }}?v=39"></script>
 {% endblock %}

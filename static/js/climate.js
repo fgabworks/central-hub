@@ -1139,8 +1139,12 @@
   function identityLogoSrc(msg) {
     if (!msg || msg.role === "user") return "";
     if (assistantRoleLabel(msg) === "AiriX") {
-      var shell = document.getElementById("climate-shell");
-      return (shell && shell.getAttribute("data-brand-icon")) || "/static/img/climate-mark.png";
+      var root = document.getElementById("climate-shell");
+      var branded = (root && root.getAttribute("data-brand-icon")) || "/static/img/climate-mark.png";
+      if (/\/logo\.(png|svg|webp|jpe?g)(\?|$)/i.test(branded) && branded.indexOf("mark") < 0) {
+        return "/static/img/climate-mark.png";
+      }
+      return branded;
     }
     var id = String(msg.provider || (activeSession() || {}).provider || "").toLowerCase();
     var map = {
@@ -1155,9 +1159,25 @@
     };
     return map[id] || "";
   }
+  function compactError(value) {
+    var line = String(value || "Request failed").trim().split(/\r?\n/)[0].trim();
+    if (!line) line = "Request failed";
+    return line.length > 180 ? (line.slice(0, 177) + "…") : line;
+  }
+  function friendlyError(value) {
+    var line = compactError(value);
+    var lower = line.toLowerCase();
+    if (/rate.?limit|429|quota|resource.?exhaust/.test(lower)) return "The provider is rate-limited. Retry in a moment.";
+    if (/timeout|timed out|deadline/.test(lower)) return "The request timed out. You can retry.";
+    if (/auth|api.?key|unauthor|401|403|credential|permission/.test(lower)) return "The provider could not authenticate. Check AI Providers.";
+    if (/unavailable|503|502|connect|network|econn/.test(lower)) return "The provider is unavailable right now.";
+    if (/model/.test(lower) && /not found|invalid|unknown|unsupported/.test(lower)) return "That exact model is not available. Choose another model and retry.";
+    if (/cancel/.test(lower)) return "The request was stopped.";
+    return "The assistant could not complete this reply.";
+  }
   function compactAssistantStatus(msg) {
     if (!msg || msg.role === "user") return "";
-    if (msg.status === "running") return "Thinking…";
+    if (msg.status === "running") return String(msg.text || "").trim() ? "Streaming…" : "Thinking…";
     if (msg.status === "stopping") return "Stopping…";
     if (msg.status === "cancelled" || msg.stoppedByUser) return "Cancelled";
     if (msg.status === "failed" || msg.role === "error") return "Failed";
@@ -2200,10 +2220,20 @@
       sources: Array.isArray(run.sources) ? run.sources.slice(0, 24) : []
     };
   }
-  function renderExecutionFileMeta(label, items) {
+  function renderExecutionFileMeta(label, items, kind) {
     var list = Array.isArray(items) ? items.filter(Boolean) : [];
     if (!list.length) return "";
-    return '<div class="climate-exec-meta">' + escapeHtml(label) + ": " + escapeHtml(list.join(", ")) + "</div>";
+    var cls = kind ? (" is-" + kind) : "";
+    return '<div class="climate-exec-files' + cls + '"><span>' + escapeHtml(label) + "</span><ul>" +
+      list.map(function (item) {
+        var ref = sourceRef(item);
+        if (!ref.path) return "";
+        return '<li><button type="button" class="climate-assistant-file" data-open-file="' + escapeHtml(ref.path) + '"' +
+          (ref.start ? ' data-open-line="' + ref.start + '"' : "") + ' title="' + escapeHtml(ref.path) + '">' +
+          '<span class="climate-source-name">' + escapeHtml(ref.label || ref.path) + "</span>" +
+          (ref.rangeLabel ? "<small>" + escapeHtml(ref.rangeLabel) + "</small>" : "") +
+          '<span class="climate-source-open" aria-hidden="true">↗</span></button></li>';
+      }).join("") + "</ul></div>";
   }
   function lastAssistantIdentity(messages) {
     var rows = Array.isArray(messages) ? messages : [];
@@ -2623,6 +2653,11 @@
         else if (action === "cancel") cancelTokenSavings(msgId);
       });
     });
+    feed.querySelectorAll("[data-retry-id]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        retryFromMessage(button.getAttribute("data-retry-id") || "");
+      });
+    });
     feed.querySelectorAll("[data-activity-explore]").forEach(function (button) {
       button.addEventListener("click", function (event) {
         event.preventDefault();
@@ -2674,6 +2709,26 @@
     });
     proposalActions.hidden = !pending;
   }
+  function precedingUserPrompt(msgId) {
+    var session = activeSession();
+    var rows = (session && session.messages) || [];
+    var idx = -1;
+    for (var i = 0; i < rows.length; i += 1) {
+      if (rows[i].id === msgId) { idx = i; break; }
+    }
+    if (idx < 0) return "";
+    for (var j = idx - 1; j >= 0; j -= 1) {
+      if (rows[j] && rows[j].role === "user") return String(rows[j].text || "").trim();
+    }
+    return "";
+  }
+  function retryFromMessage(msgId) {
+    if (!msgId || state.runActive || state.runId) return;
+    var prompt = precedingUserPrompt(msgId);
+    if (!prompt) return;
+    promptEl.value = prompt;
+    sendRun();
+  }
   function renderChatMessage(msg) {
     var isUser = msg.role === "user";
     var isError = msg.role === "error" || msg.status === "failed";
@@ -2685,17 +2740,27 @@
     var isEditRun = !isUser && taskMode === "edit" && (hasPendingProposal || (msg.changedFiles || []).length) && !isStopped;
     var name = isUser ? "You" : assistantRoleLabel(msg);
     var logo = isUser ? "" : identityLogoSrc(msg);
+    var avatarKind = isUser ? " is-user" : (name === "AiriX" ? " is-airix" : " is-provider");
     var avatar = isUser ? "Y" : (logo ? "" : providerGlyph(msg.provider || (activeSession() || {}).provider));
     var bodyText = msg.text || "";
-    if (looksLikeEditsJson(bodyText) || isRawProviderLine(bodyText) || looksLikeProtocolDump(bodyText)) {
+    if (!isUser && (looksLikeEditsJson(bodyText) || isRawProviderLine(bodyText) || looksLikeProtocolDump(bodyText))) {
       var cleaned = humanizeAnswer(bodyText, taskMode);
       bodyText = cleaned.text || "";
     }
+    if (isError) bodyText = "";
     if (isRunning && (!bodyText || bodyText === "Working…" || bodyText === "Working...")) bodyText = "";
     var body = "";
-    if (bodyText) {
-      if (isUser) body = escapeHtml(bodyText).replace(/\n/g, "<br>");
-      else body = renderMarkdownHtml(bodyText);
+    if (isError) {
+      body = '<div class="climate-assistant-error"><p>' +
+        escapeHtml(msg.errorMessage || friendlyError(msg.diagnostics || msg.text) || "The assistant could not complete this reply.") +
+        "</p>";
+      if (precedingUserPrompt(msg.id)) {
+        body += '<button type="button" class="climate-btn climate-assistant-retry" data-retry-id="' + escapeHtml(msg.id) + '">Retry</button>';
+      }
+      body += "</div>";
+    } else if (bodyText) {
+      if (isUser) body = '<div class="climate-assistant-text">' + escapeHtml(bodyText).replace(/\n/g, "<br>") + "</div>";
+      else body = '<div class="climate-assistant-text climate-md">' + renderMarkdownHtml(bodyText) + "</div>";
     }
     var files = Array.isArray(msg.changedFiles) ? msg.changedFiles : [];
     var sourceItems = [];
@@ -2704,32 +2769,37 @@
       if (ref.path) sourceItems.push(ref);
     });
     var status = compactAssistantStatus(msg);
+    var liveMark = "";
+    if (isRunning && msg.status === "running" && !String(msg.text || "").trim()) {
+      liveMark = '<span class="climate-run-spinner" aria-hidden="true"></span>';
+    } else if (isRunning && msg.status === "running") {
+      liveMark = '<span class="climate-run-typing" aria-hidden="true"><i></i><i></i><i></i></span>';
+    }
     var html = '<article class="climate-assistant-msg ' + (isUser ? "is-user" : "is-assistant") + (isError ? " is-error" : "") + (isRunning ? " is-stream" : "") + '" data-msg-id="' + escapeHtml(msg.id) + '" data-task-mode="' + escapeHtml(taskMode) + '" data-surface="workspace">';
     if (logo) {
-      html += '<div class="climate-assistant-avatar" aria-hidden="true"><img src="' + escapeHtml(logo) + '" alt=""></div>';
+      html += '<div class="climate-assistant-avatar' + avatarKind + '" aria-hidden="true"><img src="' + escapeHtml(logo) + '" alt=""></div>';
     } else {
-      html += '<div class="climate-assistant-avatar" aria-hidden="true">' + escapeHtml(avatar) + '</div>';
+      html += '<div class="climate-assistant-avatar' + avatarKind + '" aria-hidden="true">' + escapeHtml(avatar) + "</div>";
     }
-    html += '<div class="climate-assistant-meta"><strong>' + escapeHtml(name) + '</strong>';
-    if (isUser) html += '<time>' + escapeHtml(formatClock(msg.ts)) + '</time>';
+    html += '<div class="climate-assistant-meta">';
+    if (!isUser) html += "<strong>" + escapeHtml(name) + "</strong>";
+    html += liveMark;
+    html += "<time>" + escapeHtml(formatClock(msg.ts || msg.startedAt)) + "</time>";
     if (status) {
       html += '<span class="climate-assistant-status-pill' + (isComplete ? " is-ok" : (isStopped || isError ? " is-stop" : "")) + '">' +
-        (isComplete ? '<span class="climate-status-check" aria-hidden="true">✓</span> ' : "") +
         escapeHtml(status) + "</span>";
     }
-    html += '</div>';
+    html += "</div>";
     html += '<div class="climate-assistant-body">';
-    if (msg.stopNotice) html += '<div class="climate-stop-notice">' + escapeHtml(msg.stopNotice) + '</div>';
-    if (msg.status === "running") html += renderActivityProgress(msg);
-    else if (msg.status === "stopping" && msg.activity) html += renderActivityProgress(Object.assign({}, msg, { status: "stopping" }));
-    if (body) html += '<div class="climate-assistant-text' + (isUser ? "" : " climate-md") + '">' + body + '</div>';
+    if (isStopped) html += '<p class="climate-stop-notice">You stopped this request.</p>';
+    if (body) html += body;
     if ((isComplete || isStopped) && sourceItems.length) {
-      html += '<details class="climate-sources"><summary>Sources · ' + sourceItems.length + "</summary><ul>";
+      html += '<details class="climate-sources"><summary>Sources</summary><ul>';
       html += sourceItems.map(function (ref) {
         return '<li><button type="button" class="climate-assistant-file" data-open-file="' + escapeHtml(ref.path) + '"' +
           (ref.start ? ' data-open-line="' + ref.start + '"' : "") + ' title="' + escapeHtml(ref.path) + '">' +
           '<span class="climate-source-name">' + escapeHtml(ref.label) + "</span>" +
-          (ref.rangeLabel ? '<small>' + escapeHtml(ref.rangeLabel) + "</small>" : "") +
+          (ref.rangeLabel ? "<small>" + escapeHtml(ref.rangeLabel) + "</small>" : "") +
           '<span class="climate-source-open" aria-hidden="true">↗</span></button></li>';
       }).join("");
       html += "</ul></details>";
@@ -2774,11 +2844,15 @@
     if (msg.model) html += '<div><small>Model</small><b>' + escapeHtml(msg.model) + "</b></div>";
     if (scopeLabel) html += '<div><small>Context Scope</small><b>' + escapeHtml(scopeLabel) + "</b></div>";
     if (repoLabel && scope === "repository") html += '<div><small>Repository</small><b>' + escapeHtml(repoLabel) + "</b></div>";
-    if (filesUsed) html += '<div><small>Files used</small><b>' + escapeHtml(filesUsed) + "</b></div>";
+    if (filesUsed) html += '<div><small>Files</small><b>' + escapeHtml(filesUsed) + "</b></div>";
+    if (msg.elapsedMs) html += '<div><small>Runtime</small><b>' + escapeHtml(formatElapsed(msg.elapsedMs)) + "</b></div>";
     html += "</div>";
-    html += renderExecutionFileMeta("Attached", msg.attached_files);
-    html += renderExecutionFileMeta("Retrieved", msg.retrieved_files);
-    html += renderExecutionFileMeta("Inspected", msg.inspected_files);
+    var attached = msg.attached_files;
+    var retrieved = msg.retrieved_files;
+    var hasBoth = !!(attached && attached.length && retrieved && retrieved.length);
+    html += renderExecutionFileMeta(hasBoth ? "Attached context" : "Attached", attached, "attached");
+    html += renderExecutionFileMeta(hasBoth ? "Retrieved context" : "Retrieved", retrieved, "retrieved");
+    html += renderExecutionFileMeta("Inspected", msg.inspected_files, "inspected");
     if (msg.status === "completed") html += renderTokenEfficiencyFold(msg);
     if (msg.diagnostics) html += '<details class="climate-diag-fold"><summary>Diagnostics</summary><pre class="mono">' + escapeHtml(msg.diagnostics) + "</pre></details>";
     html += "</details>";
@@ -2907,6 +2981,7 @@
     if (statusTextEl) statusTextEl.textContent = statusText;
     else providerState.textContent = statusText;
     providerState.className = "climate-provider-state " + (connected ? "is-ok" : "is-error");
+    providerState.hidden = false;
     var titleBits = [statusText];
     if (p && p.executable_path) titleBits.push(p.executable_path);
     if (p && p.runtime_health) titleBits.push("runtime " + p.runtime_health);
@@ -2971,7 +3046,15 @@
       var userCount = session.messages.filter(function (m) { return m.role === "user"; }).length;
       if (userCount === 1 && isDefaultSessionTitle(session.title)) session.title = titleFromPrompt(text);
     } else if (cls === "is-error") {
-      session.messages.push({ id: uid("msg"), role: "error", text: text, ts: Date.now(), status: "failed" });
+      session.messages.push({
+        id: uid("msg"),
+        role: "error",
+        text: "",
+        diagnostics: compactError(text),
+        errorMessage: friendlyError(text),
+        ts: Date.now(),
+        status: "failed"
+      });
     } else {
       upsertAssistantMessage({ text: text, status: "completed" });
       saveChatStore();
@@ -2999,7 +3082,7 @@
     if (stopBtn) {
       stopBtn.hidden = idle;
       stopBtn.disabled = stopping;
-      stopBtn.textContent = stopping ? "Stopping…" : "■ Stop";
+      stopBtn.textContent = stopping ? "Stopping…" : "Stop";
     }
     if (sendTopBtn) sendTopBtn.hidden = !idle;
     if (stopTopBtn) {
@@ -3157,7 +3240,15 @@
       }
       pollRun();
     }).catch(function (error) {
-      upsertAssistantMessage({ status: "failed", text: error.message, role: "error", stopNotice: "" });
+      var raw = error.message || "Request failed";
+      upsertAssistantMessage({
+        status: "failed",
+        text: "",
+        role: "error",
+        diagnostics: compactError(raw),
+        errorMessage: friendlyError(raw),
+        stopNotice: ""
+      });
       addProblem({ severity:"error", source:"runtime", path: (currentTab()||{}).path || "", line:1, message:error.message });
       pushOutput("system", error.message);
       finishRun();
@@ -3356,14 +3447,22 @@
         finalizeStoppedRun(data.run);
         return;
       }
-      var displayText = data.run.error ? data.run.error : (finalParsed.text || (proposal ? "Proposed changes are ready for review." : "Run finished."));
+      var failed = data.run.status === "failed" || data.run.status === "unavailable";
+      if (data.run.error && diagnostics.indexOf(data.run.error) < 0) {
+        diagnostics = (diagnostics ? diagnostics + "\n\n" : "") + data.run.error;
+      }
+      var displayText = failed
+        ? (finalParsed.text || "")
+        : (finalParsed.text || (proposal ? "Proposed changes are ready for review." : "Run finished."));
       if (looksLikeEditsJson(displayText)) {
         displayText = humanizeAnswer(displayText, taskMode).text || (proposal ? "Proposed changes are ready for review." : "Run finished.");
       }
       upsertAssistantMessage({
         status: data.run.status,
+        role: failed ? "error" : "assistant",
         text: displayText,
         diagnostics: diagnostics,
+        errorMessage: failed ? friendlyError(data.run.error || displayText) : "",
         summary: summary,
         changedFiles: files,
         sources: sources,
@@ -3390,12 +3489,6 @@
         stopNotice: "",
         stoppedByUser: false
       });
-      if (data.run.error && !finalParsed.text) {
-        var msg = session && session.messages.find(function (row) { return row.id === state.streamingMsgId; });
-        if (msg) msg.role = "error";
-        saveChatStore();
-        renderChat();
-      }
       renderProposal(proposal);
       finishRun();
     }).catch(function (error) {
@@ -3403,7 +3496,13 @@
         finalizeStoppedRun(state.run || { id: state.runId, status: "cancelled", logs: "", answer: "" });
         return;
       }
-      upsertAssistantMessage({ status: "failed", text: error.message });
+      upsertAssistantMessage({
+        status: "failed",
+        role: "error",
+        text: "",
+        diagnostics: compactError(error.message || "Run failed"),
+        errorMessage: friendlyError(error.message || "Run failed")
+      });
       finishRun();
     });
   }

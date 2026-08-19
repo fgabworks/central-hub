@@ -282,11 +282,15 @@
   function identityLogoSrc(msg) {
     if (!msg || msg.role === "user") return "";
     if (assistantRoleLabel(msg) === "AiriX") {
-      return root.getAttribute("data-brand-icon") || (staticRoot + "img/climate-mark.png");
+      var branded = root.getAttribute("data-brand-icon") || (staticRoot + "img/climate-mark.png");
+      if (String(branded).indexOf("climate-logo.png") >= 0) return staticRoot + "img/climate-mark.png";
+      return branded;
     }
     var id = String(msg.provider || "").toLowerCase();
     var map = {
       gemini: "img/providers/gemini.svg",
+      openai: "img/providers/codex.svg",
+      "openai-api": "img/providers/codex.svg",
       codex: "img/providers/codex.svg",
       "claude-code": "img/providers/claude-code.svg",
       claude: "img/providers/claude-code.svg",
@@ -297,20 +301,22 @@
     var p = connectedProvider(msg.provider);
     if (p && p.logo) {
       var logo = String(p.logo).replace(/^\/?static\//, "");
+      if (logo.indexOf("climate-logo.png") >= 0) return staticRoot + "img/climate-mark.png";
       return staticRoot + logo.replace(/^\//, "");
     }
-    return "";
+    return staticRoot + "img/climate-mark.png";
   }
   function avatarHtml(msg) {
     var role = assistantRoleLabel(msg);
     if (!msg || msg.role === "user") {
       return '<div class="ax-msg-avatar is-user" aria-hidden="true">Y</div>';
     }
+    var kind = role === "AiriX" ? " is-airix" : " is-provider";
     var src = identityLogoSrc(msg);
     if (src) {
-      return '<div class="ax-msg-avatar is-assistant" aria-hidden="true"><img src="' + escapeHtml(src) + '" alt=""></div>';
+      return '<div class="ax-msg-avatar is-assistant' + kind + '" aria-hidden="true"><img src="' + escapeHtml(src) + '" alt=""></div>';
     }
-    return '<div class="ax-msg-avatar is-assistant" aria-hidden="true">' + escapeHtml((role || "A").charAt(0)) + "</div>";
+    return '<div class="ax-msg-avatar is-assistant' + kind + '" aria-hidden="true">' + escapeHtml((role || "A").charAt(0)) + "</div>";
   }
   function compactRunStatus(msg, phase) {
     if (phase === "thinking") return "Thinking…";
@@ -333,7 +339,7 @@
   function renderSourcesFold(msg) {
     var sources = Array.isArray(msg.sources) ? msg.sources.filter(Boolean) : [];
     if (!sources.length) return "";
-    return '<details class="ax-msg-fold ax-msg-sources"><summary>Sources · ' + sources.length + "</summary><ul>" +
+    return '<details class="ax-msg-fold ax-msg-sources"><summary>Sources</summary><ul>' +
       sources.map(function (path) { return "<li>" + escapeHtml(path) + "</li>"; }).join("") +
       "</ul></details>";
   }
@@ -365,22 +371,69 @@
     if (!list.length) return "";
     return '<div class="ax-msg-exec">' + escapeHtml(label) + ": " + escapeHtml(list.join(", ")) + "</div>";
   }
+  function contextScopeLabel(msg) {
+    if (!msg) return "";
+    if (msg.context_scope === "all") return "All Repositories";
+    if (msg.context_scope === "repository") return "Specific Repository";
+    if (msg.context_scope === "general") return "General";
+    return "";
+  }
+  function detailRow(label, value) {
+    if (!value) return "";
+    return '<div class="ax-exec-row"><span>' + escapeHtml(label) + "</span><b>" + escapeHtml(value) + "</b></div>";
+  }
+  function filesUsedLabel(msg) {
+    var attached = Array.isArray(msg.attached_files) ? msg.attached_files.filter(Boolean) : [];
+    var retrieved = Array.isArray(msg.retrieved_files) ? msg.retrieved_files.filter(Boolean) : [];
+    var inspected = Array.isArray(msg.inspected_files) ? msg.inspected_files.filter(Boolean) : [];
+    var sources = Array.isArray(msg.sources) ? msg.sources.filter(Boolean) : [];
+    var used = sources.length || attached.length;
+    if (used && inspected.length) return used + " of " + inspected.length + " inspected";
+    if (inspected.length) return inspected.length + " inspected";
+    if (used) return String(used) + " used";
+    return "";
+  }
   function renderDetailsFold(msg, phase) {
     if (msg.role !== "assistant" || phase === "thinking" || phase === "streaming") return "";
-    if (!(msg.execution_summary || msg.provider || msg.model || msg.status || msg.diagnostics || (msg.attached_files && msg.attached_files.length) || (msg.retrieved_files && msg.retrieved_files.length) || (msg.inspected_files && msg.inspected_files.length))) return "";
-    var summary = executionDetailsLine(msg);
-    return '<details class="ax-msg-details"><summary>Details</summary>' +
-      (summary ? '<div class="ax-msg-exec">' + escapeHtml(summary) + "</div>" : "") +
-      renderFileMetaLine("Attached", msg.attached_files) +
-      renderFileMetaLine("Retrieved", msg.retrieved_files) +
-      renderFileMetaLine("Inspected", msg.inspected_files) +
-      (msg.diagnostics ? "<pre>" + escapeHtml(msg.diagnostics) + "</pre>" : "") +
-      "</details>";
+    var hasMeta = !!(msg.execution_summary || msg.provider || msg.model || msg.status || msg.diagnostics || filesUsedLabel(msg) || (msg.attached_files && msg.attached_files.length) || (msg.retrieved_files && msg.retrieved_files.length) || (msg.inspected_files && msg.inspected_files.length) || msg.token_efficiency);
+    if (!hasMeta && phase !== "error" && phase !== "cancelled") return "";
+    var mode = msg.execution_mode === "direct" ? "Direct" : (msg.execution_mode ? "AiriX" : "");
+    var provider = (msg.provider_label || providerLabel(msg.provider) || "");
+    var repo = msg.context_scope === "repository" ? (msg.repository_name || msg.repository_id || "") : "";
+    var runtime = elapsedMsFrom(msg) ? formatElapsed(elapsedMsFrom(msg)) : "";
+    var html = '<details class="ax-msg-details"><summary>Details</summary><div class="ax-exec-grid">';
+    html += detailRow("Mode", mode);
+    html += detailRow("Provider", provider);
+    html += detailRow("Model", msg.model);
+    html += detailRow("Context Scope", contextScopeLabel(msg));
+    html += detailRow("Repository", repo);
+    html += detailRow("Files", filesUsedLabel(msg));
+    html += detailRow("Runtime", runtime);
+    html += "</div>";
+    html += renderFileMetaLine("Attached", msg.attached_files);
+    html += renderFileMetaLine("Retrieved", msg.retrieved_files);
+    html += renderFileMetaLine("Inspected", msg.inspected_files);
+    html += renderTokenEfficiencyFold(msg);
+    if (msg.diagnostics) html += '<details class="ax-msg-diag"><summary>Diagnostics</summary><pre>' + escapeHtml(msg.diagnostics) + "</pre></details>";
+    html += "</details>";
+    return html;
   }
   function compactError(value) {
     var line = String(value || "Request failed").trim().split(/\r?\n/)[0].trim();
     if (!line) line = "Request failed";
     return line.length > 180 ? (line.slice(0, 177) + "…") : line;
+  }
+  function friendlyError(value) {
+    var line = compactError(value);
+    var lower = line.toLowerCase();
+    if (/rate.?limit|429|quota|resource.?exhaust/.test(lower)) return "The provider is rate-limited. Retry in a moment.";
+    if (/timeout|timed out|deadline/.test(lower)) return "The request timed out. You can retry.";
+    if (/auth|api.?key|unauthor|401|403|credential|permission/.test(lower)) return "The provider could not authenticate. Check AI Providers.";
+    if (/unavailable|503|502|connect|network|econn/.test(lower)) return "The provider is unavailable right now.";
+    if (/model/.test(lower) && /not found|invalid|unknown|unsupported/.test(lower)) return "That exact model is not available. Choose another model and retry.";
+    if (/cancel/.test(lower)) return "The request was stopped.";
+    if (line === "Request failed" || line === "Run failed") return "The assistant could not complete this reply.";
+    return "The assistant could not complete this reply.";
   }
   function streamTextFromLogs(logs) {
     var raw = String(logs || "");
@@ -538,45 +591,28 @@
       var role = assistantRoleLabel(msg);
       var status = compactRunStatus(msg, phase);
       var statusCls = phase === "error" ? " is-error" : (phase === "cancelled" ? " is-stop" : (phase === "completed" ? " is-ok" : ""));
-      var statusHtml = "";
+      var liveMark = "";
+      if (msg.role === "assistant" && phase === "thinking") {
+        liveMark = '<span class="ax-run-spinner" aria-hidden="true"></span>';
+      } else if (msg.role === "assistant" && phase === "streaming") {
+        liveMark = '<span class="ax-run-typing" aria-hidden="true"><i></i><i></i><i></i></span>';
+      }
       var body = "";
       if (msg.role === "assistant" && phase === "thinking") {
-        statusHtml =
-          '<div class="ax-run-status is-thinking" role="status">' +
-            '<span class="ax-run-spinner" aria-hidden="true"></span>' +
-            '<div class="ax-run-status-copy">' +
-              "<strong>" + escapeHtml(msg.thinkingLabel || "AiriX is thinking…") + "</strong>" +
-              "<small>This may take a few seconds.</small>" +
-            "</div>" +
-          "</div>";
-      } else if (msg.role === "assistant" && phase === "streaming") {
-        statusHtml =
-          '<div class="ax-run-stream">' +
-            '<span class="ax-run-typing" aria-hidden="true"><i></i><i></i><i></i></span>' +
-            '<div class="ax-msg-body climate-md is-streaming" data-md="1"></div>' +
-          "</div>";
         body = "";
+      } else if (msg.role === "assistant" && phase === "streaming") {
+        body = '<div class="ax-msg-body climate-md is-streaming" data-md="1"></div>';
       } else if (msg.role === "assistant" && phase === "cancelled") {
-        statusHtml =
-          '<div class="ax-run-status is-cancelled" role="status">' +
-            '<span class="ax-run-cancelled-icon" aria-hidden="true">×</span>' +
-            '<div class="ax-run-status-copy">' +
-              "<strong>Response cancelled</strong>" +
-              "<small>You stopped this request.</small>" +
-            "</div>" +
-          "</div>";
-        if (String(msg.text || "").trim()) {
-          body = '<div class="ax-msg-body climate-md" data-md="1"></div>';
-        }
+        if (String(msg.text || "").trim()) body = '<div class="ax-msg-body climate-md" data-md="1"></div>';
+        body += '<p class="ax-msg-note">You stopped this request.</p>';
       } else if (msg.role === "assistant" && phase === "error") {
-        statusHtml =
-          '<div class="ax-run-status is-error" role="status">' +
-            '<span class="ax-run-error-icon" aria-hidden="true">!</span>' +
-            '<div class="ax-run-status-copy">' +
-              "<strong>Request failed</strong>" +
-              "<small>" + escapeHtml(msg.errorMessage || compactError(msg.text) || "Request failed") + "</small>" +
-            "</div>" +
-          "</div>";
+        body = '<div class="ax-msg-error"><p>' +
+          escapeHtml(msg.errorMessage || friendlyError(msg.diagnostics || msg.text) || "The assistant could not complete this reply.") +
+          "</p>";
+        if (precedingUserPrompt(msg.id)) {
+          body += '<button type="button" class="btn btn-sm ax-msg-retry" data-retry-id="' + escapeHtml(msg.id) + '">Retry</button>';
+        }
+        body += "</div>";
       } else if (msg.role === "assistant") {
         body = '<div class="ax-msg-body climate-md" data-md="1"></div>';
       } else {
@@ -584,17 +620,19 @@
       }
       var extras = "";
       if (msg.role === "assistant" && phase !== "thinking" && phase !== "streaming") {
-        extras = renderSourcesFold(msg) + renderTokenEfficiencyFold(msg) + renderDetailsFold(msg, phase);
+        extras = renderSourcesFold(msg) + renderDetailsFold(msg, phase);
       }
+      var headName = msg.role === "user" ? "" : ("<strong>" + escapeHtml(role) + "</strong>");
       return '<article class="' + cls + '" data-id="' + escapeHtml(msg.id) + '">' +
         avatarHtml(msg) +
         '<div class="ax-msg-main">' +
           '<div class="ax-msg-head">' +
-            "<strong>" + escapeHtml(role) + "</strong>" +
+            headName +
+            liveMark +
             (msg.ts || msg.created_at || msg.started_at ? "<time>" + escapeHtml(formatClock(msg.ts || msg.created_at || msg.started_at)) + "</time>" : "") +
             (status ? '<span class="ax-msg-status' + statusCls + '">' + escapeHtml(status) + "</span>" : "") +
           "</div>" +
-          statusHtml + body + extras +
+          body + extras +
         "</div></article>";
     }).join("");
     feedEl.querySelectorAll("[data-md]").forEach(function (el) {
@@ -617,6 +655,11 @@
   if (!feedEl._teBound) {
     feedEl._teBound = true;
     feedEl.addEventListener("click", function (event) {
+      var retryBtn = event.target.closest("[data-retry-id]");
+      if (retryBtn) {
+        retryFromMessage(retryBtn.getAttribute("data-retry-id") || "");
+        return;
+      }
       var btn = event.target.closest("[data-te-action]");
       if (!btn) return;
       var msgId = btn.getAttribute("data-msg-id") || "";
@@ -636,6 +679,27 @@
         });
       }
     });
+  }
+  function precedingUserPrompt(msgId) {
+    var idx = -1;
+    for (var i = 0; i < state.messages.length; i += 1) {
+      if (state.messages[i].id === msgId) { idx = i; break; }
+    }
+    if (idx < 0) return "";
+    for (var j = idx - 1; j >= 0; j -= 1) {
+      if (state.messages[j] && state.messages[j].role === "user") {
+        return String(state.messages[j].text || "").trim();
+      }
+    }
+    return "";
+  }
+  function retryFromMessage(msgId) {
+    if (!msgId || state.runActive) return;
+    var prompt = precedingUserPrompt(msgId);
+    if (!prompt) return;
+    promptEl.value = prompt;
+    resizePrompt();
+    sendRun();
   }
   function newChat() {
     state.activeId = "";
@@ -668,7 +732,7 @@
           status: run.status,
           error: run.status === "failed" || run.status === "unavailable",
           errorMessage: (run.status === "failed" || run.status === "unavailable")
-            ? compactError(run.error || text)
+            ? friendlyError(run.error || text)
             : "",
           stopNotice: run.status === "cancelled" ? "You stopped this request." : "",
           sealed: true
@@ -742,7 +806,7 @@
         status: run.status,
         thinkingLabel: thinkingLabelFor(run),
         error: failed,
-        errorMessage: failed ? compactError(run.error || text) : "",
+        errorMessage: failed ? friendlyError(run.error || text) : "",
         stopNotice: run.status === "cancelled" ? "You stopped this request." : "",
         sealed: terminal
       }, copyRunIdentity(run)));
@@ -756,17 +820,24 @@
       setRunControls("idle");
       loadConversations(state.activeId);
     }).catch(function (err) {
+      var raw = err.message || "Run failed";
       upsertAssistant({
         text: "",
         status: "failed",
         error: true,
-        errorMessage: compactError(err.message || "Run failed"),
+        diagnostics: compactError(raw),
+        errorMessage: friendlyError(raw),
         sealed: true
       });
       state.runActive = false;
       state.runId = "";
       setRunControls("idle");
     });
+  }
+  function mentionedPaths(prompt) {
+    return (String(prompt || "").match(/@([A-Za-z0-9_./-]+)/g) || []).map(function (token) {
+      return token.slice(1);
+    }).filter(Boolean).slice(0, 12);
   }
   function sendRun() {
     var prompt = promptEl.value.trim();
@@ -776,12 +847,15 @@
     state.streamText = "";
     if (!state.title || state.title === "New chat") state.title = titleFromPrompt(prompt);
     state.messages.push({ id: uid("u"), role: "user", text: prompt, ts: Date.now() });
+    var scope = currentChatScope();
     upsertAssistant({
       text: "",
       status: "running",
       provider: providerSelect.value,
       model: modelSelect.value,
       execution_mode: currentChatMode(),
+      context_scope: scope.scope,
+      repository_id: scope.repositoryId,
       assistant_label: currentChatMode() === "direct" ? providerLabel(providerSelect.value, true) : "AiriX",
       thinkingLabel: currentThinkingLabel(),
       ts: Date.now(),
@@ -802,9 +876,10 @@
         conversation_id: state.activeId || "",
         reuse_session: true,
         execution_mode: currentChatMode(),
-        context_scope: currentChatScope().scope,
-        repository_id: currentChatScope().repositoryId,
-        include_repo_context: currentChatScope().scope === "repository",
+        context_scope: scope.scope,
+        repository_id: scope.repositoryId,
+        include_repo_context: scope.scope === "repository",
+        attached_files: scope.scope === "repository" ? mentionedPaths(prompt) : [],
         surface: "chat"
       })
     }).then(function (data) {
@@ -824,11 +899,13 @@
       state.runId = run.id;
       pollRun();
     }).catch(function (err) {
+      var raw = err.message || "Request failed";
       upsertAssistant({
         text: "",
         status: "failed",
         error: true,
-        errorMessage: compactError(err.message || "Request failed"),
+        diagnostics: compactError(raw),
+        errorMessage: friendlyError(raw),
         sealed: true
       });
       state.runActive = false;

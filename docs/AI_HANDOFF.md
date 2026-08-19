@@ -4,7 +4,43 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**CLIMATE Settings compact layout system (2026-08-19)**
+**Code Workspace compact Code Assistant (2026-08-19)**
+
+The Code Workspace right panel stays **AiriX · Code Assistant** and is visually
+distinct from standalone CLIMATE Chat. AiriX/Direct, Provider, Model, Context
+Scope, attachments, `@filename`, removable chips, streaming, cancel, exact-model,
+and execution-context persistence are unchanged. AiriX replies use the uploaded
+icon-only avatar; Direct replies use Gemini/Codex/Claude/Cursor icons (never the
+CLIMATE wordmark). Each reply leads with the answer, `Completed · Ns`, one
+collapsed Sources fold (clickable file/line refs), and one collapsed Details
+fold. Details shows persisted mode/provider/model/scope/repo/files/runtime;
+Token Efficiency stays nested and collapsed. Attached context and Retrieved
+context are labeled separately when both exist. A compact Repo / File / Sel /
+Attached strip stays in the header. Errors use a short friendly line plus Retry;
+technical text stays under Details. Thinking/streaming is a small head
+indicator; Stop shows only while a run is active. Composer placeholder remains
+`Ask about your code...`. Standalone CLIMATE Chat and Settings were not changed.
+
+Prior: **CLIMATE Chat compact conversation UI (2026-08-19)**
+
+Standalone AiriX · CLIMATE Chat is a modern compact conversation surface
+(Cursor/Claude/Codex-like). AiriX/Direct, Provider, Model, Context Scope,
+execution-context persistence, streaming, cancel, exact-model, and
+`@filename` attachment semantics are unchanged. User bubbles stay compact on
+the right. AiriX replies use the uploaded AiriX avatar (`avatar_url` /
+`climate-mark.png`); Direct replies use Gemini/Codex/Claude/Cursor icons.
+Chat avatars never use the full CLIMATE wordmark. Each reply leads with the
+answer, then one collapsed Sources fold and one collapsed Details fold.
+Details shows persisted mode, provider, exact model, context scope,
+repository, files inspected/used, and runtime; Token Efficiency lives inside
+Details and stays collapsed. Compact status is `Completed · Ns`. Provider
+errors render as a short friendly line plus Retry; the technical error stays
+under Details. Thinking/streaming is a small head indicator only; Stop shows
+only while a run is active. The composer is one compact prompt box with
+secondary controls. Settings, hub sidebar, and Code Workspace were not
+redesigned.
+
+Prior: **CLIMATE Settings compact layout system (2026-08-19)**
 
 Settings pages now share one compact layout: 1080px max-width, sticky left nav,
 section header + lede, and `settings-card` / `settings-form` treatment with

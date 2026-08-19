@@ -8,14 +8,15 @@ Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](doc
 **AiriX · CLIMATE Chat** is a standalone top-level Ask-only chat at `/work/chat`
 (VANTA) and `/personal/chat` (ARCTIC). It reuses Agent Center conversations/runs,
 the Gemini adapter, exact model discovery/selection, streaming, cancellation, and
-`display_prompt` separation. Chat processing states are lightweight and CSS-only:
-thinking (“AiriX is thinking…” / Direct provider name), live streaming
-indicator, clean completion, compact cancel/error, and dimmed selectors while a
-run is active. Completed assistant labels match the run: **AiriX** plus the existing CLIMATE
-mark in AiriX mode, and the selected provider name/logo (Gemini, Codex,
-Claude, Cursor) in Direct. Compact runtime status (`Completed · 6s`) sits
-beside the name. Sources, Details, and Token Efficiency are collapsed by
-default; diagnostics stay under Details. Context scope defaults to **General** (no repository limitation). **All Repositories**
+`display_prompt` separation. The conversation UI is compact: user bubbles on
+the right, assistant answers first, then one collapsed Sources fold and one
+collapsed Details fold. Token Efficiency lives inside Details. Chat processing
+states are lightweight head indicators only (thinking/streaming spinner,
+`Completed · Ns`, compact cancel/error). Failed replies show a short friendly
+message plus Retry; the technical error stays under Details. Completed labels
+match the run: **AiriX** plus the uploaded AiriX avatar (never the CLIMATE
+wordmark) in AiriX mode, and the selected provider name/icon (Gemini, Codex,
+Claude, Cursor) in Direct. Context scope defaults to **General** (no repository limitation). **All Repositories**
 searches connected repos and keeps only relevant bounded hits. A specific
 repository stays strictly scoped. Reopening a conversation restores the saved
 mode/provider/model/scope/repository. The VANTA workspace repo is never inherited.
@@ -23,11 +24,18 @@ Repository scope is validated only when a specific repository is selected. Codin
 diagnostics stay in the Workspace Assistant.
 
 **Code Workspace** uses the same `[ AiriX | Direct ] [ Provider ] [ Model ]
-[ Context Scope ]` architecture. Scope defaults to the active explorer
+[ Context Scope ]` architecture in an IDE-native **AiriX · Code Assistant**
+panel (not the standalone Chat shell). Scope defaults to the active explorer
 repository (Specific). General and All Repositories are opt-in and do not
 inherit VANTA. Files are never attached silently: Explorer **Add to Chat**,
-composer attach actions, and `@filename` create removable chips above the
-composer. Attached files are high-priority bounded context (not whole
+composer attach actions, and `@filename` create removable chips. A compact
+Repo / File / Sel / Attached strip stays in the header. Replies lead with the
+answer, `Completed · Ns`, one collapsed Sources fold (clickable file/line
+refs), and one collapsed Details fold (Token Efficiency nested). Attached
+context and Retrieved context are labeled separately when both exist. AiriX
+uses the uploaded icon-only avatar; Direct uses provider icons. Failed replies
+show a friendly line plus Retry. Composer placeholder is `Ask about your code...`.
+Attached files are high-priority bounded context (not whole
 repositories). Specific-repository EDIT/ASK behavior is unchanged.
 
 **CLIMATE Code Workspace v1** (Workspace Assistant) remains at `/work/climate` (VANTA) and
@@ -240,8 +248,8 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Registry + health | `config/repositories.yaml`, `${VAR:-default}` expansion, `hub/adapters/` |
 | Registry grouping | Optional `repository_group_id` merges adapters into one UI row (`hub/registry/grouping.py`); Workspace / Application / API statuses independent |
 | Registry management | Add / Edit / Enable / Disable via UI → YAML (`hub/registry/store.py`); no auto-clone |
-| CLIMATE Chat | `/work/chat` + `/personal/chat`; ChatGPT-like AiriX Ask-only UI over the existing Agent Center/Gemini stack; no editor, no repository upload |
-| CLIMATE Code Workspace | `/work/climate` (VANTA) + `/personal/climate` (ARCTIC); Workspace Assistant / Monaco IDE shell over existing safe file/Git and authenticated coding-provider services; exact provider/model, cancel/output, proposal diff Accept/Reject; no unrestricted shell |
+| CLIMATE Chat | `/work/chat` + `/personal/chat`; compact conversation UI (answer, Sources, Details); AiriX avatar vs provider icons; Ask-only over Agent Center/Gemini; no editor, no repository upload |
+| CLIMATE Code Workspace | `/work/climate` (VANTA) + `/personal/climate` (ARCTIC); IDE-native AiriX · Code Assistant; Monaco viewer; compact Mode/Provider/Model/Scope; clickable Sources; nested Details/Token Efficiency; exact provider/model, cancel/output, proposal Accept/Reject; no unrestricted shell |
 | Repository Workspace | Phases 1–2 + Connect + Run Profile Builder + Active Application + Repository Intelligence: General / Connection / Repository Intelligence / Files & Changes / Settings / Logs & History; process vs HTTP health reconciled (`hub/repository_workspace/run_status.py`); YAML templates + SQLite repo profiles |
 | DHIS2 Reports | `/dhis2/reports` — Phase 1 Standard Report Manager: sync Stage/Live `/api/reports` metadata cache, filters, View / Open in DHIS2 / HTML source / Download / Refresh; period+OU controls; iframe embed with Open-in-DHIS2 fallback. Catalog shortcuts remain for repository/static HTML (`hub/dhis2_reports/`) |
 | Central Hub HCSC–RF | `/dhis2/hcsc-indicators` — Phase 0–3 registry + batched Overview/report/category + Compare Sources (`hub/hcsc_indicators/`); quarters **2025Q3–2026Q4**; National (DHIS2 level-1 `Philippines`) plus Region → Province → Municipality/City → Barangay via env-isolated SQLite cache + DHIS2 GET refresh; National passes the root UID through the unchanged batched analytics/registry path without child enumeration; generated reports have server-side CSV download with result/N/D/source/scope/timestamp lineage; optional **Geographic Breakdown** remains batched below the selected level; Population Filter = All Households; no formula engine |

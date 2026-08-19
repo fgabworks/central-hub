@@ -470,6 +470,7 @@ class ClimateUiContractTests(unittest.TestCase):
             'New session',
             'data-surface="workspace"',
             'id="climate-assistant-context"',
+            'climate-assistant-ctx',
             'Session total',
             'Provider breakdown',
             'climate-token-quota',
@@ -532,7 +533,7 @@ class ClimateUiContractTests(unittest.TestCase):
         self.assertIn("classifyTaskMode", script)
         self.assertIn("humanizeAnswer", script)
         self.assertIn("looksLikeEditsJson", script)
-        self.assertIn("Sources ·", script)
+        self.assertIn("<summary>Sources</summary>", script)
         self.assertIn("task_mode", script)
         self.assertIn("formatQuotaMeter", script)
         self.assertIn("resolveCodexQuotaRemaining", script)
@@ -590,12 +591,21 @@ class ClimateUiContractTests(unittest.TestCase):
         self.assertNotIn("logo_url", identity_fn)
         msg_fn = script.split("function renderChatMessage", 1)[1].split("\n  function ", 1)[0]
         self.assertNotIn("renderActivityComplete", msg_fn)
+        self.assertNotIn("renderActivityProgress", msg_fn)
         self.assertIn("renderAssistantDetails", msg_fn)
-        self.assertIn("Sources ·", msg_fn)
+        self.assertIn("<summary>Sources</summary>", msg_fn)
+        self.assertIn("friendlyError", script)
+        self.assertIn("retryFromMessage", script)
+        self.assertIn("climate-assistant-retry", script)
+        self.assertIn("Attached context", script)
+        self.assertIn("Retrieved context", script)
+        self.assertIn("is-airix", script)
+        self.assertIn("You stopped this request.", script)
         details_fn = script.split("function renderAssistantDetails", 1)[1].split("\n  function ", 1)[0]
         self.assertIn("renderTokenEfficiencyFold", details_fn)
         self.assertIn("climate-exec-grid", details_fn)
         self.assertIn("climate-diag-fold", details_fn)
+        self.assertIn("Runtime", details_fn)
         self.assertIn('mode === "direct"', script)
         self.assertIn('return "AiriX"', script)
         self.assertNotIn("AiriX · CLIMATE CHAT", template)
