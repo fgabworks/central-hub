@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-20 (Coding Agent Phase 3).
+Last verified: 2026-08-20 (Code Assistant bottom execution toolbar).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -81,8 +81,10 @@ RepoBrain, cross RepoBrain, and live repository evidence origins used.
 panel (not the standalone Chat shell). Scope defaults to the active explorer
 repository (Specific). General and All Repositories are opt-in and do not
 inherit VANTA. Files are never attached silently: Explorer **Add to Chat**,
-composer attach actions, and `@filename` create removable chips. A compact
-Repo / File / Sel / Attached strip stays in the header. Replies lead with the
+composer attach actions, and `@filename` create removable chips. The top header
+stays identity-only (title, connected status, session actions). Execution
+controls sit in a compact toolbar attached under the composer. A separate
+Repo / File / Sel / Attached strip sits just above the composer. Replies lead with the
 answer, `Completed · Ns`, one collapsed Sources fold (clickable file/line
 refs), and one collapsed Details fold (Token Efficiency nested). Attached
 context and Retrieved context are labeled separately when both exist. AiriX
@@ -180,8 +182,8 @@ uses that repo only; All Repositories uses bounded retrieval hits; Direct never
 implies a native repository scan. Standalone
 Chat is labeled **AiriX · CLIMATE Chat** (`surface=chat`, `.ax-chat`). The Code Workspace
 panel is **AiriX · Code Assistant** (`surface=workspace`, `.climate-assistant-*` shell)
-with compact Mode/Provider/Model/Context Scope controls, removable file chips, a
-coding-context strip (repo / file / selection / attachments), and collapsed
+with compact Mode/Provider/Model/Context Scope controls attached under the composer,
+removable file chips, a coding-context strip above the composer (repo / file / selection / attachments), and collapsed
 Sources + Details (Token Efficiency lives under Details). AiriX replies use the
 icon-only chat avatar; Direct replies use Gemini/Codex/Claude/Cursor provider
 icons. Composer placeholder is `Ask about your code...`. Workspace-only local
@@ -339,7 +341,7 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Registry grouping | Optional `repository_group_id` merges adapters into one UI row (`hub/registry/grouping.py`); Workspace / Application / API statuses independent |
 | Registry management | Add / Edit / Enable / Disable via UI → YAML (`hub/registry/store.py`); no auto-clone |
 | CLIMATE Chat | `/work/chat` + `/personal/chat`; compact conversation UI (answer, Sources, Details); AiriX avatar vs provider icons; Ask-only over Agent Center API (Gemini/OpenAI/Anthropic/Grok) and coding CLIs; no editor, no repository upload |
-| CLIMATE Code Workspace | `/work/climate` (VANTA) + `/personal/climate` (ARCTIC); IDE-native AiriX · Code Assistant; Monaco viewer; compact Mode/Provider/Model/Scope; clickable Sources; nested Details/Token Efficiency; exact provider/model, cancel/output, proposal Accept/Reject; no unrestricted shell |
+| CLIMATE Code Workspace | `/work/climate` (VANTA) + `/personal/climate` (ARCTIC); IDE-native AiriX · Code Assistant; minimal header; composer-attached Mode/Provider/Model/Scope toolbar; coding-context strip above composer; Monaco viewer; clickable Sources; nested Details/Token Efficiency; exact provider/model, cancel/output, proposal Accept/Reject; no unrestricted shell |
 | Repository Workspace | Phases 1–2 + Connect + Run Profile Builder + Active Application + Repository Intelligence: General / Connection / Repository Intelligence / Files & Changes / Settings / Logs & History; process vs HTTP health reconciled (`hub/repository_workspace/run_status.py`); YAML templates + SQLite repo profiles |
 | DHIS2 Reports | `/dhis2/reports` — Phase 1 Standard Report Manager: sync Stage/Live `/api/reports` metadata cache, filters, View / Open in DHIS2 / HTML source / Download / Refresh; period+OU controls; iframe embed with Open-in-DHIS2 fallback. Catalog shortcuts remain for repository/static HTML (`hub/dhis2_reports/`) |
 | Central Hub HCSC–RF | `/dhis2/hcsc-indicators` — Phase 0–3 registry + batched Overview/report/category + Compare Sources (`hub/hcsc_indicators/`); quarters **2025Q3–2026Q4**; National (DHIS2 level-1 `Philippines`) plus Region → Province → Municipality/City → Barangay via env-isolated SQLite cache + DHIS2 GET refresh; National passes the root UID through the unchanged batched analytics/registry path without child enumeration; generated reports have server-side CSV download with result/N/D/source/scope/timestamp lineage; optional **Geographic Breakdown** remains batched below the selected level; Population Filter = All Households; no formula engine |

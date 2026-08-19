@@ -4,7 +4,22 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**Coding Agent Phase 3 (2026-08-20)**
+**Code Assistant bottom execution toolbar (2026-08-20)**
+
+Code Workspace **AiriX · Code Assistant** keeps a minimal top header (title,
+connected status, session/history/more/close) and moves AiriX/Direct, Provider,
+exact Model, and Context Scope/Repository into a compact toolbar attached under
+the composer. The Repo / File / Sel / Attached strip stays a separate coding-context
+row just above the composer. Conversation remains primary; execution settings
+are secondary and wrap on a narrow panel without stealing composer width.
+Dropdowns, persisted exact values, AiriX/Direct, attachments, `@filename`,
+streaming, cancellation, proposals, tests, and iteration flow are unchanged.
+Standalone CLIMATE Chat was not modified.
+
+Tests: `tests/test_climate.py` layout contract, `tests/test_climate_chat.py`
+workspace vs Chat isolation.
+
+Prior: **Coding Agent Phase 3 (2026-08-20)**
 
 The Phase 2 Accept/Reject and Run Tests/Skip Tests gates now repeat for explicitly approved
 follow-up fixes. Migration `017_coding_iteration_chains` adds root/depth/fingerprint fields
