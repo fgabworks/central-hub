@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ climate.context_label }} · CLIMATE{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/climate.css') }}?v=43">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/climate.css') }}?v=46">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/styles/github-dark.min.css">
 {% endblock %}
 {% block content %}
@@ -14,7 +14,7 @@
   <header class="climate-titlebar">
     <div class="climate-brand climate-brand-lockup"
          data-brand-display="{{ branding.display if branding is defined else 'wordmark' }}"
-         data-brand-fit="{{ branding.fit if branding is defined else 'contain' }}">
+         data-brand-fit="contain">
       <img class="climate-brand-mark brand-logo-mark" src="{{ branding.logo_url if branding is defined and branding.display == 'full' and branding.logo_url else (branding.icon_url if branding is defined and branding.icon_url else url_for('static', filename='img/climate-mark.png')) }}" alt="">
       <span class="climate-brand-copy">
         <span class="brand-text"><strong>CLIMATE</strong></span>
@@ -227,7 +227,11 @@
       <div class="climate-ai-full">
       <header class="climate-assistant-header">
         <div class="climate-assistant-topline">
-          <span class="climate-assistant-label">AiriX · Code Assistant</span>
+          <img class="climate-assistant-mark" src="{{ branding.avatar_url if branding is defined and branding.avatar_url else url_for('static', filename='img/climate-mark.png') }}" alt="" aria-hidden="true">
+          <div class="climate-assistant-brand">
+            <span class="climate-assistant-label">AiriX · Code Assistant</span>
+            <span class="climate-assistant-tagline">Your code-aware AI partner</span>
+          </div>
           <button type="button" class="climate-token-pill" id="climate-token-pill" title="Session usage" aria-expanded="false">
             <span class="climate-token-compact" id="climate-token-compact">
               <span id="climate-token-label">0 tokens</span>
@@ -237,17 +241,51 @@
               </span>
             </span>
           </button>
-          <span class="climate-provider-state" id="climate-provider-state"><i class="climate-provider-state-dot" aria-hidden="true"></i><span class="climate-provider-state-text">Checking</span></span>
+          <span class="climate-provider-state" id="climate-provider-state" hidden><i class="climate-provider-state-dot" aria-hidden="true"></i><span class="climate-provider-state-text">Checking</span></span>
           <div class="climate-assistant-actions">
-            <button type="button" class="climate-icon-btn" id="climate-chat-new" title="New session" aria-label="New session">+</button>
+            <button type="button" class="climate-icon-btn climate-chat-secondary" id="climate-chat-new" title="New session" aria-label="New session">+</button>
             <button type="button" class="climate-icon-btn climate-chat-secondary" id="climate-chat-history" title="Sessions" aria-label="Sessions">◷</button>
-            <button type="button" class="climate-icon-btn" id="climate-chat-menu" title="More" aria-label="More options">⋯</button>
+            <button type="button" class="climate-icon-btn climate-chat-secondary" id="climate-chat-menu" title="More" aria-label="More options">⋯</button>
+            <button type="button" class="climate-icon-btn" id="climate-assistant-max" title="Maximize AI panel" aria-label="Maximize AI panel">□</button>
             <button type="button" class="climate-icon-btn climate-assistant-close" id="climate-ai-close" title="Close AI panel" aria-label="Close AI panel">×</button>
           </div>
         </div>
         <div class="climate-assistant-session">
           <div class="climate-assistant-title" id="climate-chat-title" title="New session">New session</div>
           <button type="button" class="climate-icon-btn climate-chat-secondary" id="climate-chat-rename" title="Rename session" aria-label="Rename session">✎</button>
+        </div>
+        <div class="climate-assistant-controls" id="climate-assistant-controls">
+            <div class="climate-chat-pill climate-chat-pill-mode" id="climate-mode-pill" title="AiriX — CLIMATE orchestration, then the selected provider/model.">
+              <div class="climate-mode-switch" role="radiogroup" aria-label="Execution mode">
+                <button type="button" data-execution-mode="climate_assisted" aria-pressed="true">AiriX</button>
+                <button type="button" data-execution-mode="direct" aria-pressed="false">Direct</button>
+              </div>
+              <select id="climate-execution-mode" hidden aria-hidden="true" tabindex="-1">
+                <option value="climate_assisted" selected>AiriX</option>
+                <option value="direct">Direct</option>
+              </select>
+            </div>
+          <label class="climate-chat-pill" title="Provider">
+            <i class="climate-chat-pill-dot" id="climate-provider-dot" aria-hidden="true"></i>
+            <select id="climate-provider-panel" aria-label="Provider"></select>
+          </label>
+          <label class="climate-chat-pill climate-chat-pill-model" title="Exact model — no silent fallback">
+            <select id="climate-model-panel" aria-label="Model"><option value="">Select exact model</option></select>
+          </label>
+          <div class="climate-chat-pill climate-chat-pill-scope" title="Context scope — General, all connected repositories, or one repository">
+            <select id="climate-context-scope" aria-label="Context scope" data-rich-menu="1" data-menu-min-width="320">
+              <option value="general" data-icon="globe" data-description="General conversation (no source limitation)">General</option>
+              <option value="all" data-icon="search" data-description="Search across all connected repositories">All Repositories</option>
+              {% if climate.repositories %}
+              <optgroup label="Repositories">
+                {% for repo in climate.repositories %}
+                <option value="{{ repo.id }}" data-icon="folder" {% if repo.id == climate.active_repository_id %}selected{% endif %} {% if not repo.available %}disabled{% endif %}>{{ repo.name }}</option>
+                {% endfor %}
+              </optgroup>
+              {% endif %}
+            </select>
+          </div>
+          <button type="button" class="climate-compose-tool" id="climate-model-refresh" title="Refresh models">↻</button>
         </div>
         <div class="climate-assistant-context" id="climate-assistant-context" aria-label="Coding context">
           <span id="climate-assistant-context-scope">Repository</span>
@@ -258,6 +296,16 @@
           <span class="climate-assistant-dot" aria-hidden="true">·</span>
           <span id="climate-assistant-context-attached">0 attached</span>
         </div>
+        <div class="climate-attached" id="climate-attached" hidden>
+          <div class="climate-attached-head">
+            <span>Attached Context (<b id="climate-attached-count">0</b> files)</span>
+            <button type="button" class="climate-attached-clear" id="climate-attached-clear">Clear All</button>
+          </div>
+          <div class="climate-attached-chips" id="climate-attached-chips"></div>
+        </div>
+        <button type="button" class="climate-attached-add" id="climate-attached-add">
+          <span aria-hidden="true">📎</span> Add file, folder, or code selection
+        </button>
         <div class="climate-chat-popover climate-usage-popover" id="climate-usage-panel" hidden>
           <div class="climate-usage-head">
             <strong>Session usage</strong>
@@ -311,16 +359,6 @@
       </div>
 
       <div class="climate-assistant-composer" id="climate-chat-composer">
-        <div class="climate-attached" id="climate-attached" hidden>
-          <div class="climate-attached-head">
-            <span>Attached Context (<b id="climate-attached-count">0</b> files)</span>
-            <button type="button" class="climate-attached-clear" id="climate-attached-clear">Clear All</button>
-          </div>
-          <div class="climate-attached-chips" id="climate-attached-chips"></div>
-        </div>
-        <button type="button" class="climate-attached-add" id="climate-attached-add">
-          <span aria-hidden="true">📎</span> Add file, folder, or code selection
-        </button>
         <div class="climate-compose-box">
           <textarea id="climate-prompt" placeholder="Ask about your code..." rows="3" aria-label="Ask about your code"></textarea>
           <div class="climate-mention" id="climate-mention" hidden role="listbox" aria-label="File references"></div>
@@ -328,45 +366,12 @@
             <button type="button" class="climate-compose-tool" id="climate-ctx-mention" title="@ to reference files">@</button>
             <button type="button" class="climate-compose-tool" id="climate-ctx-files" title="Add current file">#</button>
             <button type="button" class="climate-compose-tool" id="climate-ctx-attach" title="Add file or selection">⧉</button>
-            <span class="climate-compose-hint">@ to reference · Shift+Enter newline</span>
             <span class="climate-spacer"></span>
             <button type="button" class="climate-stop-btn" id="climate-stop" hidden title="Stop active run" aria-label="Stop active run">■ Stop</button>
             <button type="button" class="climate-send-fab" id="climate-send" title="Send" aria-label="Send">➤</button>
           </div>
         </div>
-        <div class="climate-chat-footer-controls">
-            <div class="climate-chat-pill climate-chat-pill-mode" id="climate-mode-pill" title="AiriX — CLIMATE orchestration, then the selected provider/model.">
-              <div class="climate-mode-switch" role="radiogroup" aria-label="Execution mode">
-                <button type="button" data-execution-mode="climate_assisted" aria-pressed="true">AiriX</button>
-                <button type="button" data-execution-mode="direct" aria-pressed="false">Direct</button>
-              </div>
-              <select id="climate-execution-mode" hidden aria-hidden="true" tabindex="-1">
-                <option value="climate_assisted" selected>AiriX</option>
-                <option value="direct">Direct</option>
-              </select>
-            </div>
-          <label class="climate-chat-pill" title="Provider">
-            <i class="climate-chat-pill-dot" id="climate-provider-dot" aria-hidden="true"></i>
-            <select id="climate-provider-panel" aria-label="Provider"></select>
-          </label>
-          <label class="climate-chat-pill climate-chat-pill-model" title="Exact model — no silent fallback">
-            <select id="climate-model-panel" aria-label="Model"><option value="">Select exact model</option></select>
-          </label>
-          <div class="climate-chat-pill climate-chat-pill-scope" title="Context scope — General, all connected repositories, or one repository">
-            <select id="climate-context-scope" aria-label="Context scope" data-rich-menu="1" data-menu-min-width="320">
-              <option value="general" data-icon="globe" data-description="General conversation (no source limitation)">General</option>
-              <option value="all" data-icon="search" data-description="Search across all connected repositories">All Repositories</option>
-              {% if climate.repositories %}
-              <optgroup label="Repositories">
-                {% for repo in climate.repositories %}
-                <option value="{{ repo.id }}" data-icon="folder" {% if repo.id == climate.active_repository_id %}selected{% endif %} {% if not repo.available %}disabled{% endif %}>{{ repo.name }}</option>
-                {% endfor %}
-              </optgroup>
-              {% endif %}
-            </select>
-          </div>
-          <button type="button" class="climate-compose-tool" id="climate-model-refresh" title="Refresh models">↻</button>
-        </div>
+        <div class="climate-compose-hint-row">@ to reference files, / for commands</div>
         <div class="climate-context-popover" id="climate-context-panel" hidden>
           <div class="climate-field-label">CONTEXT SCOPE</div>
           <p class="climate-context-summary" id="climate-context-summary">Specific repository — only this repository is used.</p>
@@ -411,5 +416,5 @@
 <script src="{{ url_for('static', filename='js/wc_terminal.js') }}?v=climate-5"></script>
 <script src="{{ url_for('static', filename='js/climate_markdown.js') }}?v=3"></script>
 <script src="{{ url_for('static', filename='js/climate_select.js') }}?v=3"></script>
-<script src="{{ url_for('static', filename='js/climate.js') }}?v=36"></script>
+<script src="{{ url_for('static', filename='js/climate.js') }}?v=38"></script>
 {% endblock %}

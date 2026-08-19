@@ -70,7 +70,8 @@ Scope: personal, local-first tool. Canonical agent rules: [AGENTS.md](AGENTS.md)
     and audit details expose only metadata (`configured`, env **names**, status). Stored values
     are never returned. Existing process/`.env` variables continue to work.
   - **Settings → Branding:** PNG/SVG/WEBP only (magic-byte sniff, not extension). Stored as
-    `data/branding/logo.{png,svg,webp}` with display/fit JSON — never as base64 in settings.
+    `data/branding/logo.{png,svg,webp}` (app branding) and `data/branding/avatar.{png,svg,webp}`
+    (AiriX icon) with display/fit JSON — never as base64 in settings.
     Path-jailed under `data/branding/`. SVG rejects script/javascript/onload/foreignObject.
     Writes are owner-gated (`BRANDING_SAVE` / `BRANDING_RESET`).
   - Provider audit records contain provider ID, action, and boolean outcome; account labels,

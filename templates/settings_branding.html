@@ -2,7 +2,7 @@
 {% block title %}Branding · Settings · {{ app_name }}{% endblock %}
 {% block content %}
 {% set sh_title = "Branding" %}
-{% set sh_info = "Upload one CLIMATE logo, then preview how it appears in the app header versus chat avatars." %}
+{% set sh_info = "Upload a full CLIMATE logo and a separate AiriX icon. Previews use the live header, chat, and Code Assistant rules." %}
 {% set settings_active_tab = "branding" %}
 <div class="settings-layout">
   <aside class="settings-nav-wrap">
@@ -11,9 +11,9 @@
   <div class="settings-main">
     {% include "partials/section_header.html" %}
     <p class="settings-lede">
-      Store a PNG, SVG, or WEBP logo on this CLIMATE server. App branding uses the full logo or wordmark
-      in the sidebar and headers. Chat avatars stay icon-only with padding so the wordmark is never squeezed
-      into an AiriX bubble. Direct replies keep their provider icons.
+      App branding is a PNG, SVG, or WEBP full logo for the sidebar and headers, always
+      <code>object-fit: contain</code>. AiriX chat avatars use a separate padded icon.
+      If none is uploaded, the default CLIMATE mark is used. Direct replies keep provider icons.
     </p>
 
     <section class="panel panel-body branding-panel" id="branding-settings"
@@ -24,92 +24,149 @@
              data-icon-url="{{ branding.icon_url }}"
              data-avatar-url="{{ branding.avatar_url }}"
              data-full-url="{{ branding.full_url }}"
-             data-custom="{{ '1' if branding.custom else '0' }}">
-      <div class="branding-grid">
-        <div class="branding-preview-col">
-          <div class="branding-preview-pair">
+             data-custom="{{ '1' if branding.custom_logo else '0' }}"
+             data-custom-avatar="{{ '1' if branding.custom_avatar else '0' }}"
+             data-logo-name="{{ branding.original_name or branding.filename or 'climate-logo.png' }}"
+             data-avatar-name="{{ branding.avatar_original_name or branding.avatar_filename or 'climate-mark.png' }}"
+             data-logo-width="{{ branding.logo_width or '' }}"
+             data-logo-height="{{ branding.logo_height or '' }}"
+             data-avatar-width="{{ branding.avatar_width or '' }}"
+             data-avatar-height="{{ branding.avatar_height or '' }}"
+             data-logo-kind="{{ branding.logo_kind or 'PNG' }}"
+             data-avatar-kind="{{ branding.avatar_kind or 'PNG' }}">
+      <form class="branding-form" id="branding-form">
+        <div class="branding-grid">
+          <div class="branding-preview-col">
             <div class="branding-preview-card">
-              <div class="branding-field-label">Header / full logo</div>
-              <div class="branding-preview-stage">
-                <div class="branding-preview-lockup climate-brand-lockup is-preview"
-                     data-brand-display="{{ branding.display }}"
-                     data-brand-fit="{{ branding.fit }}">
-                  <span class="brand-mark" aria-hidden="true">
-                    <img class="brand-logo-mark" id="branding-preview-header"
-                         src="{{ branding.logo_url }}"
-                         alt="Header logo preview"
-                         decoding="async">
-                  </span>
-                  <span class="brand-text">
-                    <strong class="brand-wordmark">CLIMATE</strong>
-                    <span>Integrated Intelligence System</span>
+              <div class="branding-field-label">Header</div>
+              <div class="branding-preview-stage branding-preview-header-stage">
+                <div class="sidebar-brand branding-preview-header-bar" aria-hidden="true">
+                  <span class="climate-brand-lockup branding-preview-lockup"
+                        data-brand-display="{{ branding.display }}"
+                        data-brand-fit="contain">
+                    <span class="brand-mark">
+                      <img class="brand-logo-mark" id="branding-preview-header"
+                           src="{{ branding.logo_url }}"
+                           alt="Header logo preview"
+                           decoding="async">
+                    </span>
+                    <span class="brand-text">
+                      <strong class="brand-wordmark">CLIMATE</strong>
+                      <span>Integrated Intelligence System</span>
+                    </span>
                   </span>
                 </div>
               </div>
             </div>
+
             <div class="branding-preview-card">
-              <div class="branding-field-label">Chat avatar / icon-only</div>
+              <div class="branding-field-label">AiriX sizes</div>
               <div class="branding-preview-stage branding-preview-avatar-stage">
-                <div class="branding-preview-avatar-row">
-                  <span class="brand-avatar is-preview" data-brand-display="icon" data-brand-fit="contain">
-                    <img id="branding-preview-avatar"
-                         src="{{ branding.avatar_url }}"
-                         alt="Chat avatar preview"
-                         decoding="async">
+                <div class="branding-preview-avatar-sizes" aria-label="Avatar sizes">
+                  <span class="brand-avatar is-preview is-size-32" data-brand-display="icon" data-brand-fit="contain">
+                    <img class="branding-preview-avatar-img" src="{{ branding.avatar_url }}" alt="" decoding="async">
                   </span>
-                  <span>
-                    <strong>AiriX</strong>
-                    <span class="muted">Icon-only · Direct mode uses Gemini, Codex, Claude, or Cursor icons</span>
+                  <span class="muted">32px</span>
+                  <span class="brand-avatar is-preview is-size-36" data-brand-display="icon" data-brand-fit="contain">
+                    <img class="branding-preview-avatar-img" src="{{ branding.avatar_url }}" alt="" decoding="async">
                   </span>
+                  <span class="muted">36px</span>
+                  <span class="brand-avatar is-preview is-size-40" data-brand-display="icon" data-brand-fit="contain">
+                    <img class="branding-preview-avatar-img" src="{{ branding.avatar_url }}" alt="" decoding="async">
+                  </span>
+                  <span class="muted">40px</span>
                 </div>
               </div>
             </div>
+
+            <div class="branding-preview-card">
+              <div class="branding-field-label">CLIMATE Chat</div>
+              <div class="branding-preview-stage branding-preview-surface">
+                <article class="ax-msg is-assistant branding-preview-chat-example">
+                  <div class="ax-msg-avatar is-assistant">
+                    <img class="branding-preview-avatar-img" src="{{ branding.avatar_url }}" alt="" decoding="async">
+                  </div>
+                  <div class="ax-msg-main">
+                    <div class="ax-msg-head"><strong>AiriX</strong></div>
+                    <div class="ax-msg-body">Ask about a repository or attached file.</div>
+                  </div>
+                </article>
+              </div>
+            </div>
+
+            <div class="branding-preview-card">
+              <div class="branding-field-label">Code Assistant</div>
+              <div class="branding-preview-stage branding-preview-surface">
+                <div class="branding-preview-assistant">
+                  <img class="climate-assistant-mark branding-preview-avatar-img" src="{{ branding.avatar_url }}" alt="" decoding="async">
+                  <div class="climate-assistant-brand">
+                    <span class="climate-assistant-label">AiriX · Code Assistant</span>
+                    <span class="climate-assistant-tagline">Your code-aware AI partner</span>
+                  </div>
+                </div>
+                <article class="climate-assistant-msg is-assistant branding-preview-assistant-msg">
+                  <div class="climate-assistant-avatar">
+                    <img class="branding-preview-avatar-img" src="{{ branding.avatar_url }}" alt="" decoding="async">
+                  </div>
+                  <div class="climate-assistant-meta"><strong>AiriX</strong></div>
+                </article>
+              </div>
+            </div>
           </div>
-          <p class="muted branding-preview-note" id="branding-preview-note">
-            {% if branding.custom %}Custom logo · {{ branding.original_name or branding.filename }}{% else %}Default CLIMATE logo{% endif %}
-          </p>
+
+          <div class="branding-controls">
+            <fieldset class="branding-options">
+              <legend>App Branding</legend>
+              <p class="muted branding-option-hint">Sidebar, top-left header, and larger branding areas. Contain-fit only.</p>
+              <p class="branding-asset-meta" id="branding-logo-meta">
+                {% if branding.custom_logo %}
+                  {{ branding.original_name or branding.filename }}{% if branding.logo_width and branding.logo_height %} · {{ branding.logo_width }} × {{ branding.logo_height }}{% endif %} · {{ branding.logo_kind }}
+                {% else %}
+                  Default · climate-logo.png
+                {% endif %}
+              </p>
+              <div class="branding-asset-actions">
+                <button type="button" class="btn btn-sm" id="branding-logo-replace">Replace</button>
+                <button type="button" class="btn btn-sm" id="branding-logo-remove"{% if not branding.custom_logo %} disabled{% endif %}>Remove</button>
+              </div>
+              <input type="file" class="branding-file-input" id="branding-file" name="logo" accept=".png,.svg,.webp,image/png,image/svg+xml,image/webp">
+              <div class="branding-display" role="radiogroup" aria-label="App branding display">
+                <label><input type="radio" name="display" value="wordmark" {% if branding.display != 'full' %}checked{% endif %}> Wordmark</label>
+                <label><input type="radio" name="display" value="full" {% if branding.display == 'full' %}checked{% endif %}> Full logo</label>
+              </div>
+            </fieldset>
+
+            <fieldset class="branding-options">
+              <legend>AiriX Chat Avatar</legend>
+              <p class="muted branding-option-hint">Used in CLIMATE Chat and Code Assistant. Never derived from the full wordmark.</p>
+              <p class="branding-asset-meta" id="branding-avatar-meta">
+                {% if branding.custom_avatar %}
+                  {{ branding.avatar_original_name or branding.avatar_filename }}{% if branding.avatar_width and branding.avatar_height %} · {{ branding.avatar_width }} × {{ branding.avatar_height }}{% endif %} · {{ branding.avatar_kind }}
+                {% else %}
+                  Default · climate-mark.png
+                {% endif %}
+              </p>
+              <div class="branding-asset-actions">
+                <button type="button" class="btn btn-sm" id="branding-avatar-replace">Replace</button>
+                <button type="button" class="btn btn-sm" id="branding-avatar-remove"{% if not branding.custom_avatar %} disabled{% endif %}>Remove</button>
+              </div>
+              <input type="file" class="branding-file-input" id="branding-avatar-file" name="avatar" accept=".png,.svg,.webp,image/png,image/svg+xml,image/webp">
+              <p class="branding-avatar-rule">AiriX avatars always use the dedicated icon asset.</p>
+            </fieldset>
+
+            <p class="banner banner-error" id="branding-error" hidden></p>
+            <p class="banner branding-ok" id="branding-ok" hidden></p>
+            <div class="branding-actions">
+              <button type="button" class="btn" id="branding-reset">Reset to defaults</button>
+              <button type="submit" class="btn btn-primary" id="branding-save">Save changes</button>
+            </div>
+          </div>
         </div>
-
-        <form class="branding-form" id="branding-form">
-          <label class="branding-upload">
-            <span class="branding-field-label">Logo file</span>
-            <input type="file" id="branding-file" name="logo" accept=".png,.svg,.webp,image/png,image/svg+xml,image/webp">
-            <span class="muted">PNG, SVG, or WEBP · 2 MB max · one local file for both usages, not base64 in settings</span>
-          </label>
-
-          <fieldset class="branding-options">
-            <legend>App Branding</legend>
-            <p class="muted branding-option-hint">Top-left header, sidebar, and larger branding areas.</p>
-            <label><input type="radio" name="display" value="wordmark" {% if branding.display != 'full' %}checked{% endif %}> Wordmark</label>
-            <label><input type="radio" name="display" value="full" {% if branding.display == 'full' %}checked{% endif %}> Full logo</label>
-          </fieldset>
-
-          <fieldset class="branding-options">
-            <legend>Chat Avatar</legend>
-            <p class="muted branding-option-hint">AiriX message avatars and compact assistant identity. Always icon-only.</p>
-            <label><input type="radio" name="avatar_display" value="icon" checked disabled> Icon only</label>
-          </fieldset>
-
-          <fieldset class="branding-options">
-            <legend>Fit</legend>
-            <p class="muted branding-option-hint">Applies to app branding. Chat avatars always use contain with padding.</p>
-            <label><input type="radio" name="fit" value="contain" {% if branding.fit != 'cover' %}checked{% endif %}> Contain</label>
-            <label><input type="radio" name="fit" value="cover" {% if branding.fit == 'cover' %}checked{% endif %}> Cover</label>
-          </fieldset>
-
-          <p class="banner banner-error" id="branding-error" hidden></p>
-          <p class="banner branding-ok" id="branding-ok" hidden></p>
-
-          <div class="branding-actions">
-            <button type="button" class="btn" id="branding-reset">Reset to default</button>
-            <button type="submit" class="btn btn-primary" id="branding-save">Save</button>
-          </div>
-        </form>
-      </div>
+      </form>
     </section>
   </div>
 </div>
 {% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/settings_branding.js') }}?v=2" defer></script>
+<script src="{{ url_for('static', filename='js/settings_branding.js') }}?v=4" defer></script>
 {% endblock %}

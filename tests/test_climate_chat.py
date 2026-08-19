@@ -29,6 +29,8 @@ class ClimateChatPageTests(unittest.TestCase):
             self.assertIn("Ask AiriX", html)
             self.assertNotIn("AiriX · Code Assistant", html)
             self.assertNotIn("Ask about your code", html)
+            self.assertNotIn("Your code-aware AI partner", html)
+            self.assertNotIn("climate-assistant-controls", html)
             self.assertIn("New Chat", html)
             self.assertIn('id="ax-chat-history"', html)
             self.assertIn('data-surface="chat"', html)
@@ -60,7 +62,9 @@ class ClimateChatPageTests(unittest.TestCase):
         self.assertIn("EXPLORER", html)
         self.assertIn("AiriX · Code Assistant", html)
         self.assertIn("Ask about your code", html)
+        self.assertIn("Your code-aware AI partner", html)
         self.assertIn("climate-assistant-header", html)
+        self.assertIn("climate-assistant-controls", html)
         self.assertIn("New session", html)
         self.assertIn('data-surface="workspace"', html)
         self.assertNotIn("AiriX · CLIMATE CHAT", html)
@@ -517,9 +521,13 @@ class ClimateChatApiTests(unittest.TestCase):
                     "execution_mode": "direct",
                     "context_scope": "repository",
                     "repository_id": "work-repo",
+                    "repository_name": "Work",
                     "surface": "chat",
                     "provider": "gemini",
                     "model": "gemini-3.7-flash",
+                    "attached_files": ["app.py"],
+                    "retrieved_files": [],
+                    "inspected_files": [],
                 }
             },
         })
@@ -531,6 +539,10 @@ class ClimateChatApiTests(unittest.TestCase):
         self.assertEqual(run["context_scope"], "repository")
         self.assertEqual(run["repository_id"], "work-repo")
         self.assertEqual(run["assistant_label"], "Gemini")
+        self.assertEqual(run["surface"], "chat")
+        self.assertEqual(run["repository_name"], "Work")
+        self.assertEqual(run["attached_files"], ["app.py"])
+        self.assertEqual(run["retrieved_files"], [])
         self.assertIn("Direct · Gemini · gemini-3.7-flash · Work", run["execution_summary"])
 
     def test_general_conversation_does_not_inherit_a_repository(self) -> None:
@@ -832,6 +844,10 @@ class ClimateChatUiContractTests(unittest.TestCase):
         self.assertIn("executionDetailsLine", script)
         self.assertIn("copyRunIdentity", script)
         self.assertIn("execution_summary", script)
+        self.assertIn("attached_files", script)
+        self.assertIn("retrieved_files", script)
+        self.assertIn("inspected_files", script)
+        self.assertIn('surface: "chat"', script)
         self.assertIn("last.execution_mode", script)
         self.assertIn("last.context_scope", script)
         self.assertIn("last.repository_id", script)

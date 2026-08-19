@@ -779,6 +779,7 @@ class ClimateService:
         payload: dict[str, Any],
     ) -> dict[str, Any]:
         """General / All Repositories in Code Workspace — no implied repo inheritance."""
+        del explorer_repo_id
         prompt = str(payload.get("prompt") or "")
         display_prompt = str(payload.get("display_prompt") or prompt)
         provider = str(payload.get("provider") or "")
@@ -856,10 +857,11 @@ class ClimateService:
         selected_files: list[str],
         selection: str,
         handoff: bool,
-        can_investigate: bool,
+        can_investigate: bool,  # retained for call-site compatibility; Direct never scans
         payload: dict[str, Any],
     ) -> dict[str, Any]:
         """Raw prompt + explicit attached files only. Skip Context Resolver and repo scan."""
+        del can_investigate
         attached_labels = normalize_path_list(
             list(selected_files) + ([current_file] if current_file else [])
         )
@@ -978,8 +980,13 @@ class ClimateService:
                 execution_mode=meta.get("execution_mode") or local.get("execution_mode"),
                 context_scope=meta.get("context_scope") or local.get("context_scope"),
                 repository_id=meta.get("repository_id"),
+                repository_name=meta.get("repository_name") or local.get("repository_name"),
                 provider=local.get("provider"),
                 model=local.get("model"),
+                surface=meta.get("surface") or local.get("surface"),
+                attached_files=meta.get("attached_files") or local.get("attached_files"),
+                retrieved_files=meta.get("retrieved_files") or local.get("retrieved_files"),
+                inspected_files=local.get("inspected_files"),
             )
             return local
         result = self.coding.result(run_id, workspace=ws)
@@ -989,7 +996,7 @@ class ClimateService:
         result["task_mode"] = task_mode
         if meta.get("execution_mode") or result.get("execution_mode"):
             result["execution_mode"] = meta.get("execution_mode") or result.get("execution_mode")
-        if scope:
+        if scope and not (meta.get("context_scope") or result.get("context_scope")):
             result["repository_id"] = scope[1]
         raw_answer = str(result.get("answer") or "")
         display, raw_diag = self.coding.humanize_answer(
@@ -1566,6 +1573,74 @@ class ClimateService:
         repo = self.registry.get(rid)
         return str(getattr(repo, "name", "") or rid)
 
+    def _record_execution(
+        self,
+        result: dict[str, Any],
+        *,
+        ws: str,
+        surface: str,
+        execution_mode: str,
+        scope: str,
+        repository_id: str = "",
+        provider: str = "",
+        model: str = "",
+        attached_files: list[str] | None = None,
+        retrieved_files: list[str] | None = None,
+        selected_files: list[str] | None = None,
+        current_file: str = "",
+        sources: list[str] | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Persist executed configuration in memory and stamp the public result."""
+        scoped = repository_id if scope == REPOSITORY else ""
+        attached = normalize_path_list(attached_files)
+        retrieved = normalize_path_list(retrieved_files)
+        source_list = normalize_path_list(
+            sources if sources is not None else (list(attached) + list(retrieved)),
+            limit=24,
+        )
+        repo_name = self._repository_display_name(scoped) if scoped else ""
+        run_id = str(result.get("id") or "")
+        extra_meta = dict(extra or {})
+        if run_id:
+            self._run_scope[run_id] = (ws, scoped)
+            meta = {
+                "task_mode": result.get("task_mode") or extra_meta.get("task_mode") or "ask",
+                "selected_files": list(selected_files or []),
+                "current_file": current_file,
+                "provider_invoked": extra_meta.get(
+                    "provider_invoked",
+                    bool(result.get("provider_invoked", True)),
+                ),
+                "sources": source_list,
+                "attached_files": attached,
+                "retrieved_files": retrieved,
+                "user_prompt": extra_meta.get("user_prompt") or "",
+                "execution_mode": execution_mode,
+                "context_scope": scope,
+                "repository_id": scoped,
+                "repository_name": repo_name,
+                "surface": surface,
+                "conversation_id": result.get("conversation_id") or "",
+            }
+            if extra_meta.get("preflight") is not None:
+                meta["preflight"] = extra_meta.get("preflight")
+            self._run_meta[run_id] = meta
+        result["sources"] = source_list
+        return self._apply_execution_identity(
+            result,
+            execution_mode=execution_mode,
+            context_scope=scope,
+            repository_id=scoped,
+            repository_name=repo_name,
+            provider=provider or result.get("provider"),
+            model=model or result.get("model"),
+            surface=surface,
+            attached_files=attached,
+            retrieved_files=retrieved,
+            inspected_files=list(result.get("inspected_files") or []),
+        )
+
     def _apply_execution_identity(
         self,
         result: dict[str, Any],
@@ -1573,8 +1648,13 @@ class ClimateService:
         execution_mode: str | None = None,
         context_scope: str | None = None,
         repository_id: str | None = None,
+        repository_name: str | None = None,
         provider: str | None = None,
         model: str | None = None,
+        surface: str | None = None,
+        attached_files: list[str] | None = None,
+        retrieved_files: list[str] | None = None,
+        inspected_files: list[str] | None = None,
     ) -> dict[str, Any]:
         """Stamp speaker label + compact Details from persisted run metadata."""
         raw_mode = execution_mode or result.get("execution_mode")
@@ -1589,11 +1669,35 @@ class ClimateService:
         repo_id = str(
             repository_id if repository_id is not None else result.get("repository_id") or ""
         ).strip()
+        name = str(
+            repository_name if repository_name is not None else result.get("repository_name") or ""
+        ).strip()
         if scope == REPOSITORY:
             result["repository_id"] = repo_id
+            result["repository_name"] = name or self._repository_display_name(repo_id)
         elif scope in {GENERAL, ALL}:
             result["repository_id"] = ""
+            result["repository_name"] = ""
             repo_id = ""
+        else:
+            if repo_id:
+                result["repository_id"] = repo_id
+            if name or repo_id:
+                result["repository_name"] = name or self._repository_display_name(repo_id)
+        if surface is not None or result.get("surface"):
+            result["surface"] = str(surface if surface is not None else result.get("surface") or "")
+        if attached_files is not None:
+            result["attached_files"] = normalize_path_list(attached_files)
+        elif "attached_files" not in result:
+            result["attached_files"] = []
+        if retrieved_files is not None:
+            result["retrieved_files"] = normalize_path_list(retrieved_files)
+        elif "retrieved_files" not in result:
+            result["retrieved_files"] = []
+        if inspected_files is not None:
+            result["inspected_files"] = normalize_path_list(inspected_files)
+        elif "inspected_files" not in result:
+            result["inspected_files"] = []
         provider_id = str(provider or result.get("provider") or "")
         provider_label = provider_display_label(
             provider_id, str(result.get("provider_label") or "")
@@ -1606,7 +1710,7 @@ class ClimateService:
                 provider_label=provider_label,
                 model=str(model or result.get("model") or ""),
                 context_scope=scope,
-                repository_label=self._repository_display_name(repo_id) if repo_id else "",
+                repository_label=str(result.get("repository_name") or ""),
             )
         return result
 

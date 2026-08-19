@@ -75,11 +75,21 @@ protections stay in force. AiriX Chat keeps CLIMATE wrapping and evidence
 rules.
 Mode persists per workspace/repo prefs and per conversation. Chat reopen
 restores execution mode, provider, exact model, context scope, and repository
-from saved `context.climate_execution`, not leftover UI controls. Standalone
+from saved `context.climate_execution`, not leftover UI controls. Persisted fields
+include `surface`, execution mode, provider, exact model, context scope, selected
+repository id/name, attached files, and retrieved/inspected files when the run
+produced them. Code Workspace reopen applies the same record to mode, provider,
+model, context scope, and repository. General stays repo-free; Specific Repository
+uses that repo only; All Repositories uses bounded retrieval hits; Direct never
+implies a native repository scan. Standalone
 Chat is labeled **AiriX · CLIMATE Chat** (`surface=chat`, `.ax-chat`). The Code Workspace
 panel is **AiriX · Code Assistant** (`surface=workspace`, `.climate-assistant-*` shell)
-with compact session actions, a coding-context strip (repo / file / selection / attachments),
-and workspace-only local storage (`climate:workspace:v1:`). Conversations stay on the shared
+with compact Mode/Provider/Model/Context Scope controls, removable file chips, a
+coding-context strip (repo / file / selection / attachments), and collapsed
+Sources + Details (Token Efficiency lives under Details). AiriX replies use the
+icon-only chat avatar; Direct replies use Gemini/Codex/Claude/Cursor provider
+icons. Composer placeholder is `Ask about your code...`. Workspace-only local
+storage is `climate:workspace:v1:`. Conversations stay on the shared
 Agent Center store, filtered by `surface`. Provider/model controls remain explicit. Browser sessions reconcile with the
 existing SQLite `agent_conversations` and `agent_runs` store through scoped CLIMATE
 conversation list/detail/rename APIs. Completed server runs can therefore be restored
@@ -254,7 +264,7 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | App shell | Fixed sidebar 210–216px + `padding-left` on `.app-shell`; `.main-column` / `.content` `flex:1; min-width:0`; `.sidebar-scroll` for nav; CSS weather-galaxy sky behind non-editor pages (`climate-sky`), quiet/static on Code Workspace |
 | AI Connections | `/system/ai-connections`; CLIMATE provider cards with local logos, API Key/CLI method, Test Connection + Manage; Gemini keys reuse `data/ai_provider_secrets.env` (never returned, not encrypted); CLI auth unchanged; compact split AI Defaults for CLIMATE Chat (General) and Code Workspace (Coding) plus a one-row Provider Overrides (Auto) grid |
 | AI Provider Settings | `/settings/ai-providers`; Settings submenu + registry-driven cards for Gemini, Grok/xAI, OpenAI, Claude/Anthropic (planned adapter), Local Models (UI-ready); Add/Replace/Remove key + Test Connection; secrets in gitignored `data/ai_provider_secrets.env`; APIs return metadata only; CLI providers stay on AI Connections |
-| CLIMATE Branding | `/settings/branding`; local logo file under `data/branding/` plus display/fit JSON; App Branding = Wordmark / Full logo; Chat Avatar = icon-only (`avatar_url`, never default `climate-logo.png`); Contain / Cover for app fit; padded contain avatars; AiriX vs Direct provider icons unchanged |
+| CLIMATE Branding | `/settings/branding`; two local files under `data/branding/` (`logo.*` app branding, `avatar.*` AiriX icon) plus display JSON (not base64); Wordmark / Full logo for sidebar/header with contain-fit only; AiriX avatar is a dedicated padded icon (`avatar_url`, default `climate-mark.png`, never the full logo); Replace/Remove per asset; live header + Chat + Code Assistant previews; Direct provider icons unchanged |
 | DHIS2 | GET client, discovery, UID mapping, preview builder |
 | UID index admin | LP-style controlled update: dry-run → preview → typed confirm → archive/versions/restore |
 | Metadata enrichment | Read-only DHIS2 enrich → local SQLite relationships + audit statuses |

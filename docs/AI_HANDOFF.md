@@ -4,7 +4,54 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**CLIMATE branding: app header vs chat avatar (2026-08-19)**
+**CLIMATE branding: production-ready logo and AiriX avatar (2026-08-19)**
+
+`Settings → Branding` stores two independent local files under `data/branding/`
+(paths in JSON, never base64): `logo.*` for App Branding and `avatar.*` for the
+AiriX icon. Contain-fit only — no Cover/stretch/crop. The settings page shows
+the live header lockup, 32/36/40px avatars, a CLIMATE Chat bubble, and a Code
+Assistant identity, all updating immediately on file select. Each asset has
+filename/dimensions plus Replace/Remove. Save and Reset stay compact with
+inline success/error. Chat and Code Assistant AiriX surfaces read `avatar_url`
+(or default `climate-mark.png`); Direct replies keep provider icons. Reset
+restores both default assets.
+
+Prior: **CLIMATE branding: separate app logo and AiriX avatar (2026-08-19)**
+
+`Settings → Branding` now stores two local files under `data/branding/` (paths in
+JSON, not base64): `logo.*` for App Branding (Wordmark / Full logo in sidebar and
+headers) and `avatar.*` for the AiriX chat icon. If no AiriX icon is uploaded,
+avatars use the default `climate-mark.png`. The full wordmark is never placed in
+a small avatar. Settings previews reuse the live header lockup (`sidebar-brand` /
+`.climate-brand-lockup`, 48px, `object-fit: contain`) and live avatar wells
+(32/36/40px padded contain) with the `AiriX` label. Direct Gemini/Codex/Claude/
+Cursor icons are unchanged. Reset restores both defaults.
+
+Prior: **Code Workspace IDE-native Code Assistant (2026-08-19)**
+
+The Code Workspace right panel is a compact IDE assistant labeled
+**AiriX · Code Assistant** (`Your code-aware AI partner`), visually distinct
+from standalone **AiriX · CLIMATE Chat**. Compact header controls keep AiriX/
+Direct, Provider, Model, and Context Scope. Each reply leads with the answer,
+then `Completed · Ns`, one collapsed Sources fold, and one collapsed Details
+fold (execution metadata, diagnostics, and Token Efficiency nested inside
+Details). AiriX uses the icon-only CLIMATE/AiriX mark; Direct uses the selected
+provider icon. Composer placeholder is `Ask about your code...`. Standalone
+Chat is unchanged. Shared conversations, providers, exact-model, streaming,
+cancel, and execution-context persistence are unchanged.
+
+Prior: **CLIMATE execution-context reliability (2026-08-19)**
+
+Every CLIMATE Chat and Code Workspace run now persists the configuration that
+actually executed: `surface`, AiriX/Direct mode, provider, exact model, context
+scope, selected repository id/name, attached files, and retrieved/inspected
+files when they exist. Details and conversation reopen read that stored record
+only — they do not infer repo/model/mode from leftover UI controls. General stays
+repo-free, Specific Repository uses the selected repo, All Repositories keeps
+bounded retrieval, Direct uses explicit attached files only, and exact-model /
+no-silent-fallback is unchanged.
+
+Prior: **CLIMATE branding: app header vs chat avatar (2026-08-19)**
 
 `Settings → Branding` still stores one PNG/SVG/WEBP file under `data/branding/`.
 App Branding (Wordmark / Full logo) drives the sidebar, top-left header, and

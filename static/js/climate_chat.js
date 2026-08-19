@@ -238,11 +238,16 @@
       execution_mode: run.execution_mode || "",
       context_scope: run.context_scope || "",
       repository_id: run.repository_id || "",
+      repository_name: run.repository_name || "",
+      surface: run.surface || "chat",
       assistant_label: run.assistant_label || "",
       execution_summary: run.execution_summary || "",
       started_at: run.started_at || "",
       finished_at: run.finished_at || "",
       created_at: run.created_at || "",
+      attached_files: Array.isArray(run.attached_files) ? run.attached_files.slice(0, 24) : [],
+      retrieved_files: Array.isArray(run.retrieved_files) ? run.retrieved_files.slice(0, 24) : [],
+      inspected_files: Array.isArray(run.inspected_files) ? run.inspected_files.slice(0, 24) : [],
       sources: Array.isArray(run.sources) ? run.sources.slice(0, 24) : [],
       token_efficiency: run.token_efficiency || null
     };
@@ -355,12 +360,20 @@
     html += "</div></section></details>";
     return html;
   }
+  function renderFileMetaLine(label, items) {
+    var list = Array.isArray(items) ? items.filter(Boolean) : [];
+    if (!list.length) return "";
+    return '<div class="ax-msg-exec">' + escapeHtml(label) + ": " + escapeHtml(list.join(", ")) + "</div>";
+  }
   function renderDetailsFold(msg, phase) {
     if (msg.role !== "assistant" || phase === "thinking" || phase === "streaming") return "";
-    if (!(msg.execution_summary || msg.provider || msg.model || msg.status || msg.diagnostics)) return "";
+    if (!(msg.execution_summary || msg.provider || msg.model || msg.status || msg.diagnostics || (msg.attached_files && msg.attached_files.length) || (msg.retrieved_files && msg.retrieved_files.length) || (msg.inspected_files && msg.inspected_files.length))) return "";
     var summary = executionDetailsLine(msg);
     return '<details class="ax-msg-details"><summary>Details</summary>' +
       (summary ? '<div class="ax-msg-exec">' + escapeHtml(summary) + "</div>" : "") +
+      renderFileMetaLine("Attached", msg.attached_files) +
+      renderFileMetaLine("Retrieved", msg.retrieved_files) +
+      renderFileMetaLine("Inspected", msg.inspected_files) +
       (msg.diagnostics ? "<pre>" + escapeHtml(msg.diagnostics) + "</pre>" : "") +
       "</details>";
   }
@@ -791,7 +804,8 @@
         execution_mode: currentChatMode(),
         context_scope: currentChatScope().scope,
         repository_id: currentChatScope().repositoryId,
-        include_repo_context: currentChatScope().scope === "repository"
+        include_repo_context: currentChatScope().scope === "repository",
+        surface: "chat"
       })
     }).then(function (data) {
       var run = data.run || {};

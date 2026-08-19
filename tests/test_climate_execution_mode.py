@@ -166,7 +166,7 @@ class ExecutionModeServiceTests(unittest.TestCase):
         self.assertEqual(call["provider"], "codex")
         self.assertEqual(call["model"], "gpt-exact")
         self.assertEqual(call["repository_id"], "work-repo")
-        self.assertTrue(call.get("repository_investigation"))
+        self.assertFalse(call.get("repository_investigation"))
         self.assertIn("[climate_execution_mode]", call.get("preflight_log") or "")
         self.assertIn("Context Resolver skipped", call.get("preflight_log") or "")
         self.assertNotIn("climate_context_resolver", str(call))

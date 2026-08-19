@@ -44,8 +44,9 @@
 
 {% macro brand_icon(size=34, compact=false) -%}
   {% set default_mark = url_for('static', filename='img/climate-mark.png') %}
+  {% set default_full = url_for('static', filename='img/climate-logo.png') %}
   {% set icon_src = branding.icon_url if branding is defined and branding.icon_url else default_mark %}
-  {% set full_src = branding.logo_url if branding is defined and branding.logo_url else icon_src %}
+  {% set full_src = branding.full_url if branding is defined and branding.full_url else default_full %}
   <img class="brand-logo-mark"
        src="{{ full_src if (not compact and branding is defined and branding.display == 'full') else icon_src }}"
        alt=""
@@ -54,7 +55,7 @@
 
 {% macro brand_avatar() -%}
   {% set default_mark = url_for('static', filename='img/climate-mark.png') %}
-  {% set src = branding.avatar_url if branding is defined and branding.avatar_url else (branding.icon_url if branding is defined and branding.icon_url else default_mark) %}
+  {% set src = branding.avatar_url if branding is defined and branding.avatar_url else default_mark %}
   <span class="brand-avatar" data-brand-display="icon" data-brand-fit="contain">
     <img src="{{ src }}" alt="" decoding="async">
   </span>
@@ -62,7 +63,7 @@
 
 {% macro brand_logo(show_wordmark=true, mark_size=22, class_name='', show_tagline=false, compact=false) -%}
   {% set display = 'icon' if compact else ((branding.display if branding is defined else 'wordmark') or 'wordmark') %}
-  {% set fit = (branding.fit if branding is defined else 'contain') or 'contain' %}
+  {% set fit = "contain" %}
   <span class="climate-brand-lockup {{ class_name }}" data-brand-display="{{ display }}" data-brand-fit="{{ fit }}">
     <span class="brand-mark" aria-hidden="true">{{ brand_icon(mark_size, compact=compact) }}</span>
     {% if show_wordmark %}
