@@ -213,6 +213,26 @@ manual/API-assisted recovery. Audit events are `coding_proposal_created`,
 `coding_proposal_accepted`, `coding_proposal_rejected`, and `coding_proposal_conflict`.
 The agent does not run arbitrary commands, tests, commits, pushes, or automatic rollback.
 
+Coding Agent Phase 2 tests run only after an explicit `Run Tests` action against an accepted
+proposal and a server-discovered profile id. Commands are fixed argv arrays with `shell=False`;
+shell operators, redirects, expansion, traversal/absolute output paths, destructive/system/
+package-install/Git-write commands, live/write run profiles, and unvalidated package scripts
+are blocked. The cwd is revalidated inside the selected repository. Child processes receive
+only basic OS path/temp variables plus test-safe flags, not the Hub's provider/application
+secrets. Runs enforce process-group cancellation, timeout, bounded/redacted stdout/stderr,
+and persist exact resolved argv and results in `coding_test_runs`. Failed output never applies
+a fix: `Propose Fix` starts a separate read-only reasoning run and its patch still requires
+Phase 1 Accept/Reject.
+
+Coding Agent Phase 3 repeats only those same gates through explicit user actions. Durable
+`coding_iteration_chains` and append-only `coding_iteration_events` link root/child proposals
+and test runs. `CODING_AGENT_MAX_ITERATIONS` limits accepted fix depth (default 3, hard range
+1–10). Normalized hashes detect repeated test failures and repeated proposed file states;
+either condition blocks further fixes and records a warning. Each follow-up remains subject
+to the Phase 1 file-count/patch/path/stale-state controls and Phase 2 argv/cwd/environment/
+timeout/output controls. No background loop, auto-apply, auto-rerun, package install, commit,
+or push path is introduced.
+
 - JSONL at `CENTRAL_HUB_AUDIT_LOG` plus job rows in SQLite `CENTRAL_HUB_DATABASE`.
 - Job actions: `SUBMIT_JOB`, `START_JOB`, `JOB_*`, `UPLOAD_INPUT`, `DOWNLOAD_RESULT`,
   `OWNER_LOGIN`, plus existing DHIS2 events.

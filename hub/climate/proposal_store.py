@@ -34,6 +34,7 @@ class CodingProposalStore:
             "files_changed_json", "resulting_state_json", "error", "created_at",
             "updated_at", "decided_at", "applied_at", "parent_proposal_id",
             "source_test_run_id",
+            "root_proposal_id", "iteration_depth", "proposal_fingerprint",
         ]
         values: dict[str, Any] = dict(record)
         for public, stored in _JSON_FIELDS.items():
@@ -61,3 +62,10 @@ class CodingProposalStore:
             except (TypeError, ValueError):
                 data[public] = {} if public == "evidence_provenance" else []
         return data
+
+    def get_by_id(self, proposal_id: str) -> dict[str, Any] | None:
+        with self.db.connect() as conn:
+            row = conn.execute(
+                "SELECT run_id FROM coding_edit_proposals WHERE id = ?", (proposal_id,)
+            ).fetchone()
+        return self.get(str(row["run_id"])) if row is not None else None

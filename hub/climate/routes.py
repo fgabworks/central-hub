@@ -315,3 +315,46 @@ def register_climate_routes(app: Flask) -> None:
             return jsonify(_svc().reject(workspace, run_id))
         except ClimateCodingError as exc:
             return _error(exc)
+
+    @app.get("/api/climate/<workspace>/runs/<run_id>/test-profiles")
+    def api_climate_test_profiles(workspace: str, run_id: str):
+        try:
+            return jsonify({"ok": True, "profiles": _svc().test_profiles(workspace, run_id)})
+        except (ClimateCodingError, WorkspaceSecurityError) as exc:
+            return _error(exc)
+
+    @app.post("/api/climate/<workspace>/runs/<run_id>/tests/run")
+    def api_climate_run_tests(workspace: str, run_id: str):
+        try:
+            payload = request.get_json(silent=True) or {}
+            return jsonify({"ok": True, "test_run": _svc().run_tests(workspace, run_id, str(payload.get("profile_id") or ""))})
+        except (ClimateCodingError, WorkspaceSecurityError) as exc:
+            return _error(exc)
+
+    @app.post("/api/climate/<workspace>/runs/<run_id>/tests/skip")
+    def api_climate_skip_tests(workspace: str, run_id: str):
+        try:
+            return jsonify({"ok": True, "test_run": _svc().skip_tests(workspace, run_id)})
+        except (ClimateCodingError, WorkspaceSecurityError) as exc:
+            return _error(exc)
+
+    @app.get("/api/climate/<workspace>/test-runs/<test_run_id>")
+    def api_climate_test_result(workspace: str, test_run_id: str):
+        try:
+            return jsonify({"ok": True, "test_run": _svc().test_result(workspace, test_run_id)})
+        except (ClimateCodingError, WorkspaceSecurityError) as exc:
+            return _error(exc)
+
+    @app.post("/api/climate/<workspace>/test-runs/<test_run_id>/cancel")
+    def api_climate_cancel_tests(workspace: str, test_run_id: str):
+        try:
+            return jsonify({"ok": True, "test_run": _svc().cancel_tests(workspace, test_run_id)})
+        except (ClimateCodingError, WorkspaceSecurityError) as exc:
+            return _error(exc)
+
+    @app.post("/api/climate/<workspace>/test-runs/<test_run_id>/follow-up")
+    def api_climate_test_follow_up(workspace: str, test_run_id: str):
+        try:
+            return jsonify({"ok": True, "run": _svc().follow_up_test_failure(workspace, test_run_id)})
+        except (ClimateCodingError, WorkspaceSecurityError) as exc:
+            return _error(exc)

@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-20 (Coding Agent Phase 1).
+Last verified: 2026-08-20 (Coding Agent Phase 3).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -116,6 +116,31 @@ aggregate-patch limits before using the existing confirmed Repository Workspace 
 Stale proposals become conflicts and must be regenerated. No tests, shell commands, commit,
 push, or automatic rollback are run by the coding agent. Direct keeps the same controlled
 proposal gate and gains no autonomous write behavior.
+
+**Coding Agent Phase 2** adds an explicit post-Accept test gate. The user chooses
+**Run Tests** or **Skip Tests**; neither ordinary ASK nor proposal acceptance starts tests.
+Profiles are server-resolved argv arrays discovered from targeted changed-file matches,
+Python unittest/pytest project structure, strictly validated package test scripts, and
+approved non-live/non-write Repository Workspace test profiles. Targeted profiles sort
+before clearly labeled full-suite choices. Execution uses `shell=False`, the selected
+repository cwd, a minimal environment, a timeout, cancellation, bounded/redacted stdout
+and stderr, and no terminal/package/Git access. SQLite records the exact resolved command,
+timestamps, exit/status, failed test identifiers, timeout/cancel state, and bounded output.
+After failure the user may explicitly request **Propose Fix**; only bounded failure evidence
+enters a new provider run, whose new patch uses the Phase 1 stale-check and Accept/Reject
+gate. There is no automatic test, fix, apply, rerun, commit, or push loop.
+
+**Coding Agent Phase 3** makes that same workflow repeatable without making it autonomous.
+Every accepted follow-up exposes the same explicit **Run Tests / Skip Tests** gate; a failed
+run exposes **Propose Fix** only when the user chooses to continue. Versioned SQLite chain
+and event rows link the root proposal, every test run, parent/child fix proposal, depth,
+decision, outcome, and final status. The compact Code Workspace timeline renders sequences
+such as `Change 1 → Tests failed → Fix 1 → Tests passed`. A configurable maximum accepted
+fix depth (`CODING_AGENT_MAX_ITERATIONS`, default 3), repeated normalized failure hashes,
+and repeated proposal-content hashes stop cyclic iteration with a visible warning. Stale
+fixes still fail Phase 1 raw-hash validation. Follow-up reasoning receives only changed files,
+bounded failed-test output, the bounded prior diff, optional bounded RepoBrain orientation,
+and instructions to verify current live files. Nothing auto-applies or auto-runs.
 Codex remains VANTA-only under its existing profile policy; ARCTIC surfaces that state
 explicitly and can use authenticated Claude Code or Cursor Agent with selected ARCTIC files.
 Codex capacity in the AI usage chrome comes from authenticated `codex app-server`
@@ -658,7 +683,7 @@ No LP apply/write proxies. No import of LP Python packages for business logic.
 
 ## Next
 
-**AiriX Context Expansion Phase 3 is implemented.** See [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
+**Coding Agent Phase 3 is implemented.** See [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 AiriX Unified Tool Runtime Phase 2 remains implemented. Phase 3+ of that runtime
 (MCP, browser, scheduler, shell/`run_command`, write tools, workflow editor,
 CLI native tool loops) stays deferred.

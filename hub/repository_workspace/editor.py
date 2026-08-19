@@ -65,7 +65,7 @@ class RepositoryEditor:
         data = path.read_bytes()
         if looks_binary(data[:8192]):
             raise WorkspaceSecurityError("File appears to be binary.", code="binary")
-        text = data.decode("utf-8")
+        text = data.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
         return {
             "path": rel,
             "content": text,

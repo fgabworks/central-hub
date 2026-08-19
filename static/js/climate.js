@@ -2655,6 +2655,11 @@
         else if (action === "cancel") cancelTokenSavings(msgId);
       });
     });
+    feed.querySelectorAll("[data-test-action]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        testAction(button.getAttribute("data-test-action"), button.getAttribute("data-msg-id"));
+      });
+    });
     feed.querySelectorAll("[data-retry-id]").forEach(function (button) {
       button.addEventListener("click", function () {
         retryFromMessage(button.getAttribute("data-retry-id") || "");
@@ -2806,6 +2811,14 @@
       }).join("");
       html += "</ul></details>";
     }
+    if (!isUser && msg.iteration && Array.isArray(msg.iteration.timeline) && msg.iteration.timeline.length) {
+      html += '<section class="climate-run-summary climate-iteration-status" aria-label="Coding iteration status">';
+      html += '<div><strong>Iteration</strong> ' + msg.iteration.timeline.map(escapeHtml).join(' &rarr; ') + '</div>';
+      if (msg.iteration.warning) {
+        html += '<div class="climate-run-warning" role="status">' + escapeHtml(msg.iteration.warning) + '</div>';
+      }
+      html += '</section>';
+    }
     if (hasPendingProposal) {
       html += '<section class="climate-run-summary climate-assistant-proposal">';
       if (msg.proposal && msg.proposal.large_diff) {
@@ -2820,6 +2833,26 @@
       html += '<div class="climate-assistant-changed">' + files.map(function (path) {
         return '<button type="button" class="climate-assistant-file" data-open-file="' + escapeHtml(path) + '">' + escapeHtml(path) + "</button>";
       }).join("") + "</div>";
+    }
+    if (!isUser && msg.testOptions && !msg.testRun) {
+      var profiles = msg.testOptions || [];
+      html += '<section class="climate-run-summary"><div class="climate-assistant-msg-actions">';
+      if (profiles.length) {
+        html += '<select data-test-profile="' + escapeHtml(msg.id) + '">' + profiles.map(function(profile){return '<option value="'+escapeHtml(profile.id)+'">'+escapeHtml(profile.name+(profile.targeted?' · targeted':(profile.full_suite?' · full suite':'')))+'</option>';}).join('') + '</select>';
+        html += '<button type="button" class="climate-btn climate-btn-primary" data-test-action="run" data-msg-id="'+escapeHtml(msg.id)+'">Run Tests</button>';
+      }
+      html += '<button type="button" class="climate-btn" data-test-action="skip" data-msg-id="'+escapeHtml(msg.id)+'">Skip Tests</button></div></section>';
+    }
+    if (!isUser && msg.testRun) {
+      var tr = msg.testRun;
+      html += '<section class="climate-run-summary"><strong>Tests: '+escapeHtml(tr.status||'running')+'</strong>';
+      if (tr.exit_code != null) html += '<span> · exit '+escapeHtml(String(tr.exit_code))+'</span>';
+      if ((tr.failed_tests||[]).length) html += '<div>'+escapeHtml((tr.failed_tests||[]).join(', '))+'</div>';
+      if (tr.stdout || tr.stderr) html += '<details><summary>Test output</summary><pre class="mono">'+escapeHtml([tr.stdout||'',tr.stderr||''].filter(Boolean).join('\n'))+'</pre></details>';
+      if (tr.status === 'running') html += '<button type="button" class="climate-btn" data-test-action="cancel" data-msg-id="'+escapeHtml(msg.id)+'">Cancel</button>';
+      var chainBlocked = msg.iteration && msg.iteration.status === 'blocked';
+      if (tr.status === 'failed' && !tr.follow_up_run_id && !tr.repeated_failure_detected && !chainBlocked) html += '<button type="button" class="climate-btn climate-btn-primary" data-test-action="follow-up" data-msg-id="'+escapeHtml(msg.id)+'">Propose Fix</button>';
+      html += '</section>';
     }
     if (!isUser && (isComplete || isStopped || isError || msg.execution_summary || msg.diagnostics || msg.tokenEfficiency)) {
       html += renderAssistantDetails(msg, sourceItems);
@@ -3473,6 +3506,9 @@
         tests: tests,
         lines: lines,
         proposal: proposal,
+        testOptions: Array.isArray(data.run.test_profiles) ? data.run.test_profiles : null,
+        testRun: data.run.test_run || null,
+        iteration: data.run.iteration || null,
         taskMode: taskMode,
         activity: finalActivity,
         elapsedMs: elapsedMs,
@@ -3612,12 +3648,42 @@
       if (msg && msg.proposal) msg.proposal.state = action === "accept" ? "accepted" : "rejected";
       upsertAssistantMessage({
         id: msg && msg.id,
-        text: action==="accept" ? ("Kept " + (data.applied||[]).length + " file edit(s).") : "Undid proposed edits.",
+        text: action==="accept" ? ("Applied " + (data.applied||[]).length + " file edit(s).") : "Rejected proposed edits.",
         proposal: msg && msg.proposal,
+        testOptions: action === "accept" ? (data.test_profiles || []) : null,
+        iteration: data.iteration || (msg && msg.iteration) || null,
         status: "completed"
       });
       if(action==="accept"){var tab=currentTab();if(tab){tab.loaded=false;tab.dirty=false;openFile(tab.path);}loadTree();loadGit();}
     }).catch(function(error){appendFeed(error.message,"is-error");});
+  }
+  function testAction(action, msgId) {
+    var session = activeSession();
+    var msg = session && session.messages.find(function(row){return row.id===msgId;});
+    if (!msg || !msg.runId) return;
+    if (action === "run") {
+      var select = feed.querySelector('[data-test-profile="'+msgId+'"]');
+      if (!select || !select.value) return;
+      jsonFetch(endpoint('/runs/'+encodeURIComponent(msg.runId)+'/tests/run'), {method:'POST', body:JSON.stringify({profile_id:select.value})}).then(function(data){msg.testOptions=null;msg.testRun=data.test_run;msg.iteration=data.test_run.iteration||msg.iteration;saveChatStore();renderChat();pollTestRun(msgId,data.test_run.id);}).catch(function(error){appendFeed(error.message,'is-error');});
+    } else if (action === "skip") {
+      jsonFetch(endpoint('/runs/'+encodeURIComponent(msg.runId)+'/tests/skip'), {method:'POST', body:'{}'}).then(function(data){msg.testOptions=null;msg.testRun=data.test_run;msg.iteration=data.test_run.iteration||msg.iteration;saveChatStore();renderChat();}).catch(function(error){appendFeed(error.message,'is-error');});
+    } else if (action === "cancel" && msg.testRun) {
+      jsonFetch(endpoint('/test-runs/'+encodeURIComponent(msg.testRun.id)+'/cancel'), {method:'POST', body:'{}'}).then(function(data){msg.testRun=data.test_run;msg.iteration=data.test_run.iteration||msg.iteration;saveChatStore();renderChat();pollTestRun(msgId,msg.testRun.id);}).catch(function(error){appendFeed(error.message,'is-error');});
+    } else if (action === "follow-up" && msg.testRun) {
+      jsonFetch(endpoint('/test-runs/'+encodeURIComponent(msg.testRun.id)+'/follow-up'), {method:'POST', body:'{}'}).then(function(data){
+        msg.testRun.follow_up_run_id=data.run.id; saveChatStore(); renderChat();
+        state.run=data.run;state.runId=data.run.id;state.runActive=true;state.streamingMsgId='';
+        var follow=upsertAssistantMessage({status:data.run.status||'running',taskMode:'edit',runId:data.run.id,text:'',provider:data.run.provider,model:data.run.model,iteration:data.run.iteration||msg.iteration});
+        state.streamingMsgId=follow.id;setRunControls('running');pollRun();
+      }).catch(function(error){appendFeed(error.message,'is-error');});
+    }
+  }
+  function pollTestRun(msgId, testRunId) {
+    window.setTimeout(function(){jsonFetch(endpoint('/test-runs/'+encodeURIComponent(testRunId))).then(function(data){
+      var session=activeSession(),msg=session&&session.messages.find(function(row){return row.id===msgId;});
+      if(!msg)return;msg.testRun=data.test_run;msg.iteration=data.test_run.iteration||msg.iteration;saveChatStore();renderChat();
+      if(data.test_run.status==='running')pollTestRun(msgId,testRunId);
+    }).catch(function(error){appendFeed(error.message,'is-error');});},700);
   }
   function problemId(item) {
     return [item.source || "", item.path || "", item.line || "", item.column || "", item.message || ""].join("|");

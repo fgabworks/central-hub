@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import re
+import json
+import hashlib
 import subprocess
 import uuid
 from dataclasses import dataclass, field
@@ -44,6 +46,7 @@ from hub.climate.execution_mode import (
 )
 from hub.climate.preflight import make_blocked_run, resolve_climate_context
 from hub.climate.proposal_store import CodingProposalStore
+from hub.climate.iteration_store import CodingIterationStore
 from hub.climate.retrieval_policy import is_logs_history_query, is_noisy_artifact
 from hub.climate.token_efficiency import TokenEfficiencyService
 from hub.climate.test_execution import CodingTestExecutionService, CodingTestRunStore
@@ -69,6 +72,7 @@ MAX_PROPOSAL_FILES = _proposal_limit("CODING_AGENT_MAX_PROPOSAL_FILES", 6, 1, 20
 MAX_PROPOSAL_PATCH_CHARS = _proposal_limit(
     "CODING_AGENT_MAX_PATCH_CHARS", 60_000, 1_000, 500_000
 )
+MAX_CODING_ITERATION_DEPTH = _proposal_limit("CODING_AGENT_MAX_ITERATIONS", 3, 1, 10)
 
 
 def normalize_workspace(value: str) -> str:
@@ -114,6 +118,9 @@ class Proposal:
     applied_at: str | None = None
     parent_proposal_id: str = ""
     source_test_run_id: str = ""
+    root_proposal_id: str = ""
+    iteration_depth: int = 0
+    proposal_fingerprint: str = ""
 
 
 class ClimateService:
@@ -137,6 +144,7 @@ class ClimateService:
         dhis2_instance: str = "",
         proposal_store: CodingProposalStore | None = None,
         test_execution: CodingTestExecutionService | None = None,
+        iteration_store: CodingIterationStore | None = None,
     ) -> None:
         self.registry = registry
         self.repository_workspace = repository_workspace
@@ -147,6 +155,10 @@ class ClimateService:
         self._local_runs: dict[str, dict[str, Any]] = {}
         self.audit_store = audit_store
         self.proposal_store = proposal_store or self._default_proposal_store()
+        proposal_db = getattr(self.proposal_store, "db", None) if self.proposal_store else None
+        self.iteration_store = iteration_store or (
+            CodingIterationStore(proposal_db) if proposal_db is not None else None
+        )
         self.test_execution = test_execution or self._default_test_execution()
         self.token_efficiency = TokenEfficiencyService()
         self.context_resolver = context_resolver or build_default_context_resolver(
@@ -179,7 +191,14 @@ class ClimateService:
 
     def _default_test_execution(self) -> CodingTestExecutionService | None:
         db = getattr(self.proposal_store, "db", None) if self.proposal_store else None
-        return CodingTestExecutionService(CodingTestRunStore(db)) if db is not None else None
+        return (
+            CodingTestExecutionService(
+                CodingTestRunStore(db),
+                on_complete=self._on_test_complete,
+            )
+            if db is not None
+            else None
+        )
 
     def _repository_intelligence(self) -> Any | None:
         agent_center = getattr(self.coding, "agent_center", None)
@@ -1257,6 +1276,8 @@ class ClimateService:
                         },
                         parent_proposal_id=str(meta.get("parent_proposal_id") or ""),
                         source_test_run_id=str(meta.get("source_test_run_id") or ""),
+                        root_proposal_id=str(meta.get("root_proposal_id") or ""),
+                        iteration_depth=meta.get("iteration_depth"),
                     )
                     if proposal.source_test_run_id and self.test_execution is not None:
                         self.test_execution.store.update(
@@ -1264,6 +1285,12 @@ class ClimateService:
                             follow_up_proposal_id=proposal.id,
                         )
         result["proposal"] = self._public_proposal(proposal) if proposal else None
+        if proposal and proposal.state == "accepted" and self.test_execution is not None:
+            latest_test = self.test_execution.store.latest_for_proposal(proposal.id)
+            result["test_run"] = latest_test
+            result["test_profiles"] = [] if latest_test else self.test_profiles(ws, proposal.run_id)
+        if proposal:
+            result["iteration"] = self.iteration_status(proposal.root_proposal_id)
         sources = list(meta.get("sources") or result.get("sources") or [])
         if not sources:
             for path in list(meta.get("selected_files") or []) + ([meta.get("current_file")] if meta.get("current_file") else []):
@@ -1534,6 +1561,8 @@ class ClimateService:
         evidence_provenance: dict[str, Any] | None = None,
         parent_proposal_id: str = "",
         source_test_run_id: str = "",
+        root_proposal_id: str = "",
+        iteration_depth: int | None = None,
     ) -> Proposal:
         ws = normalize_workspace(workspace)
         if context_scope != REPOSITORY or not repository_id:
@@ -1609,8 +1638,47 @@ class ClimateService:
         clean_plan = [str(item).strip()[:240] for item in list(plan or [])[:8] if str(item).strip()]
         if not clean_plan:
             clean_plan = [f"Update {path}." for path in paths[:3]]
+        proposal_id = str(uuid.uuid4())
+        parent_record = (
+            self.proposal_store.get_by_id(parent_proposal_id)
+            if parent_proposal_id and self.proposal_store is not None
+            else None
+        )
+        if parent_proposal_id and parent_record is None:
+            raise ClimateCodingError("Parent proposal not found.", code="not_found")
+        if parent_record and str(parent_record.get("repository_id") or "") != repo.id:
+            raise ClimateCodingError("Follow-up proposal crossed repository scope.", code="workspace_isolation")
+        existing_chain = (
+            self.iteration_status(str(parent_record.get("root_proposal_id") or parent_proposal_id))
+            if parent_record else None
+        )
+        if existing_chain and existing_chain.get("status") == "blocked":
+            raise ClimateCodingError(
+                str(existing_chain.get("warning") or "This coding iteration was stopped by a safety guard."),
+                code="iteration_blocked",
+            )
+        depth = int(iteration_depth) if iteration_depth is not None else (
+            int(parent_record.get("iteration_depth") or 0) + 1 if parent_record else 0
+        )
+        root_id = str(root_proposal_id or (parent_record or {}).get("root_proposal_id") or parent_proposal_id or proposal_id)
+        if depth > MAX_CODING_ITERATION_DEPTH:
+            self._block_iteration(root_id, depth, "Maximum coding iteration depth reached.")
+            raise ClimateCodingError("Maximum coding iteration depth reached.", code="iteration_limit")
+        fingerprint_payload = [
+            {"path": item["path"], "content_sha256": hashlib.sha256(item["content"].encode("utf-8")).hexdigest()}
+            for item in staged
+        ]
+        proposal_fingerprint = hashlib.sha256(
+            json.dumps(fingerprint_payload, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        if parent_record and self.iteration_store and self.iteration_store.proposal_fingerprint_exists(root_id, proposal_fingerprint):
+            self._block_iteration(root_id, depth, "The proposed fix repeats an earlier proposal. Iteration stopped.")
+            raise ClimateCodingError(
+                "The proposed fix repeats an earlier proposal. Review the failure before continuing.",
+                code="repeated_iteration",
+            )
         proposal = Proposal(
-            id=str(uuid.uuid4()),
+            id=proposal_id,
             run_id=run_id,
             workspace=ws,
             repository_id=repo.id,
@@ -1630,10 +1698,26 @@ class ClimateService:
             updated_at=now,
             parent_proposal_id=parent_proposal_id,
             source_test_run_id=source_test_run_id,
+            root_proposal_id=root_id,
+            iteration_depth=depth,
+            proposal_fingerprint=proposal_fingerprint,
         )
         self._proposals[run_id] = proposal
         self._run_scope.setdefault(run_id, (ws, repo.id))
         self._persist_proposal(proposal)
+        if self.iteration_store:
+            self.iteration_store.ensure_chain(
+                root_proposal_id=root_id,
+                root_run_id=(str((parent_record or {}).get("run_id") or run_id) if depth else run_id),
+                workspace=ws,
+                repository_id=repo.id,
+                max_depth=MAX_CODING_ITERATION_DEPTH,
+            )
+            self.iteration_store.update_chain(root_id, current_depth=depth, status="awaiting_decision", warning="")
+            self.iteration_store.event(
+                root_proposal_id=root_id, depth=depth, event_type="proposal_created",
+                proposal_id=proposal.id, status="pending",
+            )
         self._audit_proposal("coding_proposal_created", proposal, ok=True)
         return proposal
 
@@ -1658,6 +1742,13 @@ class ClimateService:
                 proposal.updated_at = proposal.decided_at
                 self._persist_proposal(proposal)
                 self._audit_proposal("coding_proposal_conflict", proposal, ok=False)
+                self._iteration_event(proposal, "proposal_conflict", status="conflict")
+                if self.iteration_store and proposal.root_proposal_id:
+                    self.iteration_store.update_chain(
+                        proposal.root_proposal_id,
+                        status="stale_proposal",
+                        warning=proposal.error,
+                    )
                 raise ClimateCodingError(
                     f"File changed since proposal: {edit['path']}", code="proposal_conflict"
                 )
@@ -1684,6 +1775,7 @@ class ClimateService:
         proposal.updated_at = proposal.applied_at
         self._persist_proposal(proposal)
         self._audit_proposal("coding_proposal_accepted", proposal, ok=True)
+        self._iteration_event(proposal, "proposal_accepted", status="accepted")
         profiles = self.test_profiles(proposal.workspace, proposal.run_id)
         return {
             "ok": True,
@@ -1692,6 +1784,7 @@ class ClimateService:
             "applied": applied,
             "test_profiles": profiles,
             "tests_available": bool(profiles),
+            "iteration": self.iteration_status(proposal.root_proposal_id),
         }
 
     def reject(self, workspace: str, run_id: str) -> dict[str, Any]:
@@ -1704,7 +1797,18 @@ class ClimateService:
         proposal.updated_at = proposal.decided_at
         self._persist_proposal(proposal)
         self._audit_proposal("coding_proposal_rejected", proposal, ok=True)
-        return {"ok": True, "state": proposal.state, "applied": []}
+        self._iteration_event(proposal, "proposal_rejected", status="rejected")
+        if self.iteration_store and proposal.root_proposal_id:
+            self.iteration_store.update_chain(
+                proposal.root_proposal_id,
+                status="fix_rejected" if proposal.iteration_depth else "rejected",
+            )
+        return {
+            "ok": True,
+            "state": proposal.state,
+            "applied": [],
+            "iteration": self.iteration_status(proposal.root_proposal_id),
+        }
 
     def test_profiles(self, workspace: str, run_id: str) -> list[dict[str, Any]]:
         proposal = self._require_proposal(workspace, run_id)
@@ -1736,6 +1840,8 @@ class ClimateService:
             profile_store=self.repository_workspace.profile_store,
         )
         self._audit_test("coding_tests_started", record, ok=True)
+        self._iteration_test_event(record, "tests_started", status="running")
+        record["iteration"] = self.iteration_status(proposal.root_proposal_id)
         return record
 
     def skip_tests(self, workspace: str, run_id: str) -> dict[str, Any]:
@@ -1746,6 +1852,10 @@ class ClimateService:
             raise ClimateCodingError("Test execution is unavailable.", code="unavailable")
         record = self.test_execution.skip(proposal)
         self._audit_test("coding_tests_skipped", record, ok=True)
+        self._iteration_test_event(record, "tests_skipped", status="skipped")
+        if self.iteration_store and proposal.root_proposal_id:
+            self.iteration_store.update_chain(proposal.root_proposal_id, status="tests_skipped")
+        record["iteration"] = self.iteration_status(proposal.root_proposal_id)
         return record
 
     def test_result(self, workspace: str, test_run_id: str) -> dict[str, Any]:
@@ -1757,6 +1867,7 @@ class ClimateService:
             raise ClimateCodingError("Test run not found.", code="not_found")
         if record.get("workspace") != ws:
             raise ClimateCodingError("Test run belongs to another workspace.", code="workspace_isolation")
+        record["iteration"] = self.iteration_status(str(record.get("root_proposal_id") or ""))
         return record
 
     def cancel_tests(self, workspace: str, test_run_id: str) -> dict[str, Any]:
@@ -1773,8 +1884,36 @@ class ClimateService:
         if record.get("follow_up_run_id"):
             raise ClimateCodingError("A follow-up run already exists.", code="follow_up_exists")
         parent = self._require_proposal(workspace, str(record.get("proposal_run_id") or ""))
+        next_depth = int(parent.iteration_depth or 0) + 1
+        if next_depth > MAX_CODING_ITERATION_DEPTH:
+            self._block_iteration(
+                parent.root_proposal_id, next_depth, "Maximum coding iteration depth reached."
+            )
+            raise ClimateCodingError(
+                "Maximum coding iteration depth reached. Review the remaining failure manually.",
+                code="iteration_limit",
+            )
+        if record.get("repeated_failure_detected"):
+            warning = "The same test failure repeated in this chain. Iteration stopped."
+            self._block_iteration(parent.root_proposal_id, next_depth, warning)
+            raise ClimateCodingError(warning, code="repeated_iteration")
         failure = "\n".join(filter(None, [str(record.get("stdout") or ""), str(record.get("stderr") or "")]))[:12_000]
         failed = ", ".join(record.get("failed_tests") or []) or "See bounded output"
+        prior_diff = "\n\n".join(
+            str(edit.get("diff") or "") for edit in parent.edits[:MAX_PROPOSAL_FILES]
+        )[:6_000]
+        repobrain_context = ""
+        repobrain = self._repobrain()
+        if repobrain is not None:
+            try:
+                orientation = repobrain.context(
+                    parent.repository_id,
+                    f"{parent.requested_change} {failed}",
+                    refresh=False,
+                )
+                repobrain_context = str((orientation or {}).get("content") or "")[:4_000]
+            except Exception:
+                repobrain_context = ""
         prompt = (
             "Propose a minimal fix for the explicitly run tests that failed after the accepted change. "
             "Do not apply changes or run commands. Verify exact current files and return a new review-gated proposal.\n\n"
@@ -1782,7 +1921,9 @@ class ClimateService:
             f"Changed files: {', '.join(parent.affected_files)}\n"
             f"Test profile: {record.get('profile_name')}\n"
             f"Failed tests: {failed}\n"
-            f"Bounded test evidence:\n{failure}"
+            f"Previous approved diff (bounded):\n{prior_diff}\n"
+            + (f"RepoBrain orientation (bounded; verify live files):\n{repobrain_context}\n" if repobrain_context else "")
+            + f"Bounded test evidence:\n{failure}"
         )
         run = self.execute(
             parent.workspace,
@@ -1804,10 +1945,22 @@ class ClimateService:
             meta = self._run_meta.get(follow_run_id) or {}
             meta["parent_proposal_id"] = parent.id
             meta["source_test_run_id"] = test_run_id
+            meta["root_proposal_id"] = parent.root_proposal_id
+            meta["iteration_depth"] = next_depth
             self._run_meta[follow_run_id] = meta
             assert self.test_execution is not None
             self.test_execution.store.update(test_run_id, follow_up_run_id=follow_run_id)
         self._audit_test("coding_test_follow_up_started", {**record, "follow_up_run_id": follow_run_id}, ok=True)
+        if self.iteration_store and parent.root_proposal_id:
+            self.iteration_store.update_chain(parent.root_proposal_id, status="generating_fix")
+            self.iteration_store.event(
+                root_proposal_id=parent.root_proposal_id,
+                depth=next_depth,
+                event_type="follow_up_started",
+                proposal_id=parent.id,
+                test_run_id=test_run_id,
+                status="running",
+            )
         return run
 
     def _repository_root(self, repo: Repository) -> Path:
@@ -1831,8 +1984,124 @@ class ClimateService:
                 "exit_code": record.get("exit_code"),
                 "timed_out": bool(record.get("timed_out")),
                 "cancel_requested": bool(record.get("cancel_requested")),
+                "root_proposal_id": record.get("root_proposal_id"),
+                "iteration_depth": record.get("iteration_depth"),
+                "failure_fingerprint": record.get("failure_fingerprint"),
+                "repeated_failure_detected": bool(record.get("repeated_failure_detected")),
             },
         )
+
+    def iteration_status(self, root_proposal_id: str) -> dict[str, Any] | None:
+        if not self.iteration_store or not root_proposal_id:
+            return None
+        return self.iteration_store.status(root_proposal_id)
+
+    def _iteration_event(
+        self,
+        proposal: Proposal,
+        event_type: str,
+        *,
+        status: str,
+        detail: dict[str, Any] | None = None,
+    ) -> None:
+        if not self.iteration_store or not proposal.root_proposal_id:
+            return
+        self.iteration_store.event(
+            root_proposal_id=proposal.root_proposal_id,
+            depth=int(proposal.iteration_depth or 0),
+            event_type=event_type,
+            proposal_id=proposal.id,
+            test_run_id=proposal.source_test_run_id,
+            status=status,
+            detail=detail,
+        )
+        if event_type == "proposal_accepted":
+            self.iteration_store.update_chain(
+                proposal.root_proposal_id,
+                current_depth=int(proposal.iteration_depth or 0),
+                status="awaiting_test_action",
+                warning="",
+            )
+
+    def _iteration_test_event(
+        self,
+        record: dict[str, Any],
+        event_type: str,
+        *,
+        status: str,
+        detail: dict[str, Any] | None = None,
+    ) -> None:
+        root_id = str(record.get("root_proposal_id") or "")
+        if not self.iteration_store or not root_id:
+            return
+        self.iteration_store.event(
+            root_proposal_id=root_id,
+            depth=int(record.get("iteration_depth") or 0),
+            event_type=event_type,
+            proposal_id=str(record.get("proposal_id") or ""),
+            test_run_id=str(record.get("id") or ""),
+            status=status,
+            detail=detail,
+        )
+
+    def _block_iteration(self, root_proposal_id: str, depth: int, warning: str) -> None:
+        if not self.iteration_store or not root_proposal_id:
+            return
+        self.iteration_store.update_chain(
+            root_proposal_id,
+            current_depth=min(int(depth), MAX_CODING_ITERATION_DEPTH),
+            status="blocked",
+            warning=warning[:1000],
+        )
+        self.iteration_store.event(
+            root_proposal_id=root_proposal_id,
+            depth=int(depth),
+            event_type="guard_blocked",
+            status="blocked",
+            detail={"warning": warning[:1000]},
+        )
+
+    def _on_test_complete(self, record: dict[str, Any]) -> None:
+        """Persist terminal test state without initiating another action."""
+        try:
+            status = str(record.get("status") or "failed")
+            event_type = {
+                "passed": "tests_passed",
+                "failed": "tests_failed",
+                "cancelled": "tests_cancelled",
+                "timed_out": "tests_timed_out",
+            }.get(status, "tests_failed")
+            self._audit_test("coding_tests_completed", record, ok=status == "passed")
+            self._iteration_test_event(
+                record,
+                event_type,
+                status=status,
+                detail={
+                    "exit_code": record.get("exit_code"),
+                    "failed_tests": list(record.get("failed_tests") or [])[:40],
+                    "repeated_failure_detected": bool(record.get("repeated_failure_detected")),
+                },
+            )
+            root_id = str(record.get("root_proposal_id") or "")
+            if not self.iteration_store or not root_id:
+                return
+            if status == "passed":
+                self.iteration_store.update_chain(root_id, status="passed", warning="")
+            elif status == "failed" and record.get("repeated_failure_detected"):
+                self._block_iteration(
+                    root_id,
+                    int(record.get("iteration_depth") or 0) + 1,
+                    "The same test failure repeated in this chain. Iteration stopped.",
+                )
+            elif status == "failed":
+                self.iteration_store.update_chain(root_id, status="tests_failed", warning="")
+            elif status == "cancelled":
+                self.iteration_store.update_chain(root_id, status="tests_cancelled")
+            elif status == "timed_out":
+                self.iteration_store.update_chain(root_id, status="tests_timed_out")
+        except Exception:
+            # Test completion persistence must never break process cleanup.
+            return
 
     def ports(self, workspace: str, repository_id: str) -> dict[str, Any]:
         """Read-only local listener discovery for the selected CLIMATE repository."""
@@ -2232,6 +2501,11 @@ class ClimateService:
                 "model": proposal.model,
                 "execution_mode": proposal.execution_mode,
                 "context_scope": proposal.context_scope,
+                "root_proposal_id": proposal.root_proposal_id,
+                "iteration_depth": proposal.iteration_depth,
+                "parent_proposal_id": proposal.parent_proposal_id,
+                "source_test_run_id": proposal.source_test_run_id,
+                "proposal_fingerprint": proposal.proposal_fingerprint,
             },
         )
 
@@ -2297,6 +2571,10 @@ class ClimateService:
                 else ""
             ),
             "evidence_provenance": dict(proposal.evidence_provenance),
+            "parent_proposal_id": proposal.parent_proposal_id,
+            "source_test_run_id": proposal.source_test_run_id,
+            "root_proposal_id": proposal.root_proposal_id,
+            "iteration_depth": proposal.iteration_depth,
         }
 
     def _branch(self, repo: Repository) -> str | None:

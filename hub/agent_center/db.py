@@ -449,6 +449,46 @@ _MIGRATIONS: list[tuple[str, str]] = [
             ON coding_test_runs(status, updated_at DESC);
         """,
     ),
+    (
+        "017_coding_iteration_chains",
+        """
+        ALTER TABLE coding_edit_proposals ADD COLUMN root_proposal_id TEXT NOT NULL DEFAULT '';
+        ALTER TABLE coding_edit_proposals ADD COLUMN iteration_depth INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE coding_edit_proposals ADD COLUMN proposal_fingerprint TEXT NOT NULL DEFAULT '';
+        ALTER TABLE coding_test_runs ADD COLUMN root_proposal_id TEXT NOT NULL DEFAULT '';
+        ALTER TABLE coding_test_runs ADD COLUMN iteration_depth INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE coding_test_runs ADD COLUMN failure_fingerprint TEXT NOT NULL DEFAULT '';
+        ALTER TABLE coding_test_runs ADD COLUMN repeated_failure_detected INTEGER NOT NULL DEFAULT 0;
+
+        CREATE TABLE IF NOT EXISTS coding_iteration_chains (
+            root_proposal_id TEXT PRIMARY KEY,
+            root_run_id TEXT NOT NULL,
+            workspace TEXT NOT NULL,
+            repository_id TEXT NOT NULL,
+            max_depth INTEGER NOT NULL,
+            current_depth INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'awaiting_decision',
+            warning TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS coding_iteration_events (
+            id TEXT PRIMARY KEY,
+            root_proposal_id TEXT NOT NULL,
+            sequence INTEGER NOT NULL,
+            depth INTEGER NOT NULL DEFAULT 0,
+            event_type TEXT NOT NULL,
+            proposal_id TEXT NOT NULL DEFAULT '',
+            test_run_id TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT '',
+            detail_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            UNIQUE(root_proposal_id, sequence)
+        );
+        CREATE INDEX IF NOT EXISTS idx_coding_iteration_events_root
+            ON coding_iteration_events(root_proposal_id, sequence);
+        """,
+    ),
 ]
 
 

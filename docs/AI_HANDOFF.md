@@ -4,7 +4,47 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**Coding Agent Phase 1 (2026-08-20)**
+**Coding Agent Phase 3 (2026-08-20)**
+
+The Phase 2 Accept/Reject and Run Tests/Skip Tests gates now repeat for explicitly approved
+follow-up fixes. Migration `017_coding_iteration_chains` adds root/depth/fingerprint fields
+to proposals and test runs plus durable chain/event tables. Each chain links the root change,
+test ids, parent/child proposals, decisions, outcomes, and final status. Code Workspace shows
+a compact timeline such as `Change 1 → Tests failed → Fix 1 → Tests passed`.
+
+There is still no automatic apply, test, rerun, or fix loop. The user must select every
+Accept and every Run Tests action. `CODING_AGENT_MAX_ITERATIONS` defaults to three accepted
+fixes; normalized failure and proposal fingerprints stop repeated cycles with a persisted
+warning. Stale fixes use the existing exact-file hash conflict path. Follow-up prompts contain
+only bounded failure output, changed files, the previous bounded diff, optional bounded
+RepoBrain orientation, and a live-verification instruction. Phase 1 patch/write guards and
+Phase 2 runner/cwd/timeout/cancel/output controls are unchanged. Standalone Chat and Settings
+remain unchanged.
+
+Tests: `tests/test_coding_agent_phase3.py`, Phase 1/2 regression suites, CLIMATE service and
+execution-mode regressions, JavaScript syntax, compileall, and diff checks.
+
+Prior: **Coding Agent Phase 2 (2026-08-20)**
+
+Accepted Code Workspace proposals now expose compact **Run Tests / Skip Tests** actions.
+Run Tests accepts only a discovered server profile id. Targeted Python tests inferred from
+changed files are preferred; full unittest/pytest suites remain explicit choices. Strictly
+validated `package.json` test scripts and approved non-live/non-write Repository Workspace
+test profiles can also appear. Commands are argv arrays with `shell=False`, repository-only
+cwd, minimal environment, bounded/redacted output, timeout, and cancellation.
+
+Migration `016_coding_test_runs` persists proposal/apply identity, profile and exact command,
+cwd, timestamps, status/exit code, stdout/stderr, timeout/cancel flags, failed tests, changed
+files, and follow-up run/proposal ids. After a failed run the user may select **Propose Fix**.
+Only bounded failure evidence is sent into a new provider run; its new proposal uses the
+existing Phase 1 persistence, stale validation, and Accept/Reject gate. No automatic tests,
+fixes, applies, reruns, package installation, commits, or pushes were added. Standalone Chat
+and Settings are unchanged.
+
+Tests: `tests/test_coding_agent_phase2.py`, Phase 1 tests, CLIMATE execution-mode/service
+regressions, JavaScript syntax, compileall, and diff checks.
+
+Prior: **Coding Agent Phase 1 (2026-08-20)**
 
 Code Workspace now upgrades its existing proposal review seam into a durable controlled-edit
 workflow. AiriX/provider execution remains read-only and returns a short plan plus bounded
