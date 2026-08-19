@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-19 (CLIMATE atmosphere polish).
+Last verified: 2026-08-19 (AiriX Context Expansion Phase 1).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -22,6 +22,17 @@ repository stays strictly scoped. Reopening a conversation restores the saved
 mode/provider/model/scope/repository. The VANTA workspace repo is never inherited.
 Repository scope is validated only when a specific repository is selected. Coding
 diagnostics stay in the Workspace Assistant.
+
+In AiriX mode, CLIMATE uses one provider-agnostic internal context registry for
+Repositories, Tasks, Notebook/Notes, SQL Workspace metadata/history, and
+Repository Activity. Each source exposes id/type, availability, bounded
+search/retrieve, and source metadata. The resolver ranks candidates globally,
+keeps a small per-run evidence packet, isolates source failures, and persists
+sources considered/queried/used plus evidence references on the existing Agent
+Center run. General remains repository-free, Specific Repository filters linked
+stores to that repository, and All Repositories uses bounded multi-repository
+evidence. Direct never invokes this registry or automatically retrieves CLIMATE
+context; only explicit user attachments remain eligible.
 
 **Code Workspace** uses the same `[ AiriX | Direct ] [ Provider ] [ Model ]
 [ Context Scope ]` architecture in an IDE-native **AiriX · Code Assistant**
@@ -67,8 +78,8 @@ Context Resolver flow in Code Workspace (compact repo hints/packet; native
 provider investigation still allowed) and CLIMATE chat wrapping on Chat.
 Direct Chat sends the user prompt to the same selected provider/model with
 only minimal system/identity context — no evidence gates, investigation
-prompts, or repository-verification language unless Context Scope is
-**All Repositories** or a specific repository (or the user attached files).
+prompts, repository-verification language, or automatic CLIMATE retrieval.
+Explicit user-attached files remain available in a specific repository.
 **General** is the Chat default: no repository limitation and no implied
 VANTA inheritance. AiriX General also receives compact hub registry facts
 (connected repository names/ids/types from config) so CLIMATE-known questions
@@ -86,7 +97,8 @@ restores execution mode, provider, exact model, context scope, and repository
 from saved `context.climate_execution`, not leftover UI controls. Persisted fields
 include `surface`, execution mode, provider, exact model, context scope, selected
 repository id/name, attached files, and retrieved/inspected files when the run
-produced them. Code Workspace reopen applies the same record to mode, provider,
+produced them, plus internal sources considered/queried/used and bounded evidence
+references. Code Workspace reopen applies the same record to mode, provider,
 model, context scope, and repository. General stays repo-free; Specific Repository
 uses that repo only; All Repositories uses bounded retrieval hits; Direct never
 implies a native repository scan. Standalone

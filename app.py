@@ -394,6 +394,8 @@ def create_app() -> Flask:
         registry if registry is not None else Registry([]),
         app.config["REPO_WORKSPACE"],
         ClimateCodingAdapter(app.config["AGENT_CENTER"]),
+        notebook_store=app.config["NOTEBOOK"],
+        sql_workspace_store=app.config["SQL_WS_STORE"],
     )
     register_climate_routes(app)
     app.config["BRANDING"] = BrandingService()

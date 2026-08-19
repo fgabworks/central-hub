@@ -166,7 +166,10 @@ class ChatExecutionContextTests(unittest.TestCase):
                     self.assertEqual(result["retrieved_files"], [])
                     self.assertEqual(exec_meta["repository_id"], "")
                 if scope == "all":
-                    self.assertIn("hub/climate/service.py", " ".join(result.get("retrieved_files") or []))
+                    if mode == "climate_assisted":
+                        self.assertIn("hub/climate/service.py", " ".join(result.get("retrieved_files") or []))
+                    else:
+                        self.assertEqual(result.get("retrieved_files") or [], [])
                     self.assertEqual(result["repository_id"], "")
                     self.assertNotIn("print(1)", payload.get("prompt") or "")
                 if scope == "repository":
@@ -333,9 +336,13 @@ class WorkspaceExecutionContextTests(unittest.TestCase):
                     self.assertEqual(result["repository_id"], "")
                     self.assertFalse(call.get("repository_investigation"))
                 if scope == "all":
-                    self.assertIn("app.py", " ".join(result.get("retrieved_files") or []))
-                    self.assertIn("Bounded relevant repository hits", call.get("selection") or "")
-                    self.assertNotIn("value = 1\nvalue = 1\nvalue = 1", call.get("selection") or "")
+                    if mode == "climate_assisted":
+                        self.assertIn("app.py", " ".join(result.get("retrieved_files") or []))
+                        self.assertIn("Bounded relevant repository hits", call.get("selection") or "")
+                        self.assertNotIn("value = 1\nvalue = 1\nvalue = 1", call.get("selection") or "")
+                    else:
+                        self.assertEqual(result.get("retrieved_files") or [], [])
+                        self.assertNotIn("Bounded relevant repository hits", call.get("selection") or "")
                 if scope == "repository":
                     self.assertEqual(call["repository_id"], "work-repo")
                     self.assertIn("docs/anc.md", result.get("attached_files") or [])

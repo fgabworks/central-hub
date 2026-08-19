@@ -37,6 +37,7 @@ from hub.agent_center.runner import AgentRunner
 from hub.agent_center.store import AgentCenterStore
 from hub.registry.models import Registry
 from hub.settings import ROOT_DIR
+from hub.climate.execution_mode import normalize_context_source_list
 
 AuditFn = Callable[..., None]
 
@@ -80,6 +81,11 @@ def _merge_climate_execution(context: dict[str, Any], payload: dict[str, Any]) -
         "retrieved_files": _clean_exec_paths(extra.get("retrieved_files")),
         "inspected_files": _clean_exec_paths(extra.get("inspected_files")),
         "current_file": str(extra.get("current_file") or "").replace("\\", "/").strip().lstrip("/"),
+        "sources_considered": normalize_context_source_list(extra.get("sources_considered")),
+        "sources_queried": [str(item)[:100] for item in list(extra.get("sources_queried") or [])[:24]],
+        "sources_used": [str(item)[:100] for item in list(extra.get("sources_used") or [])[:24]],
+        "evidence_references": normalize_context_source_list(extra.get("evidence_references")),
+        "context_source_failures": normalize_context_source_list(extra.get("context_source_failures")),
     }
     return merged
 

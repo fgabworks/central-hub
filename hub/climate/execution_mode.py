@@ -148,6 +148,27 @@ def normalize_path_list(value: Any, *, limit: int = 48) -> list[str]:
     return items
 
 
+def normalize_context_source_list(value: Any, *, limit: int = 24) -> list[Any]:
+    """Keep context provenance JSON-safe and bounded before run persistence."""
+    def clean(item: Any, depth: int = 0) -> Any:
+        if depth >= 3:
+            return str(item or "")[:500]
+        if isinstance(item, dict):
+            return {
+                str(key)[:80]: clean(val, depth + 1)
+                for key, val in list(item.items())[:24]
+                if not str(key).startswith("_")
+            }
+        if isinstance(item, (list, tuple)):
+            return [clean(part, depth + 1) for part in list(item)[:24]]
+        if isinstance(item, (str, int, float, bool)) or item is None:
+            return item[:1_000] if isinstance(item, str) else item
+        return str(item)[:500]
+
+    raw = value if isinstance(value, (list, tuple)) else []
+    return [clean(item) for item in list(raw)[:limit]]
+
+
 def climate_execution_record(
     *,
     execution_mode: str | None,
@@ -162,6 +183,11 @@ def climate_execution_record(
     retrieved_files: Any = None,
     inspected_files: Any = None,
     current_file: str = "",
+    sources_considered: Any = None,
+    sources_queried: Any = None,
+    sources_used: Any = None,
+    evidence_references: Any = None,
+    context_source_failures: Any = None,
 ) -> dict[str, Any]:
     """Authoritative executed configuration persisted on the Agent Center run."""
     return {
@@ -177,4 +203,9 @@ def climate_execution_record(
         "retrieved_files": normalize_path_list(retrieved_files),
         "inspected_files": normalize_path_list(inspected_files),
         "current_file": str(current_file or "").replace("\\", "/").strip().lstrip("/"),
+        "sources_considered": normalize_context_source_list(sources_considered),
+        "sources_queried": [str(item)[:100] for item in list(sources_queried or [])[:24]],
+        "sources_used": [str(item)[:100] for item in list(sources_used or [])[:24]],
+        "evidence_references": normalize_context_source_list(evidence_references),
+        "context_source_failures": normalize_context_source_list(context_source_failures),
     }

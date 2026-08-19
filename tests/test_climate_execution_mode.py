@@ -302,7 +302,8 @@ class ExecutionModeServiceTests(unittest.TestCase):
             )
         resolver.assert_called()
         self.assertEqual(resolver.call_args.kwargs["repo"].id, "work-repo")
-        self.assertEqual(self.coding.calls[0]["prompt"], packet.packet)
+        self.assertEqual(self.coding.calls[0]["prompt"], "hello")
+        self.assertIn(packet.packet, self.coding.calls[0]["selection"])
         self.assertEqual(self.coding.calls[0]["repository_id"], "work-repo")
         with mock.patch("hub.climate.service.resolve_climate_context") as resolver:
             self.service.execute_chat(
@@ -361,7 +362,7 @@ class ExecutionModeServiceTests(unittest.TestCase):
         self.assertEqual(result["context_scope"], "all")
         self.assertEqual(result["execution_mode"], DIRECT)
         self.assertEqual(self.coding.calls[0]["repository_id"], "")
-        self.assertIn("CLIMATE connected repositories", self.coding.calls[0]["selection"])
+        self.assertFalse(self.coding.calls[0]["selection"])
 
     def test_workspace_attached_files_reach_provider(self):
         result = self.service.execute(

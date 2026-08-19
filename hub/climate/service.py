@@ -10,6 +10,12 @@ from typing import Any
 from hub.agent_center.repository_context import explicit_repository_id
 from hub.agent_center.redact import redact_text
 from hub.climate.file_view import as_read_only_file
+from hub.climate.context_registry import (
+    ClimateContextResolver,
+    ContextRequest,
+    ContextResolution,
+    build_default_context_resolver,
+)
 from hub.climate.coding import ClimateCodingAdapter, ClimateCodingError, classify_task_mode
 from hub.climate.codex_limits import get_codex_rate_limits_service
 from hub.climate.investigation_metrics import summarize_tool_activity
@@ -74,6 +80,9 @@ class ClimateService:
         registry: Registry,
         repository_workspace: RepositoryWorkspaceService,
         coding: ClimateCodingAdapter,
+        notebook_store: Any | None = None,
+        sql_workspace_store: Any | None = None,
+        context_resolver: ClimateContextResolver | None = None,
     ) -> None:
         self.registry = registry
         self.repository_workspace = repository_workspace
@@ -83,6 +92,16 @@ class ClimateService:
         self._proposals: dict[str, Proposal] = {}
         self._local_runs: dict[str, dict[str, Any]] = {}
         self.token_efficiency = TokenEfficiencyService()
+        self.context_resolver = context_resolver or build_default_context_resolver(
+            registry=registry,
+            repository_workspace=repository_workspace,
+            notebook_store=notebook_store,
+            sql_workspace_store=sql_workspace_store,
+            intelligence_loader=lambda: self._repository_intelligence(),
+            # Resolve through this module so existing tests and callers can
+            # replace the established repository resolver seam.
+            context_loader=lambda **kwargs: resolve_climate_context(**kwargs),
+        )
 
     def _repository_intelligence(self) -> Any | None:
         agent_center = getattr(self.coding, "agent_center", None)
@@ -433,6 +452,7 @@ class ClimateService:
         chat_sources: list[str] = []
         attached_labels: list[str] = []
         retrieved_files: list[str] = []
+        context_resolution = ContextResolution("", [], [], [], [], [])
         attached_items = self._parse_attached_files(payload)
         if scope == REPOSITORY:
             repo = self.require_repo(ws, repo_id)
@@ -456,36 +476,41 @@ class ClimateService:
                     selection=extra_selection,
                 )
                 chat_sources = list(attached_labels)
-            else:
-                preflight = resolve_climate_context(
-                    workspace=ws,
-                    repo=repo,
-                    repository_workspace=self.repository_workspace,
-                    prompt=prompt,
-                    provider=provider,
-                    model=model,
-                    task_mode="ask",
-                    current_file=current_file,
-                    selected_files=selected_files,
-                    selection=selection,
-                    include_repo_context=True,
-                    repository_intelligence=self._repository_intelligence() if ws == "work" else None,
-                    handoff=bool(payload.get("handoff")),
-                    repository_agent=False,
-                )
-                if preflight.ok and preflight.packet:
-                    packed_prompt = preflight.packet
-                extra_selection = extra_selection if attached_items else selection
-                raw_sources = getattr(preflight, "source_files", None)
-                if not isinstance(raw_sources, (list, tuple)):
-                    raw_sources = []
-                retrieved_files = normalize_path_list(list(raw_sources))
-                chat_sources = normalize_path_list(list(attached_labels) + list(retrieved_files))
-        elif scope == ALL:
-            extra_selection, retrieved_files = self._bounded_all_repository_bundle(ws, prompt)
-            chat_sources = list(retrieved_files)
-        elif not direct:
-            extra_selection = self.hub_registry_facts(ws)
+        if not direct:
+            context_resolution = self.context_resolver.resolve(ContextRequest(
+                query=prompt,
+                workspace=ws,
+                scope=scope,
+                repository_id=repo_id if scope == REPOSITORY else "",
+                provider=provider,
+                model=model,
+                current_file=current_file if scope == REPOSITORY else "",
+                selected_files=tuple(selected_files if scope == REPOSITORY else []),
+                selection=selection if scope == REPOSITORY else "",
+            ))
+            if context_resolution.packet:
+                extra_selection = "\n\n".join(filter(None, [
+                    extra_selection if attached_items else "",
+                    context_resolution.packet,
+                ]))[:40_000]
+            retrieved_labels: list[Any] = []
+            for ref in context_resolution.evidence_references:
+                metadata = dict(ref.get("metadata") or {})
+                paths = list(metadata.get("paths") or [])
+                if metadata.get("path"):
+                    paths.append(metadata.get("path"))
+                for path in paths:
+                    if not str(path).strip():
+                        continue
+                    if scope == REPOSITORY:
+                        retrieved_labels.append(str(path))
+                    else:
+                        retrieved_labels.append({
+                            "repository_id": metadata.get("repository_id", ""),
+                            "path": path,
+                        })
+            retrieved_files = normalize_path_list(retrieved_labels)
+            chat_sources = normalize_path_list(list(attached_labels) + list(retrieved_files))
         result = self.coding.execute(
             workspace=ws,
             repository_id=repo_id if scope == REPOSITORY else "",
@@ -509,6 +534,11 @@ class ClimateService:
             attached_files=attached_labels,
             retrieved_files=retrieved_files,
             repository_name=self._repository_display_name(repo_id) if scope == REPOSITORY else "",
+            sources_considered=context_resolution.sources_considered,
+            sources_queried=context_resolution.sources_queried,
+            sources_used=context_resolution.sources_used,
+            evidence_references=context_resolution.evidence_references,
+            context_source_failures=context_resolution.failures,
         )
         result["task_mode"] = "ask"
         result["provider_invoked"] = True
@@ -526,7 +556,14 @@ class ClimateService:
             selected_files=selected_files if scope == REPOSITORY else [],
             current_file=current_file if scope == REPOSITORY else "",
             sources=chat_sources,
-            extra={"user_prompt": display_prompt or prompt},
+            extra={
+                "user_prompt": display_prompt or prompt,
+                "sources_considered": context_resolution.sources_considered,
+                "sources_queried": context_resolution.sources_queried,
+                "sources_used": context_resolution.sources_used,
+                "evidence_references": context_resolution.evidence_references,
+                "context_source_failures": context_resolution.failures,
+            },
         )
 
     def execute(self, workspace: str, repository_id: str, **payload: Any) -> dict[str, Any]:
@@ -791,10 +828,28 @@ class ClimateService:
         )
         extra = ""
         retrieved_files: list[str] = []
-        if scope == ALL:
-            extra, retrieved_files = self._bounded_all_repository_bundle(ws, prompt)
-        elif not direct:
-            extra = self.hub_registry_facts(ws)
+        context_resolution = ContextResolution("", [], [], [], [], [])
+        if not direct:
+            context_resolution = self.context_resolver.resolve(ContextRequest(
+                query=prompt,
+                workspace=ws,
+                scope=scope,
+                provider=provider,
+                model=model,
+            ))
+            extra = context_resolution.packet
+            retrieved_labels: list[Any] = []
+            for ref in context_resolution.evidence_references:
+                metadata = dict(ref.get("metadata") or {})
+                paths = list(metadata.get("paths") or [])
+                if metadata.get("path"):
+                    paths.append(metadata.get("path"))
+                for path in paths:
+                    retrieved_labels.append({
+                        "repository_id": metadata.get("repository_id", ""),
+                        "path": path,
+                    })
+            retrieved_files = normalize_path_list(retrieved_labels)
         file_block = self._attach_explicit_file_bodies(attached)
         selection_parts = [extra, file_block, str(payload.get("selection") or "")]
         extra_selection = "\n\n".join(
@@ -824,6 +879,11 @@ class ClimateService:
             attached_files=attached_labels,
             retrieved_files=retrieved_files,
             repository_name="",
+            sources_considered=context_resolution.sources_considered,
+            sources_queried=context_resolution.sources_queried,
+            sources_used=context_resolution.sources_used,
+            evidence_references=context_resolution.evidence_references,
+            context_source_failures=context_resolution.failures,
         )
         result["task_mode"] = "ask"
         result["provider_invoked"] = True
@@ -841,7 +901,14 @@ class ClimateService:
             selected_files=[str(item.get("path") or "") for item in attached],
             current_file="",
             sources=normalize_path_list(list(attached_labels) + list(retrieved_files)),
-            extra={"user_prompt": display_prompt or prompt},
+            extra={
+                "user_prompt": display_prompt or prompt,
+                "sources_considered": context_resolution.sources_considered,
+                "sources_queried": context_resolution.sources_queried,
+                "sources_used": context_resolution.sources_used,
+                "evidence_references": context_resolution.evidence_references,
+                "context_source_failures": context_resolution.failures,
+            },
         )
 
     def _execute_direct(
@@ -1622,11 +1689,25 @@ class ClimateService:
                 "repository_name": repo_name,
                 "surface": surface,
                 "conversation_id": result.get("conversation_id") or "",
+                "sources_considered": list(extra_meta.get("sources_considered") or []),
+                "sources_queried": list(extra_meta.get("sources_queried") or []),
+                "sources_used": list(extra_meta.get("sources_used") or []),
+                "evidence_references": list(extra_meta.get("evidence_references") or []),
+                "context_source_failures": list(extra_meta.get("context_source_failures") or []),
             }
             if extra_meta.get("preflight") is not None:
                 meta["preflight"] = extra_meta.get("preflight")
             self._run_meta[run_id] = meta
         result["sources"] = source_list
+        for key in (
+            "sources_considered",
+            "sources_queried",
+            "sources_used",
+            "evidence_references",
+            "context_source_failures",
+        ):
+            if key in extra_meta:
+                result[key] = list(extra_meta.get(key) or [])
         return self._apply_execution_identity(
             result,
             execution_mode=execution_mode,

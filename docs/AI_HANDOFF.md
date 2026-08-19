@@ -4,7 +4,26 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**CLIMATE provider expansion: OpenAI, Anthropic, xAI (2026-08-19)**
+**AiriX Context Expansion Phase 1 (2026-08-19)**
+
+AiriX now has one provider-agnostic, read-only internal context registry over
+Repositories, Tasks, Notebook/Notes, SQL Workspace metadata/history, and
+Repository Activity. Sources share id/type, availability, bounded search and
+retrieve, and metadata contracts. The resolver ranks candidates, caps evidence,
+and isolates source failures so one unavailable store does not block a run.
+General remains repository-free, Specific Repository strictly filters linked
+context, and All Repositories uses bounded multi-repository evidence. Direct mode
+never calls the resolver or automatically retrieves CLIMATE context. Existing
+Agent Center run persistence now records sources considered, queried, and used,
+plus evidence references and isolated failure diagnostics. Providers still receive
+one plain bounded packet and contain no source-specific logic. Streaming,
+cancellation, exact-model selection, conversations, and the current Chat/Code
+Workspace UI are unchanged. Gmail, Drive, Calendar, and DHIS2 are not registered.
+
+Tests: `tests/test_climate_context_registry.py`, focused Chat and execution-context
+regressions.
+
+Prior: **CLIMATE provider expansion: OpenAI, Anthropic, xAI (2026-08-19)**
 
 CLIMATE Chat and Code Workspace now offer production API providers besides Gemini:
 OpenAI (Responses API), Anthropic (Messages API), and xAI/Grok (OpenAI-compatible

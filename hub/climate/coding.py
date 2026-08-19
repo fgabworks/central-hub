@@ -305,6 +305,11 @@ class ClimateCodingAdapter:
         retrieved_files: list[str] | None = None,
         repository_name: str = "",
         provider_label: str = "",
+        sources_considered: list[dict[str, Any]] | None = None,
+        sources_queried: list[str] | None = None,
+        sources_used: list[str] | None = None,
+        evidence_references: list[dict[str, Any]] | None = None,
+        context_source_failures: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         self._require_provider(provider)
         if workspace not in {"work", "personal"}:
@@ -521,6 +526,11 @@ class ClimateCodingAdapter:
                 attached_files=attached_files,
                 retrieved_files=retrieved_files,
                 current_file=current_file,
+                sources_considered=sources_considered,
+                sources_queried=sources_queried,
+                sources_used=sources_used,
+                evidence_references=evidence_references,
+                context_source_failures=context_source_failures,
             ),
         }
         if general_chat:
@@ -579,6 +589,11 @@ class ClimateCodingAdapter:
             + list(public.get("retrieved_files") or [])
             + list(public.get("inspected_files") or [])
         )
+        public["sources_considered"] = list(sources_considered or [])
+        public["sources_queried"] = list(sources_queried or [])
+        public["sources_used"] = list(sources_used or [])
+        public["evidence_references"] = list(evidence_references or [])
+        public["context_source_failures"] = list(context_source_failures or [])
         public["execution_summary"] = format_execution_summary(
             execution_mode=orchestration,
             provider_label=display_provider,
@@ -753,6 +768,11 @@ class ClimateCodingAdapter:
             "retrieved_files": retrieved,
             "inspected_files": inspected,
             "sources": sources,
+            "sources_considered": list(exec_meta.get("sources_considered") or []),
+            "sources_queried": list(exec_meta.get("sources_queried") or []),
+            "sources_used": list(exec_meta.get("sources_used") or []),
+            "evidence_references": list(exec_meta.get("evidence_references") or []),
+            "context_source_failures": list(exec_meta.get("context_source_failures") or []),
             "assistant_label": assistant_label(execution_mode, provider_label) if execution_mode else "",
             "execution_summary": format_execution_summary(
                 execution_mode=execution_mode,

@@ -301,7 +301,7 @@ class ClimateChatApiTests(unittest.TestCase):
         self.assertTrue(payload.get("allow_general_knowledge"))
         self.assertEqual(payload["repository_ids"], [])
 
-    def test_all_repositories_direct_attaches_bounded_context(self) -> None:
+    def test_all_repositories_direct_does_not_attach_climate_context(self) -> None:
         self.center.repository_intelligence = mock.Mock()
         self.center.repository_intelligence.retrieve.return_value = {"items": []}
         self.service.repository_workspace.availability.return_value = {"available": True}
@@ -317,9 +317,9 @@ class ClimateChatApiTests(unittest.TestCase):
         packed = str(payload["prompt"])
         self.assertEqual(result["execution_mode"], "direct")
         self.assertTrue(payload.get("direct_provider_chat"))
-        self.assertIn("Attached context:", packed)
-        self.assertIn("CLIMATE connected repositories", packed)
-        self.assertIn("list connected repos", packed)
+        self.assertEqual(packed, "list connected repos")
+        self.assertNotIn("CLIMATE connected repositories", packed)
+        self.center.repository_intelligence.retrieve.assert_not_called()
 
     def test_specific_repository_scope_stays_strict(self) -> None:
         with self.assertRaises(ClimateCodingError) as caught:
