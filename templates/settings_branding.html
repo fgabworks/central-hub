@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Branding · Settings · {{ app_name }}{% endblock %}
+{% block content %}
+{% set sh_title = "Branding" %}
+{% set sh_info = "Upload one CLIMATE logo, then preview how it appears in the app header versus chat avatars." %}
+{% set settings_active_tab = "branding" %}
+<div class="settings-layout">
+  <aside class="settings-nav-wrap">
+    {% include "partials/settings_nav.html" %}
+  </aside>
+  <div class="settings-main">
+    {% include "partials/section_header.html" %}
+    <p class="settings-lede">
+      Store a PNG, SVG, or WEBP logo on this CLIMATE server. App branding uses the full logo or wordmark
+      in the sidebar and headers. Chat avatars stay icon-only with padding so the wordmark is never squeezed
+      into an AiriX bubble. Direct replies keep their provider icons.
+    </p>
+
+    <section class="panel panel-body branding-panel" id="branding-settings"
+             data-endpoint="/api/settings/branding"
+             data-reset="/api/settings/branding/reset"
+             data-default-icon="{{ url_for('static', filename='img/climate-mark.png') }}"
+             data-default-full="{{ url_for('static', filename='img/climate-logo.png') }}"
+             data-icon-url="{{ branding.icon_url }}"
+             data-avatar-url="{{ branding.avatar_url }}"
+             data-full-url="{{ branding.full_url }}"
+             data-custom="{{ '1' if branding.custom else '0' }}">
+      <div class="branding-grid">
+        <div class="branding-preview-col">
+          <div class="branding-preview-pair">
+            <div class="branding-preview-card">
+              <div class="branding-field-label">Header / full logo</div>
+              <div class="branding-preview-stage">
+                <div class="branding-preview-lockup climate-brand-lockup is-preview"
+                     data-brand-display="{{ branding.display }}"
+                     data-brand-fit="{{ branding.fit }}">
+                  <span class="brand-mark" aria-hidden="true">
+                    <img class="brand-logo-mark" id="branding-preview-header"
+                         src="{{ branding.logo_url }}"
+                         alt="Header logo preview"
+                         decoding="async">
+                  </span>
+                  <span class="brand-text">
+                    <strong class="brand-wordmark">CLIMATE</strong>
+                    <span>Integrated Intelligence System</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div class="branding-preview-card">
+              <div class="branding-field-label">Chat avatar / icon-only</div>
+              <div class="branding-preview-stage branding-preview-avatar-stage">
+                <div class="branding-preview-avatar-row">
+                  <span class="brand-avatar is-preview" data-brand-display="icon" data-brand-fit="contain">
+                    <img id="branding-preview-avatar"
+                         src="{{ branding.avatar_url }}"
+                         alt="Chat avatar preview"
+                         decoding="async">
+                  </span>
+                  <span>
+                    <strong>AiriX</strong>
+                    <span class="muted">Icon-only · Direct mode uses Gemini, Codex, Claude, or Cursor icons</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="muted branding-preview-note" id="branding-preview-note">
+            {% if branding.custom %}Custom logo · {{ branding.original_name or branding.filename }}{% else %}Default CLIMATE logo{% endif %}
+          </p>
+        </div>
+
+        <form class="branding-form" id="branding-form">
+          <label class="branding-upload">
+            <span class="branding-field-label">Logo file</span>
+            <input type="file" id="branding-file" name="logo" accept=".png,.svg,.webp,image/png,image/svg+xml,image/webp">
+            <span class="muted">PNG, SVG, or WEBP · 2 MB max · one local file for both usages, not base64 in settings</span>
+          </label>
+
+          <fieldset class="branding-options">
+            <legend>App Branding</legend>
+            <p class="muted branding-option-hint">Top-left header, sidebar, and larger branding areas.</p>
+            <label><input type="radio" name="display" value="wordmark" {% if branding.display != 'full' %}checked{% endif %}> Wordmark</label>
+            <label><input type="radio" name="display" value="full" {% if branding.display == 'full' %}checked{% endif %}> Full logo</label>
+          </fieldset>
+
+          <fieldset class="branding-options">
+            <legend>Chat Avatar</legend>
+            <p class="muted branding-option-hint">AiriX message avatars and compact assistant identity. Always icon-only.</p>
+            <label><input type="radio" name="avatar_display" value="icon" checked disabled> Icon only</label>
+          </fieldset>
+
+          <fieldset class="branding-options">
+            <legend>Fit</legend>
+            <p class="muted branding-option-hint">Applies to app branding. Chat avatars always use contain with padding.</p>
+            <label><input type="radio" name="fit" value="contain" {% if branding.fit != 'cover' %}checked{% endif %}> Contain</label>
+            <label><input type="radio" name="fit" value="cover" {% if branding.fit == 'cover' %}checked{% endif %}> Cover</label>
+          </fieldset>
+
+          <p class="banner banner-error" id="branding-error" hidden></p>
+          <p class="banner branding-ok" id="branding-ok" hidden></p>
+
+          <div class="branding-actions">
+            <button type="button" class="btn" id="branding-reset">Reset to default</button>
+            <button type="submit" class="btn btn-primary" id="branding-save">Save</button>
+          </div>
+        </form>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/settings_branding.js') }}?v=2" defer></script>
+{% endblock %}

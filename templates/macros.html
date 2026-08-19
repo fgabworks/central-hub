@@ -42,18 +42,29 @@
   {% endif %}
 {%- endmacro %}
 
-{% macro brand_icon(size=34) -%}
+{% macro brand_icon(size=34, compact=false) -%}
+  {% set default_mark = url_for('static', filename='img/climate-mark.png') %}
+  {% set icon_src = branding.icon_url if branding is defined and branding.icon_url else default_mark %}
+  {% set full_src = branding.logo_url if branding is defined and branding.logo_url else icon_src %}
   <img class="brand-logo-mark"
-       src="{{ url_for('static', filename='img/climate-mark.png') }}"
-       width="{{ size }}"
-       height="{{ size }}"
+       src="{{ full_src if (not compact and branding is defined and branding.display == 'full') else icon_src }}"
        alt=""
        decoding="async">
 {%- endmacro %}
 
-{% macro brand_logo(show_wordmark=true, mark_size=22, class_name='', show_tagline=false) -%}
-  <span class="climate-brand-lockup {{ class_name }}">
-    <span class="brand-mark" aria-hidden="true">{{ brand_icon(mark_size) }}</span>
+{% macro brand_avatar() -%}
+  {% set default_mark = url_for('static', filename='img/climate-mark.png') %}
+  {% set src = branding.avatar_url if branding is defined and branding.avatar_url else (branding.icon_url if branding is defined and branding.icon_url else default_mark) %}
+  <span class="brand-avatar" data-brand-display="icon" data-brand-fit="contain">
+    <img src="{{ src }}" alt="" decoding="async">
+  </span>
+{%- endmacro %}
+
+{% macro brand_logo(show_wordmark=true, mark_size=22, class_name='', show_tagline=false, compact=false) -%}
+  {% set display = 'icon' if compact else ((branding.display if branding is defined else 'wordmark') or 'wordmark') %}
+  {% set fit = (branding.fit if branding is defined else 'contain') or 'contain' %}
+  <span class="climate-brand-lockup {{ class_name }}" data-brand-display="{{ display }}" data-brand-fit="{{ fit }}">
+    <span class="brand-mark" aria-hidden="true">{{ brand_icon(mark_size, compact=compact) }}</span>
     {% if show_wordmark %}
     <span class="brand-text">
       <strong class="brand-wordmark">CLIMATE</strong>

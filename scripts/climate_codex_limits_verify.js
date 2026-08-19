@@ -66,7 +66,7 @@ const UNAVAILABLE = {
 async function seedUsage(page) {
   await page.evaluate(() => {
     localStorage.setItem(
-      "climate:chat:v1:work",
+      "climate:workspace:v1:work",
       JSON.stringify({
         activeId: "chat-limits",
         sessions: [

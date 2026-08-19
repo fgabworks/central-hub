@@ -253,7 +253,7 @@ fs.mkdirSync(outDir, { recursive: true });
     await page.waitForSelector("#climate-stop:not([hidden])", { timeout: 15000 });
     ui = await page.evaluate(() => ({
       stopVisible: !document.getElementById("climate-stop").hidden,
-      msgs: document.querySelectorAll("#climate-ai-feed .climate-chat-msg").length,
+      msgs: document.querySelectorAll("#climate-ai-feed .climate-assistant-msg, #climate-ai-feed .climate-chat-msg").length,
     }));
     check("new run starts after stop", ui.stopVisible && ui.msgs >= 3, String(ui.msgs));
     await page.screenshot({ path: path.join(outDir, "new-run.png") });

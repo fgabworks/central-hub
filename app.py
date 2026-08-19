@@ -155,6 +155,8 @@ from hub.data_explorer.service import DataExplorerService
 from hub.repository_workspace.service import RepositoryWorkspaceService
 from hub.climate import ClimateCodingAdapter, ClimateService
 from hub.climate.routes import register_climate_routes
+from hub.branding.service import BrandingService
+from hub.branding.routes import public_branding, register_branding_routes
 from hub.climate.service import repo_workspace as climate_repo_workspace
 from hub.registry import load_registry
 from hub.registry.git_util import default_search_roots, find_local_checkout, slugify_repo_id
@@ -394,6 +396,8 @@ def create_app() -> Flask:
         ClimateCodingAdapter(app.config["AGENT_CENTER"]),
     )
     register_climate_routes(app)
+    app.config["BRANDING"] = BrandingService()
+    register_branding_routes(app)
 
     app.config["WORKSPACE_CONSOLE"] = WorkspaceConsoleService(
         registry=app.config.get("REGISTRY"),
@@ -596,6 +600,7 @@ def create_app() -> Flask:
             "note_scope": workspace,
             "assistant_dock": assistant_dock,
             "workspace_console": workspace_console,
+            "branding": public_branding(app.config["BRANDING"]),
         }
 
     def _set_workspace_and_redirect(workspace: str, next_url: str | None = None):

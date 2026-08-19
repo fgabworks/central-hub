@@ -5,6 +5,12 @@
     <span class="settings-nav-ico" aria-hidden="true">⚙</span>
     <span>General</span>
   </a>
+  <a class="settings-nav-item{% if settings_active_tab == 'branding' %} is-active{% endif %}"
+     href="{{ url_for('settings_branding') }}"
+     {% if settings_active_tab == 'branding' %}aria-current="page"{% endif %}>
+    <span class="settings-nav-ico" aria-hidden="true">◈</span>
+    <span>Branding</span>
+  </a>
   <span class="settings-nav-item is-planned" title="Planned">
     <span class="settings-nav-ico" aria-hidden="true">◐</span>
     <span>Appearance</span>

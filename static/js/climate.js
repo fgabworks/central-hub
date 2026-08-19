@@ -4,6 +4,7 @@
   if (!shell) return;
   var bootstrap = JSON.parse(shell.getAttribute("data-bootstrap") || "{}");
   var workspace = shell.getAttribute("data-workspace");
+  var CLIMATE_SURFACE = shell.getAttribute("data-surface") || "workspace";
   var apiRoot = shell.getAttribute("data-api-root");
   var repoSelect = document.getElementById("climate-repository");
   var branchSelect = document.getElementById("climate-branch");
@@ -241,6 +242,7 @@
     renderContextSummary();
     syncSelectedFilesFromAttached();
     highlightTree();
+    renderAssistantContextBar();
   }
   function renderContextSummary() {
     var summary = document.getElementById("climate-context-summary");
@@ -258,6 +260,36 @@
             return "<div>" + escapeHtml(item.path) + escapeHtml(range) + "</div>";
           }).join("")
         : '<div class="climate-context-hint">No files attached.</div>';
+    }
+    renderAssistantContextBar();
+  }
+  function renderAssistantContextBar() {
+    var scopeEl = document.getElementById("climate-assistant-context-scope");
+    var fileEl = document.getElementById("climate-assistant-context-file");
+    var selEl = document.getElementById("climate-assistant-context-sel");
+    var attEl = document.getElementById("climate-assistant-context-attached");
+    if (!scopeEl && !fileEl) return;
+    var scope = currentWorkspaceScope();
+    var scopeLabel = "General";
+    if (scope.scope === "all") scopeLabel = "All repositories";
+    else if (scope.scope === "repository") {
+      scopeLabel = repoName(scope.repositoryId) || scope.repositoryId || "Repository";
+    }
+    if (scopeEl) {
+      scopeEl.textContent = scopeLabel;
+      scopeEl.title = scopeLabel;
+    }
+    var nameEl = document.getElementById("climate-current-file-name");
+    var fileText = (nameEl && nameEl.textContent) || "No file open";
+    if (fileEl) {
+      fileEl.textContent = fileText.indexOf("/") >= 0 ? fileText.split("/").pop() : fileText;
+      fileEl.title = fileText;
+    }
+    var selMeta = document.getElementById("climate-selection-meta");
+    if (selEl) selEl.textContent = (selMeta && selMeta.textContent) || "No selection";
+    if (attEl) {
+      var n = (state.attachedContext || []).length;
+      attEl.textContent = n ? (n + " attached") : "0 attached";
     }
   }
   function addAttached(item, opts) {
@@ -761,6 +793,7 @@
     var langEl = document.getElementById("climate-language");
     if (langEl) langEl.textContent = tab && !tab.binary ? languageId(tab.language, tab.path) : "Plain Text";
     if (fileReadonly) fileReadonly.hidden = !tab;
+    renderAssistantContextBar();
   }
   function captureActive() {
     saveTabViewState(currentTab());
@@ -1056,11 +1089,49 @@
       review.querySelector(".is-after pre").textContent=sides.after||"No modified content available.";
     }).catch(function(error){var review=document.getElementById("climate-git-review");if(review)review.querySelector(".is-before pre").textContent=error.message;});
   }
-  function chatStorageKey() { return "climate:chat:v1:" + workspace; }
+  function chatStorageKey() { return "climate:workspace:v1:" + workspace; }
+  function legacyChatStorageKey() { return "climate:chat:v1:" + workspace; }
+  function conversationQuery(extra) {
+    var parts = ["surface=" + encodeURIComponent(CLIMATE_SURFACE)];
+    if (repoId()) parts.push("repository_id=" + encodeURIComponent(repoId()));
+    if (extra) parts.push(extra);
+    return parts.join("&");
+  }
+  function defaultSessionTitle() { return "New session"; }
+  function isDefaultSessionTitle(title) {
+    var t = String(title || "").trim();
+    return !t || t === "New session" || t === "New chat";
+  }
   function uid(prefix) { return (prefix || "id") + "-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
   function providerLabel(id) {
     var row = (bootstrap.providers || []).find(function (p) { return p.id === id; });
     return (row && row.label) || id || "Assistant";
+  }
+  function assistantRoleLabel(msg) {
+    if (!msg || msg.role === "user") return "You";
+    if (msg.assistant_label) return msg.assistant_label;
+    var mode = msg.executionMode || msg.execution_mode || "";
+    if (mode === "direct") {
+      return providerLabel(msg.provider || (activeSession() || {}).provider);
+    }
+    return "AiriX";
+  }
+  function identityLogoSrc(msg) {
+    if (!msg || msg.role === "user") return "";
+    if (assistantRoleLabel(msg) === "AiriX") {
+      var shell = document.getElementById("climate-shell");
+      return (shell && shell.getAttribute("data-brand-icon")) || "/static/img/climate-mark.png";
+    }
+    var id = String(msg.provider || (activeSession() || {}).provider || "").toLowerCase();
+    var map = {
+      gemini: "/static/img/providers/gemini.svg",
+      codex: "/static/img/providers/codex.svg",
+      "claude-code": "/static/img/providers/claude-code.svg",
+      claude: "/static/img/providers/claude-code.svg",
+      "cursor-agent": "/static/img/providers/cursor-agent.svg",
+      cursor: "/static/img/providers/cursor-agent.svg"
+    };
+    return map[id] || "";
   }
   function providerGlyph(id) {
     return id === "codex" ? "◎" : id === "claude-code" ? "✹" : id === "cursor-agent" ? "⬡" : "✦";
@@ -1995,9 +2066,20 @@
   }
   function loadChatStore() {
     try {
-      var saved = JSON.parse(localStorage.getItem(chatStorageKey()) || "{}");
+      var raw = localStorage.getItem(chatStorageKey());
+      if (!raw) {
+        var legacy = localStorage.getItem(legacyChatStorageKey());
+        if (legacy) {
+          raw = legacy;
+          localStorage.setItem(chatStorageKey(), legacy);
+        }
+      }
+      var saved = JSON.parse(raw || "{}");
       state.chat.sessions = Array.isArray(saved.sessions) ? saved.sessions.slice(0, 40) : [];
-      state.chat.sessions.forEach(function (session) { ensureUsage(session); });
+      state.chat.sessions.forEach(function (session) {
+        ensureUsage(session);
+        if (isDefaultSessionTitle(session.title)) session.title = defaultSessionTitle();
+      });
       state.chat.activeId = saved.activeId || (state.chat.sessions[0] && state.chat.sessions[0].id) || "";
       if (!state.chat.activeId) newChatSession(true);
       else renderChat();
@@ -2037,8 +2119,8 @@
   }
   function newChatSession(silent) {
     var session = {
-      id: uid("chat"),
-      title: "New chat",
+      id: uid("session"),
+      title: defaultSessionTitle(),
       createdAt: Date.now(),
       updatedAt: Date.now(),
       provider: providerSelect.value || "",
@@ -2058,12 +2140,12 @@
     saveChatStore();
     renderChat();
     renderUsageChrome(session);
-    if (!silent) setStatus("New chat");
+    if (!silent) setStatus("New session");
     return session;
   }
   function titleFromPrompt(prompt) {
     var t = String(prompt || "").replace(/\s+/g, " ").trim();
-    if (!t) return "New chat";
+    if (!t) return defaultSessionTitle();
     return t.length > 52 ? (t.slice(0, 49) + "…") : t;
   }
   function closeChatPopovers() {
@@ -2238,7 +2320,7 @@
   function renderHistoryList() {
     if (!historyList) return;
     if (!state.chat.sessions.length) {
-      historyList.innerHTML = '<div class="climate-chat-history-item"><span>No saved chats yet</span></div>';
+      historyList.innerHTML = '<div class="climate-chat-history-item"><span>No saved sessions yet</span></div>';
       return;
     }
     historyList.innerHTML = state.chat.sessions.map(function (session) {
@@ -2255,7 +2337,7 @@
     var updated = Date.parse(row.updated_at || row.created_at || "") || Date.now();
     return {
       id: "server:" + row.id,
-      title: row.title || "New chat",
+      title: row.title || defaultSessionTitle(),
       createdAt: Date.parse(row.created_at || "") || updated,
       updatedAt: updated,
       provider: "",
@@ -2274,14 +2356,13 @@
     };
   }
   function hydrateServerHistory() {
-    if (!repoId()) return;
-    jsonFetch(endpoint("/conversations?repository_id=" + encodeURIComponent(repoId()) + "&limit=50")).then(function (data) {
+    jsonFetch(endpoint("/conversations?" + conversationQuery("limit=50"))).then(function (data) {
       (data.conversations || []).forEach(function (row) {
         var existing = state.chat.sessions.find(function (session) {
           return session.agentConversationId === row.id;
         });
         if (existing) {
-          if (!existing.title || existing.title === "New chat") existing.title = row.title || existing.title;
+          if (isDefaultSessionTitle(existing.title)) existing.title = row.title || existing.title;
           existing.updatedAt = Date.parse(row.updated_at || "") || existing.updatedAt;
           existing.serverBacked = true;
           return;
@@ -2298,7 +2379,7 @@
   }
   function hydrateServerSession(session) {
     if (!session || !session.agentConversationId || session.serverHydrated) return Promise.resolve(session);
-    return jsonFetch(endpoint("/conversations/" + encodeURIComponent(session.agentConversationId) + "?repository_id=" + encodeURIComponent(repoId()))).then(function (data) {
+    return jsonFetch(endpoint("/conversations/" + encodeURIComponent(session.agentConversationId) + "?" + conversationQuery())).then(function (data) {
       var conversation = data.conversation || {};
       var messages = [];
       (conversation.runs || []).forEach(function (run) {
@@ -2315,11 +2396,14 @@
             model: run.model || "",
             runId: run.id || "",
             taskMode: run.mode || "ask",
+            executionMode: run.execution_mode || "",
+            assistant_label: run.assistant_label || "",
             usage: parseUsagePayload(run.usage || {})
           });
           session.provider = run.provider || session.provider;
           session.model = run.model || session.model;
           session.lastRunProvider = run.provider || session.lastRunProvider;
+          if (run.execution_mode) session.executionMode = run.execution_mode;
           applyUsageFromRun(session, run.provider || "unknown", run.usage || {});
         }
       });
@@ -2355,20 +2439,20 @@
     selectProvider(session.provider || providerSelect.value, { refresh: false, preserveModel: session.model });
     renderChat();
     renderUsageChrome(session);
-    setStatus("Restored chat");
+    setStatus("Restored session");
     hydrateTokenEfficiency(session);
     hydrateServerSession(session);
   }
   function renderChat() {
     var session = activeSession();
     if (chatTitleEl) {
-      var title = (session && session.title) || "New chat";
+      var title = (session && session.title) || defaultSessionTitle();
       chatTitleEl.textContent = title;
       chatTitleEl.title = title;
     }
     renderUsageChrome(session);
     if (!session || !session.messages.length) {
-      feed.innerHTML = '<div class="climate-ai-empty"><strong>AiriX</strong><span>Ask about the active repository. The selected provider powers the answer.</span></div>';
+      feed.innerHTML = '<div class="climate-ai-empty"><strong>AiriX · Code Assistant</strong><span>Ask about the active repository, attached files, or a code selection. Nothing is sent until you add it.</span></div>';
       proposalActions.hidden = true;
       return;
     }
@@ -2455,8 +2539,9 @@
     var taskMode = msg.taskMode || "ask";
     var hasPendingProposal = !!(msg.proposal && msg.proposal.state === "pending") && !isStopped && msg.status !== "stopping";
     var isEditRun = !isUser && taskMode === "edit" && (hasPendingProposal || (msg.changedFiles || []).length) && !isStopped;
-    var name = isUser ? "You" : providerLabel(msg.provider || (activeSession() || {}).provider);
-    var avatar = isUser ? "Y" : providerGlyph(msg.provider || (activeSession() || {}).provider);
+    var name = isUser ? "You" : assistantRoleLabel(msg);
+    var logo = isUser ? "" : identityLogoSrc(msg);
+    var avatar = isUser ? "Y" : (logo ? "" : providerGlyph(msg.provider || (activeSession() || {}).provider));
     var bodyText = msg.text || "";
     if (looksLikeEditsJson(bodyText) || isRawProviderLine(bodyText) || looksLikeProtocolDump(bodyText)) {
       var cleaned = humanizeAnswer(bodyText, taskMode);
@@ -2473,14 +2558,18 @@
     var tests = testsFromText(msg.text, msg.tests);
     var lines = msg.lines || lineDeltaFromProposal(msg.proposal);
     var showRunCard = isComplete && isEditRun;
-    var html = '<article class="climate-chat-msg ' + (isUser ? "is-user" : "is-assistant") + (isError ? " is-error" : "") + (isRunning ? " is-stream" : "") + '" data-msg-id="' + escapeHtml(msg.id) + '" data-task-mode="' + escapeHtml(taskMode) + '">';
-    html += '<div class="climate-chat-avatar" aria-hidden="true">' + escapeHtml(avatar) + '</div>';
-    html += '<div class="climate-chat-meta"><strong>' + escapeHtml(name) + '</strong><time>' + escapeHtml(formatClock(msg.ts)) + '</time>';
-    if (isComplete) html += '<span class="climate-chat-status-pill is-ok">✓ Completed</span>';
-    else if (msg.status === "stopping") html += '<span class="climate-chat-status-pill is-stop">Stopping…</span>';
-    else if (isStopped) html += '<span class="climate-chat-status-pill is-stop">Stopped</span>';
+    var html = '<article class="climate-assistant-msg ' + (isUser ? "is-user" : "is-assistant") + (isError ? " is-error" : "") + (isRunning ? " is-stream" : "") + '" data-msg-id="' + escapeHtml(msg.id) + '" data-task-mode="' + escapeHtml(taskMode) + '" data-surface="workspace">';
+    if (logo) {
+      html += '<div class="climate-assistant-avatar" aria-hidden="true"><img src="' + escapeHtml(logo) + '" alt=""></div>';
+    } else {
+      html += '<div class="climate-assistant-avatar" aria-hidden="true">' + escapeHtml(avatar) + '</div>';
+    }
+    html += '<div class="climate-assistant-meta"><strong>' + escapeHtml(name) + '</strong><time>' + escapeHtml(formatClock(msg.ts)) + '</time>';
+    if (isComplete) html += '<span class="climate-assistant-status-pill is-ok">✓ Completed</span>';
+    else if (msg.status === "stopping") html += '<span class="climate-assistant-status-pill is-stop">Stopping…</span>';
+    else if (isStopped) html += '<span class="climate-assistant-status-pill is-stop">Stopped</span>';
     html += '</div>';
-    html += '<div class="climate-chat-body">';
+    html += '<div class="climate-assistant-body">';
     if (msg.stopNotice) html += '<div class="climate-stop-notice">' + escapeHtml(msg.stopNotice) + '</div>';
     if (msg.status === "running") {
       html += renderActivityProgress(msg);
@@ -2491,11 +2580,11 @@
     } else if (!isUser && msg.elapsedMs && !showRunCard) {
       html += '<button type="button" class="climate-chat-elapsed">End-to-end runtime ' + escapeHtml(formatElapsed(msg.elapsedMs)) + ' ▾</button>';
     }
-    if (body) html += '<div class="climate-chat-text' + (isUser ? "" : " climate-md") + '">' + body + '</div>';
+    if (body) html += '<div class="climate-assistant-text' + (isUser ? "" : " climate-md") + '">' + body + '</div>';
     if ((isComplete || isStopped) && sources.length) {
       html += '<details class="climate-sources"><summary>Candidate Sources · ' + sources.length + ' file' + (sources.length === 1 ? "" : "s") + '</summary>';
       html += '<ul>' + sources.map(function (path) {
-        return '<li><button type="button" class="climate-chat-file" data-open-file="' + escapeHtml(path) + '">' + escapeHtml(path) + '</button></li>';
+        return '<li><button type="button" class="climate-assistant-file" data-open-file="' + escapeHtml(path) + '">' + escapeHtml(path) + '</button></li>';
       }).join("") + '</ul></details>';
     }
     if (showRunCard) {
@@ -2514,7 +2603,7 @@
       html += '<div><div class="climate-chat-files-title">Changed files (' + files.length + ')</div>';
       if (files.length) {
         html += files.map(function (path) {
-          return '<button type="button" class="climate-chat-file" data-open-file="' + escapeHtml(path) + '">' + escapeHtml(path) + '</button>';
+          return '<button type="button" class="climate-assistant-file" data-open-file="' + escapeHtml(path) + '">' + escapeHtml(path) + '</button>';
         }).join("");
       } else html += '<span class="climate-muted">No file edits</span>';
       html += '</div><div><div class="climate-chat-files-title">Tests</div>';
@@ -2522,7 +2611,7 @@
       else html += '<span class="climate-muted">No test summary</span>';
       html += '</div></div>';
       if (hasPendingProposal) {
-        html += '<div class="climate-chat-msg-actions">';
+        html += '<div class="climate-assistant-msg-actions">';
         html += '<button type="button" class="climate-btn" data-chat-action="undo" data-msg-id="' + escapeHtml(msg.id) + '">Undo All</button>';
         html += '<button type="button" class="climate-btn" data-chat-action="keep" data-msg-id="' + escapeHtml(msg.id) + '">Keep All</button>';
         html += '<button type="button" class="climate-btn climate-btn-primary" data-chat-action="review" data-msg-id="' + escapeHtml(msg.id) + '">Review Changes</button>';
@@ -2534,7 +2623,7 @@
       html += renderTokenEfficiency(msg);
     }
     if (!isUser && msg.diagnostics) {
-      html += '<details class="climate-chat-details" id="climate-details-' + escapeHtml(msg.id) + '"><summary>Details / Diagnostics</summary><pre class="mono">' + escapeHtml(msg.diagnostics) + '</pre></details>';
+      html += '<details class="climate-assistant-details" id="climate-details-' + escapeHtml(msg.id) + '"><summary>Details / Diagnostics</summary><pre class="mono">' + escapeHtml(msg.diagnostics) + '</pre></details>';
     }
     html += '</div></article>';
     return html;
@@ -2717,7 +2806,7 @@
     if (cls === "is-user") {
       session.messages.push({ id: uid("msg"), role: "user", text: text, ts: Date.now() });
       var userCount = session.messages.filter(function (m) { return m.role === "user"; }).length;
-      if (userCount === 1 && (!session.title || session.title === "New chat")) session.title = titleFromPrompt(text);
+      if (userCount === 1 && isDefaultSessionTitle(session.title)) session.title = titleFromPrompt(text);
     } else if (cls === "is-error") {
       session.messages.push({ id: uid("msg"), role: "error", text: text, ts: Date.now(), status: "failed" });
     } else {
@@ -2786,7 +2875,7 @@
     var taskMode = classifyTaskMode(prompt);
     var priorUserCount = (session.messages || []).filter(function (m) { return m.role === "user"; }).length;
     session.messages.push({ id: uid("msg"), role: "user", text: prompt, ts: Date.now() });
-    if (priorUserCount === 0 && (!session.title || session.title === "New chat")) {
+    if (priorUserCount === 0 && isDefaultSessionTitle(session.title)) {
       session.title = titleFromPrompt(prompt);
     }
     session.provider = providerSelect.value;
@@ -2811,6 +2900,9 @@
       startedAt: Date.now(),
       taskMode: taskMode,
       executionMode: currentExecutionMode(),
+      assistant_label: currentExecutionMode() === "direct"
+        ? providerLabel(providerSelect.value)
+        : "AiriX",
       sources: [],
       stopNotice: "",
       stoppedByUser: false,
@@ -2847,6 +2939,7 @@
         }).map(function (item) { return item.path; }),
         include_repo_context: false,
         execution_mode: currentExecutionMode(),
+        surface: CLIMATE_SURFACE,
         handoff: crossProvider,
         reuse_session: !crossProvider,
         conversation_id: session.agentConversationId || ""
@@ -3115,6 +3208,7 @@
         usage: usageParsed,
         tokenEfficiency: data.run.token_efficiency || null,
         executionMode: data.run.execution_mode || currentExecutionMode(),
+        assistant_label: data.run.assistant_label || "",
         stopNotice: "",
         stoppedByUser: false
       });
@@ -3683,7 +3777,7 @@
       });
       try { var blank = editor.getModel(); if (blank) blank.dispose(); editor.setModel(null); } catch (_) {}
       editor.onDidChangeCursorPosition(function(e){document.getElementById("climate-line").textContent=e.position.lineNumber;document.getElementById("climate-column").textContent=e.position.column;});
-      editor.onDidChangeCursorSelection(function(e){var count=Math.abs(e.selection.endLineNumber-e.selection.startLineNumber)+1;document.getElementById("climate-selection-meta").textContent=e.selection.isEmpty()?"No selection":count+" line"+(count===1?"":"s");});
+      editor.onDidChangeCursorSelection(function(e){var count=Math.abs(e.selection.endLineNumber-e.selection.startLineNumber)+1;document.getElementById("climate-selection-meta").textContent=e.selection.isEmpty()?"No selection":count+" line"+(count===1?"":"s");renderAssistantContextBar();});
       try{window.monaco.languages.json.jsonDefaults.setDiagnosticsOptions({validate:true,allowComments:true});}catch(_){ }
       if(window.monaco.editor.onDidChangeMarkers)window.monaco.editor.onDidChangeMarkers(function(){refreshProblems();});
       fallback.style.display="none";
@@ -3713,13 +3807,13 @@
   function renameActiveChat(){
     var session=activeSession();
     if(!session)return;
-    var next=window.prompt("Rename chat", session.title||"New chat");
+    var next=window.prompt("Rename session", session.title||defaultSessionTitle());
     if(next&&next.trim()){
       session.title=next.trim();session.updatedAt=Date.now();saveChatStore();renderChat();
       if(session.agentConversationId){
-        jsonFetch(endpoint("/conversations/"+encodeURIComponent(session.agentConversationId)+"?repository_id="+encodeURIComponent(repoId())),{
-          method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({title:session.title})
-        }).catch(function(error){pushOutput("system","Chat rename was saved locally only: "+error.message);});
+        jsonFetch(endpoint("/conversations/"+encodeURIComponent(session.agentConversationId)+"?"+conversationQuery()),{
+          method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({title:session.title,surface:CLIMATE_SURFACE})
+        }).catch(function(error){pushOutput("system","Session rename was saved locally only: "+error.message);});
       }
     }
   }
@@ -3765,7 +3859,7 @@
       else if(action==="history"){historyPanel.hidden=false;renderHistoryList();}
       else if(action==="rename") renameActiveChat();
       else if(action==="context"){contextPanel.hidden=false;}
-      else if(action==="clear"&&session){session.messages=[];session.title="New chat";session.updatedAt=Date.now();saveChatStore();renderChat();renderUsageChrome(session);}
+      else if(action==="clear"&&session){session.messages=[];session.title=defaultSessionTitle();session.updatedAt=Date.now();saveChatStore();renderChat();renderUsageChrome(session);}
       menuPanel.hidden=true;
     });
   });

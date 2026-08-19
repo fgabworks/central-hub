@@ -118,8 +118,8 @@ assert.match(css, /\.climate-monaco\s*\{[^}]*height:\s*100%/);
 assert.match(css, /\.climate-md-preview\s*\{[^}]*overflow:\s*auto/);
 assert.match(css, /\.climate-center\s*\{[^}]*overflow:\s*hidden/);
 assert.match(css, /grid-template-rows:\s*36px\s+28px\s+minmax\(0,\s*1fr\)/);
-assert.match(html, /climate\.css.*\?v=35/);
-assert.match(html, /climate\.js.*\?v=30/);
+assert.match(html, /climate\.css.*\?v=43/);
+assert.match(html, /climate\.js.*\?v=36/);
 
 assert.match(source, /readOnly:\s*true/);
 assert.match(source, /domReadOnly:\s*true/);

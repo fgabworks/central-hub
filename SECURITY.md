@@ -69,6 +69,10 @@ Scope: personal, local-first tool. Canonical agent rules: [AGENTS.md](AGENTS.md)
     `data/ai_provider_secrets.env` (and removes matching lines from `.env`). APIs, UI, logs,
     and audit details expose only metadata (`configured`, env **names**, status). Stored values
     are never returned. Existing process/`.env` variables continue to work.
+  - **Settings → Branding:** PNG/SVG/WEBP only (magic-byte sniff, not extension). Stored as
+    `data/branding/logo.{png,svg,webp}` with display/fit JSON — never as base64 in settings.
+    Path-jailed under `data/branding/`. SVG rejects script/javascript/onload/foreignObject.
+    Writes are owner-gated (`BRANDING_SAVE` / `BRANDING_RESET`).
   - Provider audit records contain provider ID, action, and boolean outcome; account labels,
     command output, model-list payloads, and credentials are excluded.
   - No assistant tool exists for file edits, commands, SQL execution, mail/calendar
@@ -188,6 +192,8 @@ accepted as usable authority for runtime database or DHIS2 value queries.
   prompt length / ids only on submit).
 - AI Connections: `AI_CONNECTIONS_VIEW`, `AI_CONNECTION_ACTION`
   (provider/action/outcome only).
+- Branding: `BRANDING_VIEW` / `BRANDING_SAVE` / `BRANDING_RESET`
+  (display/fit/filename only — no image bytes).
 - Repository Workspace: `REPO_WS_VIEW`, `REPO_WS_READ`, `REPO_WS_SEARCH`,
   `REPO_WS_DIFF_PREVIEW`, `REPO_WS_SAVE`, `REPO_WS_REVERT`, `REPO_WS_CREATE`,
   `REPO_WS_RENAME`, `REPO_WS_DELETE`, `REPO_WS_OPEN_EXTERNAL`,

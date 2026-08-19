@@ -45,8 +45,6 @@
 {% include "partials/section_header.html" %}
 
 <div class="aic-page">
-  <p class="aic-lede">Configure AI providers and default models used across CLIMATE.</p>
-
   <div class="aic-notice" role="status">
     <span class="aic-notice-ico" aria-hidden="true">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -208,40 +206,33 @@
       </div>
       <form class="aic-defaults-form coding-defaults-form" id="coding-defaults-form">
         <div class="aic-surface" data-surface="chat">
-          <h3 id="aic-chat-defaults-title">CLIMATE Chat</h3>
-          <div class="aic-surface-grid">
-            <label class="aic-field aic-field-wide"><span>Mode</span>
-              {{ aic_mode_switch('chat', chat_defaults.default_mode or 'climate_assisted') }}
-            </label>
-            <label class="aic-field"><span>Provider</span>
-              {{ aic_provider_select('chat-default-provider', chat_defaults.default_provider or '') }}
-            </label>
-            <div class="aic-field-stack">
-              <span class="aic-field-caption">Model</span>
-              {{ aic_model_field('chat-default-model', chat_defaults.default_provider or '', chat_defaults.default_model or '', 'data-surface-model="chat"') }}
-            </div>
+          <h3 id="aic-chat-defaults-title">CLIMATE Chat (General)</h3>
+          <label class="aic-field aic-field-mode"><span>Mode</span>
+            {{ aic_mode_switch('chat', chat_defaults.default_mode or 'climate_assisted') }}
+          </label>
+          <label class="aic-field aic-field-provider"><span>Provider</span>
+            {{ aic_provider_select('chat-default-provider', chat_defaults.default_provider or '') }}
+          </label>
+          <div class="aic-field-stack aic-field-model">
+            <span class="aic-field-caption">Model</span>
+            {{ aic_model_field('chat-default-model', chat_defaults.default_provider or '', chat_defaults.default_model or '', 'data-surface-model="chat"') }}
           </div>
         </div>
         <div class="aic-surface" data-surface="workspace">
-          <h3 id="aic-workspace-defaults-title">Code Workspace</h3>
-          <div class="aic-surface-grid">
-            <label class="aic-field aic-field-wide"><span>Mode</span>
-              {{ aic_mode_switch('workspace', workspace_defaults.default_mode or 'climate_assisted') }}
-            </label>
-            <label class="aic-field"><span>Provider</span>
-              {{ aic_provider_select('workspace-default-provider', workspace_defaults.default_provider or '') }}
-            </label>
-            <div class="aic-field-stack">
-              <span class="aic-field-caption">Model</span>
-              {{ aic_model_field('workspace-default-model', workspace_defaults.default_provider or '', workspace_defaults.default_model or '', 'data-surface-model="workspace"') }}
-            </div>
+          <h3 id="aic-workspace-defaults-title">Code Workspace (Coding)</h3>
+          <label class="aic-field aic-field-mode"><span>Mode</span>
+            {{ aic_mode_switch('workspace', workspace_defaults.default_mode or 'climate_assisted') }}
+          </label>
+          <label class="aic-field aic-field-provider"><span>Provider</span>
+            {{ aic_provider_select('workspace-default-provider', workspace_defaults.default_provider or '') }}
+          </label>
+          <div class="aic-field-stack aic-field-model">
+            <span class="aic-field-caption">Model</span>
+            {{ aic_model_field('workspace-default-model', workspace_defaults.default_provider or '', workspace_defaults.default_model or '', 'data-surface-model="workspace"') }}
           </div>
         </div>
         <div class="aic-overrides">
-          <div>
-            <h3 id="aic-overrides-title">Provider Overrides</h3>
-            <p class="muted">Exact model when that provider is selected and the surface has no model of its own. Auto keeps the provider default.</p>
-          </div>
+          <h3 id="aic-overrides-title" title="Exact model when that provider is selected and the surface has no model of its own. Auto keeps the provider default.">Provider Overrides (Auto)</h3>
           <div class="aic-model-grid">
             {% for item in connections %}
             {% set saved = coding_defaults.default_models.get(item.id, '') %}

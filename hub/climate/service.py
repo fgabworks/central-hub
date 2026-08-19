@@ -25,8 +25,12 @@ from hub.climate.execution_mode import (
     MODE_LABELS,
     MODE_TOOLTIPS,
     EXECUTION_MODES,
+    assistant_label,
+    format_execution_summary,
     is_direct_mode,
     normalize_execution_mode,
+    normalize_path_list,
+    provider_display_label,
 )
 from hub.climate.preflight import make_blocked_run, resolve_climate_context
 from hub.climate.retrieval_policy import is_logs_history_query, is_noisy_artifact
@@ -117,7 +121,7 @@ class ClimateService:
             lines.append("- None connected in this workspace.")
         return "\n".join(lines)[:4_000]
 
-    def _bounded_all_repository_context(self, workspace: str, prompt: str) -> str:
+    def _bounded_all_repository_bundle(self, workspace: str, prompt: str) -> tuple[str, list[str]]:
         """Search all connected command repos; keep only relevant bounded hits."""
         ws = normalize_workspace(workspace)
         repo_ids = [
@@ -125,6 +129,7 @@ class ClimateService:
             if row.get("available") and row.get("id")
         ]
         chunks = [self.hub_registry_facts(ws)]
+        paths: list[str] = []
         intelligence = self._repository_intelligence() if ws == "work" else None
         if intelligence is not None and repo_ids and hasattr(intelligence, "retrieve"):
             knowledge = intelligence.retrieve(
@@ -142,12 +147,19 @@ class ClimateService:
                 lines = ["Bounded relevant repository hits (not full repositories):"]
                 for item in items:
                     summary = str(item.get("summary") or "").replace("\n", " ").strip()[:500]
-                    lines.append(
-                        f"- {item.get('repository_id')}:{item.get('path')}: {summary}"
-                    )
+                    rid = str(item.get("repository_id") or "").strip()
+                    path = str(item.get("path") or "").replace("\\", "/").strip().lstrip("/")
+                    label = f"{rid}:{path}" if rid and path else path
+                    if label:
+                        paths.append(label)
+                    lines.append(f"- {rid}:{item.get('path')}: {summary}")
                 chunks.append("\n".join(lines))
         text = "\n\n".join(chunk for chunk in chunks if str(chunk).strip()).strip()
-        return text[:12_000]
+        return text[:12_000], normalize_path_list(paths, limit=24)
+
+    def _bounded_all_repository_context(self, workspace: str, prompt: str) -> str:
+        text, _paths = self._bounded_all_repository_bundle(workspace, prompt)
+        return text
 
     def require_repo(self, workspace: str, repository_id: str) -> Repository:
         ws = normalize_workspace(workspace)
@@ -260,12 +272,16 @@ class ClimateService:
         ws = normalize_workspace(workspace)
         if repository_id:
             self.require_repo(ws, repository_id)
-        return self.coding.conversation(
+        payload = self.coding.conversation(
             conversation_id,
             workspace=ws,
             repository_id=repository_id,
             surface=surface,
         )
+        for run in list(payload.get("runs") or []):
+            if isinstance(run, dict):
+                self._apply_execution_identity(run)
+        return payload
 
     def rename_conversation(
         self,
@@ -414,20 +430,32 @@ class ClimateService:
         selection = str(payload.get("selection") or "")
         extra_selection = selection
         packed_prompt = prompt
+        chat_sources: list[str] = []
+        attached_labels: list[str] = []
+        retrieved_files: list[str] = []
+        attached_items = self._parse_attached_files(payload)
         if scope == REPOSITORY:
             repo = self.require_repo(ws, repo_id)
+            attached_items = self._validate_attached_files(
+                ws, scope, repo_id, attached_items, repo_id
+            )
+            attached_labels = normalize_path_list(
+                list(attached_items)
+                + selected_files
+                + ([current_file] if current_file else [])
+            )
+            if attached_items:
+                extra_selection = self._attach_explicit_file_bodies(
+                    attached_items, selection=extra_selection
+                )
             if direct:
                 extra_selection = self._attach_selected_file_bodies(
                     repo,
                     current_file=current_file,
                     selected_files=selected_files,
-                    selection=selection,
+                    selection=extra_selection,
                 )
-                if not extra_selection:
-                    extra_selection = (
-                        f"Explicit repository context selected: {repo.name} ({repo.id}). "
-                        "No files were attached."
-                    )
+                chat_sources = list(attached_labels)
             else:
                 preflight = resolve_climate_context(
                     workspace=ws,
@@ -447,14 +475,20 @@ class ClimateService:
                 )
                 if preflight.ok and preflight.packet:
                     packed_prompt = preflight.packet
-                extra_selection = selection
+                extra_selection = extra_selection if attached_items else selection
+                raw_sources = getattr(preflight, "source_files", None)
+                if not isinstance(raw_sources, (list, tuple)):
+                    raw_sources = []
+                retrieved_files = normalize_path_list(list(raw_sources))
+                chat_sources = normalize_path_list(list(attached_labels) + list(retrieved_files))
         elif scope == ALL:
-            extra_selection = self._bounded_all_repository_context(ws, prompt)
+            extra_selection, retrieved_files = self._bounded_all_repository_bundle(ws, prompt)
+            chat_sources = list(retrieved_files)
         elif not direct:
             extra_selection = self.hub_registry_facts(ws)
         result = self.coding.execute(
             workspace=ws,
-            repository_id="",
+            repository_id=repo_id if scope == REPOSITORY else "",
             provider=provider,
             model=model,
             prompt=packed_prompt,
@@ -472,28 +506,28 @@ class ClimateService:
             display_prompt=display_prompt,
             surface="chat",
             context_scope=scope,
+            attached_files=attached_labels,
+            retrieved_files=retrieved_files,
+            repository_name=self._repository_display_name(repo_id) if scope == REPOSITORY else "",
         )
-        run_id = str(result.get("id") or "")
-        if run_id:
-            self._run_scope[run_id] = (ws, "")
-            self._run_meta[run_id] = {
-                "task_mode": "ask",
-                "selected_files": selected_files if scope == REPOSITORY else [],
-                "current_file": current_file if scope == REPOSITORY else "",
-                "provider_invoked": True,
-                "sources": [],
-                "user_prompt": display_prompt or prompt,
-                "execution_mode": execution_mode,
-                "context_scope": scope,
-                "surface": "chat",
-                "conversation_id": result.get("conversation_id") or "",
-            }
         result["task_mode"] = "ask"
-        result["execution_mode"] = execution_mode
-        result["context_scope"] = scope
-        result["sources"] = []
         result["provider_invoked"] = True
-        return result
+        return self._record_execution(
+            result,
+            ws=ws,
+            surface="chat",
+            execution_mode=execution_mode,
+            scope=scope,
+            repository_id=repo_id if scope == REPOSITORY else "",
+            provider=provider,
+            model=model,
+            attached_files=attached_labels,
+            retrieved_files=retrieved_files,
+            selected_files=selected_files if scope == REPOSITORY else [],
+            current_file=current_file if scope == REPOSITORY else "",
+            sources=chat_sources,
+            extra={"user_prompt": display_prompt or prompt},
+        )
 
     def execute(self, workspace: str, repository_id: str, **payload: Any) -> dict[str, Any]:
         ws = normalize_workspace(workspace)
@@ -599,14 +633,28 @@ class ClimateService:
             )
             self._local_runs[str(blocked["id"])] = blocked
             self._run_scope[str(blocked["id"])] = (ws, repo.id)
-            self._run_meta[str(blocked["id"])] = {
-                "task_mode": preflight.task_mode,
-                "selected_files": selected_files,
-                "current_file": current_file,
-                "provider_invoked": False,
-                "preflight": blocked.get("preflight"),
-                "sources": list(preflight.source_files),
-            }
+            blocked["execution_mode"] = CLIMATE_ASSISTED
+            blocked["task_mode"] = preflight.task_mode
+            self._record_execution(
+                blocked,
+                ws=ws,
+                surface=str(payload.get("surface") or "workspace"),
+                execution_mode=CLIMATE_ASSISTED,
+                scope=REPOSITORY,
+                repository_id=repo.id,
+                provider=provider,
+                model=model,
+                attached_files=list(dict.fromkeys(attached_paths + selected_files + ([current_file] if current_file else []))),
+                retrieved_files=list(preflight.source_files),
+                selected_files=selected_files,
+                current_file=current_file,
+                sources=list(preflight.source_files),
+                extra={
+                    "user_prompt": prompt,
+                    "provider_invoked": False,
+                    "preflight": blocked.get("preflight"),
+                },
+            )
             return blocked
 
         # Bounded packet replaces blind full-history / full-instruction dumps.
@@ -664,35 +712,47 @@ class ClimateService:
             repository_investigation=can_investigate,
             execution_mode=CLIMATE_ASSISTED,
             display_prompt=str(payload.get("display_prompt") or prompt),
+            surface=str(payload.get("surface") or "workspace"),
             context_scope=REPOSITORY,
+            attached_files=list(dict.fromkeys(attached_paths + selected_files + ([current_file] if current_file else []))),
+            retrieved_files=list(preflight.source_files),
+            repository_name=self._repository_display_name(repo.id),
         )
-        self._run_scope[str(result["id"])] = (ws, repo.id)
-        self._run_meta[str(result["id"])] = {
-            "task_mode": result.get("task_mode") or preflight.task_mode,
-            "selected_files": selected_files,
-            "current_file": current_file,
-            "provider_invoked": True,
-            "conversation_id": result.get("conversation_id") or "",
-            "preflight": {
-                "ok": True,
-                "activity": list(preflight.activity),
-                "instruction_files": list(preflight.instruction_files),
-                "skills_used": list(preflight.skills_used),
-                "source_files": list(preflight.source_files),
-                "context_chars": preflight.context_chars,
-                "context_tokens_est": preflight.context_tokens_est,
-                "confidence": preflight.confidence,
-                "provider_invoked": True,
-                "diagnostics": dict(preflight.diagnostics),
-            },
-            "sources": list(dict.fromkeys(list(preflight.source_files) + selected_files + ([current_file] if current_file else []))),
-            "user_prompt": prompt,
-            "execution_mode": CLIMATE_ASSISTED,
-        }
         result["provider_invoked"] = True
         result["execution_mode"] = CLIMATE_ASSISTED
-        result["preflight"] = self._run_meta[str(result["id"])]["preflight"]
-        result["sources"] = list(self._run_meta[str(result["id"])]["sources"])[:24]
+        result["preflight"] = {
+            "ok": True,
+            "activity": list(preflight.activity),
+            "instruction_files": list(preflight.instruction_files),
+            "skills_used": list(preflight.skills_used),
+            "source_files": list(preflight.source_files),
+            "context_chars": preflight.context_chars,
+            "context_tokens_est": preflight.context_tokens_est,
+            "confidence": preflight.confidence,
+            "provider_invoked": True,
+            "diagnostics": dict(preflight.diagnostics),
+        }
+        self._record_execution(
+            result,
+            ws=ws,
+            surface=str(payload.get("surface") or "workspace"),
+            execution_mode=CLIMATE_ASSISTED,
+            scope=REPOSITORY,
+            repository_id=repo.id,
+            provider=provider,
+            model=model,
+            attached_files=list(dict.fromkeys(attached_paths + selected_files + ([current_file] if current_file else []))),
+            retrieved_files=list(preflight.source_files),
+            selected_files=selected_files,
+            current_file=current_file,
+            sources=list(dict.fromkeys(
+                list(preflight.source_files) + selected_files + ([current_file] if current_file else [])
+            )),
+            extra={
+                "user_prompt": prompt,
+                "preflight": result["preflight"],
+            },
+        )
         self._capture_token_efficiency_snapshot(
             str(result["id"]),
             ws=ws,
@@ -729,8 +789,9 @@ class ClimateService:
             ws, scope, "", self._parse_attached_files(payload), ""
         )
         extra = ""
+        retrieved_files: list[str] = []
         if scope == ALL:
-            extra = self._bounded_all_repository_context(ws, prompt)
+            extra, retrieved_files = self._bounded_all_repository_bundle(ws, prompt)
         elif not direct:
             extra = self.hub_registry_facts(ws)
         file_block = self._attach_explicit_file_bodies(attached)
@@ -738,6 +799,7 @@ class ClimateService:
         extra_selection = "\n\n".join(
             part.strip() for part in selection_parts if str(part).strip()
         ).strip()
+        attached_labels = normalize_path_list(attached)
         result = self.coding.execute(
             workspace=ws,
             repository_id="",
@@ -758,32 +820,28 @@ class ClimateService:
             display_prompt=display_prompt,
             surface="workspace",
             context_scope=scope,
+            attached_files=attached_labels,
+            retrieved_files=retrieved_files,
+            repository_name="",
         )
-        run_id = str(result.get("id") or "")
-        if run_id:
-            self._run_scope[run_id] = (ws, explicit_repository_id(explorer_repo_id) or "")
-            self._run_meta[run_id] = {
-                "task_mode": "ask",
-                "selected_files": [str(item.get("path") or "") for item in attached],
-                "current_file": "",
-                "provider_invoked": True,
-                "sources": [
-                    f"{item.get('repository_id')}:{item.get('path')}"
-                    for item in attached
-                    if item.get("path")
-                ],
-                "user_prompt": display_prompt or prompt,
-                "execution_mode": execution_mode,
-                "context_scope": scope,
-                "surface": "workspace",
-                "conversation_id": result.get("conversation_id") or "",
-            }
         result["task_mode"] = "ask"
-        result["execution_mode"] = execution_mode
-        result["context_scope"] = scope
         result["provider_invoked"] = True
-        result["sources"] = list((self._run_meta.get(run_id) or {}).get("sources") or [])[:24]
-        return result
+        return self._record_execution(
+            result,
+            ws=ws,
+            surface="workspace",
+            execution_mode=execution_mode,
+            scope=scope,
+            repository_id="",
+            provider=provider,
+            model=model,
+            attached_files=attached_labels,
+            retrieved_files=retrieved_files,
+            selected_files=[str(item.get("path") or "") for item in attached],
+            current_file="",
+            sources=normalize_path_list(list(attached_labels) + list(retrieved_files)),
+            extra={"user_prompt": display_prompt or prompt},
+        )
 
     def _execute_direct(
         self,
@@ -801,12 +859,24 @@ class ClimateService:
         can_investigate: bool,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        """Raw prompt + approved cwd. Skip Context Resolver; keep ASK/EDIT safety."""
+        """Raw prompt + explicit attached files only. Skip Context Resolver and repo scan."""
+        attached_labels = normalize_path_list(
+            list(selected_files) + ([current_file] if current_file else [])
+        )
+        packed_selection = selection
+        if current_file or selected_files:
+            packed_selection = self._attach_selected_file_bodies(
+                repo,
+                current_file=current_file,
+                selected_files=selected_files,
+                selection=selection,
+            )
         safety_log = (
             "[climate_execution_mode]\n"
             "Mode=direct\n"
             "Context Resolver skipped\n"
-            "Safety=approved repo boundary, ASK read-only sandbox, controlled EDIT"
+            "Safety=approved repo boundary, ASK read-only sandbox, controlled EDIT\n"
+            "Context=explicit attached files only"
         )
         result = self.coding.execute(
             workspace=ws,
@@ -816,7 +886,7 @@ class ClimateService:
             prompt=prompt,
             selected_files=list(selected_files)[:16],
             current_file=current_file,
-            selection=selection if (str(selection or "").strip() or ws == "personal" or provider == "gemini") else "",
+            selection=packed_selection,
             include_repo_context=False,
             task_mode=task_mode,
             reuse_session=bool(payload.get("reuse_session", True)) and not handoff,
@@ -824,16 +894,21 @@ class ClimateService:
             preflight_log=safety_log,
             evidence_packet=None,
             conversation_id=str(payload.get("conversation_id") or "").strip(),
-            repository_investigation=can_investigate,
+            repository_investigation=False,
             execution_mode=DIRECT,
             display_prompt=str(payload.get("display_prompt") or prompt),
+            surface=str(payload.get("surface") or "workspace"),
             context_scope=REPOSITORY,
+            attached_files=attached_labels,
+            retrieved_files=[],
+            repository_name=self._repository_display_name(repo.id),
         )
         preflight = {
             "ok": True,
             "activity": [
                 "Direct Provider",
                 "Context Resolver skipped",
+                "Explicit attached files only",
                 "Approved repository boundary preserved",
             ],
             "instruction_files": [],
@@ -852,22 +927,25 @@ class ClimateService:
                 "qualification": [],
             },
         }
-        self._run_scope[str(result["id"])] = (ws, repo.id)
-        self._run_meta[str(result["id"])] = {
-            "task_mode": result.get("task_mode") or task_mode,
-            "selected_files": selected_files,
-            "current_file": current_file,
-            "provider_invoked": True,
-            "conversation_id": result.get("conversation_id") or "",
-            "preflight": preflight,
-            "sources": list(dict.fromkeys(selected_files + ([current_file] if current_file else []))),
-            "user_prompt": prompt,
-            "execution_mode": DIRECT,
-        }
         result["provider_invoked"] = True
         result["execution_mode"] = DIRECT
         result["preflight"] = preflight
-        result["sources"] = list(self._run_meta[str(result["id"])]["sources"])[:24]
+        self._record_execution(
+            result,
+            ws=ws,
+            surface=str(payload.get("surface") or "workspace"),
+            execution_mode=DIRECT,
+            scope=REPOSITORY,
+            repository_id=repo.id,
+            provider=provider,
+            model=model,
+            attached_files=attached_labels,
+            retrieved_files=[],
+            selected_files=selected_files,
+            current_file=current_file,
+            sources=attached_labels,
+            extra={"user_prompt": prompt, "preflight": preflight},
+        )
         self._capture_token_efficiency_snapshot(
             str(result["id"]),
             ws=ws,
@@ -895,13 +973,22 @@ class ClimateService:
             local["task_mode"] = meta.get("task_mode") or local.get("task_mode") or "ask"
             local["proposal"] = None
             local["sources"] = list(meta.get("sources") or local.get("sources") or [])[:24]
+            self._apply_execution_identity(
+                local,
+                execution_mode=meta.get("execution_mode") or local.get("execution_mode"),
+                context_scope=meta.get("context_scope") or local.get("context_scope"),
+                repository_id=meta.get("repository_id"),
+                provider=local.get("provider"),
+                model=local.get("model"),
+            )
             return local
         result = self.coding.result(run_id, workspace=ws)
         scope = self._run_scope.get(run_id)
         meta = self._run_meta.get(run_id) or {}
         task_mode = str(meta.get("task_mode") or result.get("task_mode") or "ask")
         result["task_mode"] = task_mode
-        result["execution_mode"] = meta.get("execution_mode") or result.get("execution_mode") or CLIMATE_ASSISTED
+        if meta.get("execution_mode") or result.get("execution_mode"):
+            result["execution_mode"] = meta.get("execution_mode") or result.get("execution_mode")
         if scope:
             result["repository_id"] = scope[1]
         raw_answer = str(result.get("answer") or "")
@@ -971,7 +1058,7 @@ class ClimateService:
                     self.stage_proposal(run_id, ws, scope[1], edits)
         proposal = self._proposals.get(run_id)
         result["proposal"] = self._public_proposal(proposal) if proposal else None
-        sources = list(meta.get("sources") or [])
+        sources = list(meta.get("sources") or result.get("sources") or [])
         if not sources:
             for path in list(meta.get("selected_files") or []) + ([meta.get("current_file")] if meta.get("current_file") else []):
                 p = str(path or "").replace("\\", "/").lstrip("/")
@@ -983,12 +1070,36 @@ class ClimateService:
         result["files_inspected"] = investigation.get("files_inspected")
         result["search_matched_files"] = investigation.get("search_matched_files")
         result["tool_calls"] = investigation.get("tool_calls")
+        inspected = normalize_path_list(
+            result.get("inspected_files") or investigation.get("inspected_paths") or []
+        )
+        attached = normalize_path_list(meta.get("attached_files") or result.get("attached_files") or [])
+        retrieved = normalize_path_list(meta.get("retrieved_files") or result.get("retrieved_files") or [])
+        if inspected:
+            result["inspected_files"] = inspected
         inv_log = investigation.get("log") or ""
         logs = str(result.get("logs") or "")
         if inv_log and "[climate_investigation]" not in logs:
             result["logs"] = (logs + ("\n\n" if logs else "") + inv_log).strip()
         if str(result.get("provider") or result.get("agent_id") or "") == "codex":
             result["token_efficiency"] = self._token_efficiency_payload(ws, run_id, result)
+        self._apply_execution_identity(
+            result,
+            execution_mode=meta.get("execution_mode") or result.get("execution_mode"),
+            context_scope=meta.get("context_scope") or result.get("context_scope"),
+            repository_id=(
+                meta.get("repository_id")
+                if meta.get("context_scope") or meta.get("repository_id") is not None
+                else result.get("repository_id")
+            ),
+            repository_name=meta.get("repository_name") or result.get("repository_name"),
+            provider=result.get("provider"),
+            model=result.get("model"),
+            surface=meta.get("surface") or result.get("surface"),
+            attached_files=attached,
+            retrieved_files=retrieved,
+            inspected_files=inspected,
+        )
         return result
 
     def cancel(self, workspace: str, run_id: str) -> dict[str, Any]:
@@ -1447,6 +1558,57 @@ class ClimateService:
             },
             "logs": logs,
         }
+
+    def _repository_display_name(self, repo_id: str) -> str:
+        rid = str(repo_id or "").strip()
+        if not rid:
+            return ""
+        repo = self.registry.get(rid)
+        return str(getattr(repo, "name", "") or rid)
+
+    def _apply_execution_identity(
+        self,
+        result: dict[str, Any],
+        *,
+        execution_mode: str | None = None,
+        context_scope: str | None = None,
+        repository_id: str | None = None,
+        provider: str | None = None,
+        model: str | None = None,
+    ) -> dict[str, Any]:
+        """Stamp speaker label + compact Details from persisted run metadata."""
+        raw_mode = execution_mode or result.get("execution_mode")
+        if raw_mode:
+            mode = normalize_execution_mode(raw_mode)
+            result["execution_mode"] = mode
+        else:
+            mode = ""
+        scope = str(context_scope or result.get("context_scope") or "").strip()
+        if scope:
+            result["context_scope"] = scope
+        repo_id = str(
+            repository_id if repository_id is not None else result.get("repository_id") or ""
+        ).strip()
+        if scope == REPOSITORY:
+            result["repository_id"] = repo_id
+        elif scope in {GENERAL, ALL}:
+            result["repository_id"] = ""
+            repo_id = ""
+        provider_id = str(provider or result.get("provider") or "")
+        provider_label = provider_display_label(
+            provider_id, str(result.get("provider_label") or "")
+        )
+        result["provider_label"] = provider_label
+        if mode:
+            result["assistant_label"] = assistant_label(mode, provider_label)
+            result["execution_summary"] = format_execution_summary(
+                execution_mode=mode,
+                provider_label=provider_label,
+                model=str(model or result.get("model") or ""),
+                context_scope=scope,
+                repository_label=self._repository_display_name(repo_id) if repo_id else "",
+            )
+        return result
 
     def _require_run_scope(self, workspace: str, run_id: str) -> None:
         scope = self._run_scope.get(run_id)

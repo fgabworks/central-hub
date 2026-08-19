@@ -11,7 +11,7 @@ fs.mkdirSync(outDir, { recursive: true });
 
 function seedChat(page, mode) {
   return page.evaluate((kind) => {
-    const key = "climate:chat:v1:work";
+    const key = "climate:workspace:v1:work";
     const diagnostics =
       "tool_call read path=analytics/derive_member_scores.py\n" +
       "Searching repository for ANC Binary\n" +

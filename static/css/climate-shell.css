@@ -35,19 +35,79 @@ body.climate-system-shell .sidebar-brand {
 body.climate-system-shell .brand-mark {
   width: 22px;
   height: 22px;
-  padding: 0;
-  border-radius: 50%;
+  padding: 2px;
+  border-radius: 6px;
   background: transparent;
   box-shadow: none;
   overflow: hidden;
   border: 1px solid var(--climate-border, #2a3038);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
 }
 
 body.climate-system-shell .brand-mark img,
 body.climate-system-shell .brand-logo-mark {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  object-position: center;
+  display: block;
+}
+
+.climate-brand-lockup[data-brand-fit="cover"] .brand-logo-mark,
+.climate-brand-lockup[data-brand-fit="cover"] .brand-mark img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.climate-brand-lockup[data-brand-display="icon"] .brand-text {
+  display: none;
+}
+
+.climate-brand-lockup[data-brand-display="full"] .brand-text {
+  display: none;
+}
+.climate-brand-lockup[data-brand-display="full"] .brand-mark {
+  width: auto;
+  max-width: 168px;
+  height: 28px;
+  padding: 0;
+  border-radius: 4px;
+  border-color: transparent;
+  background: transparent;
+}
+.climate-brand-lockup[data-brand-display="full"] .brand-logo-mark {
+  max-height: 28px;
+  max-width: 168px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+.brand-avatar {
+  width: 32px;
+  height: 32px;
+  box-sizing: border-box;
+  padding: 4px;
+  border-radius: 10px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--climate-panel-2, #1c2128) 86%, #000);
+  border: 1px solid color-mix(in srgb, var(--workspace-accent, #26c6da) 28%, var(--climate-border, #262b32));
+}
+.brand-avatar img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  object-position: center;
   display: block;
 }
 
@@ -143,9 +203,11 @@ body.climate-system-shell .topbar-brand {
 }
 
 body.climate-system-shell .topbar-brand img {
-  width: 22px;
+  width: auto;
   height: 22px;
-  border-radius: 50%;
+  max-width: 120px;
+  object-fit: contain;
+  object-position: center;
   display: block;
 }
 
@@ -162,10 +224,15 @@ body.climate-system-shell .topbar-brand-name {
 body.climate-system-shell .card,
 body.climate-system-shell .panel,
 body.climate-system-shell .stat-card {
-  background: var(--climate-panel, #161a20);
+  background: color-mix(in srgb, var(--climate-panel, #161a20) 94%, #000);
   border: 1px solid var(--climate-border, #2a3038);
   border-radius: var(--radius, 6px);
   box-shadow: none;
+}
+
+body.climate-system-shell .aic-card,
+body.climate-system-shell .aic-defaults {
+  background: color-mix(in srgb, var(--climate-panel, #161a20) 94%, #000);
 }
 
 body.climate-system-shell a.stat-card-link:hover,
@@ -246,4 +313,9 @@ body.climate-system-shell.app-shell.is-sidebar-collapsed .brand-text {
 }
 body.climate-system-shell.app-shell.is-sidebar-collapsed .brand-mark {
   margin: 0 auto;
+}
+body.climate-system-shell.app-shell.is-sidebar-collapsed .climate-brand-lockup[data-brand-display="full"] .brand-mark {
+  width: 22px;
+  height: 22px;
+  max-width: 22px;
 }

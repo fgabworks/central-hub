@@ -284,7 +284,7 @@ test.describe("CLIMATE Markdown chat readability", () => {
         workbench.classList.remove("is-ai-closed", "is-ai-collapsed");
         const html = window.ClimateMarkdown.render(md);
         const feed = document.getElementById("climate-ai-feed");
-        feed.innerHTML = '<article class="climate-chat-msg is-assistant"><div class="climate-chat-body"><div class="climate-chat-text climate-md">' + html + "</div></div></article>";
+        feed.innerHTML = '<article class="climate-assistant-msg is-assistant"><div class="climate-assistant-body"><div class="climate-assistant-text climate-md">' + html + "</div></div></article>";
         const root = feed.querySelector(".climate-chat-text.climate-md");
         const wrap = root.querySelector(".climate-md-table-wrap");
         const table = wrap && wrap.querySelector("table");
@@ -401,7 +401,7 @@ test.describe("CLIMATE execution mode selector", () => {
     };
     await page.evaluate(({ te: payload, mode }) => {
       localStorage.setItem(
-        "climate:chat:v1:work",
+        "climate:workspace:v1:work",
         JSON.stringify({
           activeId: "chat-mode",
           sessions: [

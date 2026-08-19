@@ -4,7 +4,92 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**Code Workspace context scope + explicit file chips (2026-08-18)**
+**CLIMATE branding: app header vs chat avatar (2026-08-19)**
+
+`Settings → Branding` still stores one PNG/SVG/WEBP file under `data/branding/`.
+App Branding (Wordmark / Full logo) drives the sidebar, top-left header, and
+larger lockups. Chat Avatar is always icon-only with padded `object-fit: contain`
+so the full CLIMATE wordmark is never squeezed into an AiriX bubble. AiriX uses
+`avatar_url` (custom file or default `climate-mark.png`); Direct Gemini/Codex/
+Claude/Cursor keep their provider icons; user messages keep the existing initial.
+Reset restores the default mark/wordmark.
+
+Prior: **CLIMATE branding + logo fit (2026-08-19)**
+
+`Settings → Branding` stores a PNG, SVG, or WEBP logo as a local file under
+`data/branding/` (path + display/fit JSON, not base64). Live preview runs in the
+browser before save. Display is Icon only / Wordmark / Full logo; fit is Contain
+or Cover. Reset restores the default mark/wordmark. Shared shell surfaces
+(sidebar, favicon, Chat mark) reuse the saved asset with `object-fit: contain`
+by default so logos are not stretched. Code Assistant keeps a compact AiriX /
+provider identity and does not switch to the full wordmark lockup.
+
+Prior: **Code Workspace assistant shell (2026-08-19)**
+
+The Code Workspace right panel is no longer the standalone CLIMATE Chat surface.
+It uses an IDE assistant shell labeled **AiriX · Code Assistant**: compact session
+actions instead of `+ New Chat`, a repo/file/selection/attachment context strip,
+and denser coding-message presentation. Standalone Chat (`/work/chat`, `/personal/chat`)
+is unchanged. Shared Agent Center conversations, providers, exact-model, streaming,
+and cancel stay shared; frontend state is split (`surface=chat` vs `surface=workspace`,
+`ax-climate-chat:` vs `climate:workspace:v1:`). Workspace conversation APIs pass
+`surface=workspace` so Chat threads are not mixed into the IDE.
+
+Prior: **CLIMATE weather-galaxy sky (2026-08-19)**
+
+Shared CLIMATE surfaces (Dashboard, CLIMATE Chat, AI Connections, and other
+non-editor pages) now sit on a low-opacity CSS weather-galaxy atmosphere: deep
+navy, faint stars, cloud-like nebula, a slow galaxy turn, and a blue horizon
+glow. Cards/panels stay opaque. Code Workspace uses a faint static version with
+no motion. `prefers-reduced-motion` disables animation; hidden tabs pause it.
+No WebGL, no layout/routing/provider changes.
+
+Prior: **AI Connections compact defaults layout (2026-08-19)**
+
+`/system/ai-connections` keeps the full-width page and provider cards, and
+tightens **AI Defaults** to a standard settings row: label, compact
+AiriX/Direct toggle, and balanced Provider/Model dropdowns for **CLIMATE Chat
+(General)** and **Code Workspace (Coding)**. **Provider Overrides (Auto)** sits
+in one compact four-column grid. Reset/Save stay compact at the bottom-right.
+Provider/model/default logic, exact-model behavior, API/CLI connections, and
+saved settings are unchanged.
+
+Prior: **Code Workspace assistant identity (2026-08-19)**
+
+The embedded Code Workspace assistant is now labeled **AiriX · Code Assistant**
+so it is distinct from standalone **AiriX · CLIMATE Chat**. The composer
+placeholder is `Ask about your code...`. AiriX-mode replies stay AiriX;
+Direct replies use the selected provider identity. Shared Agent Center
+conversations, repository context, Sources, Token Efficiency, attachments,
+streaming, cancel, and persistence are unchanged.
+
+Prior: **CLIMATE Chat conversation presentation (2026-08-19)**
+
+Standalone Chat message cards now match the approved CLIMATE dark, minimal
+conversation style. AiriX replies show the existing CLIMATE/AiriX mark;
+Direct replies show the selected provider (Gemini, Codex, Claude, Cursor)
+and never the AiriX label. Compact `Completed · 6s` status sits beside the
+name. Sources, Details, and Token Efficiency stay collapsed by default, and
+technical/session diagnostics stay under Details rather than in the answer
+body. Selectors, streaming, cancel, persistence, context scope, and
+exact-model behavior are unchanged.
+
+Prior: **CLIMATE Chat mode identity + execution-context persistence (2026-08-19)**
+
+Chat assistant labels follow the run that actually executed: AiriX mode stays
+`AiriX`; Direct uses the provider name (for example `Gemini`). Thinking copy
+matches (`AiriX is thinking…` / `<Provider> is thinking…`). Each run persists
+execution mode, provider, exact model, context scope, and repository id on
+Agent Center `context.climate_execution`. Reopening a conversation restores
+those controls from saved run metadata instead of leftover UI/session values.
+AiriX + Specific Repository passes that repo into the Context Resolver and
+keeps Agent Center `repository_ids` empty. General stays repo-free. All
+Repositories stays bounded. Direct + Specific uses only explicit attached
+files. Details shows a compact line from persisted metadata, e.g.
+`AiriX · Gemini · gemini-3.7-flash · SQL Queries`. Streaming, cancel,
+exact-model selection, and no silent fallback are unchanged.
+
+Prior: **Code Workspace context scope + explicit file chips (2026-08-18)**
 
 Code Workspace now shares Chat’s `[ AiriX | Direct ] [ Provider ] [ Model ]
 [ Context Scope ]` architecture. Context Scope is General / All Repositories /

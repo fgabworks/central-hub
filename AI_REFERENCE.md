@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-18 (Code Workspace context scope + explicit file chips).
+Last verified: 2026-08-19 (CLIMATE weather-galaxy sky).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -11,10 +11,14 @@ the Gemini adapter, exact model discovery/selection, streaming, cancellation, an
 `display_prompt` separation. Chat processing states are lightweight and CSS-only:
 thinking (“AiriX is thinking…” / Direct provider name), live streaming
 indicator, clean completion, compact cancel/error, and dimmed selectors while a
-run is active. Diagnostics stay under Details, not in the chat body. Context
-scope defaults to **General** (no repository limitation). **All Repositories**
+run is active. Completed assistant labels match the run: **AiriX** plus the existing CLIMATE
+mark in AiriX mode, and the selected provider name/logo (Gemini, Codex,
+Claude, Cursor) in Direct. Compact runtime status (`Completed · 6s`) sits
+beside the name. Sources, Details, and Token Efficiency are collapsed by
+default; diagnostics stay under Details. Context scope defaults to **General** (no repository limitation). **All Repositories**
 searches connected repos and keeps only relevant bounded hits. A specific
-repository stays strictly scoped. The VANTA workspace repo is never inherited.
+repository stays strictly scoped. Reopening a conversation restores the saved
+mode/provider/model/scope/repository. The VANTA workspace repo is never inherited.
 Repository scope is validated only when a specific repository is selected. Coding
 diagnostics stay in the Workspace Assistant.
 
@@ -69,9 +73,14 @@ assistance only; ASK read-only sandbox, approved repo boundary, controlled
 EDIT proposals, cancel, diagnostics, token accounting, and Git/terminal
 protections stay in force. AiriX Chat keeps CLIMATE wrapping and evidence
 rules.
-Mode persists per workspace/repo prefs and per conversation. The CLIMATE AI
-panel is visibly identified as **AiriX · CLIMATE Chat**
-while provider/model controls remain explicit. Browser sessions reconcile with the
+Mode persists per workspace/repo prefs and per conversation. Chat reopen
+restores execution mode, provider, exact model, context scope, and repository
+from saved `context.climate_execution`, not leftover UI controls. Standalone
+Chat is labeled **AiriX · CLIMATE Chat** (`surface=chat`, `.ax-chat`). The Code Workspace
+panel is **AiriX · Code Assistant** (`surface=workspace`, `.climate-assistant-*` shell)
+with compact session actions, a coding-context strip (repo / file / selection / attachments),
+and workspace-only local storage (`climate:workspace:v1:`). Conversations stay on the shared
+Agent Center store, filtered by `surface`. Provider/model controls remain explicit. Browser sessions reconcile with the
 existing SQLite `agent_conversations` and `agent_runs` store through scoped CLIMATE
 conversation list/detail/rename APIs. Completed server runs can therefore be restored
 when browser storage is unavailable without creating a second chat database; local UI
@@ -242,9 +251,10 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | AI Assistant Center | Aira at `/personal/aira`; AiriX at `/work/airix` (legacy `/work/okarun` redirects); full-height right dock + fixed composer (`hub/agent_center/dock.py`); **Smart Routing Phase 5** + **Routing Mode** Smart vs Direct Agent (`hub/agent_center/routing/` — cost intelligence, RBAC, relevance findings, budgets, orchestration; `/api/assistants/airix/routing/*`); Find/Ask/Plan/Review; Codex CLI, Claude Code, Cursor, Grok, OpenAI |
 | Workspace Console | Bottom panel under main content only (`left: var(--sidebar-w)`); bounded height; Ctrl+J; collapsed by default |
 | Activity Rail | Far-right icons for AI Assistant, Quick Notepad, Workspace Console (future utilities placeholders); reduces main width only |
-| App shell | Fixed sidebar 210–216px + `padding-left` on `.app-shell`; `.main-column` / `.content` `flex:1; min-width:0`; `.sidebar-scroll` for nav |
-| AI Connections | `/system/ai-connections`; CLIMATE provider cards with local logos, API Key/CLI method, Test Connection + Manage; Gemini keys reuse `data/ai_provider_secrets.env` (never returned, not encrypted); CLI auth unchanged; split AI Defaults for CLIMATE Chat and Code Workspace plus per-provider model overrides |
+| App shell | Fixed sidebar 210–216px + `padding-left` on `.app-shell`; `.main-column` / `.content` `flex:1; min-width:0`; `.sidebar-scroll` for nav; CSS weather-galaxy sky behind non-editor pages (`climate-sky`), quiet/static on Code Workspace |
+| AI Connections | `/system/ai-connections`; CLIMATE provider cards with local logos, API Key/CLI method, Test Connection + Manage; Gemini keys reuse `data/ai_provider_secrets.env` (never returned, not encrypted); CLI auth unchanged; compact split AI Defaults for CLIMATE Chat (General) and Code Workspace (Coding) plus a one-row Provider Overrides (Auto) grid |
 | AI Provider Settings | `/settings/ai-providers`; Settings submenu + registry-driven cards for Gemini, Grok/xAI, OpenAI, Claude/Anthropic (planned adapter), Local Models (UI-ready); Add/Replace/Remove key + Test Connection; secrets in gitignored `data/ai_provider_secrets.env`; APIs return metadata only; CLI providers stay on AI Connections |
+| CLIMATE Branding | `/settings/branding`; local logo file under `data/branding/` plus display/fit JSON; App Branding = Wordmark / Full logo; Chat Avatar = icon-only (`avatar_url`, never default `climate-logo.png`); Contain / Cover for app fit; padded contain avatars; AiriX vs Direct provider icons unchanged |
 | DHIS2 | GET client, discovery, UID mapping, preview builder |
 | UID index admin | LP-style controlled update: dry-run → preview → typed confirm → archive/versions/restore |
 | Metadata enrichment | Read-only DHIS2 enrich → local SQLite relationships + audit statuses |
@@ -254,7 +264,7 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | API exec (Phase 4) | GET/HEAD only from YAML `http_path` |
 | Files (Phase 5) | Uploads/results under `data/{uploads,results}/{job_id}/` |
 | Safeguards (Phase 6) | Dry-run default, confirm for apply, max concurrent, owner token |
-| Tests | `tests/` — includes `test_perf_navigation.py`, `test_ai_assistant_center.py`, `test_openai_catalog.py`, `test_openai_agent.py`, `test_agent_center.py` |
+| Tests | `tests/` — includes `test_branding.py`, `test_perf_navigation.py`, `test_ai_assistant_center.py`, `test_openai_catalog.py`, `test_openai_agent.py`, `test_agent_center.py` |
 | DHIS2 writes | **Disabled** |
 | Gmail writes | **Disabled** (no send/reply/delete/label/mark-read) |
 | Calendar writes | **Disabled** (no create/update/delete/RSVP) |

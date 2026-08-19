@@ -229,6 +229,7 @@ _SHARED_STAY_PREFIXES = ("settings", "api_settings")
 _SHARED_STAY_ENDPOINTS = {
     "settings_page",
     "settings_ai_providers",
+    "settings_branding",
     "jobs",
     "job_detail",
     "health",

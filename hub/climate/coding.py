@@ -13,8 +13,18 @@ from hub.climate.logic_format import (
     logic_explanation_instructions,
 )
 from hub.climate.retrieval_policy import ASK_INVESTIGATION_CONSTRAINTS
-from hub.climate.execution_mode import is_direct_mode, normalize_execution_mode
-from hub.climate.context_scope import ALL, CONTEXT_SCOPES, GENERAL, normalize_context_scope
+from hub.agent_center.repository_context import explicit_repository_id
+from hub.climate.execution_mode import (
+    assistant_label,
+    climate_execution_record,
+    format_execution_summary,
+    is_direct_mode,
+    normalize_path_list,
+    provider_display_label,
+    normalize_execution_mode,
+)
+from hub.climate.context_scope import ALL, CONTEXT_SCOPES, GENERAL, REPOSITORY, normalize_context_scope
+from hub.climate.investigation_metrics import summarize_tool_activity
 
 
 CODING_PROVIDERS = ("gemini", "codex", "claude-code", "cursor-agent")
@@ -82,8 +92,41 @@ def _is_general_chat_surface(surface: str) -> bool:
     return str(surface or "").strip().lower() in {"chat", "general"}
 
 
+def _is_workspace_surface(surface: str) -> bool:
+    return str(surface or "").strip().lower() == "workspace"
+
+
 def _is_general_chat_conversation(runs: list[dict[str, Any]]) -> bool:
     return all(not list(run.get("repository_ids") or []) for run in runs)
+
+
+def _run_surface(run: dict[str, Any]) -> str:
+    ctx = run.get("context") if isinstance(run.get("context"), dict) else {}
+    exec_meta = ctx.get("climate_execution") if isinstance(ctx.get("climate_execution"), dict) else {}
+    return str(exec_meta.get("surface") or "").strip().lower()
+
+
+def _is_workspace_conversation(runs: list[dict[str, Any]]) -> bool:
+    if not runs:
+        return False
+    surfaces = [_run_surface(run) for run in runs]
+    if any(item == "workspace" for item in surfaces):
+        return True
+    if any(_is_general_chat_surface(item) for item in surfaces):
+        return False
+    return any(list(run.get("repository_ids") or []) for run in runs)
+
+
+def _is_chat_conversation(runs: list[dict[str, Any]]) -> bool:
+    if _is_workspace_conversation(runs):
+        return False
+    if not runs:
+        return True
+    return _is_general_chat_conversation(runs)
+
+
+def _workspace_open_scope(runs: list[dict[str, Any]]) -> bool:
+    return bool(runs) and all(not list(run.get("repository_ids") or []) for run in runs)
 
 
 class ClimateCodingError(ValueError):
@@ -123,7 +166,8 @@ class ClimateCodingAdapter:
         profile_id = "okarun" if workspace == "work" else "aira"
         rows = self.agent_center.store.list_conversations(profile_id=profile_id, limit=limit)
         general = _is_general_chat_surface(surface)
-        if not repository_id and not general:
+        workspace_surface = _is_workspace_surface(surface)
+        if not repository_id and not general and not workspace_surface:
             return rows
         filtered = []
         for row in rows:
@@ -131,8 +175,19 @@ class ClimateCodingAdapter:
                 str(row.get("id") or ""), profile_id=profile_id, limit=100
             )
             if general:
-                if _is_general_chat_conversation(runs):
+                if _is_chat_conversation(runs):
                     filtered.append(row)
+                continue
+            if workspace_surface:
+                if not _is_workspace_conversation(runs):
+                    continue
+                if repository_id:
+                    repo_match = any(
+                        repository_id in list(run.get("repository_ids") or []) for run in runs
+                    )
+                    if not repo_match and not _workspace_open_scope(runs):
+                        continue
+                filtered.append(row)
                 continue
             if any(repository_id in list(run.get("repository_ids") or []) for run in runs):
                 filtered.append(row)
@@ -155,9 +210,18 @@ class ClimateCodingAdapter:
         runs = self.agent_center.store.list_conversation_runs(
             conversation_id, profile_id=profile_id, limit=200
         )
-        if _is_general_chat_surface(surface) and not _is_general_chat_conversation(runs):
+        if _is_general_chat_surface(surface) and not _is_chat_conversation(runs):
             raise ClimateCodingError("Conversation not found", code="not_found")
-        if repository_id and not any(
+        if _is_workspace_surface(surface):
+            if not _is_workspace_conversation(runs):
+                raise ClimateCodingError("Conversation not found", code="not_found")
+            if repository_id:
+                repo_match = any(
+                    repository_id in list(run.get("repository_ids") or []) for run in runs
+                )
+                if not repo_match and not _workspace_open_scope(runs):
+                    raise ClimateCodingError("Conversation not found", code="not_found")
+        elif repository_id and not any(
             repository_id in list(run.get("repository_ids") or []) for run in runs
         ):
             raise ClimateCodingError("Conversation not found", code="not_found")
@@ -179,7 +243,7 @@ class ClimateCodingAdapter:
         surface: str = "",
     ) -> dict[str, Any]:
         profile_id = "okarun" if workspace == "work" else "aira"
-        if repository_id or _is_general_chat_surface(surface):
+        if repository_id or _is_general_chat_surface(surface) or _is_workspace_surface(surface):
             self.conversation(
                 conversation_id,
                 workspace=workspace,
@@ -236,6 +300,10 @@ class ClimateCodingAdapter:
         display_prompt: str = "",
         surface: str = "",
         context_scope: str = "",
+        attached_files: list[str] | None = None,
+        retrieved_files: list[str] | None = None,
+        repository_name: str = "",
+        provider_label: str = "",
     ) -> dict[str, Any]:
         self._require_provider(provider)
         if workspace not in {"work", "personal"}:
@@ -272,6 +340,7 @@ class ClimateCodingAdapter:
             and chat_scope in {GENERAL, ALL}
         ):
             general_chat = True
+        scoped_repo_id = explicit_repository_id(repository_id) if chat_scope == REPOSITORY else ""
         explicit_files = bool(
             str(current_file or "").strip()
             or any(str(path or "").strip() for path in (selected_files or []))
@@ -433,6 +502,19 @@ class ClimateCodingAdapter:
             "bounded_evidence_only": False if direct else bool(has_packet),
             "reuse_provider_session": bool(reuse_session) and not handoff,
             "repository_investigation": bool(repository_investigation),
+            "climate_execution": climate_execution_record(
+                execution_mode=orchestration,
+                context_scope=chat_scope,
+                repository_id=scoped_repo_id,
+                repository_name=repository_name or scoped_repo_id,
+                surface=str(surface or ""),
+                provider=provider,
+                model=model,
+                provider_label=provider_label,
+                attached_files=attached_files,
+                retrieved_files=retrieved_files,
+                current_file=current_file,
+            ),
         }
         if general_chat:
             payload["inherit_repository_scope"] = False
@@ -462,10 +544,40 @@ class ClimateCodingAdapter:
             run = self.agent_center.start_run(payload)
         except AgentCenterError as exc:
             raise ClimateCodingError(str(exc), code=exc.code) from exc
-        public = self._public_run(run, workspace=workspace, repository_id=repository_id)
+        public = self._public_run(run, workspace=workspace, repository_id=scoped_repo_id or repository_id)
         public["task_mode"] = mode
         public["provider_invoked"] = True
         public["execution_mode"] = orchestration
+        public["context_scope"] = chat_scope
+        public["surface"] = str(surface or public.get("surface") or "")
+        public["provider"] = provider
+        public["model"] = model
+        if scoped_repo_id:
+            public["repository_id"] = scoped_repo_id
+            public["repository_name"] = str(repository_name or public.get("repository_name") or scoped_repo_id)
+        elif chat_scope in {GENERAL, ALL}:
+            public["repository_id"] = ""
+            public["repository_name"] = ""
+        display_provider = provider_display_label(
+            provider, str(provider_label or run.get("agent_label") or "")
+        )
+        public["provider_label"] = display_provider
+        public["assistant_label"] = assistant_label(orchestration, display_provider)
+        public["attached_files"] = normalize_path_list(attached_files)
+        public["retrieved_files"] = normalize_path_list(retrieved_files)
+        public["inspected_files"] = list(public.get("inspected_files") or [])
+        public["sources"] = normalize_path_list(
+            list(public.get("attached_files") or [])
+            + list(public.get("retrieved_files") or [])
+            + list(public.get("inspected_files") or [])
+        )
+        public["execution_summary"] = format_execution_summary(
+            execution_mode=orchestration,
+            provider_label=display_provider,
+            model=model,
+            context_scope=chat_scope,
+            repository_label=str(public.get("repository_name") or ""),
+        )
         if preflight_log:
             logs = str(public.get("logs") or "")
             public["logs"] = (preflight_log + ("\n\n" if logs else "") + logs).strip()
@@ -587,17 +699,60 @@ class ClimateCodingAdapter:
             "host_path": row.get("host_path") or "",
             "account_label": row.get("account_label") or "",
             "capabilities": dict(row.get("capabilities") or {}),
+            "logo": str(row.get("logo") or ""),
         }
 
     @staticmethod
     def _public_run(run: dict[str, Any], *, workspace: str, repository_id: str = "") -> dict[str, Any]:
+        ctx = run.get("context") if isinstance(run.get("context"), dict) else {}
+        exec_meta = ctx.get("climate_execution") if isinstance(ctx.get("climate_execution"), dict) else {}
+        execution_mode = str(exec_meta.get("execution_mode") or "")
+        context_scope = str(exec_meta.get("context_scope") or "")
+        if "repository_id" in exec_meta:
+            scoped_repo = str(exec_meta.get("repository_id") or "")
+        else:
+            scoped_repo = str(repository_id or "")
+            if not scoped_repo:
+                scoped_repo = str(((run.get("repository_ids") or [""])[0]) or "")
+        provider_id = str(run.get("agent_id") or exec_meta.get("provider") or "")
+        provider_label = provider_display_label(
+            provider_id, str(run.get("agent_label") or exec_meta.get("provider_label") or "")
+        )
+        model = str(exec_meta.get("model") or run.get("model") or "")
+        repo_name = str(exec_meta.get("repository_name") or "")
+        attached = normalize_path_list(exec_meta.get("attached_files"))
+        retrieved = normalize_path_list(exec_meta.get("retrieved_files"))
+        persisted_inspected = normalize_path_list(exec_meta.get("inspected_files"))
+        activity = summarize_tool_activity(
+            run.get("tool_activity"),
+            str(run.get("logs") or run.get("log") or ""),
+        )
+        inspected = persisted_inspected or normalize_path_list(list(activity.inspected_paths or []))
+        sources = normalize_path_list(list(attached) + list(retrieved) + list(inspected), limit=24)
         return {
             "id": run.get("id"),
             "workspace": workspace,
-            "repository_id": repository_id or ((run.get("repository_ids") or [""])[0]),
+            "repository_id": scoped_repo,
+            "repository_name": repo_name,
             "status": run.get("status"),
-            "provider": run.get("agent_id"),
-            "model": run.get("model"),
+            "provider": provider_id,
+            "provider_label": provider_label,
+            "model": model,
+            "surface": str(exec_meta.get("surface") or ""),
+            "execution_mode": execution_mode,
+            "context_scope": context_scope,
+            "attached_files": attached,
+            "retrieved_files": retrieved,
+            "inspected_files": inspected,
+            "sources": sources,
+            "assistant_label": assistant_label(execution_mode, provider_label) if execution_mode else "",
+            "execution_summary": format_execution_summary(
+                execution_mode=execution_mode,
+                provider_label=provider_label,
+                model=model,
+                context_scope=context_scope,
+                repository_label=repo_name or scoped_repo,
+            ) if execution_mode else "",
             "answer": run.get("answer") or "",
             "error": run.get("error") or "",
             "logs": run.get("logs") or run.get("log") or "",

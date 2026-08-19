@@ -99,7 +99,7 @@ async function seed(page, stateKey, te) {
   await page.evaluate(
     ({ stateKey: key, te: payload, msg }) => {
       localStorage.setItem(
-        "climate:chat:v1:work",
+        "climate:workspace:v1:work",
         JSON.stringify({
           activeId: "chat-te",
           sessions: [

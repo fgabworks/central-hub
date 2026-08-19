@@ -4,18 +4,24 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=mission-control-7">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/climate-theme.css') }}?v=5">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=mission-control-11">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/climate-theme.css') }}?v=6">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/assistant_dock_maximize.css') }}?v=2">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/climate-shell.css') }}?v=8">
-  <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/climate-mark.png') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/climate-shell.css') }}?v=11">
+  <link rel="icon" type="{{ branding.favicon_type if branding is defined else 'image/png' }}" href="{{ branding.icon_url if branding is defined and branding.icon_url else url_for('static', filename='img/climate-mark.png') }}">
   {% block head_extra %}{% endblock %}
 </head>
-<body class="climate-system-shell theme-{{ workspace|default('work') }}">
-  {% from "macros.html" import brand_icon, brand_logo %}
+{% set climate_shared_shell = request.endpoint in ('work_climate', 'personal_climate') %}
+<body class="climate-system-shell theme-{{ workspace|default('work') }}{% if climate_shared_shell %} climate-sky-quiet{% endif %}">
+  {% from "macros.html" import brand_icon, brand_logo with context %}
   {# Code Workspace keeps Dashboard system chrome (pixel-stable shared shell). #}
-  {% set climate_shared_shell = request.endpoint in ('work_climate', 'personal_climate') %}
   {% set show_activity_rail = climate_shared_shell or (not skip_activity_rail|default(false)) %}
+  <div class="climate-sky" aria-hidden="true">
+    <div class="climate-sky-layer climate-sky-stars"></div>
+    <div class="climate-sky-layer climate-sky-weather"></div>
+    <div class="climate-sky-layer climate-sky-galaxy"></div>
+    <div class="climate-sky-layer climate-sky-horizon"></div>
+  </div>
   <div class="app-shell{% if show_activity_rail %} has-activity-rail{% endif %}{% if assistant_dock and not skip_assistant_dock|default(false) %} has-ad-dock{% endif %}{% if assistant_dock and assistant_dock.prefs.open and not assistant_dock.prefs.minimized %} is-ad-open{% elif assistant_dock and assistant_dock.prefs.minimized %} is-ad-open is-ad-minimized{% endif %}{% if workspace_console and not skip_workspace_console|default(false) and workspace_console.prefs.open and not workspace_console.prefs.minimized %} is-wc-open{% elif workspace_console and not skip_workspace_console|default(false) and workspace_console.prefs.minimized %} is-wc-open is-wc-minimized{% endif %}{% if workspace_console and not skip_workspace_console|default(false) and workspace_console.prefs.maximized %} is-wc-maximized{% endif %}"
        style="{% if assistant_dock %}--ad-width: {{ assistant_dock.prefs.width }}px;{% endif %}{% if workspace_console and not skip_workspace_console|default(false) %}--wc-height: {{ workspace_console.prefs.height }}px;{% endif %}">
     <aside class="sidebar" id="hub-sidebar" aria-label="Primary navigation">
@@ -257,6 +263,7 @@
   <script src="{{ url_for('static', filename='js/quick_notepad.js') }}?v=qn-rail-2"></script>
   {% endif %}
   <script src="{{ url_for('static', filename='js/hub_perf.js') }}?v=perf-1"></script>
+  <script src="{{ url_for('static', filename='js/climate_sky.js') }}?v=1"></script>
   {% if assistant_dock and not skip_assistant_dock|default(false) %}
   <script src="{{ url_for('static', filename='js/assistant_dock.js') }}?v=shell-dock-30"></script>
   {% endif %}

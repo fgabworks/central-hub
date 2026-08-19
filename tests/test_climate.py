@@ -464,8 +464,12 @@ class ClimateUiContractTests(unittest.TestCase):
             'climate-terminal-panel',
             'wc_terminal.js',
             'wc-xterm-a',
-            'Ask AiriX',
-            'AiriX · CLIMATE CHAT',
+            'Ask about your code...',
+            'AiriX · Code Assistant',
+            'climate-assistant-header',
+            'New session',
+            'data-surface="workspace"',
+            'id="climate-assistant-context"',
             'Session total',
             'Provider breakdown',
             'climate-token-quota',
@@ -484,6 +488,10 @@ class ClimateUiContractTests(unittest.TestCase):
             'Direct',
         ):
             self.assertIn(marker, template)
+        self.assertNotIn("New Chat", template)
+        self.assertNotIn("climate-chat-header", template)
+        self.assertNotIn("climate-chat-new-label", template)
+        self.assertNotIn("Ask AiriX", template)
         self.assertNotIn('id="climate-cancel"', template)
         self.assertNotIn('id="climate-cancel-top"', template)
         self.assertNotIn("OUTLINE", template)
@@ -551,9 +559,22 @@ class ClimateUiContractTests(unittest.TestCase):
         self.assertIn("climate-dd-menu.is-portal", css)
         self.assertIn("monaco.editor.create", script)
         self.assertIn("localStorage.setItem", script)
+        self.assertIn("climate:workspace:v1:", script)
         self.assertIn("climate:chat:v1:", script)
+        self.assertIn("CLIMATE_SURFACE", script)
+        self.assertIn("conversationQuery", script)
+        self.assertIn("climate-assistant-msg", script)
+        self.assertIn("renderAssistantContextBar", script)
+        self.assertIn("surface: CLIMATE_SURFACE", script)
+        self.assertNotIn('class="climate-chat-msg', script)
         self.assertIn("splitRunOutput", script)
         self.assertIn("Details / Diagnostics", script)
+        self.assertIn("assistantRoleLabel", script)
+        self.assertIn("identityLogoSrc", script)
+        self.assertIn('mode === "direct"', script)
+        self.assertIn('return "AiriX"', script)
+        self.assertNotIn("AiriX · CLIMATE CHAT", template)
+        self.assertNotIn("AiriX · CLIMATE Chat", template)
         self.assertIn("newChatSession", script)
         self.assertIn("restoreChatSession", script)
         self.assertIn("compactHandoffPrompt", script)
@@ -608,6 +629,8 @@ class ClimateUiContractTests(unittest.TestCase):
         self.assertIn("brand_logo(", base)
         self.assertIn("climate-mark.png", base)
         self.assertIn("climate-theme.css", base)
+        self.assertIn("climate-sky", base)
+        self.assertIn("climate_sky.js", base)
         self.assertIn("brand-wordmark", macros)
         self.assertIn("CLIMATE", macros)
         self.assertIn("CLIMATE v{{ hub_version }}", base)

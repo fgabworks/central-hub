@@ -7,6 +7,8 @@ Repository/file context is never implied; it is used only when explicitly select
 
 from __future__ import annotations
 
+from typing import Any
+
 CLIMATE_ASSISTED = "climate_assisted"
 DIRECT = "direct"
 EXECUTION_MODES = (CLIMATE_ASSISTED, DIRECT)
@@ -52,6 +54,59 @@ def is_direct_mode(value: str | None) -> bool:
     return normalize_execution_mode(value) == DIRECT
 
 
+PROVIDER_LABELS = {
+    "gemini": "Gemini",
+    "openai": "OpenAI",
+    "openai-api": "OpenAI",
+    "grok": "Grok",
+    "claude": "Claude",
+    "claude-code": "Claude Code",
+    "codex": "Codex",
+    "cursor-agent": "Cursor Agent",
+}
+
+
+def provider_display_label(provider_id: str | None, known_label: str = "") -> str:
+    """Human provider name for labels/summaries. Known labels win."""
+    label = str(known_label or "").strip()
+    if label:
+        return label
+    pid = str(provider_id or "").strip()
+    return PROVIDER_LABELS.get(pid, pid or "Provider")
+
+
+def assistant_label(execution_mode: str | None, provider_label: str = "") -> str:
+    """Visible speaker for a completed/in-flight assistant message."""
+    if is_direct_mode(execution_mode):
+        return str(provider_label or "").strip() or "Provider"
+    return "AiriX"
+
+
+def format_execution_summary(
+    *,
+    execution_mode: str | None,
+    provider_label: str = "",
+    model: str = "",
+    context_scope: str = "",
+    repository_label: str = "",
+) -> str:
+    """Compact Details line from persisted run metadata, not live UI controls."""
+    parts = [mode_label(execution_mode)]
+    if str(provider_label or "").strip():
+        parts.append(str(provider_label).strip())
+    if str(model or "").strip():
+        parts.append(str(model).strip())
+    scope = str(context_scope or "").strip().lower()
+    if scope in {"all", "all-repositories", "all_repositories"}:
+        parts.append("All Repositories")
+    elif scope in {"repository", "repo", "specific"}:
+        if str(repository_label or "").strip():
+            parts.append(str(repository_label).strip())
+    elif scope == "general":
+        parts.append("General")
+    return " · ".join(parts)
+
+
 def mode_label(value: str | None) -> str:
     return MODE_LABELS[normalize_execution_mode(value)]
 
@@ -67,4 +122,57 @@ def execution_mode_public(value: str | None) -> dict[str, str]:
         "label": MODE_LABELS[mode],
         "tooltip": MODE_TOOLTIPS[mode],
         "compare_label": "Compare with CLIMATE" if mode == DIRECT else "Compare with Direct",
+    }
+
+
+def normalize_path_list(value: Any, *, limit: int = 48) -> list[str]:
+    """Stable relative-path labels from strings or {repository_id, path} dicts."""
+    items: list[str] = []
+    seen: set[str] = set()
+    raw = value if isinstance(value, (list, tuple)) else []
+    for item in raw:
+        if isinstance(item, dict):
+            repo = str(item.get("repository_id") or item.get("repositoryId") or "").strip()
+            path = str(item.get("path") or "").replace("\\", "/").strip().lstrip("/")
+            text = f"{repo}:{path}" if repo and path else path
+        else:
+            text = str(item or "").replace("\\", "/").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        items.append(text)
+        if len(items) >= limit:
+            break
+    return items
+
+
+def climate_execution_record(
+    *,
+    execution_mode: str | None,
+    context_scope: str = "",
+    repository_id: str = "",
+    repository_name: str = "",
+    surface: str = "",
+    provider: str = "",
+    model: str = "",
+    provider_label: str = "",
+    attached_files: Any = None,
+    retrieved_files: Any = None,
+    inspected_files: Any = None,
+    current_file: str = "",
+) -> dict[str, Any]:
+    """Authoritative executed configuration persisted on the Agent Center run."""
+    return {
+        "execution_mode": normalize_execution_mode(execution_mode),
+        "context_scope": str(context_scope or ""),
+        "repository_id": str(repository_id or ""),
+        "repository_name": str(repository_name or ""),
+        "surface": str(surface or "").strip().lower(),
+        "provider": str(provider or ""),
+        "model": str(model or ""),
+        "provider_label": str(provider_label or ""),
+        "attached_files": normalize_path_list(attached_files),
+        "retrieved_files": normalize_path_list(retrieved_files),
+        "inspected_files": normalize_path_list(inspected_files),
+        "current_file": str(current_file or "").replace("\\", "/").strip().lstrip("/"),
     }

@@ -99,6 +99,14 @@ def main() -> None:
                         pageWidth: q(".aic-page") ? Math.round(q(".aic-page").getBoundingClientRect().width) : 0,
                         gridCols: getComputedStyle(q(".aic-provider-grid")).gridTemplateColumns,
                         modelCols: getComputedStyle(q(".aic-model-grid")).gridTemplateColumns,
+                        surfaceCols: q(".aic-surface") ? getComputedStyle(q(".aic-surface")).gridTemplateColumns : "",
+                        chatProviderWidth: (function () {
+                          const el = q("#chat-default-provider");
+                          const trigger = el && ((el.closest(".climate-dd") || {}).querySelector
+                            ? (el.closest(".climate-dd").querySelector(".climate-dd-trigger") || el)
+                            : el);
+                          return trigger ? Math.round(trigger.getBoundingClientRect().width) : 0;
+                        })(),
                         hasAgentSafety: !!q(".agent-safety"),
                         reset: !!(q("#coding-defaults-reset")),
                         modeSwitches: qa(".aic-mode-switch").length,
@@ -187,11 +195,11 @@ def main() -> None:
             failed.append(f"{name}: missing API key dialog")
         if row.get("defaultsTitle") != "AI Defaults":
             failed.append(f"{name}: defaults title is not AI Defaults")
-        if row.get("chatTitle") != "CLIMATE Chat":
+        if row.get("chatTitle") != "CLIMATE Chat (General)":
             failed.append(f"{name}: missing CLIMATE Chat defaults")
-        if row.get("workspaceTitle") != "Code Workspace":
+        if row.get("workspaceTitle") != "Code Workspace (Coding)":
             failed.append(f"{name}: missing Code Workspace defaults")
-        if row.get("overridesTitle") != "Provider Overrides":
+        if row.get("overridesTitle") != "Provider Overrides (Auto)":
             failed.append(f"{name}: missing Provider Overrides")
         if not row.get("chatProvider") or not row.get("workspaceProvider"):
             failed.append(f"{name}: missing split provider selectors")
@@ -199,6 +207,15 @@ def main() -> None:
             failed.append(f"{name}: merged coding-default-provider is still present")
         if not row.get("chatBeforeWorkspace"):
             failed.append(f"{name}: Chat defaults are not above Code Workspace")
+        if name == "desktop":
+            if len((row.get("modelCols") or "").split()) != 4:
+                failed.append(f"{name}: provider overrides are not one compact 4-column row")
+            if len((row.get("surfaceCols") or "").split()) < 4:
+                failed.append(f"{name}: Chat/Workspace defaults are not a compact 4-column row")
+            if (row.get("pageWidth") or 0) < 1000:
+                failed.append(f"{name}: page is not using the full content width")
+        if (row.get("chatProviderWidth") or 0) > 280:
+            failed.append(f"{name}: provider dropdown is oversized")
         if not row.get("workspaceBeforeOverrides"):
             failed.append(f"{name}: Code Workspace defaults are not above Provider Overrides")
         if row.get("modeSwitches", 0) < 2:

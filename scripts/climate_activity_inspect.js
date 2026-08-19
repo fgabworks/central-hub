@@ -21,7 +21,7 @@ fs.mkdirSync(outDir, { recursive: true });
     const qa = (s) => Array.from(document.querySelectorAll(s));
     return {
       feedHtmlSample: (q("#climate-ai-feed") || {}).innerHTML?.slice(0, 500) || "",
-      msgClasses: qa(".climate-chat-msg").map((el) => el.className),
+      msgClasses: qa(".climate-assistant-msg, .climate-chat-msg").map((el) => el.className),
       hasActivity: !!q(".climate-activity-block, .climate-run-progress, [data-activity]"),
       hasRunSummary: !!q(".climate-run-summary"),
       detailsCount: qa(".climate-chat-details").length,
@@ -32,7 +32,7 @@ fs.mkdirSync(outDir, { recursive: true });
 
   // Seed a running + completed message shape into localStorage chat store and reload render via evaluate
   const seeded = await page.evaluate(() => {
-    const key = Object.keys(localStorage).find((k) => k.startsWith("climate:chat:v1:")) || "climate:chat:v1:work";
+    const key = Object.keys(localStorage).find((k) => k.startsWith("climate:workspace:v1:") || k.startsWith("climate:chat:v1:")) || "climate:workspace:v1:work";
     const store = {
       activeId: "chat-activity-demo",
       sessions: [
@@ -82,9 +82,9 @@ fs.mkdirSync(outDir, { recursive: true });
     const q = (s) => document.querySelector(s);
     const qa = (s) => Array.from(document.querySelectorAll(s));
     return {
-      messageCount: qa(".climate-chat-msg").length,
-      assistantHtml: (qa(".climate-chat-msg.is-assistant")[0] || {}).innerHTML?.slice(0, 1200) || "",
-      bodyText: ((qa(".climate-chat-msg.is-assistant .climate-chat-body")[0] || {}).textContent || "").slice(0, 400),
+      messageCount: qa(".climate-assistant-msg, .climate-chat-msg").length,
+      assistantHtml: (qa(".climate-assistant-msg.is-assistant, .climate-chat-msg.is-assistant")[0] || {}).innerHTML?.slice(0, 1200) || "",
+      bodyText: ((qa(".climate-assistant-msg.is-assistant .climate-assistant-body, .climate-chat-msg.is-assistant .climate-chat-body")[0] || {}).textContent || "").slice(0, 400),
       hasProgress: !!q(".climate-activity-progress, .climate-run-progress"),
     };
   });

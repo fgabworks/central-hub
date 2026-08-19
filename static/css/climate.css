@@ -54,6 +54,10 @@
 .climate-chat-text,
 .climate-chat-meta strong,
 .climate-chat-title,
+.climate-assistant-title,
+.climate-assistant-label,
+.climate-assistant-meta strong,
+.climate-assistant-text,
 .climate-ai-empty,
 .climate-compose-box textarea,
 .climate-run-summary-title,
@@ -331,15 +335,38 @@ body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:focus {
 .climate-brand-mark {
   width: 20px;
   height: 20px;
-  border-radius: 50%;
+  box-sizing: border-box;
+  padding: 2px;
+  border-radius: 6px;
   display: block;
+  object-fit: contain;
+  object-position: center;
   border: 1px solid color-mix(in srgb, var(--cl-accent) 25%, transparent);
 }
+.climate-brand[data-brand-display="full"] .climate-brand-mark,
+.climate-brand[data-brand-display="full"] .brand-logo-mark {
+  width: auto;
+  height: auto;
+  max-width: 148px;
+  max-height: 22px;
+  padding: 0;
+  border-color: transparent;
+}
+.climate-brand[data-brand-display="full"] .brand-text,
+.climate-brand[data-brand-display="icon"] .brand-text {
+  display: none;
+}
 .climate-welcome-logo {
-  width: 40px;
+  width: auto;
   height: 40px;
+  max-width: 160px;
+  max-height: 40px;
   margin-bottom: 0.55rem;
-  border-radius: 50%;
+  padding: 4px;
+  box-sizing: border-box;
+  border-radius: 8px;
+  object-fit: contain;
+  object-position: center;
 }
 .climate-welcome h1 {
   margin: 0 0 4px;
@@ -553,6 +580,82 @@ body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:focus {
   border-bottom: 1px solid var(--cl-border);
   background: var(--cl-bg-elevated);
 }
+.climate-assistant-header {
+  position: relative;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--cl-border);
+  background: var(--cl-panel);
+}
+.climate-assistant-topline,
+.climate-chat-topline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  min-width: 0;
+  padding: 4px 8px 0;
+}
+.climate-assistant-label,
+.climate-chat-label {
+  flex: 0 0 auto;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--cl-text);
+  font-weight: 600;
+  margin-right: 2px;
+  white-space: nowrap;
+}
+.climate-assistant-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+.climate-assistant-actions .climate-icon-btn {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+}
+.climate-assistant-session {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 22px;
+  padding: 0 10px 2px;
+}
+.climate-assistant-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--cl-muted);
+}
+.climate-assistant-session .climate-icon-btn {
+  width: 22px;
+  height: 22px;
+}
+.climate-assistant-context {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 10px 6px;
+  color: var(--cl-muted);
+  font-size: 10px;
+  line-height: 1.2;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.climate-assistant-context span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.climate-assistant-dot { flex: 0 0 auto; opacity: 0.55; }
 .climate-chat-topline {
   display: flex;
   align-items: center;
@@ -1045,7 +1148,8 @@ body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:focus {
 .climate-chat-title-row .climate-icon-btn { width: 26px; height: 26px; }
 
 /* keep prior topline rules from being fully overridden */
-.climate-chat-topline .climate-provider-state {
+.climate-chat-topline .climate-provider-state,
+.climate-assistant-topline .climate-provider-state {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1053,10 +1157,12 @@ body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:focus {
   color: var(--cl-muted);
   margin-left: 0;
 }
-.climate-chat-topline .climate-provider-state.is-ok {
+.climate-chat-topline .climate-provider-state.is-ok,
+.climate-assistant-topline .climate-provider-state.is-ok {
   color: #d7f5df;
 }
-.climate-chat-topline .climate-provider-state.is-ok::before {
+.climate-chat-topline .climate-provider-state.is-ok::before,
+.climate-assistant-topline .climate-provider-state.is-ok::before {
   content: "";
   width: 7px;
   height: 7px;
@@ -1064,7 +1170,8 @@ body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:focus {
   background: var(--success, #22c55e);
   display: inline-block;
 }
-.climate-chat-close { min-width: 22px; height: 22px; }
+.climate-chat-close,
+.climate-assistant-close { min-width: 22px; height: 22px; }
 .climate-chat-title-row {
   display: flex;
   align-items: center;
@@ -1174,17 +1281,133 @@ body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:focus {
   gap: 8px 10px;
   margin: 0 0 16px;
 }
-.climate-chat-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
+.climate-assistant-msg {
   display: grid;
-  place-items: center;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 4px 8px;
+  margin: 0 0 10px;
+  padding: 6px 8px 8px;
+  border-left: 2px solid transparent;
+  border-radius: 0 6px 6px 0;
+}
+.climate-assistant-msg.is-assistant {
+  border-left-color: color-mix(in srgb, var(--cl-accent, #5b8def) 55%, var(--cl-border));
+  background: color-mix(in srgb, var(--cl-panel-2) 70%, transparent);
+}
+.climate-assistant-msg.is-user {
+  border-left-color: color-mix(in srgb, var(--workspace-accent, #e53935) 50%, var(--cl-border));
+  background: transparent;
+}
+.climate-assistant-msg.is-error {
+  border-left-color: #f08b87;
+}
+.climate-assistant-avatar {
+  width: 22px;
+  height: 22px;
+  box-sizing: border-box;
+  padding: 3px;
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--cl-text);
   background: var(--cl-panel-2);
   border: 1px solid var(--cl-border);
+}
+.climate-assistant-avatar img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  object-position: center;
+  display: block;
+}
+.climate-assistant-msg.is-assistant .climate-assistant-avatar {
+  background: color-mix(in srgb, var(--cl-accent) 16%, var(--cl-panel-2));
+  border-color: color-mix(in srgb, var(--cl-accent) 35%, var(--cl-border));
+}
+.climate-assistant-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  grid-column: 2;
+}
+.climate-assistant-meta strong { color: var(--cl-text); font-size: 11px; }
+.climate-assistant-meta time { color: var(--cl-muted); font-size: 10px; }
+.climate-assistant-body { grid-column: 2; min-width: 0; color: var(--cl-text); font-size: 12px; line-height: 1.42; }
+.climate-assistant-msg.is-user .climate-assistant-body { color: #e8eaed; }
+.climate-assistant-msg.is-error .climate-assistant-body { color: #f0aaa6; }
+.climate-assistant-text { min-width: 0; }
+.climate-assistant-status-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
   color: var(--cl-muted);
+}
+.climate-assistant-details {
+  margin-top: 6px;
+  border: 0;
+}
+.climate-assistant-details > summary {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 0;
+  color: var(--cl-muted);
+  font-size: 11px;
+  list-style: none;
+}
+.climate-assistant-details > summary::-webkit-details-marker { display: none; }
+.climate-assistant-details pre {
+  margin: 6px 0 0;
+  padding: 8px;
+  max-height: 160px;
+  overflow: auto;
+  border: 1px solid var(--cl-border);
+  border-radius: 6px;
+  background: var(--cl-bg);
+  color: var(--cl-muted);
+  font-size: 11px;
+  white-space: pre-wrap;
+}
+.climate-assistant-file {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: #9ec3e8;
+  padding: 2px 0;
+  cursor: pointer;
+  font: inherit;
   font-size: 12px;
-  font-weight: 700;
+}
+.climate-assistant-file:hover { color: #c5ddf5; text-decoration: underline; }
+.climate-assistant-msg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.climate-assistant-msg-actions .climate-btn {
+  min-height: 26px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+}
+.climate-chat-avatar img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  object-position: center;
+  display: block;
 }
 .climate-chat-msg.is-assistant .climate-chat-avatar {
   border-radius: 8px;
@@ -1346,7 +1569,8 @@ body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:focus {
   border-color: color-mix(in srgb, var(--workspace-accent, #e53935) 55%, var(--cl-border));
 }
 .climate-icon-btn.is-stop[hidden] { display: none !important; }
-.climate-chat-status-pill.is-stop {
+.climate-chat-status-pill.is-stop,
+.climate-assistant-status-pill.is-stop {
   color: #f0b4b1;
   background: color-mix(in srgb, #ef4444 14%, transparent);
   border: 1px solid color-mix(in srgb, #ef4444 35%, var(--cl-border));
@@ -1364,7 +1588,8 @@ body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:focus {
   white-space: nowrap;
 }
 
-.climate-chat-composer {
+.climate-chat-composer,
+.climate-assistant-composer {
   flex: 0 0 auto;
   border-top: 1px solid var(--cl-border);
   background: var(--cl-bg-elevated);
@@ -1538,7 +1763,9 @@ body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:focus {
   .climate-chat-secondary { display: none !important; }
   .climate-chat-new-label { display: none; }
   .climate-chat-new-btn { padding: 0 7px; }
-  .climate-chat-topline .climate-provider-state-text {
+  .climate-assistant-context { display: none; }
+  .climate-chat-topline .climate-provider-state-text,
+  .climate-assistant-topline .climate-provider-state-text {
     max-width: 72px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1751,7 +1978,8 @@ body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:focus {
 .climate-wc-terminal .wc-xterm { padding: 2px 4px; }
 
 /* Live provider activity — mockup-matched progress (panel-only). */
-.climate-chat-status-pill {
+.climate-chat-status-pill,
+.climate-assistant-status-pill {
   margin-left: 8px;
   padding: 1px 7px;
   border-radius: 999px;
@@ -1759,7 +1987,8 @@ body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:focus {
   font-weight: 500;
   letter-spacing: 0.02em;
 }
-.climate-chat-status-pill.is-ok {
+.climate-chat-status-pill.is-ok,
+.climate-assistant-status-pill.is-ok {
   color: #9be7b3;
   background: color-mix(in srgb, #22c55e 16%, transparent);
   border: 1px solid color-mix(in srgb, #22c55e 35%, var(--cl-border));

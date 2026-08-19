@@ -1,18 +1,25 @@
 {% extends "base.html" %}
 {% block title %}{{ climate.context_label }} · CLIMATE{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/climate.css') }}?v=39">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/climate.css') }}?v=43">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/styles/github-dark.min.css">
 {% endblock %}
 {% block content %}
 <div class="climate-shell" id="climate-shell"
      data-workspace="{{ climate.workspace }}"
+     data-surface="workspace"
+     data-brand-icon="{{ branding.avatar_url if branding is defined and branding.avatar_url else url_for('static', filename='img/climate-mark.png') }}"
      data-api-root="/api/climate/{{ climate.workspace }}"
      data-bootstrap='{{ climate|tojson }}'>
   <header class="climate-titlebar">
-    <div class="climate-brand">
-      <img class="climate-brand-mark" src="{{ url_for('static', filename='img/climate-mark.png') }}" width="20" height="20" alt="">
-      <span><strong>CLIMATE</strong><small>{{ climate.context_label }}</small></span>
+    <div class="climate-brand climate-brand-lockup"
+         data-brand-display="{{ branding.display if branding is defined else 'wordmark' }}"
+         data-brand-fit="{{ branding.fit if branding is defined else 'contain' }}">
+      <img class="climate-brand-mark brand-logo-mark" src="{{ branding.logo_url if branding is defined and branding.display == 'full' and branding.logo_url else (branding.icon_url if branding is defined and branding.icon_url else url_for('static', filename='img/climate-mark.png')) }}" alt="">
+      <span class="climate-brand-copy">
+        <span class="brand-text"><strong>CLIMATE</strong></span>
+        <small class="climate-brand-context">{{ climate.context_label }}</small>
+      </span>
     </div>
     <div class="climate-scope-controls" aria-label="Active coding scope">
       <label>Repository
@@ -76,7 +83,7 @@
       </div>
       <section class="climate-editor-host" id="climate-editor-host">
         <div class="climate-welcome" id="climate-welcome">
-          <img class="climate-welcome-logo" src="{{ url_for('static', filename='img/climate-mark.png') }}" alt="" width="40" height="40">
+          <img class="climate-welcome-logo" src="{{ branding.logo_url if branding is defined and branding.display == 'full' and branding.logo_url else (branding.icon_url if branding is defined and branding.icon_url else url_for('static', filename='img/climate-mark.png')) }}" alt="">
           <h1>CLIMATE</h1>
           <p>{{ climate.context_label }}</p>
           <span>Open a repository file to begin.</span>
@@ -215,12 +222,12 @@
     </main>
 
     <div class="climate-sash climate-sash-right" data-resize="right" role="separator" aria-label="Resize AI panel"></div>
-    <aside class="climate-ai" id="climate-ai">
+    <aside class="climate-ai climate-assistant" id="climate-ai" data-surface="workspace">
       <button type="button" class="climate-ai-rail" id="climate-ai-expand" title="Expand AI Assistant" aria-label="Expand AI Assistant">✦</button>
       <div class="climate-ai-full">
-      <header class="climate-chat-header">
-        <div class="climate-chat-topline">
-          <span class="climate-chat-label">AiriX · CLIMATE CHAT</span>
+      <header class="climate-assistant-header">
+        <div class="climate-assistant-topline">
+          <span class="climate-assistant-label">AiriX · Code Assistant</span>
           <button type="button" class="climate-token-pill" id="climate-token-pill" title="Session usage" aria-expanded="false">
             <span class="climate-token-compact" id="climate-token-compact">
               <span id="climate-token-label">0 tokens</span>
@@ -231,14 +238,25 @@
             </span>
           </button>
           <span class="climate-provider-state" id="climate-provider-state"><i class="climate-provider-state-dot" aria-hidden="true"></i><span class="climate-provider-state-text">Checking</span></span>
-          <button type="button" class="climate-chat-new-btn" id="climate-chat-new" title="New Chat"><span class="climate-chat-new-icon" aria-hidden="true">+</span><span class="climate-chat-new-label">New Chat</span></button>
-          <button type="button" class="climate-icon-btn climate-chat-secondary" id="climate-chat-history" title="History" aria-label="History">◷</button>
-          <button type="button" class="climate-icon-btn" id="climate-chat-menu" title="More" aria-label="More options">⋯</button>
-          <button type="button" class="climate-icon-btn climate-chat-close" id="climate-ai-close" title="Close AI panel" aria-label="Close AI panel">×</button>
+          <div class="climate-assistant-actions">
+            <button type="button" class="climate-icon-btn" id="climate-chat-new" title="New session" aria-label="New session">+</button>
+            <button type="button" class="climate-icon-btn climate-chat-secondary" id="climate-chat-history" title="Sessions" aria-label="Sessions">◷</button>
+            <button type="button" class="climate-icon-btn" id="climate-chat-menu" title="More" aria-label="More options">⋯</button>
+            <button type="button" class="climate-icon-btn climate-assistant-close" id="climate-ai-close" title="Close AI panel" aria-label="Close AI panel">×</button>
+          </div>
         </div>
-        <div class="climate-chat-title-row">
-          <div class="climate-chat-title" id="climate-chat-title" title="New chat">New chat</div>
-          <button type="button" class="climate-icon-btn climate-chat-secondary" id="climate-chat-rename" title="Rename chat" aria-label="Rename chat">✎</button>
+        <div class="climate-assistant-session">
+          <div class="climate-assistant-title" id="climate-chat-title" title="New session">New session</div>
+          <button type="button" class="climate-icon-btn climate-chat-secondary" id="climate-chat-rename" title="Rename session" aria-label="Rename session">✎</button>
+        </div>
+        <div class="climate-assistant-context" id="climate-assistant-context" aria-label="Coding context">
+          <span id="climate-assistant-context-scope">Repository</span>
+          <span class="climate-assistant-dot" aria-hidden="true">·</span>
+          <span id="climate-assistant-context-file">No file open</span>
+          <span class="climate-assistant-dot" aria-hidden="true">·</span>
+          <span id="climate-assistant-context-sel">No selection</span>
+          <span class="climate-assistant-dot" aria-hidden="true">·</span>
+          <span id="climate-assistant-context-attached">0 attached</span>
         </div>
         <div class="climate-chat-popover climate-usage-popover" id="climate-usage-panel" hidden>
           <div class="climate-usage-head">
@@ -276,23 +294,23 @@
           </div>
         </div>
         <div class="climate-chat-popover" id="climate-chat-history-panel" hidden>
-          <div class="climate-chat-popover-title">History</div>
+          <div class="climate-chat-popover-title">Sessions</div>
           <div id="climate-chat-history-list"></div>
         </div>
         <div class="climate-chat-popover climate-chat-menu-panel" id="climate-chat-menu-panel" hidden>
-          <button type="button" data-chat-menu="new">New Chat</button>
-          <button type="button" data-chat-menu="history">History</button>
-          <button type="button" data-chat-menu="rename">Rename chat</button>
+          <button type="button" data-chat-menu="new">New session</button>
+          <button type="button" data-chat-menu="history">Sessions</button>
+          <button type="button" data-chat-menu="rename">Rename session</button>
           <button type="button" data-chat-menu="context">Context settings</button>
           <button type="button" data-chat-menu="clear">Clear messages</button>
         </div>
       </header>
 
       <div class="climate-ai-feed" id="climate-ai-feed" aria-live="polite">
-        <div class="climate-ai-empty"><strong>AiriX</strong><span>Ask about the scoped context. Attach files explicitly — nothing is sent until you add it.</span></div>
+        <div class="climate-ai-empty"><strong>AiriX · Code Assistant</strong><span>Ask about the active repository, attached files, or a code selection. Nothing is sent until you add it.</span></div>
       </div>
 
-      <div class="climate-chat-composer" id="climate-chat-composer">
+      <div class="climate-assistant-composer" id="climate-chat-composer">
         <div class="climate-attached" id="climate-attached" hidden>
           <div class="climate-attached-head">
             <span>Attached Context (<b id="climate-attached-count">0</b> files)</span>
@@ -304,7 +322,7 @@
           <span aria-hidden="true">📎</span> Add file, folder, or code selection
         </button>
         <div class="climate-compose-box">
-          <textarea id="climate-prompt" placeholder="Ask AiriX or type @ to reference files…" rows="3" aria-label="Ask AiriX"></textarea>
+          <textarea id="climate-prompt" placeholder="Ask about your code..." rows="3" aria-label="Ask about your code"></textarea>
           <div class="climate-mention" id="climate-mention" hidden role="listbox" aria-label="File references"></div>
           <div class="climate-compose-toolbar">
             <button type="button" class="climate-compose-tool" id="climate-ctx-mention" title="@ to reference files">@</button>
@@ -393,5 +411,5 @@
 <script src="{{ url_for('static', filename='js/wc_terminal.js') }}?v=climate-5"></script>
 <script src="{{ url_for('static', filename='js/climate_markdown.js') }}?v=3"></script>
 <script src="{{ url_for('static', filename='js/climate_select.js') }}?v=3"></script>
-<script src="{{ url_for('static', filename='js/climate.js') }}?v=33"></script>
+<script src="{{ url_for('static', filename='js/climate.js') }}?v=36"></script>
 {% endblock %}

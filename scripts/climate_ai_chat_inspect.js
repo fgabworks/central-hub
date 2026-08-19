@@ -23,8 +23,8 @@ async function measure(page) {
     const text = (el) => ((el && el.textContent) || "").replace(/\s+/g, " ").trim().slice(0, 200);
     const ai = q("#climate-ai");
     const feed = q("#climate-ai-feed, #climate-chat-feed");
-    const compose = q(".climate-compose, .climate-chat-composer");
-    const rawHints = qa(".climate-chat-msg .climate-chat-text, .climate-chat-msg .climate-chat-summary, .climate-ai-message")
+    const compose = q(".climate-compose, .climate-assistant-composer, .climate-chat-composer");
+    const rawHints = qa(".climate-assistant-msg .climate-assistant-text, .climate-chat-msg .climate-chat-text, .climate-chat-msg .climate-chat-summary, .climate-ai-message")
       .map((el) => el.textContent || "")
       .join("\n");
     return {
@@ -34,7 +34,7 @@ async function measure(page) {
       content: box(q("main.content")),
       ai: box(ai),
       aiStructure: {
-        title: text(q(".climate-chat-header .climate-chat-label")),
+        title: text(q(".climate-assistant-label, .climate-chat-header .climate-chat-label")),
         conversationTitle: text(q("#climate-chat-title, .climate-chat-title")),
         hasNewChat: !!q("#climate-chat-new, [data-chat-action='new']"),
         hasHistory: !!q("#climate-chat-history, [data-chat-action='history']"),
@@ -49,8 +49,8 @@ async function measure(page) {
         composerPlaceholder: (q("#climate-prompt") || {}).placeholder || "",
         composerNearBottom: compose ? compose.getBoundingClientRect().bottom > (window.innerHeight - 120) : false,
         providerSelectNearComposer: !!q(".climate-chat-composer #climate-provider, .climate-chat-footer-controls #climate-provider, .climate-chat-footer-controls #climate-model-panel, #climate-provider-panel"),
-        messageCount: qa(".climate-chat-msg, .climate-ai-message").length,
-        hasYouLabel: !!qa(".climate-chat-msg, .climate-ai-message").find((el) => /You/.test(el.textContent || "")),
+        messageCount: qa(".climate-assistant-msg, .climate-chat-msg, .climate-ai-message").length,
+        hasYouLabel: !!qa(".climate-assistant-msg, .climate-chat-msg, .climate-ai-message").find((el) => /You/.test(el.textContent || "")),
         hasUndoKeepReview: !!q("[data-chat-action='undo'], #climate-undo-all, #climate-reject") && !!q("[data-chat-action='keep'], #climate-keep-all, #climate-accept") && !!q("[data-chat-action='review'], #climate-review"),
         hasDetailsDiagnostics: !!q(".climate-chat-details, #climate-chat-details"),
         rawEventLeak: /(thread\.started|turn\.started|tool_call|response\.output_item)/i.test(rawHints),
@@ -63,7 +63,7 @@ async function measure(page) {
 
 async function seedDemoChat(page) {
   await page.evaluate(() => {
-    const key = "climate:chat:v1:work";
+    const key = "climate:workspace:v1:work";
     const session = {
       id: "demo-1",
       title: "Fix CLIMATE navigation consistency",
@@ -140,7 +140,7 @@ async function main() {
       await page.waitForTimeout(200);
       report.checks.afterNewChat = await measure(page);
       const title = await page.locator("#climate-chat-title").textContent();
-      report.checks.newChatClears = /new chat|untitled|ask/i.test(title || "") || ((await page.locator(".climate-chat-msg").count()) === 0);
+      report.checks.newChatClears = /new session|new chat|untitled|ask/i.test(title || "") || ((await page.locator(".climate-assistant-msg, .climate-chat-msg").count()) === 0);
     }
 
     // Restore history

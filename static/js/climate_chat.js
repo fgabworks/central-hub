@@ -6,6 +6,7 @@
 
   var workspace = root.getAttribute("data-workspace") || "work";
   var apiRoot = root.getAttribute("data-api-root") || ("/api/climate/" + workspace);
+  var staticRoot = (root.getAttribute("data-static") || "/static/").replace(/\/?$/, "/");
   var bootstrap = {};
   try { bootstrap = JSON.parse(root.getAttribute("data-bootstrap") || "{}"); }
   catch (_) { bootstrap = {}; }
@@ -67,12 +68,19 @@
   }
   function saveChatSelection(sel) {
     try {
+      var cur = currentChatScope();
+      var has = function (key) { return sel && Object.prototype.hasOwnProperty.call(sel, key); };
+      var contextScope = has("contextScope") ? (sel.contextScope || "general") : cur.scope;
+      var repositoryId = "";
+      if (contextScope === "repository") {
+        repositoryId = has("repositoryId") ? (sel.repositoryId || "") : cur.repositoryId;
+      }
       sessionStorage.setItem(selectionKey, JSON.stringify({
-        provider: (sel && sel.provider) || "",
-        model: (sel && sel.model) || "",
-        mode: (sel && sel.mode) || currentChatMode(),
-        repositoryId: (sel && sel.repositoryId) || currentChatRepo(),
-        contextScope: (sel && sel.contextScope) || currentChatScope().scope
+        provider: has("provider") ? (sel.provider || "") : (providerSelect.value || ""),
+        model: has("model") ? (sel.model || "") : (modelSelect.value || ""),
+        mode: has("mode") ? (sel.mode || "climate_assisted") : currentChatMode(),
+        repositoryId: repositoryId,
+        contextScope: contextScope || "general"
       }));
     } catch (_) {}
   }
@@ -151,15 +159,210 @@
     if (!preferred && list.indexOf("__provider_default__") >= 0) return "__provider_default__";
     return "";
   }
-  function providerLabel(providerId) {
-    var p = connectedProvider(providerId || providerSelect.value);
+  function applyChatScope(scope, repositoryId) {
+    var sel = document.getElementById("ax-context-scope");
+    if (!sel) return;
+    var next = "general";
+    if (scope === "all") next = "all";
+    else if (scope === "repository" && repositoryId) next = repositoryId;
+    if (next !== "general" && next !== "all") {
+      var found = false;
+      for (var i = 0; i < sel.options.length; i += 1) {
+        if (sel.options[i].value === next) { found = true; break; }
+      }
+      if (!found) next = "general";
+    }
+    sel.value = next;
+    if (window.ClimateSelect) window.ClimateSelect.sync(sel);
+  }
+  function providerLabel(providerId, allowLive) {
+    var id = providerId || (allowLive ? providerSelect.value : "");
+    var p = connectedProvider(id);
     if (p && (p.label || p.name)) return p.label || p.name;
-    var opt = providerSelect.options[providerSelect.selectedIndex];
-    return (opt && opt.textContent) || providerId || "Provider";
+    if (id) {
+      for (var i = 0; i < providerSelect.options.length; i += 1) {
+        if (providerSelect.options[i].value === id) {
+          return providerSelect.options[i].textContent || id;
+        }
+      }
+      return id;
+    }
+    if (allowLive) {
+      var opt = providerSelect.options[providerSelect.selectedIndex];
+      return (opt && opt.textContent) || "Provider";
+    }
+    return "Provider";
   }
   function currentThinkingLabel() {
     if (currentChatMode() !== "direct") return "AiriX is thinking…";
-    return providerLabel(providerSelect.value) + " is thinking…";
+    return providerLabel(providerSelect.value, true) + " is thinking…";
+  }
+  function thinkingLabelFor(run) {
+    if (!run) return currentThinkingLabel();
+    if (run.execution_mode === "direct") {
+      return (run.provider_label || providerLabel(run.provider) || "Provider") + " is thinking…";
+    }
+    if (run.execution_mode === "climate_assisted" || run.assistant_label === "AiriX") {
+      return "AiriX is thinking…";
+    }
+    return currentThinkingLabel();
+  }
+  function assistantRoleLabel(msg) {
+    if (!msg || msg.role === "user") return "You";
+    if (msg.assistant_label) return msg.assistant_label;
+    if (msg.execution_mode === "direct") return providerLabel(msg.provider) || "Provider";
+    return "AiriX";
+  }
+  function executionDetailsLine(msg) {
+    if (msg && msg.execution_summary) return msg.execution_summary;
+    var parts = [];
+    if (msg && msg.execution_mode === "direct") parts.push("Direct");
+    else if (msg && msg.execution_mode) parts.push("AiriX");
+    var pl = (msg && (msg.provider_label || providerLabel(msg.provider))) || "";
+    if (pl) parts.push(pl);
+    if (msg && msg.model) parts.push(msg.model);
+    if (msg && msg.context_scope === "all") parts.push("All Repositories");
+    else if (msg && msg.context_scope === "repository") {
+      parts.push(msg.repository_name || msg.repository_id || "Repository");
+    } else if (msg && msg.context_scope === "general") {
+      parts.push("General");
+    }
+    if (parts.length) return parts.join(" · ");
+    return [msg && msg.provider, msg && msg.model, msg && msg.status].filter(Boolean).join(" · ");
+  }
+  function copyRunIdentity(run) {
+    return {
+      provider: run.provider || "",
+      provider_label: run.provider_label || "",
+      model: run.model || "",
+      execution_mode: run.execution_mode || "",
+      context_scope: run.context_scope || "",
+      repository_id: run.repository_id || "",
+      assistant_label: run.assistant_label || "",
+      execution_summary: run.execution_summary || "",
+      started_at: run.started_at || "",
+      finished_at: run.finished_at || "",
+      created_at: run.created_at || "",
+      sources: Array.isArray(run.sources) ? run.sources.slice(0, 24) : [],
+      token_efficiency: run.token_efficiency || null
+    };
+  }
+  function formatClock(ts) {
+    var value = ts;
+    if (typeof ts === "string" && ts) {
+      var parsed = Date.parse(ts);
+      value = isFinite(parsed) ? parsed : ts;
+    }
+    try {
+      return new Date(value || Date.now()).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    } catch (_) { return ""; }
+  }
+  function formatElapsed(ms) {
+    var n = Math.max(0, Number(ms) || 0);
+    if (n < 1000) return "<1s";
+    var sec = Math.round(n / 1000);
+    if (sec < 60) return sec + "s";
+    var m = Math.floor(sec / 60);
+    var s = sec % 60;
+    return m + "m" + (s ? (" " + s + "s") : "");
+  }
+  function elapsedMsFrom(msg) {
+    var start = Date.parse(msg && (msg.started_at || msg.created_at || msg.ts) || "");
+    if (!isFinite(start) && typeof (msg && msg.ts) === "number") start = msg.ts;
+    if (!isFinite(start)) return 0;
+    var end = Date.parse((msg && msg.finished_at) || "");
+    if (!isFinite(end)) end = Date.now();
+    return Math.max(0, end - start);
+  }
+  function identityLogoSrc(msg) {
+    if (!msg || msg.role === "user") return "";
+    if (assistantRoleLabel(msg) === "AiriX") {
+      return root.getAttribute("data-brand-icon") || (staticRoot + "img/climate-mark.png");
+    }
+    var id = String(msg.provider || "").toLowerCase();
+    var map = {
+      gemini: "img/providers/gemini.svg",
+      codex: "img/providers/codex.svg",
+      "claude-code": "img/providers/claude-code.svg",
+      claude: "img/providers/claude-code.svg",
+      "cursor-agent": "img/providers/cursor-agent.svg",
+      cursor: "img/providers/cursor-agent.svg"
+    };
+    if (map[id]) return staticRoot + map[id];
+    var p = connectedProvider(msg.provider);
+    if (p && p.logo) {
+      var logo = String(p.logo).replace(/^\/?static\//, "");
+      return staticRoot + logo.replace(/^\//, "");
+    }
+    return "";
+  }
+  function avatarHtml(msg) {
+    var role = assistantRoleLabel(msg);
+    if (!msg || msg.role === "user") {
+      return '<div class="ax-msg-avatar is-user" aria-hidden="true">Y</div>';
+    }
+    var src = identityLogoSrc(msg);
+    if (src) {
+      return '<div class="ax-msg-avatar is-assistant" aria-hidden="true"><img src="' + escapeHtml(src) + '" alt=""></div>';
+    }
+    return '<div class="ax-msg-avatar is-assistant" aria-hidden="true">' + escapeHtml((role || "A").charAt(0)) + "</div>";
+  }
+  function compactRunStatus(msg, phase) {
+    if (phase === "thinking") return "Thinking…";
+    if (phase === "streaming") return "Streaming…";
+    if (phase === "cancelled") return "Cancelled";
+    if (phase === "error") return "Failed";
+    var elapsed = elapsedMsFrom(msg);
+    if (phase === "completed" || (msg && msg.status === "completed")) {
+      return elapsed ? ("Completed · " + formatElapsed(elapsed)) : "Completed";
+    }
+    return "";
+  }
+  function tokenEfficiencyStatus(te) {
+    return String((te && te.status) || "Not measured");
+  }
+  function formatTokenExact(value) {
+    if (value == null || value === "" || isNaN(Number(value))) return "Unavailable";
+    return Math.round(Number(value)).toLocaleString();
+  }
+  function renderSourcesFold(msg) {
+    var sources = Array.isArray(msg.sources) ? msg.sources.filter(Boolean) : [];
+    if (!sources.length) return "";
+    return '<details class="ax-msg-fold ax-msg-sources"><summary>Sources · ' + sources.length + "</summary><ul>" +
+      sources.map(function (path) { return "<li>" + escapeHtml(path) + "</li>"; }).join("") +
+      "</ul></details>";
+  }
+  function renderTokenEfficiencyFold(msg) {
+    var te = msg.token_efficiency;
+    var provider = msg.provider || "";
+    if (provider && provider !== "codex" && !(te && te.eligible)) return "";
+    if (msg.status !== "completed" && !(te && te.status)) return "";
+    te = te || { status: "Not measured", climate: {}, direct: null, comparison: null };
+    var status = tokenEfficiencyStatus(te);
+    var climateTotal = te.climate && te.climate.total;
+    var html = '<details class="ax-msg-fold ax-msg-te"><summary>Token Efficiency <small>' + escapeHtml(status) + "</small></summary>";
+    html += '<section class="climate-token-efficiency" data-te-status="' + escapeHtml(status) + '">';
+    html += '<div class="climate-te-stack">';
+    html += '<div class="climate-te-kv"><span>' + escapeHtml((te.execution_mode === "direct") ? "Direct run total" : "CLIMATE run total") + "</span><b>" + escapeHtml(formatTokenExact(te.execution_mode === "direct" ? (te.direct && te.direct.usage && te.direct.usage.total_tokens) : climateTotal)) + "</b></div>";
+    if (te.reason) html += '<div class="climate-te-note">' + escapeHtml(te.reason) + "</div>";
+    html += "</div>";
+    html += '<div class="climate-te-actions">';
+    if (status === "Measuring…") {
+      html += '<button type="button" class="climate-btn" data-te-action="cancel" data-msg-id="' + escapeHtml(msg.id) + '">Cancel</button>';
+    } else if (status !== "Measured" && msg.id && provider === "codex") {
+      html += '<button type="button" class="climate-btn climate-btn-primary" data-te-action="evaluate" data-msg-id="' + escapeHtml(msg.id) + '">' + escapeHtml(te.compare_label || (msg.execution_mode === "direct" ? "Compare with CLIMATE" : "Compare with Direct")) + "</button>";
+    }
+    html += "</div></section></details>";
+    return html;
+  }
+  function renderDetailsFold(msg, phase) {
+    if (msg.role !== "assistant" || phase === "thinking" || phase === "streaming") return "";
+    if (!(msg.execution_summary || msg.provider || msg.model || msg.status || msg.diagnostics)) return "";
+    var summary = executionDetailsLine(msg);
+    return '<details class="ax-msg-details"><summary>Details</summary>' +
+      (summary ? '<div class="ax-msg-exec">' + escapeHtml(summary) + "</div>" : "") +
+      (msg.diagnostics ? "<pre>" + escapeHtml(msg.diagnostics) + "</pre>" : "") +
+      "</details>";
   }
   function compactError(value) {
     var line = String(value || "Request failed").trim().split(/\r?\n/)[0].trim();
@@ -319,7 +522,9 @@
     feedEl.innerHTML = state.messages.map(function (msg) {
       var phase = msg.role === "assistant" ? assistantPhase(msg) : "";
       var cls = "ax-msg is-" + msg.role + (msg.error ? " is-error" : "") + (phase ? " is-" + phase : "");
-      var role = msg.role === "user" ? "You" : "AiriX";
+      var role = assistantRoleLabel(msg);
+      var status = compactRunStatus(msg, phase);
+      var statusCls = phase === "error" ? " is-error" : (phase === "cancelled" ? " is-stop" : (phase === "completed" ? " is-ok" : ""));
       var statusHtml = "";
       var body = "";
       if (msg.role === "assistant" && phase === "thinking") {
@@ -364,15 +569,20 @@
       } else {
         body = '<div class="ax-msg-body">' + escapeHtml(msg.text || "") + "</div>";
       }
-      var details = "";
-      if (msg.role === "assistant" && phase !== "thinking" && phase !== "streaming" && (msg.provider || msg.model || msg.status || msg.diagnostics)) {
-        details = '<details class="ax-msg-details"><summary>Details</summary>' +
-          "<div>" + escapeHtml([msg.provider, msg.model, msg.status].filter(Boolean).join(" · ")) + "</div>" +
-          (msg.diagnostics ? "<pre>" + escapeHtml(msg.diagnostics) + "</pre>" : "") +
-          "</details>";
+      var extras = "";
+      if (msg.role === "assistant" && phase !== "thinking" && phase !== "streaming") {
+        extras = renderSourcesFold(msg) + renderTokenEfficiencyFold(msg) + renderDetailsFold(msg, phase);
       }
       return '<article class="' + cls + '" data-id="' + escapeHtml(msg.id) + '">' +
-        '<div class="ax-msg-role">' + role + "</div>" + statusHtml + body + details + "</article>";
+        avatarHtml(msg) +
+        '<div class="ax-msg-main">' +
+          '<div class="ax-msg-head">' +
+            "<strong>" + escapeHtml(role) + "</strong>" +
+            (msg.ts || msg.created_at || msg.started_at ? "<time>" + escapeHtml(formatClock(msg.ts || msg.created_at || msg.started_at)) + "</time>" : "") +
+            (status ? '<span class="ax-msg-status' + statusCls + '">' + escapeHtml(status) + "</span>" : "") +
+          "</div>" +
+          statusHtml + body + extras +
+        "</div></article>";
     }).join("");
     feedEl.querySelectorAll("[data-md]").forEach(function (el) {
       var article = el.closest(".ax-msg");
@@ -381,6 +591,38 @@
       else el.textContent = (msg && msg.text) || "";
     });
     feedEl.scrollTop = feedEl.scrollHeight;
+  }
+  function applyTokenEfficiency(msgId, payload) {
+    var msg = state.messages.find(function (item) { return item.id === msgId; });
+    if (!msg) return;
+    msg.token_efficiency = payload || msg.token_efficiency;
+    renderFeed();
+  }
+  function tokenEfficiencyEndpoint(runId, suffix) {
+    return endpoint("/runs/" + encodeURIComponent(runId) + "/token-efficiency" + (suffix || ""));
+  }
+  if (!feedEl._teBound) {
+    feedEl._teBound = true;
+    feedEl.addEventListener("click", function (event) {
+      var btn = event.target.closest("[data-te-action]");
+      if (!btn) return;
+      var msgId = btn.getAttribute("data-msg-id") || "";
+      var action = btn.getAttribute("data-te-action");
+      if (!msgId || !action) return;
+      if (action === "evaluate") {
+        jsonFetch(tokenEfficiencyEndpoint(msgId, "/evaluate"), { method: "POST", body: "{}" }).then(function (data) {
+          applyTokenEfficiency(msgId, data.token_efficiency);
+        }).catch(function (err) {
+          applyTokenEfficiency(msgId, { status: "Failed", reason: err.message || "Benchmark failed" });
+        });
+      } else if (action === "cancel") {
+        jsonFetch(tokenEfficiencyEndpoint(msgId, "/cancel"), { method: "POST" }).then(function (data) {
+          applyTokenEfficiency(msgId, data.token_efficiency);
+        }).catch(function (err) {
+          applyTokenEfficiency(msgId, { status: "Cancelled", reason: err.message || "Cancelled" });
+        });
+      }
+    });
   }
   function newChat() {
     state.activeId = "";
@@ -405,34 +647,43 @@
       }
       var text = displayTextFromRun(run);
       if (text || run.status) {
-        messages.push({
+        messages.push(Object.assign({
           id: run.id || uid("a"),
           role: "assistant",
           text: (run.status === "failed" || run.status === "unavailable") ? "" : text,
           diagnostics: diagnosticsFromRun(run),
           status: run.status,
-          provider: run.provider,
-          model: run.model,
           error: run.status === "failed" || run.status === "unavailable",
           errorMessage: (run.status === "failed" || run.status === "unavailable")
             ? compactError(run.error || text)
             : "",
           stopNotice: run.status === "cancelled" ? "You stopped this request." : "",
           sealed: true
-        });
+        }, copyRunIdentity(run)));
       }
     });
     state.messages = messages;
     saveActive();
     var last = null;
     for (var i = messages.length - 1; i >= 0; i -= 1) {
-      if (messages[i] && messages[i].provider) {
+      if (messages[i] && messages[i].role === "assistant") {
         last = messages[i];
         break;
       }
     }
     if (last && last.provider) {
-      saveChatSelection({ provider: last.provider, model: last.model || "" });
+      var restoredMode = last.execution_mode === "direct" ? "direct" : "climate_assisted";
+      var restoredScope = last.context_scope || "general";
+      var restoredRepo = restoredScope === "repository" ? (last.repository_id || "") : "";
+      applyChatMode(restoredMode);
+      applyChatScope(restoredScope, restoredRepo);
+      saveChatSelection({
+        provider: last.provider,
+        model: last.model || "",
+        mode: restoredMode,
+        repositoryId: restoredRepo,
+        contextScope: restoredScope
+      });
       selectProvider(last.provider, { refresh: true, preserveModel: last.model || "" });
     }
     renderHistory();
@@ -472,17 +723,16 @@
       var terminal = ["completed", "failed", "cancelled", "unavailable"].indexOf(run.status) >= 0;
       var text = displayTextFromRun(run);
       var failed = run.status === "failed" || run.status === "unavailable";
-      upsertAssistant({
+      upsertAssistant(Object.assign({
         text: failed ? "" : text,
         diagnostics: diagnosticsFromRun(run),
         status: run.status,
-        provider: run.provider,
-        model: run.model,
+        thinkingLabel: thinkingLabelFor(run),
         error: failed,
         errorMessage: failed ? compactError(run.error || text) : "",
         stopNotice: run.status === "cancelled" ? "You stopped this request." : "",
         sealed: terminal
-      });
+      }, copyRunIdentity(run)));
       if (!terminal) {
         state.pollTimer = window.setTimeout(pollRun, 400);
         return;
@@ -512,13 +762,16 @@
     state.stopRequested = false;
     state.streamText = "";
     if (!state.title || state.title === "New chat") state.title = titleFromPrompt(prompt);
-    state.messages.push({ id: uid("u"), role: "user", text: prompt });
+    state.messages.push({ id: uid("u"), role: "user", text: prompt, ts: Date.now() });
     upsertAssistant({
       text: "",
       status: "running",
       provider: providerSelect.value,
       model: modelSelect.value,
+      execution_mode: currentChatMode(),
+      assistant_label: currentChatMode() === "direct" ? providerLabel(providerSelect.value, true) : "AiriX",
       thinkingLabel: currentThinkingLabel(),
+      ts: Date.now(),
       diagnostics: ""
     });
     promptEl.value = "";
@@ -546,6 +799,9 @@
         state.activeId = run.conversation_id;
         saveActive();
       }
+      upsertAssistant(Object.assign({
+        thinkingLabel: thinkingLabelFor(run)
+      }, copyRunIdentity(run)));
       if (state.stopRequested) {
         state.runId = run.id;
         requestStop(run.id);
@@ -591,13 +847,7 @@
   if (preferred) providerSelect.value = preferred;
   applyChatMode(preferredChatMode());
   var savedSel = loadChatSelection();
-  var scopeSelect = document.getElementById("ax-context-scope");
-  if (scopeSelect) {
-    if (savedSel.contextScope === "all") scopeSelect.value = "all";
-    else if (savedSel.repositoryId) scopeSelect.value = savedSel.repositoryId;
-    else scopeSelect.value = "general";
-    if (!scopeSelect.value) scopeSelect.value = "general";
-  }
+  applyChatScope(savedSel.contextScope, savedSel.repositoryId);
   enhanceChatSelects();
   selectProvider(providerSelect.value, { refresh: true });
 

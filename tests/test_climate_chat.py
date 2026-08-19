@@ -27,8 +27,13 @@ class ClimateChatPageTests(unittest.TestCase):
         for html in (work, personal):
             self.assertIn("AiriX · CLIMATE Chat", html)
             self.assertIn("Ask AiriX", html)
+            self.assertNotIn("AiriX · Code Assistant", html)
+            self.assertNotIn("Ask about your code", html)
             self.assertIn("New Chat", html)
             self.assertIn('id="ax-chat-history"', html)
+            self.assertIn('data-surface="chat"', html)
+            self.assertNotIn("climate-assistant-header", html)
+            self.assertNotIn("climate:workspace:v1:", html)
             self.assertIn('id="ax-prompt"', html)
             self.assertIn('id="ax-stop"', html)
             self.assertIn('id="ax-provider"', html)
@@ -53,8 +58,15 @@ class ClimateChatPageTests(unittest.TestCase):
         html = self.client.get("/work/climate").get_data(as_text=True)
         self.assertIn('id="climate-monaco"', html)
         self.assertIn("EXPLORER", html)
-        self.assertIn("AiriX · CLIMATE CHAT", html)
+        self.assertIn("AiriX · Code Assistant", html)
+        self.assertIn("Ask about your code", html)
+        self.assertIn("climate-assistant-header", html)
+        self.assertIn("New session", html)
+        self.assertIn('data-surface="workspace"', html)
+        self.assertNotIn("AiriX · CLIMATE CHAT", html)
         self.assertNotIn('id="ax-chat"', html)
+        self.assertNotIn("New Chat", html)
+        self.assertNotIn("Ask AiriX", html)
 
     def test_nav_lists_chat_and_code_workspace(self) -> None:
         work = self.client.get("/work").get_data(as_text=True)
@@ -145,6 +157,12 @@ class ClimateChatApiTests(unittest.TestCase):
         self.assertFalse(payload.get("inherit_repository_scope"))
         self.assertIsNone(payload.get("active_repository_id"))
         self.assertIsNone(payload.get("selected_repository_id"))
+        self.assertEqual(payload["climate_execution"]["repository_id"], "")
+        self.assertEqual(payload["climate_execution"]["context_scope"], "general")
+        self.assertEqual(result["assistant_label"], "AiriX")
+        self.assertEqual(result["repository_id"], "")
+        self.assertIn("General", result["execution_summary"])
+        self.assertEqual(result.get("sources") or [], [])
 
     def test_direct_no_repo_general_question_omits_evidence_gates(self) -> None:
         result = self.service.execute_chat(
@@ -161,6 +179,9 @@ class ClimateChatApiTests(unittest.TestCase):
         packed = str(payload["prompt"])
         self.assertEqual(result["execution_mode"], "direct")
         self.assertEqual(packed, "what is PMNP?")
+        self.assertEqual(result["assistant_label"], "Gemini")
+        self.assertNotEqual(result["assistant_label"], "AiriX")
+        self.assertTrue(str(result.get("execution_summary") or "").startswith("Direct · Gemini"))
         self.assertTrue(payload.get("direct_provider_chat"))
         self.assertTrue(payload.get("allow_general_knowledge"))
         self.assertFalse(payload.get("bounded_evidence_only"))
@@ -203,6 +224,7 @@ class ClimateChatApiTests(unittest.TestCase):
         self.assertNotIn("cannot verify", packed.lower())
         self.assertNotIn("AiriX · CLIMATE Chat", packed)
         self.assertEqual(payload["repository_ids"], [])
+        self.assertIn("app.py", result.get("sources") or [])
 
     def test_placeholder_repository_ids_do_not_become_scope(self) -> None:
         for placeholder in ("", "none", "null", "work", "vanta", "general", "all"):
@@ -354,6 +376,76 @@ class ClimateChatApiTests(unittest.TestCase):
             self.adapter.conversation(repo_chat["id"], workspace="work", surface="chat")
         self.assertEqual(caught.exception.code, "not_found")
 
+    def test_surface_workspace_hides_chat_conversations(self) -> None:
+        chat = self.store.create_conversation(profile_id="okarun", title="Chat general")
+        workspace_repo = self.store.create_conversation(profile_id="okarun", title="Workspace repo")
+        workspace_open = self.store.create_conversation(profile_id="okarun", title="Workspace general")
+        self.store.create_run({
+            "mode": "ask",
+            "agent_id": "gemini",
+            "agent_label": "Gemini",
+            "model": "gemini-test-flash",
+            "repository_ids": [],
+            "prompt": "hello",
+            "profile_id": "okarun",
+            "conversation_id": chat["id"],
+            "context": {"climate_execution": {"surface": "chat"}},
+        })
+        self.store.create_run({
+            "mode": "ask",
+            "agent_id": "codex",
+            "agent_label": "Codex",
+            "model": "m",
+            "repository_ids": ["work-repo"],
+            "prompt": "explain file",
+            "profile_id": "okarun",
+            "conversation_id": workspace_repo["id"],
+        })
+        self.store.create_run({
+            "mode": "ask",
+            "agent_id": "gemini",
+            "agent_label": "Gemini",
+            "model": "gemini-test-flash",
+            "repository_ids": [],
+            "prompt": "what is this repo?",
+            "profile_id": "okarun",
+            "conversation_id": workspace_open["id"],
+            "context": {"climate_execution": {"surface": "workspace"}},
+        })
+        chat_rows = [row["title"] for row in self.adapter.conversations(workspace="work", surface="chat")]
+        self.assertIn("Chat general", chat_rows)
+        self.assertNotIn("Workspace repo", chat_rows)
+        self.assertNotIn("Workspace general", chat_rows)
+        workspace_rows = [
+            row["title"]
+            for row in self.adapter.conversations(workspace="work", surface="workspace")
+        ]
+        self.assertIn("Workspace repo", workspace_rows)
+        self.assertIn("Workspace general", workspace_rows)
+        self.assertNotIn("Chat general", workspace_rows)
+        scoped = [
+            row["title"]
+            for row in self.adapter.conversations(
+                workspace="work", repository_id="work-repo", surface="workspace"
+            )
+        ]
+        self.assertIn("Workspace repo", scoped)
+        self.assertIn("Workspace general", scoped)
+        self.assertNotIn("Chat general", scoped)
+        with self.assertRaises(ClimateCodingError) as caught:
+            self.adapter.conversation(chat["id"], workspace="work", surface="workspace")
+        self.assertEqual(caught.exception.code, "not_found")
+        with self.assertRaises(ClimateCodingError) as caught_chat:
+            self.adapter.conversation(workspace_open["id"], workspace="work", surface="chat")
+        self.assertEqual(caught_chat.exception.code, "not_found")
+        detail = self.adapter.conversation(
+            workspace_open["id"],
+            workspace="work",
+            repository_id="work-repo",
+            surface="workspace",
+        )
+        self.assertEqual(detail["title"], "Workspace general")
+
     def test_explicit_valid_repo_still_invokes_provider(self) -> None:
         result = self.service.execute_chat(
             "work",
@@ -369,8 +461,13 @@ class ClimateChatApiTests(unittest.TestCase):
         self.assertTrue(result["provider_invoked"])
         self.assertEqual(payload["repository_ids"], [])
         self.assertFalse(payload.get("inherit_repository_scope"))
-        self.assertIn("Explicit repository context selected", payload["prompt"])
+        self.assertNotIn("Explicit repository context selected", payload["prompt"])
         self.assertEqual(result["context_scope"], "repository")
+        self.assertEqual(result["repository_id"], "work-repo")
+        self.assertEqual(result["assistant_label"], "Gemini")
+        self.assertEqual(payload["climate_execution"]["repository_id"], "work-repo")
+        self.assertEqual(payload["climate_execution"]["execution_mode"], "direct")
+        self.assertEqual(payload["model"], "gemini-test-flash")
 
     def test_specific_repository_airix_stays_strict(self) -> None:
         packet = mock.Mock(ok=True, packet="CLIMATE context packet (ASK).\nhello")
@@ -385,8 +482,13 @@ class ClimateChatApiTests(unittest.TestCase):
                 execution_mode="climate_assisted",
             )
         resolver.assert_called()
+        kwargs = resolver.call_args.kwargs
+        self.assertEqual(kwargs["repo"].id, "work-repo")
+        self.assertTrue(kwargs.get("include_repo_context"))
         payload = self.center.start_run.call_args.args[0]
         self.assertEqual(result["context_scope"], "repository")
+        self.assertEqual(result["repository_id"], "work-repo")
+        self.assertEqual(result["assistant_label"], "AiriX")
         self.assertIn(packet.packet, payload["prompt"])
         self.assertIn("AiriX · CLIMATE Chat", payload["prompt"])
         self.assertFalse(payload.get("allow_general_knowledge"))
@@ -394,6 +496,87 @@ class ClimateChatApiTests(unittest.TestCase):
         self.assertNotIn("CLIMATE connected repositories", payload["prompt"])
         self.assertEqual(payload["repository_ids"], [])
         self.assertFalse(payload.get("inherit_repository_scope"))
+        self.assertEqual(payload["climate_execution"]["repository_id"], "work-repo")
+        self.assertEqual(payload["climate_execution"]["execution_mode"], "climate_assisted")
+        self.assertEqual(payload["model"], "gemini-test-flash")
+        self.assertEqual(payload["climate_execution"]["model"], "gemini-test-flash")
+
+    def test_conversation_restores_execution_metadata(self) -> None:
+        convo = self.store.create_conversation(profile_id="okarun", title="Scoped")
+        self.store.create_run({
+            "mode": "ask",
+            "agent_id": "gemini",
+            "agent_label": "Gemini",
+            "model": "gemini-3.7-flash",
+            "repository_ids": [],
+            "prompt": "hello",
+            "profile_id": "okarun",
+            "conversation_id": convo["id"],
+            "context": {
+                "climate_execution": {
+                    "execution_mode": "direct",
+                    "context_scope": "repository",
+                    "repository_id": "work-repo",
+                    "surface": "chat",
+                    "provider": "gemini",
+                    "model": "gemini-3.7-flash",
+                }
+            },
+        })
+        payload = self.service.conversation("work", convo["id"], surface="chat")
+        run = payload["runs"][0]
+        self.assertEqual(run["execution_mode"], "direct")
+        self.assertEqual(run["provider"], "gemini")
+        self.assertEqual(run["model"], "gemini-3.7-flash")
+        self.assertEqual(run["context_scope"], "repository")
+        self.assertEqual(run["repository_id"], "work-repo")
+        self.assertEqual(run["assistant_label"], "Gemini")
+        self.assertIn("Direct · Gemini · gemini-3.7-flash · Work", run["execution_summary"])
+
+    def test_general_conversation_does_not_inherit_a_repository(self) -> None:
+        convo = self.store.create_conversation(profile_id="okarun", title="General")
+        self.store.create_run({
+            "mode": "ask",
+            "agent_id": "gemini",
+            "agent_label": "Gemini",
+            "model": "gemini-3.7-flash",
+            "repository_ids": [],
+            "prompt": "hello",
+            "profile_id": "okarun",
+            "conversation_id": convo["id"],
+            "context": {
+                "climate_execution": {
+                    "execution_mode": "climate_assisted",
+                    "context_scope": "general",
+                    "repository_id": "",
+                    "surface": "chat",
+                    "provider": "gemini",
+                    "model": "gemini-3.7-flash",
+                }
+            },
+        })
+        payload = self.service.conversation("work", convo["id"], surface="chat")
+        run = payload["runs"][0]
+        self.assertEqual(run["context_scope"], "general")
+        self.assertEqual(run["repository_id"], "")
+        self.assertEqual(run["assistant_label"], "AiriX")
+        self.assertIn("General", run["execution_summary"])
+
+    def test_exact_model_reaches_provider_payload(self) -> None:
+        result = self.service.execute_chat(
+            "work",
+            provider="gemini",
+            model="gemini-3.7-flash",
+            prompt="hello",
+            execution_mode="direct",
+        )
+        payload = self.center.start_run.call_args.args[0]
+        self.assertEqual(payload["model"], "gemini-3.7-flash")
+        self.assertEqual(payload["agent_id"], "gemini")
+        self.assertEqual(payload["climate_execution"]["model"], "gemini-3.7-flash")
+        self.assertEqual(payload["climate_execution"]["provider"], "gemini")
+        self.assertEqual(result["model"], "gemini-3.7-flash")
+        self.assertEqual(result["assistant_label"], "Gemini")
 
 
 class ClimateChatGeminiScopeTests(unittest.TestCase):
@@ -607,6 +790,9 @@ class ClimateChatUiContractTests(unittest.TestCase):
         script = (root / "static" / "js" / "climate_chat.js").read_text(encoding="utf-8")
         self.assertIn("/chat/runs", script)
         self.assertIn("surface=chat", script)
+        self.assertIn("ax-climate-chat:", script)
+        self.assertNotIn("climate:workspace:v1:", script)
+        self.assertNotIn("climate-assistant-msg", script)
         self.assertIn("display_prompt", script)
         self.assertIn("Select exact model", script)
         self.assertIn("chatSurfaceDefaults", script)
@@ -627,6 +813,29 @@ class ClimateChatUiContractTests(unittest.TestCase):
         self.assertNotIn("ax-repo-context", script)
         self.assertIn("no-repository", script)
         self.assertIn("applyChatMode", script)
+        self.assertIn("applyChatScope", script)
+        self.assertIn("assistantRoleLabel", script)
+        self.assertIn("identityLogoSrc", script)
+        self.assertIn("avatarHtml", script)
+        self.assertIn("img/climate-mark.png", script)
+        self.assertIn("img/providers/gemini.svg", script)
+        self.assertIn("img/providers/codex.svg", script)
+        self.assertIn("img/providers/claude-code.svg", script)
+        self.assertIn("img/providers/cursor-agent.svg", script)
+        self.assertIn("Completed · ", script)
+        self.assertIn("renderSourcesFold", script)
+        self.assertIn("renderTokenEfficiencyFold", script)
+        self.assertIn("renderDetailsFold", script)
+        self.assertIn("Token Efficiency", script)
+        self.assertIn("ax-msg-fold", script)
+        self.assertNotIn("ax-msg-role", script)
+        self.assertIn("executionDetailsLine", script)
+        self.assertIn("copyRunIdentity", script)
+        self.assertIn("execution_summary", script)
+        self.assertIn("last.execution_mode", script)
+        self.assertIn("last.context_scope", script)
+        self.assertIn("last.repository_id", script)
+        self.assertNotIn('? "You" : "AiriX"', script)
         self.assertIn("ax-execution-mode", script)
         self.assertNotIn("include_repo_context: true", script)
         self.assertIn("AiriX is thinking", script)
@@ -696,6 +905,10 @@ class ClimateChatUiContractTests(unittest.TestCase):
         self.assertIn(".ax-run-status.is-thinking", css)
         self.assertIn(".ax-run-cancelled-icon", css)
         self.assertIn(".ax-run-error-icon", css)
+        self.assertIn(".ax-msg-avatar", css)
+        self.assertIn(".ax-msg-head", css)
+        self.assertIn(".ax-msg-fold", css)
+        self.assertIn(".ax-msg-status", css)
 
 
 class ClimateChatLiveGeminiTests(unittest.TestCase):

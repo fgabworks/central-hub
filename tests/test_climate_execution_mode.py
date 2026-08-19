@@ -12,8 +12,11 @@ from hub.climate.coding import ClimateCodingAdapter, ClimateCodingError
 from hub.climate.execution_mode import (
     CLIMATE_ASSISTED,
     DIRECT,
+    assistant_label,
     coerce_execution_mode,
+    format_execution_summary,
     normalize_execution_mode,
+    provider_display_label,
 )
 from hub.climate.preflight import GATE_MESSAGE
 from hub.climate.retrieval_policy import ASK_INVESTIGATION_CONSTRAINTS
@@ -41,6 +44,31 @@ class ExecutionModeNormalizeTests(unittest.TestCase):
         self.assertEqual(coerce_execution_mode("direct"), DIRECT)
         with self.assertRaises(ValueError):
             coerce_execution_mode("smart")
+
+    def test_assistant_label_and_execution_summary(self):
+        self.assertEqual(assistant_label(CLIMATE_ASSISTED, "Gemini"), "AiriX")
+        self.assertEqual(assistant_label(DIRECT, "Gemini"), "Gemini")
+        self.assertEqual(provider_display_label("gemini"), "Gemini")
+        self.assertEqual(
+            format_execution_summary(
+                execution_mode=CLIMATE_ASSISTED,
+                provider_label="Gemini",
+                model="gemini-3.7-flash",
+                context_scope="repository",
+                repository_label="SQL Queries",
+            ),
+            "AiriX · Gemini · gemini-3.7-flash · SQL Queries",
+        )
+        self.assertEqual(
+            format_execution_summary(
+                execution_mode=DIRECT,
+                provider_label="Gemini",
+                model="gemini-3.7-flash",
+                context_scope="repository",
+                repository_label="SQL Queries",
+            ),
+            "Direct · Gemini · gemini-3.7-flash · SQL Queries",
+        )
 
 
 class ExecutionModeServiceTests(unittest.TestCase):
@@ -236,6 +264,7 @@ class ExecutionModeServiceTests(unittest.TestCase):
         )
         self.assertEqual(self.coding.calls[0]["task_mode"], "edit")
         self.assertEqual(self.coding.calls[0]["prompt"], "Fix ANC Binary in app.py")
+        self.assertEqual(self.coding.calls[0]["surface"], "workspace")
 
     def test_chat_airix_and_direct_do_not_require_a_repository(self):
         airix = self.service.execute_chat(
@@ -254,6 +283,10 @@ class ExecutionModeServiceTests(unittest.TestCase):
         self.assertEqual(self.coding.calls[0]["context_scope"], "general")
         self.assertIn("CLIMATE connected repositories", self.coding.calls[0]["selection"])
         self.assertFalse(self.coding.calls[1]["selection"])
+        self.assertEqual(airix["assistant_label"], "AiriX")
+        self.assertEqual(direct["assistant_label"], "Codex")
+        self.assertEqual(airix["repository_id"], "")
+        self.assertEqual(direct["repository_id"], "")
 
     def test_chat_explicit_repo_uses_resolver_only_for_airix(self):
         packet = mock.Mock(ok=True, packet="CLIMATE context packet (ASK).\nhello")
@@ -268,8 +301,9 @@ class ExecutionModeServiceTests(unittest.TestCase):
                 execution_mode="climate_assisted",
             )
         resolver.assert_called()
+        self.assertEqual(resolver.call_args.kwargs["repo"].id, "work-repo")
         self.assertEqual(self.coding.calls[0]["prompt"], packet.packet)
-        self.assertEqual(self.coding.calls[0]["repository_id"], "")
+        self.assertEqual(self.coding.calls[0]["repository_id"], "work-repo")
         with mock.patch("hub.climate.service.resolve_climate_context") as resolver:
             self.service.execute_chat(
                 "work",
@@ -283,7 +317,8 @@ class ExecutionModeServiceTests(unittest.TestCase):
         resolver.assert_not_called()
         self.assertEqual(self.coding.calls[1]["execution_mode"], DIRECT)
         self.assertEqual(self.coding.calls[1]["context_scope"], "repository")
-        self.assertIn("Explicit repository context", self.coding.calls[1]["selection"])
+        self.assertEqual(self.coding.calls[1]["repository_id"], "work-repo")
+        self.assertFalse(self.coding.calls[1]["selection"])
 
     def test_chat_all_repositories_uses_bounded_selection(self):
         result = self.service.execute_chat(

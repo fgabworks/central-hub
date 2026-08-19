@@ -40,6 +40,49 @@ from hub.settings import ROOT_DIR
 AuditFn = Callable[..., None]
 
 
+def _clean_exec_paths(value: Any) -> list[str]:
+    items: list[str] = []
+    seen: set[str] = set()
+    raw = value if isinstance(value, (list, tuple)) else []
+    for item in raw:
+        if isinstance(item, dict):
+            repo = str(item.get("repository_id") or item.get("repositoryId") or "").strip()
+            path = str(item.get("path") or "").replace("\\", "/").strip().lstrip("/")
+            text = f"{repo}:{path}" if repo and path else path
+        else:
+            text = str(item or "").replace("\\", "/").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        items.append(text)
+        if len(items) >= 48:
+            break
+    return items
+
+
+def _merge_climate_execution(context: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    """Persist Chat/Workspace executed configuration on the run context JSON."""
+    extra = payload.get("climate_execution")
+    if not isinstance(extra, dict) or not extra:
+        return context
+    merged = dict(context or {})
+    merged["climate_execution"] = {
+        "execution_mode": str(extra.get("execution_mode") or ""),
+        "context_scope": str(extra.get("context_scope") or ""),
+        "repository_id": str(extra.get("repository_id") or ""),
+        "repository_name": str(extra.get("repository_name") or ""),
+        "surface": str(extra.get("surface") or "").strip().lower(),
+        "provider": str(extra.get("provider") or payload.get("agent_id") or ""),
+        "model": str(extra.get("model") or payload.get("model") or ""),
+        "provider_label": str(extra.get("provider_label") or ""),
+        "attached_files": _clean_exec_paths(extra.get("attached_files")),
+        "retrieved_files": _clean_exec_paths(extra.get("retrieved_files")),
+        "inspected_files": _clean_exec_paths(extra.get("inspected_files")),
+        "current_file": str(extra.get("current_file") or "").replace("\\", "/").strip().lstrip("/"),
+    }
+    return merged
+
+
 class AgentCenterError(Exception):
     def __init__(self, message: str, *, code: str = "error") -> None:
         super().__init__(message)
@@ -755,20 +798,23 @@ class AgentCenterService:
                     "prompt": display_prompt,
                     "packed_prompt": "",
                     "answer": answer,
-                    "context": {
-                        "grounding": status,
-                        "repository_intelligence": repository_knowledge,
-                        "evidence_packet": {
-                            "summary": packet.get("summary"),
-                            "usable": False,
-                            "sources": packet.get("sources") or [],
-                            "errors": packet.get("errors") or [],
-                            "hit_count": len(packet.get("hits") or []),
+                    "context": _merge_climate_execution(
+                        {
+                            "grounding": status,
+                            "repository_intelligence": repository_knowledge,
+                            "evidence_packet": {
+                                "summary": packet.get("summary"),
+                                "usable": False,
+                                "sources": packet.get("sources") or [],
+                                "errors": packet.get("errors") or [],
+                                "hit_count": len(packet.get("hits") or []),
+                            },
+                            "included_sources": list(packet.get("sources") or [])
+                            + [f"repository:{r}" for r in resolved_repos],
+                            "tools": {"enabled": list(payload.get("tool_ids") or [])},
                         },
-                        "included_sources": list(packet.get("sources") or [])
-                        + [f"repository:{r}" for r in resolved_repos],
-                        "tools": {"enabled": list(payload.get("tool_ids") or [])},
-                    },
+                        payload,
+                    ),
                     "referenced_files": [],
                     "profile_id": profile.id,
                     "conversation_id": conversation_id,
@@ -799,7 +845,10 @@ class AgentCenterService:
                     "repository_ids": list(payload.get("repository_ids") or []),
                     "prompt": display_prompt,
                     "packed_prompt": "",
-                    "context": {"detail": unavailable_detail, "connection": connection or {}},
+                    "context": _merge_climate_execution(
+                        {"detail": unavailable_detail, "connection": connection or {}},
+                        payload,
+                    ),
                     "referenced_files": [],
                     "profile_id": profile.id,
                     "conversation_id": "",
@@ -938,7 +987,8 @@ class AgentCenterService:
                 "repository_ids": preview["repository_ids"],
                 "prompt": display_prompt,
                 "packed_prompt": packed,
-                "context": {
+                "context": _merge_climate_execution(
+                    {
                     "roots": roots,
                     "files": preview.get("files") or [],
                     "excluded_secrets": preview.get("excluded_secrets") or [],
@@ -966,7 +1016,9 @@ class AgentCenterService:
                         "state": (connection or {}).get("state", "connected"),
                         "provider": adapter.descriptor.provider,
                     },
-                },
+                    },
+                    payload,
+                ),
                 "referenced_files": referenced,
                 "profile_id": profile.id,
                 "conversation_id": conversation_id,

@@ -22,6 +22,7 @@ REPRESENTATIVE_PAGES = [
     ("/audit", "Audit"),
     ("/settings", "Settings"),
     ("/settings/ai-providers", "Settings"),
+    ("/settings/branding", "Settings"),
 ]
 
 

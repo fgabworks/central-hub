@@ -22,7 +22,7 @@ const RAW_EDITS = JSON.stringify({
 async function seed(page, kind) {
   return page.evaluate(
     ({ kind: mode, raw }) => {
-      const key = "climate:chat:v1:work";
+      const key = "climate:workspace:v1:work";
       const askText =
         "ANC Binary is 1 when ANC visits meet the rule.\nSet to 0 otherwise.";
       const askMsg = {
@@ -129,7 +129,7 @@ async function measure(page, label) {
     const hasRunSummary = !!feed && !!feed.querySelector(".climate-run-summary");
     const hasSources = !!feed && /Sources ·\s*\d+/.test(feed.innerText || "");
     const askLine = feed && feed.querySelector(".climate-ask-runline");
-    const details = feed && feed.querySelector(".climate-chat-details");
+    const details = feed && feed.querySelector(".climate-assistant-details, .climate-chat-details");
     return {
       label: name,
       title: title.trim(),
@@ -143,7 +143,7 @@ async function measure(page, label) {
       hasAskLine: !!askLine,
       hasDetails: !!details,
       bodySnippet: body.slice(0, 500),
-      msgCount: feed ? feed.querySelectorAll(".climate-chat-msg").length : 0,
+      msgCount: feed ? feed.querySelectorAll(".climate-assistant-msg, .climate-chat-msg").length : 0,
       feedId: feed ? feed.id : "",
       maximized: !!(document.querySelector(".climate-shell.is-ai-max") || document.body.classList.contains("climate-ai-max")),
       historyBtn: !!document.getElementById("climate-chat-history"),
@@ -172,7 +172,7 @@ async function measure(page, label) {
     // Title: new chat then first prompt sets title; follow-up keeps it
     await page.evaluate(() => {
       localStorage.setItem(
-        "climate:chat:v1:work",
+        "climate:workspace:v1:work",
         JSON.stringify({ activeId: "", sessions: [] })
       );
     });
@@ -185,7 +185,7 @@ async function measure(page, label) {
 
     await seed(page, "ask");
     await page.reload({ waitUntil: "domcontentloaded" });
-    await page.waitForSelector("#climate-ai-feed .climate-chat-msg, .climate-chat-msg", { timeout: 30000 });
+    await page.waitForSelector("#climate-ai-feed .climate-assistant-msg, #climate-ai-feed .climate-chat-msg, .climate-assistant-msg, .climate-chat-msg", { timeout: 30000 });
     let m = await measure(page, "ask");
     fs.writeFileSync(path.join(outDir, "ask.json"), JSON.stringify(m, null, 2));
     await page.screenshot({ path: path.join(outDir, "ask.png"), fullPage: false });
@@ -244,7 +244,7 @@ async function measure(page, label) {
 
     await seed(page, "edit");
     await page.reload({ waitUntil: "domcontentloaded" });
-    await page.waitForSelector("#climate-ai-feed .climate-chat-msg, .climate-run-summary, .climate-chat-msg", { timeout: 30000 });
+    await page.waitForSelector("#climate-ai-feed .climate-assistant-msg, #climate-ai-feed .climate-run-summary, #climate-ai-feed .climate-chat-msg, .climate-run-summary, .climate-chat-msg", { timeout: 30000 });
     m = await measure(page, "edit");
     fs.writeFileSync(path.join(outDir, "edit.json"), JSON.stringify(m, null, 2));
     await page.screenshot({ path: path.join(outDir, "edit.png"), fullPage: false });
@@ -256,7 +256,7 @@ async function measure(page, label) {
 
     // Follow-up keeps title
     await page.evaluate(() => {
-      const key = "climate:chat:v1:work";
+      const key = "climate:workspace:v1:work";
       const store = JSON.parse(localStorage.getItem(key) || "{}");
       const session = store.sessions && store.sessions[0];
       if (!session) return;

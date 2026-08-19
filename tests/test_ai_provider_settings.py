@@ -534,6 +534,8 @@ class AiProviderSettingsHttpTests(unittest.TestCase):
         self.assertIn("settings-nav", html)
         self.assertIn("Environment and registry configuration overview.", html)
         self.assertIn("/settings/ai-providers", html)
+        self.assertIn("/settings/branding", html)
+        self.assertIn("Branding", html)
 
 
 class FutureProviderPlugInTests(unittest.TestCase):

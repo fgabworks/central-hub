@@ -1,14 +1,17 @@
 {% extends "base.html" %}
 {% block title %}AiriX · CLIMATE Chat · {{ climate.workspace_label }}{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/climate.css') }}?v=39">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/climate_chat.css') }}?v=5">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/climate.css') }}?v=43">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/climate_chat.css') }}?v=9">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/styles/github-dark.min.css">
 {% endblock %}
 {% block content %}
 <div class="ax-chat" id="ax-chat"
      data-workspace="{{ climate.workspace }}"
+     data-surface="chat"
+     data-brand-icon="{{ branding.avatar_url if branding is defined and branding.avatar_url else url_for('static', filename='img/climate-mark.png') }}"
      data-api-root="/api/climate/{{ climate.workspace }}"
+     data-static="{{ url_for('static', filename='') }}"
      data-bootstrap='{{ climate|tojson }}'>
   <aside class="ax-chat-sidebar" aria-label="Conversation history">
     <div class="ax-chat-sidebar-head">
@@ -22,7 +25,9 @@
   <section class="ax-chat-main">
     <header class="ax-chat-header">
       <div class="ax-chat-brand">
-        <img class="ax-chat-mark" src="{{ url_for('static', filename='img/climate-mark.png') }}" width="22" height="22" alt="">
+        <span class="ax-chat-mark-well" data-brand-display="icon" data-brand-fit="contain">
+          <img class="ax-chat-mark" src="{{ branding.avatar_url if branding is defined and branding.avatar_url else url_for('static', filename='img/climate-mark.png') }}" alt="">
+        </span>
         <div>
           <strong>AiriX · CLIMATE Chat</strong>
           <small id="ax-chat-title">New chat</small>
@@ -36,7 +41,9 @@
 
     <div class="ax-chat-feed" id="ax-chat-feed" aria-live="polite">
       <div class="ax-chat-empty" id="ax-chat-empty">
-        <img src="{{ url_for('static', filename='img/climate-mark.png') }}" width="40" height="40" alt="">
+        <span class="ax-chat-empty-mark-well" data-brand-display="icon" data-brand-fit="contain">
+          <img class="ax-chat-empty-mark" src="{{ branding.avatar_url if branding is defined and branding.avatar_url else url_for('static', filename='img/climate-mark.png') }}" alt="">
+        </span>
         <h1>AiriX</h1>
         <p>Ask anything. Gemini (or another selected provider) powers the answer; AiriX remains your CLIMATE assistant.</p>
       </div>
@@ -94,5 +101,5 @@
 <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/highlight.min.js"></script>
 <script src="{{ url_for('static', filename='js/climate_markdown.js') }}?v=3"></script>
 <script src="{{ url_for('static', filename='js/climate_select.js') }}?v=3"></script>
-<script src="{{ url_for('static', filename='js/climate_chat.js') }}?v=8"></script>
+<script src="{{ url_for('static', filename='js/climate_chat.js') }}?v=12"></script>
 {% endblock %}
