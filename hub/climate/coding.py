@@ -310,6 +310,8 @@ class ClimateCodingAdapter:
         sources_used: list[str] | None = None,
         evidence_references: list[dict[str, Any]] | None = None,
         context_source_failures: list[dict[str, Any]] | None = None,
+        repository_evidence_origin: str = "none",
+        repository_evidence_origins: list[str] | None = None,
     ) -> dict[str, Any]:
         self._require_provider(provider)
         if workspace not in {"work", "personal"}:
@@ -406,9 +408,10 @@ class ClimateCodingAdapter:
             if mode == "edit":
                 context_note = [
                     "CLIMATE coding request (EDIT mode).",
-                    "Stay read-only at runtime; propose file replacements only.",
-                    "Return proposed file replacements in a fenced JSON object using this schema: ",
-                    '{"edits":[{"path":"relative/path","content":"complete replacement content"}]}.',
+                    "Stay read-only at runtime; inspect exact current files and propose replacements only.",
+                    "Return a short plan and proposed file replacements in one fenced JSON object using this schema: ",
+                    '{"plan":["short step"],"edits":[{"path":"relative/path","content":"complete replacement content"}]}.',
+                    "Keep the plan concise and include only files required for the requested change.",
                     "Do not apply edits or execute commands.",
                     (
                         "Do not assume full chat history."
@@ -531,6 +534,8 @@ class ClimateCodingAdapter:
                 sources_used=sources_used,
                 evidence_references=evidence_references,
                 context_source_failures=context_source_failures,
+                repository_evidence_origin=repository_evidence_origin,
+                repository_evidence_origins=repository_evidence_origins,
             ),
         }
         if general_chat:
@@ -594,6 +599,8 @@ class ClimateCodingAdapter:
         public["sources_used"] = list(sources_used or [])
         public["evidence_references"] = list(evidence_references or [])
         public["context_source_failures"] = list(context_source_failures or [])
+        public["repository_evidence_origin"] = str(repository_evidence_origin or "none")
+        public["repository_evidence_origins"] = list(repository_evidence_origins or [])
         public["execution_summary"] = format_execution_summary(
             execution_mode=orchestration,
             provider_label=display_provider,
@@ -627,7 +634,7 @@ class ClimateCodingAdapter:
         return dict(result.get("usage") or {})
 
     @staticmethod
-    def proposed_edits(answer: str) -> list[dict[str, str]]:
+    def proposed_change(answer: str) -> dict[str, Any]:
         candidates = _EDITS_FENCE_RE.findall(answer or "")
         if not candidates and (answer or "").lstrip().startswith("{"):
             candidates = [answer]
@@ -639,17 +646,26 @@ class ClimateCodingAdapter:
             edits = payload.get("edits") if isinstance(payload, dict) else None
             if not isinstance(edits, list):
                 continue
+            plan = [
+                str(item).strip()[:240]
+                for item in list(payload.get("plan") or [])[:8]
+                if str(item).strip()
+            ] if isinstance(payload.get("plan"), list) else []
             clean = []
             for item in edits:
                 if not isinstance(item, dict):
                     continue
-                path = str(item.get("path") or "").replace("\\", "/").lstrip("/")
+                path = str(item.get("path") or "").replace("\\", "/").strip()
                 content = item.get("content")
                 if path and isinstance(content, str):
                     clean.append({"path": path, "content": content})
             if clean:
-                return clean
-        return []
+                return {"plan": plan, "edits": clean}
+        return {"plan": [], "edits": []}
+
+    @staticmethod
+    def proposed_edits(answer: str) -> list[dict[str, str]]:
+        return list(ClimateCodingAdapter.proposed_change(answer).get("edits") or [])
 
     @staticmethod
     def humanize_answer(answer: str, *, task_mode: str = "ask", prompt: str = "") -> tuple[str, str]:
@@ -661,10 +677,11 @@ class ClimateCodingAdapter:
         raw = str(answer or "")
         if not raw.strip():
             return "", ""
-        edits = ClimateCodingAdapter.proposed_edits(raw)
+        change = ClimateCodingAdapter.proposed_change(raw)
+        edits = list(change.get("edits") or [])
         stripped = _EDITS_FENCE_RE.sub("", raw)
         stripped = re.sub(
-            r"\{\s*\"edits\"\s*:\s*\[[\s\S]*\]\s*\}",
+            r"\{\s*(?:\"plan\"\s*:\s*\[[\s\S]*?\]\s*,\s*)?\"edits\"\s*:\s*\[[\s\S]*\]\s*\}",
             "",
             stripped,
         ).strip()
@@ -773,6 +790,8 @@ class ClimateCodingAdapter:
             "sources_used": list(exec_meta.get("sources_used") or []),
             "evidence_references": list(exec_meta.get("evidence_references") or []),
             "context_source_failures": list(exec_meta.get("context_source_failures") or []),
+            "repository_evidence_origin": str(exec_meta.get("repository_evidence_origin") or "none"),
+            "repository_evidence_origins": list(exec_meta.get("repository_evidence_origins") or []),
             "assistant_label": assistant_label(execution_mode, provider_label) if execution_mode else "",
             "execution_summary": format_execution_summary(
                 execution_mode=execution_mode,

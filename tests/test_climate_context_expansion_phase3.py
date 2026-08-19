@@ -451,8 +451,8 @@ class Phase12RegressionTests(unittest.TestCase):
     def test_prior_sources_and_caps_remain(self) -> None:
         defaults = _resolver()
         ids = [source.id for source in defaults.registry.sources()]
-        self.assertEqual(ids[:8], [
-            "repositories", "tasks", "notebook_notes", "sql_workspace",
+        self.assertEqual(ids[:10], [
+            "repobrain", "repobrain_cross", "repositories", "tasks", "notebook_notes", "sql_workspace",
             "repository_activity", "gmail", "google_drive", "google_calendar",
         ])
         self.assertEqual(defaults.max_candidates_per_source, 12)

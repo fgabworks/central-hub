@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-20 (AiriX Context Expansion Phase 3).
+Last verified: 2026-08-20 (Coding Agent Phase 1).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -24,7 +24,7 @@ Repository scope is validated only when a specific repository is selected. Codin
 diagnostics stay in the Workspace Assistant.
 
 In AiriX mode, CLIMATE uses one provider-agnostic context registry for
-Repositories, Tasks, Notebook/Notes, SQL Workspace metadata/history,
+RepoBrain, Repositories, Tasks, Notebook/Notes, SQL Workspace metadata/history,
 Repository Activity, (General scope only) Gmail, Google Drive, and Google
 Calendar, and (General / VANTA only) bounded DHIS2 operational sources:
 environment/config metadata, UID Index, enrichment/relationship audit,
@@ -39,6 +39,42 @@ those external/DHIS2 sources unavailable. Direct never invokes this registry or
 automatically retrieves CLIMATE context; only explicit user attachments remain
 eligible. DHIS2 retrieval is GET-only and never dumps analytics, linelists,
 report HTML, credentials, or prompt-driven SQL.
+
+**RepoBrain Phase 1** adds persistent, deterministic repository orientation on
+top of Repository Intelligence. SQLite stores versioned snapshots for connected
+local repositories with Git commit/ref, generated time, summary,
+architecture/modules, important files, entry points and symbols,
+dependency/relationship and data-flow maps, business-logic topics, tests,
+recent changes, confidence, and source paths. Initial and explicit full builds
+scan a bounded set. Normal refresh compares HEAD plus bounded working-tree state,
+reanalyzes changed paths, and reuses unaffected per-file knowledge; unchanged
+repositories reuse the current snapshot. Vendor, VCS, build/generated, binary,
+oversized, and secret paths are excluded. Specific Repository uses RepoBrain for
+orientation and existing live retrieval for exact evidence. All Repositories
+uses snapshot summaries to rank repositories before live Repository Intelligence
+retrieval. General may use already-built summaries. Direct does not invoke
+RepoBrain. Persisted execution metadata identifies repository evidence as
+`repobrain_snapshot`, `live_repository_retrieval`, `both`, or `none`.
+
+**RepoBrain Phase 2** extends that same service with a versioned cross-repository
+relationship snapshot. Discovery starts from Phase 1 per-file concepts,
+symbols, dependencies, configuration references, and DHIS2-style identifiers.
+Inverted feature indexes select candidate repository pairs; the service does not
+perform a full Cartesian repository scan. Records identify source/target
+repositories, files and symbols, relationship type (`depends_on`, `produces`,
+`transforms`, `reports_on`, `implements`, `mirrors`, `shares_identifier`,
+`shares_config`, or `test_covers`), business concept, confidence, references,
+and both input snapshot/commit versions. Unchanged cross snapshots are reused;
+when Phase 1 snapshots change, only relationships touching affected repositories
+are recomputed and unrelated relationships are retained. Staleness includes
+unrefreshed Phase 1 HEAD/working-tree changes.
+
+All Repositories uses combined single- and cross-repository scores before live
+Repository Intelligence retrieval. Specific Repository may include related
+repositories only as orientation and keeps exact live evidence scoped to the
+selected repository. General may use an existing high-level cross snapshot.
+Direct remains isolated. Persisted metadata includes the exact set of single
+RepoBrain, cross RepoBrain, and live repository evidence origins used.
 
 **Code Workspace** uses the same `[ AiriX | Direct ] [ Provider ] [ Model ]
 [ Context Scope ]` architecture in an IDE-native **AiriX · Code Assistant**
@@ -69,8 +105,17 @@ runtime logs without raw provider protocol; Debug Console shows hub-managed run-
 stdout/stderr or “No active debug session”; Terminal reuses the repository-scoped PTY;
 Ports is read-only local listener discovery. Its provider-neutral coding adapter exposes Codex,
 Claude Code, and Cursor Agent availability/model discovery/exact selection/cancel/result
-without owning credentials or provider argv. AI runs remain read-only; replacement edits
-are parsed as proposals and require Accept/Reject with base-content conflict checks.
+without owning credentials or provider argv. **Coding Agent Phase 1** keeps provider runs
+read-only and parses a short plan plus complete replacement contents into bounded unified
+diff proposals. Only Specific Repository may create a proposal. No file changes occur until
+the user selects Accept; Reject writes nothing. Proposal, request/run/conversation identity,
+files inspected, provider/exact model/mode, RepoBrain/live provenance, decision, changed-file
+results, and bounded original rollback content persist in Agent Center SQLite. Accept rechecks
+exact raw file hashes, repository/path/type/secret/excluded-directory guards, file-count and
+aggregate-patch limits before using the existing confirmed Repository Workspace save path.
+Stale proposals become conflicts and must be regenerated. No tests, shell commands, commit,
+push, or automatic rollback are run by the coding agent. Direct keeps the same controlled
+proposal gate and gains no autonomous write behavior.
 Codex remains VANTA-only under its existing profile policy; ARCTIC surfaces that state
 explicitly and can use authenticated Claude Code or Cursor Agent with selected ARCTIC files.
 Codex capacity in the AI usage chrome comes from authenticated `codex app-server`

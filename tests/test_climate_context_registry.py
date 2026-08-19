@@ -80,7 +80,7 @@ class ContextRegistryUnitTests(unittest.TestCase):
         )
         self.assertEqual(
             [source.id for source in defaults.registry.sources()],
-            ["repositories", "tasks", "notebook_notes", "sql_workspace",
+            ["repobrain", "repobrain_cross", "repositories", "tasks", "notebook_notes", "sql_workspace",
              "repository_activity", "gmail", "google_drive", "google_calendar",
              "dhis2_environment", "dhis2_uid_index", "dhis2_enrichment",
              "dhis2_explorer", "dhis2_reports", "dhis2_operations"],
@@ -162,6 +162,7 @@ class ContextRegistryClimateIntegrationTests(unittest.TestCase):
                 "score": 10.0, "metadata": {"note_id": "task-1"},
             }],
             failures=[],
+            repository_evidence_origin="both",
         )
         workspace = mock.Mock()
         workspace.preview.return_value = {"content": "selected", "binary": False}
@@ -203,6 +204,8 @@ class ContextRegistryClimateIntegrationTests(unittest.TestCase):
         self.assertEqual(provider_payload["prompt"], "show my task")
         self.assertEqual(result["sources_considered"], [])
         self.assertEqual(result["sources_used"], [])
+        self.assertEqual(result["repository_evidence_origin"], "none")
+        self.assertEqual(result["repository_evidence_origins"], [])
 
     def test_source_metadata_is_in_persisted_execution_record(self) -> None:
         result = self._run()
@@ -210,7 +213,22 @@ class ContextRegistryClimateIntegrationTests(unittest.TestCase):
         self.assertEqual(persisted["sources_queried"], ["tasks"])
         self.assertEqual(persisted["sources_used"], ["tasks"])
         self.assertEqual(persisted["evidence_references"][0]["reference"], "note:task-1")
+        self.assertEqual(persisted["repository_evidence_origin"], "both")
+        self.assertEqual(result["repository_evidence_origin"], "both")
+        self.assertEqual(result["repository_evidence_origins"], [])
         self.assertEqual(result["sources_considered"][0]["id"], "tasks")
+
+    def test_cross_repository_evidence_origins_are_persisted(self) -> None:
+        origins = [
+            "repobrain_snapshot", "repobrain_cross_repository",
+            "live_repository_retrieval",
+        ]
+        self.resolver.resolve.return_value.repository_evidence_origin = "+".join(origins)
+        self.resolver.resolve.return_value.repository_evidence_origins = origins
+        result = self._run(context_scope="all")
+        persisted = self.center.start_run.call_args.args[0]["climate_execution"]
+        self.assertEqual(persisted["repository_evidence_origins"], origins)
+        self.assertEqual(result["repository_evidence_origins"], origins)
 
 
 if __name__ == "__main__":

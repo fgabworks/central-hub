@@ -101,6 +101,8 @@ class ContextResolution:
     sources_used: list[str]
     evidence_references: list[dict[str, Any]]
     failures: list[dict[str, str]]
+    repository_evidence_origin: str = "none"
+    repository_evidence_origins: list[str] = field(default_factory=list)
 
 
 class ClimateContextRegistry:
@@ -217,7 +219,36 @@ class ClimateContextResolver:
             for item in evidence
         ]
         packet = self._packet(request, evidence)[: self.max_chars]
-        return ContextResolution(packet, considered, queried, used, refs, failures)
+        origins = {
+            str((item.metadata or {}).get("evidence_origin") or "")
+            for item in evidence
+        }
+        origins.discard("")
+        has_brain = "repobrain_snapshot" in origins
+        has_cross = "repobrain_cross_repository" in origins
+        has_live = "live_repository_retrieval" in origins
+        ordered_origins = [
+            value for value in (
+                "repobrain_snapshot", "repobrain_cross_repository",
+                "live_repository_retrieval",
+            ) if value in origins
+        ]
+        if has_brain and has_live and not has_cross:
+            repository_origin = "both"
+        elif len(ordered_origins) > 1:
+            repository_origin = "+".join(ordered_origins)
+        elif has_brain:
+            repository_origin = "repobrain_snapshot"
+        elif has_cross:
+            repository_origin = "repobrain_cross_repository"
+        elif has_live:
+            repository_origin = "live_repository_retrieval"
+        else:
+            repository_origin = "none"
+        return ContextResolution(
+            packet, considered, queried, used, refs, failures, repository_origin,
+            ordered_origins,
+        )
 
     @staticmethod
     def _packet(request: ContextRequest, evidence: list[ContextEvidence]) -> str:
@@ -261,6 +292,225 @@ class _BaseSource:
         )
 
 
+class RepoBrainContextSource(_BaseSource):
+    id = "repobrain"
+    type = "repository_intelligence"
+
+    def __init__(self, registry: Registry, service_loader: Callable[[], Any | None]) -> None:
+        self.registry = registry
+        self.service_loader = service_loader
+
+    def source_metadata(self) -> dict[str, Any]:
+        return {
+            "bounded": True,
+            "read_only": True,
+            "persistent": True,
+            "live_verification_required": True,
+            "snapshot_schema_version": 1,
+        }
+
+    def _repos(self, request: ContextRequest) -> list[Repository]:
+        rows = [
+            repo for repo in self.registry.enabled_repositories()
+            if repo.type == "command"
+            and RepositoriesContextSource._workspace(repo) == request.workspace
+        ]
+        if request.scope == REPOSITORY:
+            rows = [repo for repo in rows if repo.id == request.repository_id]
+        return rows
+
+
+    def availability(self, request: ContextRequest) -> dict[str, Any]:
+        service = self.service_loader()
+        repos = self._repos(request)
+        if service is None:
+            return {"available": False, "detail": "RepoBrain service is not configured"}
+        if request.scope == REPOSITORY:
+            return {"available": bool(repos), "detail": "Specific repository snapshot can be built or refreshed"}
+        learned = sum(1 for repo in repos if service.latest(repo.id) is not None)
+        return {
+            "available": learned > 0,
+            "detail": f"{learned} persisted RepoBrain snapshot(s)",
+        }
+
+    def search(self, request: ContextRequest, *, limit: int) -> list[ContextCandidate]:
+        service = self.service_loader()
+        repos = self._repos(request)
+        if service is None or not repos:
+            return []
+        if request.scope == REPOSITORY:
+            context = service.context(repos[0].id, request.query, refresh=True)
+            if not context:
+                return []
+            return [ContextCandidate(
+                self.id,
+                f"repobrain:{repos[0].id}:v{context.get('version')}",
+                f"{repos[0].name} RepoBrain orientation",
+                str(context.get("summary") or ""),
+                score=7.0,
+                metadata={
+                    "repository_id": repos[0].id,
+                    "snapshot_id": context.get("snapshot_id"),
+                    "snapshot_version": context.get("version"),
+                    "git_commit": context.get("git_commit"),
+                    "freshness": context.get("freshness"),
+                    "stale": bool(context.get("stale")),
+                    "confidence": context.get("confidence") or {},
+                    "source_references": context.get("source_references") or [],
+                    "evidence_origin": "repobrain_snapshot",
+                    "_content": str(context.get("content") or ""),
+                },
+            )]
+        ranked = service.rank_repositories([repo.id for repo in repos], request.query)
+        names = {repo.id: repo.name for repo in repos}
+        rows = [ContextCandidate(
+            self.id,
+            f"repobrain:{item.get('repository_id')}:v{item.get('version')}",
+            f"{names.get(str(item.get('repository_id') or ''), item.get('repository_id'))} RepoBrain summary",
+            str(item.get("summary") or "")[:1_000],
+            score=4.0 + float(item.get("score") or 0),
+            metadata={
+                "repository_id": str(item.get("repository_id") or ""),
+                "snapshot_id": item.get("snapshot_id"),
+                "snapshot_version": item.get("version"),
+                "git_commit": item.get("git_commit"),
+                "freshness": item.get("freshness"),
+                "stale": bool(item.get("stale")),
+                "evidence_origin": "repobrain_snapshot",
+            },
+        ) for item in ranked]
+        return rows[:limit]
+
+    def retrieve(
+        self, request: ContextRequest, candidates: list[ContextCandidate], *, char_budget: int
+    ) -> list[ContextEvidence]:
+        service = self.service_loader()
+        if service is None:
+            return []
+        rows: list[ContextEvidence] = []
+        remaining = char_budget
+        for candidate in candidates:
+            metadata = dict(candidate.metadata or {})
+            content = str(metadata.pop("_content", "") or "")
+            if not content:
+                context = service.context(
+                    str(metadata.get("repository_id") or ""), request.query, refresh=True
+                )
+                if not context:
+                    continue
+                content = str(context.get("content") or "")
+                metadata.update({
+                    "snapshot_id": context.get("snapshot_id"),
+                    "snapshot_version": context.get("version"),
+                    "git_commit": context.get("git_commit"),
+                    "freshness": context.get("freshness"),
+                    "stale": bool(context.get("stale")),
+                    "confidence": context.get("confidence") or {},
+                    "source_references": context.get("source_references") or [],
+                })
+            content = content[:remaining]
+            if content:
+                rows.append(self._evidence(candidate, content, **metadata))
+                remaining -= len(content)
+            if remaining <= 0:
+                break
+        return rows
+
+
+class CrossRepoBrainContextSource(_BaseSource):
+    id = "repobrain_cross"
+    type = "cross_repository_intelligence"
+
+    def __init__(self, registry: Registry, service_loader: Callable[[], Any | None]) -> None:
+        self.registry = registry
+        self.service_loader = service_loader
+
+    def source_metadata(self) -> dict[str, Any]:
+        return {
+            "bounded": True,
+            "read_only": True,
+            "persistent": True,
+            "live_verification_required": True,
+            "cross_snapshot_schema_version": 1,
+        }
+
+    def _repos(self, request: ContextRequest) -> list[Repository]:
+        return [
+            repo for repo in self.registry.enabled_repositories()
+            if repo.type == "command"
+            and RepositoriesContextSource._workspace(repo) == request.workspace
+        ]
+
+    def availability(self, request: ContextRequest) -> dict[str, Any]:
+        service = self.service_loader()
+        repos = self._repos(request)
+        if service is None or len(repos) < 2:
+            return {"available": False, "detail": "Cross-repository RepoBrain requires two repositories"}
+        latest = service.latest_cross_snapshot()
+        learned = sum(1 for repo in repos if service.latest(repo.id) is not None)
+        available = latest is not None or (request.scope != GENERAL and learned >= 2)
+        return {
+            "available": available,
+            "detail": f"{learned} learned repository snapshot(s); cross snapshot "
+            + ("available" if latest is not None else "not built"),
+        }
+
+    def search(self, request: ContextRequest, *, limit: int) -> list[ContextCandidate]:
+        service = self.service_loader()
+        repos = self._repos(request)
+        if service is None or len(repos) < 2:
+            return []
+        repository_ids = [repo.id for repo in repos]
+        context = service.cross_context(
+            request.query,
+            repository_ids=repository_ids,
+            anchor_repository_id=request.repository_id if request.scope == REPOSITORY else "",
+            refresh=request.scope == ALL,
+        )
+        if not context:
+            return []
+        title = (
+            f"Related repositories for {request.repository_id}"
+            if request.scope == REPOSITORY else "Cross-repository RepoBrain relationships"
+        )
+        return [ContextCandidate(
+            self.id,
+            f"repobrain-cross:v{context.get('version')}",
+            title,
+            str(context.get("content") or "")[:1_000],
+            score=6.5,
+            metadata={
+                "cross_snapshot_id": context.get("snapshot_id"),
+                "cross_snapshot_version": context.get("version"),
+                "freshness": context.get("freshness"),
+                "stale": bool(context.get("stale")),
+                "relationship_ids": [
+                    str(row.get("id") or "") for row in list(context.get("relationships") or [])[:24]
+                ],
+                "source_references": context.get("source_references") or [],
+                "anchor_repository_id": request.repository_id if request.scope == REPOSITORY else "",
+                "orientation_only": request.scope == REPOSITORY,
+                "evidence_origin": "repobrain_cross_repository",
+                "_content": str(context.get("content") or ""),
+            },
+        )][:limit]
+
+    def retrieve(
+        self, request: ContextRequest, candidates: list[ContextCandidate], *, char_budget: int
+    ) -> list[ContextEvidence]:
+        rows: list[ContextEvidence] = []
+        remaining = char_budget
+        for candidate in candidates:
+            metadata = dict(candidate.metadata or {})
+            content = str(metadata.pop("_content", "") or "")[:remaining]
+            if content:
+                rows.append(self._evidence(candidate, content, **metadata))
+                remaining -= len(content)
+            if remaining <= 0:
+                break
+        return rows
+
+
 class RepositoriesContextSource(_BaseSource):
     id = "repositories"
     type = "repository"
@@ -271,11 +521,13 @@ class RepositoriesContextSource(_BaseSource):
         repository_workspace: Any,
         intelligence_loader: Callable[[], Any | None],
         context_loader: Callable[..., Any] = resolve_climate_context,
+        repobrain_loader: Callable[[], Any | None] | None = None,
     ) -> None:
         self.registry = registry
         self.repository_workspace = repository_workspace
         self.intelligence_loader = intelligence_loader
         self.context_loader = context_loader
+        self.repobrain_loader = repobrain_loader or (lambda: None)
 
     @staticmethod
     def _workspace(repo: Repository) -> str:
@@ -329,6 +581,23 @@ class RepositoriesContextSource(_BaseSource):
                         available_ids.append(repo.id)
                 except Exception:
                     continue
+            repobrain = self.repobrain_loader()
+            if repobrain is not None and available_ids and hasattr(repobrain, "rank_repositories"):
+                try:
+                    ranker = getattr(repobrain, "rank_repositories_cross", None)
+                    ranked = (
+                        ranker(available_ids, request.query, refresh=True)
+                        if callable(ranker)
+                        else repobrain.rank_repositories(available_ids, request.query)
+                    )
+                    ranked_ids = [
+                        str(item.get("repository_id") or "") for item in list(ranked or [])
+                        if str(item.get("repository_id") or "") in available_ids
+                    ]
+                    available_ids = ranked_ids + [rid for rid in available_ids if rid not in ranked_ids]
+                except Exception:
+                    # Persistent orientation is optional; live retrieval remains authoritative.
+                    pass
             intelligence = self.intelligence_loader()
             if intelligence is not None and available_ids and hasattr(intelligence, "retrieve"):
                 knowledge = intelligence.retrieve(
@@ -350,6 +619,7 @@ class RepositoriesContextSource(_BaseSource):
                             "repository_id": _text(item.get("repository_id"), 100),
                             "path": _text(item.get("path"), 400),
                             "kind": "repository_intelligence",
+                            "evidence_origin": "live_repository_retrieval",
                         },
                     )
                     for item in items if isinstance(item, dict)
@@ -392,6 +662,7 @@ class RepositoriesContextSource(_BaseSource):
                 "repository_id": repo.id,
                 "paths": paths,
                 "kind": "context_resolver",
+                "evidence_origin": "live_repository_retrieval",
                 "_content": str(getattr(resolved, "packet", "") or ""),
             },
         )]
@@ -665,6 +936,7 @@ def build_default_context_resolver(
     notebook_store: Any = None,
     sql_workspace_store: Any = None,
     intelligence_loader: Callable[[], Any | None],
+    repobrain_loader: Callable[[], Any | None] = lambda: None,
     context_loader: Callable[..., Any] = resolve_climate_context,
     email_service: Any = None,
     calendar_service: Any = None,
@@ -692,8 +964,11 @@ def build_default_context_resolver(
     )
 
     sources = ClimateContextRegistry()
+    sources.register(RepoBrainContextSource(registry, repobrain_loader))
+    sources.register(CrossRepoBrainContextSource(registry, repobrain_loader))
     sources.register(RepositoriesContextSource(
-        registry, repository_workspace, intelligence_loader, context_loader
+        registry, repository_workspace, intelligence_loader, context_loader,
+        repobrain_loader=repobrain_loader,
     ))
     sources.register(NotebookContextSource(notebook_store, tasks=True))
     sources.register(NotebookContextSource(notebook_store, tasks=False))

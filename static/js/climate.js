@@ -2809,11 +2809,11 @@
     if (hasPendingProposal) {
       html += '<section class="climate-run-summary climate-assistant-proposal">';
       if (msg.proposal && msg.proposal.large_diff) {
-        html += '<div class="climate-run-warning" role="status">' + escapeHtml(msg.proposal.warning || "Large or destructive replacement detected. Review the diff before Keep All.") + "</div>";
+        html += '<div class="climate-run-warning" role="status">' + escapeHtml(msg.proposal.warning || "Large or destructive replacement detected. Review the diff before Accept.") + "</div>";
       }
       html += '<div class="climate-assistant-msg-actions">';
-      html += '<button type="button" class="climate-btn" data-chat-action="undo" data-msg-id="' + escapeHtml(msg.id) + '">Undo All</button>';
-      html += '<button type="button" class="climate-btn" data-chat-action="keep" data-msg-id="' + escapeHtml(msg.id) + '">Keep All</button>';
+      html += '<button type="button" class="climate-btn" data-chat-action="undo" data-msg-id="' + escapeHtml(msg.id) + '">Reject</button>';
+      html += '<button type="button" class="climate-btn" data-chat-action="keep" data-msg-id="' + escapeHtml(msg.id) + '">Accept</button>';
       html += '<button type="button" class="climate-btn climate-btn-primary" data-chat-action="review" data-msg-id="' + escapeHtml(msg.id) + '">Review Changes</button>';
       html += "</div></section>";
     } else if (isEditRun && files.length) {
@@ -3590,8 +3590,9 @@
   function renderProposalReview(proposal){
     switchPanel("git", { skipGitRender: true });
     var edits=proposal.edits||[],active=edits[0]||{},sides=diffSides(active.diff||"");
-    var warn = proposal.large_diff ? ('<div class="climate-run-warning" role="status">'+escapeHtml(proposal.warning||"Large or destructive replacement detected. Review the diff before Keep All.")+'</div>') : "";
-    bottomBody.innerHTML='<div class="climate-git-workspace"><aside class="climate-git-changes"><div class="climate-git-title">Proposed changes <span class="count">'+edits.length+'</span></div>'+edits.map(function(edit,index){return '<button class="climate-git-file '+(index===0?'is-active':'')+'" data-proposal-index="'+index+'"><span>◆</span><span>'+escapeHtml(edit.path)+'</span><b>M</b></button>';}).join('')+'</aside><section class="climate-git-review"><div class="climate-git-review-head"><span>'+escapeHtml(active.path||'Proposed edit')+'</span><select disabled><option>Unified</option></select></div>'+warn+'<div class="climate-diff-split"><div class="climate-diff-column is-before"><h4>Original</h4><pre>'+escapeHtml(sides.before||'No original content')+'</pre></div><div class="climate-diff-column is-after"><h4>Modified</h4><pre>'+escapeHtml(sides.after||'No modified content')+'</pre></div></div><div class="climate-git-actions"><button class="climate-btn" id="climate-reject-bottom">Undo All</button><button class="climate-btn climate-btn-primary" id="climate-accept-bottom">Keep All</button></div></section></div>';
+    var warn = proposal.large_diff ? ('<div class="climate-run-warning" role="status">'+escapeHtml(proposal.warning||"Large or destructive replacement detected. Review the diff before Accept.")+'</div>') : "";
+    var plan = (proposal.plan||[]).length ? '<div class="climate-run-note"><strong>Plan</strong><ol>'+(proposal.plan||[]).map(function(step){return '<li>'+escapeHtml(step)+'</li>';}).join('')+'</ol></div>' : '';
+    bottomBody.innerHTML='<div class="climate-git-workspace"><aside class="climate-git-changes"><div class="climate-git-title">Proposed changes <span class="count">'+edits.length+'</span></div>'+edits.map(function(edit,index){return '<button class="climate-git-file '+(index===0?'is-active':'')+'" data-proposal-index="'+index+'"><span>◆</span><span>'+escapeHtml(edit.path)+'</span><b>M</b></button>';}).join('')+'</aside><section class="climate-git-review"><div class="climate-git-review-head"><span>'+escapeHtml(active.path||'Proposed edit')+'</span><select disabled><option>Unified</option></select></div>'+plan+warn+'<div class="climate-diff-split"><div class="climate-diff-column is-before"><h4>Original</h4><pre>'+escapeHtml(sides.before||'No original content')+'</pre></div><div class="climate-diff-column is-after"><h4>Modified</h4><pre>'+escapeHtml(sides.after||'No modified content')+'</pre></div></div><div class="climate-git-actions"><button class="climate-btn" id="climate-reject-bottom">Reject</button><button class="climate-btn climate-btn-primary" id="climate-accept-bottom">Accept</button></div></section></div>';
     bottomBody.querySelectorAll("[data-proposal-index]").forEach(function(button){button.addEventListener("click",function(){var edit=edits[parseInt(button.getAttribute("data-proposal-index"),10)];var split=diffSides(edit.diff||"");bottomBody.querySelectorAll(".climate-git-file").forEach(function(row){row.classList.toggle("is-active",row===button);});bottomBody.querySelector(".climate-git-review-head span").textContent=edit.path;bottomBody.querySelector(".is-before pre").textContent=split.before;bottomBody.querySelector(".is-after pre").textContent=split.after;});});
     document.getElementById("climate-reject-bottom").addEventListener("click",function(){proposalAction("reject");});document.getElementById("climate-accept-bottom").addEventListener("click",function(){proposalAction("accept");});savePrefs();
   }

@@ -666,6 +666,103 @@ def register_agent_center_routes(app: Flask) -> None:
         )
         return jsonify({"ok": result.get("status") == "current", "status": result})
 
+    @app.get("/api/repositories/<repo_id>/repobrain")
+    def api_repobrain(repo_id: str):
+        try:
+            snapshot = _svc().repobrain.get_snapshot(
+                repo_id, refresh=request.args.get("refresh") == "1"
+            )
+            return jsonify({
+                "ok": snapshot is not None,
+                "snapshot": snapshot,
+                "history": _svc().repobrain.history(repo_id),
+            })
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 404
+
+    @app.post("/api/repositories/<repo_id>/repobrain/refresh")
+    @require_owner
+    def api_repobrain_refresh(repo_id: str):
+        try:
+            result = _svc().repobrain.build(repo_id)
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 404
+        _audit(
+            "REPOBRAIN_REFRESH",
+            detail={
+                "repository_id": repo_id,
+                "snapshot_id": result.get("id"),
+                "version": result.get("version"),
+                "reused": bool(result.get("reused")),
+                "refresh": result.get("refresh") or {},
+            },
+        )
+        return jsonify({"ok": True, "snapshot": result})
+
+    @app.post("/api/repositories/<repo_id>/repobrain/rebuild")
+    @require_owner
+    def api_repobrain_rebuild(repo_id: str):
+        try:
+            result = _svc().repobrain.full_rebuild(repo_id)
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 404
+        _audit(
+            "REPOBRAIN_FULL_REBUILD",
+            detail={
+                "repository_id": repo_id,
+                "snapshot_id": result.get("id"),
+                "version": result.get("version"),
+                "refresh": result.get("refresh") or {},
+            },
+        )
+        return jsonify({"ok": True, "snapshot": result})
+
+    @app.get("/api/repobrain/relationships")
+    def api_repobrain_relationships():
+        snapshot = _svc().repobrain.get_cross_snapshot(
+            refresh=request.args.get("refresh") == "1"
+        )
+        return jsonify({
+            "ok": snapshot is not None,
+            "snapshot": snapshot,
+            "history": _svc().repobrain.cross_history(),
+        })
+
+    @app.post("/api/repobrain/relationships/refresh")
+    @require_owner
+    def api_repobrain_relationships_refresh():
+        try:
+            result = _svc().repobrain.build_cross_snapshot()
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 409
+        _audit(
+            "REPOBRAIN_CROSS_REFRESH",
+            detail={
+                "snapshot_id": result.get("id"),
+                "version": result.get("version"),
+                "reused": bool(result.get("reused")),
+                "refresh": result.get("refresh") or {},
+            },
+        )
+        return jsonify({"ok": True, "snapshot": result})
+
+    @app.post("/api/repobrain/relationships/rebuild")
+    @require_owner
+    def api_repobrain_relationships_rebuild():
+        try:
+            result = _svc().repobrain.full_rebuild_cross_snapshot()
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 409
+        _audit(
+            "REPOBRAIN_CROSS_FULL_REBUILD",
+            detail={
+                "snapshot_id": result.get("id"),
+                "version": result.get("version"),
+                "refresh": result.get("refresh") or {},
+            },
+        )
+        return jsonify({"ok": True, "snapshot": result})
+
     @app.get("/api/agents/<agent_id>/models")
     @app.get("/api/assistants/<profile_id>/agents/<agent_id>/models")
     def api_agent_models(agent_id: str, profile_id: str = "okarun"):

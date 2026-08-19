@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-import hashlib
+import os
+import re
 import subprocess
+import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from hub.agent_center.repository_context import explicit_repository_id
@@ -39,16 +43,32 @@ from hub.climate.execution_mode import (
     provider_display_label,
 )
 from hub.climate.preflight import make_blocked_run, resolve_climate_context
+from hub.climate.proposal_store import CodingProposalStore
 from hub.climate.retrieval_policy import is_logs_history_query, is_noisy_artifact
 from hub.climate.token_efficiency import TokenEfficiencyService
+from hub.climate.test_execution import CodingTestExecutionService, CodingTestRunStore
 from hub.registry.models import Registry, Repository
 from hub.repository_workspace.ports import port_listeners
 from hub.repository_workspace.process_manager import ACTIVE_STATUSES
-from hub.repository_workspace.security import WorkspaceSecurityError
+from hub.repository_workspace.security import WorkspaceSecurityError, should_skip_dir
 from hub.repository_workspace.service import RepositoryWorkspaceService
 
 MAX_CLIMATE_PORTS = 80
 MAX_DEBUG_LOG_LINES = 200
+
+
+def _proposal_limit(name: str, default: int, minimum: int, maximum: int) -> int:
+    try:
+        value = int(str(os.getenv(name) or default))
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(maximum, value))
+
+
+MAX_PROPOSAL_FILES = _proposal_limit("CODING_AGENT_MAX_PROPOSAL_FILES", 6, 1, 20)
+MAX_PROPOSAL_PATCH_CHARS = _proposal_limit(
+    "CODING_AGENT_MAX_PATCH_CHARS", 60_000, 1_000, 500_000
+)
 
 
 def normalize_workspace(value: str) -> str:
@@ -67,11 +87,33 @@ def repo_workspace(repo: Repository) -> str:
 
 @dataclass
 class Proposal:
+    id: str
     run_id: str
     workspace: str
     repository_id: str
     state: str = "pending"
     edits: list[dict[str, Any]] = field(default_factory=list)
+    conversation_id: str = ""
+    requested_change: str = ""
+    plan: list[str] = field(default_factory=list)
+    affected_files: list[str] = field(default_factory=list)
+    inspected_files: list[str] = field(default_factory=list)
+    decision: str = ""
+    provider: str = ""
+    model: str = ""
+    execution_mode: str = ""
+    context_scope: str = REPOSITORY
+    evidence_provenance: dict[str, Any] = field(default_factory=dict)
+    rollback_snapshot: list[dict[str, Any]] = field(default_factory=list)
+    files_changed: list[dict[str, Any]] = field(default_factory=list)
+    resulting_state: list[dict[str, Any]] = field(default_factory=list)
+    error: str = ""
+    created_at: str = ""
+    updated_at: str = ""
+    decided_at: str | None = None
+    applied_at: str | None = None
+    parent_proposal_id: str = ""
+    source_test_run_id: str = ""
 
 
 class ClimateService:
@@ -93,6 +135,8 @@ class ClimateService:
         job_store: Any | None = None,
         audit_store: Any | None = None,
         dhis2_instance: str = "",
+        proposal_store: CodingProposalStore | None = None,
+        test_execution: CodingTestExecutionService | None = None,
     ) -> None:
         self.registry = registry
         self.repository_workspace = repository_workspace
@@ -101,6 +145,9 @@ class ClimateService:
         self._run_meta: dict[str, dict[str, Any]] = {}
         self._proposals: dict[str, Proposal] = {}
         self._local_runs: dict[str, dict[str, Any]] = {}
+        self.audit_store = audit_store
+        self.proposal_store = proposal_store or self._default_proposal_store()
+        self.test_execution = test_execution or self._default_test_execution()
         self.token_efficiency = TokenEfficiencyService()
         self.context_resolver = context_resolver or build_default_context_resolver(
             registry=registry,
@@ -108,6 +155,7 @@ class ClimateService:
             notebook_store=notebook_store,
             sql_workspace_store=sql_workspace_store,
             intelligence_loader=lambda: self._repository_intelligence(),
+            repobrain_loader=lambda: self._repobrain(),
             # Resolve through this module so existing tests and callers can
             # replace the established repository resolver seam.
             context_loader=lambda **kwargs: resolve_climate_context(**kwargs),
@@ -123,9 +171,26 @@ class ClimateService:
             dhis2_instance=dhis2_instance,
         )
 
+    def _default_proposal_store(self) -> CodingProposalStore | None:
+        agent_center = getattr(self.coding, "agent_center", None)
+        backing = getattr(agent_center, "store", None) if agent_center else None
+        db = getattr(backing, "db", None) if backing else None
+        return CodingProposalStore(db) if db is not None else None
+
+    def _default_test_execution(self) -> CodingTestExecutionService | None:
+        db = getattr(self.proposal_store, "db", None) if self.proposal_store else None
+        return CodingTestExecutionService(CodingTestRunStore(db)) if db is not None else None
+
     def _repository_intelligence(self) -> Any | None:
         agent_center = getattr(self.coding, "agent_center", None)
         return getattr(agent_center, "repository_intelligence", None) if agent_center else None
+
+    def _repobrain(self) -> Any | None:
+        agent_center = getattr(self.coding, "agent_center", None)
+        # Read only an actually configured service. Dynamic proxy/mock attributes
+        # must not make the optional source appear available.
+        values = getattr(agent_center, "__dict__", {}) if agent_center else {}
+        return values.get("repobrain") if isinstance(values, dict) else None
 
     def repositories(self, workspace: str) -> list[dict[str, Any]]:
         ws = normalize_workspace(workspace)
@@ -559,6 +624,8 @@ class ClimateService:
             sources_used=context_resolution.sources_used,
             evidence_references=context_resolution.evidence_references,
             context_source_failures=context_resolution.failures,
+            repository_evidence_origin=context_resolution.repository_evidence_origin,
+            repository_evidence_origins=context_resolution.repository_evidence_origins,
         )
         result["task_mode"] = "ask"
         result["provider_invoked"] = True
@@ -583,6 +650,8 @@ class ClimateService:
                 "sources_used": context_resolution.sources_used,
                 "evidence_references": context_resolution.evidence_references,
                 "context_source_failures": context_resolution.failures,
+                "repository_evidence_origin": context_resolution.repository_evidence_origin,
+                "repository_evidence_origins": context_resolution.repository_evidence_origins,
             },
         )
 
@@ -904,6 +973,8 @@ class ClimateService:
             sources_used=context_resolution.sources_used,
             evidence_references=context_resolution.evidence_references,
             context_source_failures=context_resolution.failures,
+            repository_evidence_origin=context_resolution.repository_evidence_origin,
+            repository_evidence_origins=context_resolution.repository_evidence_origins,
         )
         result["task_mode"] = "ask"
         result["provider_invoked"] = True
@@ -928,6 +999,8 @@ class ClimateService:
                 "sources_used": context_resolution.sources_used,
                 "evidence_references": context_resolution.evidence_references,
                 "context_source_failures": context_resolution.failures,
+                "repository_evidence_origin": context_resolution.repository_evidence_origin,
+                "repository_evidence_origins": context_resolution.repository_evidence_origins,
             },
         )
 
@@ -1145,12 +1218,51 @@ class ClimateService:
             logs = str(result.get("logs") or "")
             if pref_log and "[climate_context_resolver]" not in logs and "[climate_preflight]" not in logs:
                 result["logs"] = (pref_log + ("\n\n" if logs else "") + logs).strip()
-        if result["status"] == "completed" and run_id not in self._proposals:
+        proposal = self._load_proposal(run_id)
+        if result["status"] == "completed" and proposal is None:
             if task_mode == "edit" and meta.get("provider_invoked", True):
-                edits = self.coding.proposed_edits(raw_answer)
-                if edits and scope:
-                    self.stage_proposal(run_id, ws, scope[1], edits)
-        proposal = self._proposals.get(run_id)
+                change = (
+                    self.coding.proposed_change(raw_answer)
+                    if hasattr(self.coding, "proposed_change")
+                    else {"plan": [], "edits": self.coding.proposed_edits(raw_answer)}
+                )
+                edits = list(change.get("edits") or [])
+                context_scope = str(meta.get("context_scope") or "")
+                if edits and scope and context_scope == REPOSITORY:
+                    inspected_files = normalize_path_list(
+                        list(result.get("inspected_files") or [])
+                        + list(meta.get("retrieved_files") or [])
+                        + list(meta.get("selected_files") or [])
+                        + ([meta.get("current_file")] if meta.get("current_file") else [])
+                    )
+                    proposal = self.stage_proposal(
+                        run_id,
+                        ws,
+                        scope[1],
+                        edits,
+                        plan=list(change.get("plan") or []),
+                        requested_change=str(meta.get("user_prompt") or ""),
+                        conversation_id=str(meta.get("conversation_id") or result.get("conversation_id") or ""),
+                        inspected_files=inspected_files,
+                        provider=str(result.get("provider") or ""),
+                        model=str(result.get("model") or ""),
+                        execution_mode=str(meta.get("execution_mode") or result.get("execution_mode") or ""),
+                        context_scope=context_scope,
+                        evidence_provenance={
+                            "repobrain": "repobrain" in list(meta.get("repository_evidence_origins") or []),
+                            "live_repository": bool(meta.get("retrieved_files") or inspected_files),
+                            "repository_evidence_origin": meta.get("repository_evidence_origin") or "none",
+                            "repository_evidence_origins": list(meta.get("repository_evidence_origins") or []),
+                            "evidence_references": list(meta.get("evidence_references") or []),
+                        },
+                        parent_proposal_id=str(meta.get("parent_proposal_id") or ""),
+                        source_test_run_id=str(meta.get("source_test_run_id") or ""),
+                    )
+                    if proposal.source_test_run_id and self.test_execution is not None:
+                        self.test_execution.store.update(
+                            proposal.source_test_run_id,
+                            follow_up_proposal_id=proposal.id,
+                        )
         result["proposal"] = self._public_proposal(proposal) if proposal else None
         sources = list(meta.get("sources") or result.get("sources") or [])
         if not sources:
@@ -1405,20 +1517,60 @@ class ClimateService:
         return adapters.get("codex")
 
     def stage_proposal(
-        self, run_id: str, workspace: str, repository_id: str, edits: list[dict[str, str]]
+        self,
+        run_id: str,
+        workspace: str,
+        repository_id: str,
+        edits: list[dict[str, str]],
+        *,
+        plan: list[str] | None = None,
+        requested_change: str = "",
+        conversation_id: str = "",
+        inspected_files: list[str] | None = None,
+        provider: str = "",
+        model: str = "",
+        execution_mode: str = "",
+        context_scope: str = REPOSITORY,
+        evidence_provenance: dict[str, Any] | None = None,
+        parent_proposal_id: str = "",
+        source_test_run_id: str = "",
     ) -> Proposal:
         ws = normalize_workspace(workspace)
+        if context_scope != REPOSITORY or not repository_id:
+            raise ClimateCodingError(
+                "Edit proposals require a Specific Repository scope.", code="repository_scope_required"
+            )
+        if not edits:
+            raise ClimateCodingError("Proposal contains no file edits.", code="proposal_invalid")
+        if len(edits) > MAX_PROPOSAL_FILES:
+            raise ClimateCodingError(
+                f"Proposal exceeds the {MAX_PROPOSAL_FILES}-file limit.", code="proposal_too_large"
+            )
         repo = self.require_repo(ws, repository_id)
-        staged = []
+        staged: list[dict[str, Any]] = []
+        rollback: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        total_patch_chars = 0
         for item in edits:
-            path = str(item.get("path") or "")
+            path = self._validate_proposal_path(str(item.get("path") or ""))
             content = item.get("content")
             if not path or not isinstance(content, str):
-                continue
-            current = self.repository_workspace.preview(repo, path)
+                raise ClimateCodingError("Proposal contains an invalid file edit.", code="proposal_invalid")
+            if path.casefold() in seen:
+                raise ClimateCodingError(f"Proposal repeats file: {path}", code="proposal_invalid")
+            seen.add(path.casefold())
+            current = self.repository_workspace.edit_state(repo, path)
             before = str(current.get("content") or "")
             preview = self.repository_workspace.preview_save(repo, path, content)
             diff = str(preview.get("diff") or "")
+            if "diff truncated" in diff.lower():
+                raise ClimateCodingError("Proposal diff exceeds the review limit.", code="proposal_too_large")
+            total_patch_chars += len(diff)
+            if total_patch_chars > MAX_PROPOSAL_PATCH_CHARS:
+                raise ClimateCodingError(
+                    f"Proposal exceeds the {MAX_PROPOSAL_PATCH_CHARS}-character patch limit.",
+                    code="proposal_too_large",
+                )
             plus, minus = self._diff_line_counts(diff)
             before_lines = len(before.splitlines()) if before else 0
             after_lines = len(content.splitlines())
@@ -1433,30 +1585,83 @@ class ClimateService:
                 "content": content,
                 "diff": diff,
                 "changed": bool(preview.get("changed")),
-                "base_sha256": hashlib.sha256(before.encode("utf-8")).hexdigest(),
+                "base_sha256": str(current.get("sha256") or ""),
                 "line_plus": plus,
                 "line_minus": minus,
                 "large_diff": large_diff,
                 "requires_review": True,
             })
-        proposal = Proposal(run_id=run_id, workspace=ws, repository_id=repo.id, edits=staged)
+            rollback.append({
+                "path": path,
+                "content": before,
+                "sha256": str(current.get("sha256") or ""),
+                "bytes": int(current.get("size") or 0),
+                "modified_at": current.get("modified_at"),
+                "encoding": str(current.get("encoding") or "utf-8"),
+                "newline": str(current.get("newline") or "lf"),
+            })
+        staged = [item for item in staged if item.get("changed")]
+        rollback = [item for item in rollback if any(e["path"] == item["path"] for e in staged)]
+        if not staged:
+            raise ClimateCodingError("Proposal would not change any files.", code="proposal_invalid")
+        now = self._utc_now()
+        paths = [item["path"] for item in staged]
+        clean_plan = [str(item).strip()[:240] for item in list(plan or [])[:8] if str(item).strip()]
+        if not clean_plan:
+            clean_plan = [f"Update {path}." for path in paths[:3]]
+        proposal = Proposal(
+            id=str(uuid.uuid4()),
+            run_id=run_id,
+            workspace=ws,
+            repository_id=repo.id,
+            edits=staged,
+            conversation_id=conversation_id,
+            requested_change=requested_change[:8000],
+            plan=clean_plan,
+            affected_files=paths,
+            inspected_files=normalize_path_list(inspected_files or [], limit=32),
+            provider=provider,
+            model=model,
+            execution_mode=execution_mode,
+            context_scope=context_scope,
+            evidence_provenance=dict(evidence_provenance or {}),
+            rollback_snapshot=rollback,
+            created_at=now,
+            updated_at=now,
+            parent_proposal_id=parent_proposal_id,
+            source_test_run_id=source_test_run_id,
+        )
         self._proposals[run_id] = proposal
         self._run_scope.setdefault(run_id, (ws, repo.id))
+        self._persist_proposal(proposal)
+        self._audit_proposal("coding_proposal_created", proposal, ok=True)
         return proposal
 
     def accept(self, workspace: str, run_id: str) -> dict[str, Any]:
         proposal = self._require_proposal(workspace, run_id)
         if proposal.state != "pending":
             raise ClimateCodingError("Proposal is no longer pending", code="proposal_closed")
+        if proposal.context_scope != REPOSITORY or not proposal.repository_id:
+            raise ClimateCodingError(
+                "Edit proposals require a Specific Repository scope.", code="repository_scope_required"
+            )
         repo = self.require_repo(proposal.workspace, proposal.repository_id)
         for edit in proposal.edits:
-            current = self.repository_workspace.preview(repo, edit["path"])
-            digest = hashlib.sha256(str(current.get("content") or "").encode("utf-8")).hexdigest()
+            path = self._validate_proposal_path(str(edit.get("path") or ""))
+            current = self.repository_workspace.edit_state(repo, path)
+            digest = str(current.get("sha256") or "")
             if digest != edit["base_sha256"]:
+                proposal.state = "conflict"
+                proposal.decision = "conflict"
+                proposal.error = f"File changed since proposal: {edit['path']}"
+                proposal.decided_at = self._utc_now()
+                proposal.updated_at = proposal.decided_at
+                self._persist_proposal(proposal)
+                self._audit_proposal("coding_proposal_conflict", proposal, ok=False)
                 raise ClimateCodingError(
                     f"File changed since proposal: {edit['path']}", code="proposal_conflict"
                 )
-            self.repository_workspace.preview_save(repo, edit["path"], edit["content"])
+            self.repository_workspace.preview_save(repo, path, edit["content"])
         applied = []
         for edit in proposal.edits:
             if edit["changed"]:
@@ -1464,14 +1669,170 @@ class ClimateService:
                     repo, edit["path"], edit["content"], confirm=True
                 ))
         proposal.state = "accepted"
-        return {"ok": True, "state": proposal.state, "applied": applied}
+        proposal.decision = "accepted"
+        proposal.files_changed = [dict(item) for item in applied]
+        proposal.resulting_state = [
+            {
+                "path": edit["path"],
+                "sha256": self.repository_workspace.edit_state(repo, edit["path"])["sha256"],
+                "bytes": self.repository_workspace.edit_state(repo, edit["path"])["size"],
+            }
+            for edit in proposal.edits if edit.get("changed")
+        ]
+        proposal.applied_at = self._utc_now()
+        proposal.decided_at = proposal.applied_at
+        proposal.updated_at = proposal.applied_at
+        self._persist_proposal(proposal)
+        self._audit_proposal("coding_proposal_accepted", proposal, ok=True)
+        profiles = self.test_profiles(proposal.workspace, proposal.run_id)
+        return {
+            "ok": True,
+            "state": proposal.state,
+            "proposal_id": proposal.id,
+            "applied": applied,
+            "test_profiles": profiles,
+            "tests_available": bool(profiles),
+        }
 
     def reject(self, workspace: str, run_id: str) -> dict[str, Any]:
         proposal = self._require_proposal(workspace, run_id)
         if proposal.state != "pending":
             raise ClimateCodingError("Proposal is no longer pending", code="proposal_closed")
         proposal.state = "rejected"
+        proposal.decision = "rejected"
+        proposal.decided_at = self._utc_now()
+        proposal.updated_at = proposal.decided_at
+        self._persist_proposal(proposal)
+        self._audit_proposal("coding_proposal_rejected", proposal, ok=True)
         return {"ok": True, "state": proposal.state, "applied": []}
+
+    def test_profiles(self, workspace: str, run_id: str) -> list[dict[str, Any]]:
+        proposal = self._require_proposal(workspace, run_id)
+        if proposal.state != "accepted":
+            raise ClimateCodingError("Tests are available only after Accept.", code="proposal_not_applied")
+        if self.test_execution is None:
+            return []
+        repo = self.require_repo(proposal.workspace, proposal.repository_id)
+        root = self._repository_root(repo)
+        return [
+            profile.public()
+            for profile in self.test_execution.discover(
+                repo, root, proposal.affected_files, self.repository_workspace.profile_store
+            )
+        ]
+
+    def run_tests(self, workspace: str, run_id: str, profile_id: str) -> dict[str, Any]:
+        proposal = self._require_proposal(workspace, run_id)
+        if proposal.state != "accepted":
+            raise ClimateCodingError("Tests require an accepted proposal.", code="proposal_not_applied")
+        if self.test_execution is None:
+            raise ClimateCodingError("Test execution is unavailable.", code="unavailable")
+        repo = self.require_repo(proposal.workspace, proposal.repository_id)
+        record = self.test_execution.start(
+            proposal=proposal,
+            repo=repo,
+            root=self._repository_root(repo),
+            profile_id=profile_id,
+            profile_store=self.repository_workspace.profile_store,
+        )
+        self._audit_test("coding_tests_started", record, ok=True)
+        return record
+
+    def skip_tests(self, workspace: str, run_id: str) -> dict[str, Any]:
+        proposal = self._require_proposal(workspace, run_id)
+        if proposal.state != "accepted":
+            raise ClimateCodingError("Tests require an accepted proposal.", code="proposal_not_applied")
+        if self.test_execution is None:
+            raise ClimateCodingError("Test execution is unavailable.", code="unavailable")
+        record = self.test_execution.skip(proposal)
+        self._audit_test("coding_tests_skipped", record, ok=True)
+        return record
+
+    def test_result(self, workspace: str, test_run_id: str) -> dict[str, Any]:
+        ws = normalize_workspace(workspace)
+        if self.test_execution is None:
+            raise ClimateCodingError("Test execution is unavailable.", code="unavailable")
+        record = self.test_execution.store.get(test_run_id)
+        if record is None:
+            raise ClimateCodingError("Test run not found.", code="not_found")
+        if record.get("workspace") != ws:
+            raise ClimateCodingError("Test run belongs to another workspace.", code="workspace_isolation")
+        return record
+
+    def cancel_tests(self, workspace: str, test_run_id: str) -> dict[str, Any]:
+        record = self.test_result(workspace, test_run_id)
+        assert self.test_execution is not None
+        cancelled = self.test_execution.cancel(test_run_id)
+        self._audit_test("coding_tests_cancel_requested", cancelled, ok=True)
+        return cancelled
+
+    def follow_up_test_failure(self, workspace: str, test_run_id: str) -> dict[str, Any]:
+        record = self.test_result(workspace, test_run_id)
+        if record.get("status") != "failed":
+            raise ClimateCodingError("A follow-up proposal requires a failed test run.", code="test_not_failed")
+        if record.get("follow_up_run_id"):
+            raise ClimateCodingError("A follow-up run already exists.", code="follow_up_exists")
+        parent = self._require_proposal(workspace, str(record.get("proposal_run_id") or ""))
+        failure = "\n".join(filter(None, [str(record.get("stdout") or ""), str(record.get("stderr") or "")]))[:12_000]
+        failed = ", ".join(record.get("failed_tests") or []) or "See bounded output"
+        prompt = (
+            "Propose a minimal fix for the explicitly run tests that failed after the accepted change. "
+            "Do not apply changes or run commands. Verify exact current files and return a new review-gated proposal.\n\n"
+            f"Original request: {parent.requested_change[:2000]}\n"
+            f"Changed files: {', '.join(parent.affected_files)}\n"
+            f"Test profile: {record.get('profile_name')}\n"
+            f"Failed tests: {failed}\n"
+            f"Bounded test evidence:\n{failure}"
+        )
+        run = self.execute(
+            parent.workspace,
+            parent.repository_id,
+            prompt=prompt,
+            display_prompt="Propose a fix for the failed approved tests.",
+            provider=parent.provider,
+            model=parent.model,
+            task_mode="edit",
+            execution_mode=parent.execution_mode or CLIMATE_ASSISTED,
+            context_scope=REPOSITORY,
+            selected_files=list(parent.affected_files)[:MAX_PROPOSAL_FILES],
+            current_file=(parent.affected_files[0] if parent.affected_files else ""),
+            conversation_id=parent.conversation_id,
+            surface="workspace",
+        )
+        follow_run_id = str(run.get("id") or "")
+        if follow_run_id:
+            meta = self._run_meta.get(follow_run_id) or {}
+            meta["parent_proposal_id"] = parent.id
+            meta["source_test_run_id"] = test_run_id
+            self._run_meta[follow_run_id] = meta
+            assert self.test_execution is not None
+            self.test_execution.store.update(test_run_id, follow_up_run_id=follow_run_id)
+        self._audit_test("coding_test_follow_up_started", {**record, "follow_up_run_id": follow_run_id}, ok=True)
+        return run
+
+    def _repository_root(self, repo: Repository) -> Path:
+        root = self.repository_workspace.availability(repo).get("root")
+        if not root:
+            raise ClimateCodingError("Local repository unavailable", code="repository_unavailable")
+        return Path(str(root)).resolve()
+
+    def _audit_test(self, action: str, record: dict[str, Any], *, ok: bool) -> None:
+        if self.audit_store is None:
+            return
+        self.audit_store.append(
+            action=action,
+            target=str(record.get("id") or ""),
+            detail=f"{record.get('repository_id')}: {record.get('status')}",
+            ok=ok,
+            metadata={
+                "proposal_id": record.get("proposal_id"),
+                "profile_id": record.get("profile_id"),
+                "command": list(record.get("command") or []),
+                "exit_code": record.get("exit_code"),
+                "timed_out": bool(record.get("timed_out")),
+                "cancel_requested": bool(record.get("cancel_requested")),
+            },
+        )
 
     def ports(self, workspace: str, repository_id: str) -> dict[str, Any]:
         """Read-only local listener discovery for the selected CLIMATE repository."""
@@ -1714,6 +2075,8 @@ class ClimateService:
                 "sources_used": list(extra_meta.get("sources_used") or []),
                 "evidence_references": list(extra_meta.get("evidence_references") or []),
                 "context_source_failures": list(extra_meta.get("context_source_failures") or []),
+                "repository_evidence_origin": str(extra_meta.get("repository_evidence_origin") or "none"),
+                "repository_evidence_origins": list(extra_meta.get("repository_evidence_origins") or []),
             }
             if extra_meta.get("preflight") is not None:
                 meta["preflight"] = extra_meta.get("preflight")
@@ -1725,9 +2088,15 @@ class ClimateService:
             "sources_used",
             "evidence_references",
             "context_source_failures",
+            "repository_evidence_origin",
+            "repository_evidence_origins",
         ):
             if key in extra_meta:
-                result[key] = list(extra_meta.get(key) or [])
+                result[key] = (
+                    str(extra_meta.get(key) or "none")
+                    if key == "repository_evidence_origin"
+                    else list(extra_meta.get(key) or [])
+                )
         return self._apply_execution_identity(
             result,
             execution_mode=execution_mode,
@@ -1822,12 +2191,71 @@ class ClimateService:
 
     def _require_proposal(self, workspace: str, run_id: str) -> Proposal:
         ws = normalize_workspace(workspace)
-        proposal = self._proposals.get(run_id)
+        proposal = self._load_proposal(run_id)
         if proposal is None:
             raise ClimateCodingError("Proposal not found", code="not_found")
         if proposal.workspace != ws:
             raise ClimateCodingError("Proposal belongs to another workspace", code="workspace_isolation")
         return proposal
+
+    def _load_proposal(self, run_id: str) -> Proposal | None:
+        proposal = self._proposals.get(run_id)
+        if proposal is not None or self.proposal_store is None:
+            return proposal
+        record = self.proposal_store.get(run_id)
+        if record is None:
+            return None
+        fields = Proposal.__dataclass_fields__
+        proposal = Proposal(**{key: record.get(key) for key in fields if key in record})
+        self._proposals[run_id] = proposal
+        self._run_scope.setdefault(run_id, (proposal.workspace, proposal.repository_id))
+        return proposal
+
+    def _persist_proposal(self, proposal: Proposal) -> None:
+        if self.proposal_store is not None:
+            self.proposal_store.save(dict(vars(proposal)))
+
+    def _audit_proposal(self, action: str, proposal: Proposal, *, ok: bool) -> None:
+        if self.audit_store is None:
+            return
+        self.audit_store.append(
+            action=action,
+            target=proposal.run_id,
+            detail=f"{proposal.repository_id}: {proposal.state}",
+            ok=ok,
+            metadata={
+                "proposal_id": proposal.id,
+                "conversation_id": proposal.conversation_id,
+                "repository_id": proposal.repository_id,
+                "files": list(proposal.affected_files),
+                "provider": proposal.provider,
+                "model": proposal.model,
+                "execution_mode": proposal.execution_mode,
+                "context_scope": proposal.context_scope,
+            },
+        )
+
+    @staticmethod
+    def _validate_proposal_path(value: str) -> str:
+        raw = str(value or "").strip().replace("\\", "/")
+        if (
+            not raw
+            or raw.startswith("/")
+            or re.match(r"^[A-Za-z]:", raw)
+            or "\x00" in raw
+        ):
+            raise ClimateCodingError("Proposal path must be repository-relative.", code="path_invalid")
+        parts = PurePosixPath(raw).parts
+        if any(part in {"", ".", ".."} for part in parts):
+            raise ClimateCodingError("Proposal path traversal is not allowed.", code="path_invalid")
+        excluded = {"vendor", "generated", "target", "out"}
+        if any(should_skip_dir(part) or part.lower() in excluded for part in parts[:-1]):
+            raise ClimateCodingError("Proposal targets an excluded directory.", code="path_excluded")
+        return "/".join(parts)
+
+    @staticmethod
+    def _utc_now() -> str:
+        return datetime.now(timezone.utc).isoformat()
 
     @staticmethod
     def _diff_line_counts(diff: str) -> tuple[int, int]:
@@ -1850,20 +2278,25 @@ class ClimateService:
         total_minus = sum(int(edit.get("line_minus") or 0) for edit in edits)
         total_plus = sum(int(edit.get("line_plus") or 0) for edit in edits)
         return {
+            "id": proposal.id,
             "run_id": proposal.run_id,
             "workspace": proposal.workspace,
             "repository_id": proposal.repository_id,
             "state": proposal.state,
+            "plan": list(proposal.plan),
+            "affected_files": list(proposal.affected_files),
+            "inspected_files": list(proposal.inspected_files),
             "edits": edits,
             "large_diff": large,
             "requires_review": True,
             "line_plus": total_plus,
             "line_minus": total_minus,
             "warning": (
-                "Large or destructive replacement detected. Review the diff before Keep All."
+                "Large or destructive replacement detected. Review the diff before Accept."
                 if large
                 else ""
             ),
+            "evidence_provenance": dict(proposal.evidence_provenance),
         }
 
     def _branch(self, repo: Repository) -> str | None:

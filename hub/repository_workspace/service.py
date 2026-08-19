@@ -156,6 +156,10 @@ class RepositoryWorkspaceService:
         _, editor, _, _ = self._require(repo)
         return editor.preview_save(path, content)
 
+    def edit_state(self, repo: Repository, path: str) -> dict[str, Any]:
+        _, editor, _, _ = self._require(repo)
+        return editor.file_state(path)
+
     def save(self, repo: Repository, path: str, content: str, *, confirm: bool) -> dict[str, Any]:
         _, editor, _, _ = self._require(repo)
         return editor.save(path, content, confirm=confirm)

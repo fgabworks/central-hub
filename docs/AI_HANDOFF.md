@@ -4,7 +4,77 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**AiriX Context Expansion Phase 3 (2026-08-20)**
+**Coding Agent Phase 1 (2026-08-20)**
+
+Code Workspace now upgrades its existing proposal review seam into a durable controlled-edit
+workflow. AiriX/provider execution remains read-only and returns a short plan plus bounded
+file replacements. Only Specific Repository can stage proposals. The existing review panel
+shows affected diffs and explicit Accept/Reject actions; no Chat or Settings redesign was
+made. Direct uses the same approval gate and has no autonomous write path.
+
+`coding_edit_proposals` in Agent Center SQLite stores run/conversation/repository/request,
+plan, inspected and affected files, provider/exact model/mode, RepoBrain/live evidence
+provenance, bounded patch data, decision timestamps, changed/result hashes, and original
+rollback snapshots. Accept revalidates every raw disk hash and all repository/path/text/
+secret/excluded-directory and aggregate limit guards before the existing confirmed save.
+Stale files close the proposal as a conflict requiring regeneration. Reject makes no change.
+No commands, tests, commit/push, self-fixing loop, or automatic rollback were added.
+
+Tests: `tests/test_coding_agent_phase1.py` plus CLIMATE service, execution-mode, and Code
+Workspace regressions.
+
+Prior: **RepoBrain Phase 2 (2026-08-20)**
+
+The existing `RepoBrainService` now persists versioned cross-repository
+relationship snapshots over learned Phase 1 snapshots. Bounded inverted indexes
+match business concepts, symbols/module names, dependencies, environment/config
+references, and DHIS2-style identifiers without a full repo-pair Cartesian scan.
+Relationships store source/target repositories, files/symbols, type, concept,
+confidence, source references, and both Phase 1 snapshot/commit versions. Types
+include dependency, producer/consumer transformation, reporting-on-processing,
+implementation/mirroring, shared identifiers/config, and cross-repo test coverage.
+
+Unchanged inputs reuse the current cross snapshot. Incremental refresh updates
+stale Phase 1 snapshots, recomputes relationships touching changed repositories,
+and retains unrelated relationships. Explicit refresh/full rebuild APIs are
+`/api/repobrain/relationships/refresh` and `/rebuild`. All Repositories combines
+cross-relationship relevance with Phase 1 ranking before exact live retrieval.
+Specific Repository exposes related repositories as orientation only and keeps
+live evidence scoped to the selected repository. General may use existing
+high-level cross facts; Direct remains isolated. Persisted execution metadata
+lists whether single-repo RepoBrain, cross-repo RepoBrain, live retrieval, or a
+combination contributed evidence. No provider or UI architecture changed.
+
+Tests: `tests/test_repobrain_cross.py`, Phase 1 RepoBrain tests, context registry,
+execution metadata, and existing routing/Repository Intelligence regressions.
+
+Prior: **RepoBrain Phase 1 (2026-08-20)**
+
+CLIMATE now has persistent, provider-agnostic repository orientation through
+`RepoBrainService`, built on the existing Repository Intelligence index. Each
+connected local repository can have versioned SQLite snapshots containing its
+Git commit/ref, generated time, summary, architecture/modules, important files,
+entry points and symbols, dependencies/relationships, business-logic and
+data-flow topics, tests, recent changes, confidence, and source references.
+HEAD plus bounded working-tree state detects staleness. Unchanged repositories
+reuse their snapshot; normal refresh analyzes changed paths and reuses unaffected
+per-file knowledge; explicit full rebuild is available through the service and
+`/api/repositories/<id>/repobrain/rebuild`. Scanning is read-only and bounded,
+with VCS/vendor/build/generated, binary, oversized, and secret paths excluded.
+
+The existing context registry registers `repobrain` before live `repositories`.
+Specific Repository receives snapshot orientation plus live exact verification;
+All Repositories ranks repository IDs from snapshots before bounded live
+Repository Intelligence retrieval; General may use existing summaries.
+RepoBrain failures do not block the live source. Direct remains isolated. Run
+and conversation execution metadata reports repository evidence origin as
+snapshot, live, both, or none. Provider adapters, streaming, cancellation,
+exact-model selection, Chat, and Code Workspace UI are unchanged.
+
+Tests: `tests/test_repobrain.py` plus Context Expansion, execution-mode,
+Repository Intelligence, routing, and telemetry regressions.
+
+Prior: **AiriX Context Expansion Phase 3 (2026-08-20)**
 
 AiriX General (VANTA) can retrieve bounded, read-only DHIS2 / CLIMATE operational
 evidence through the existing context registry. Six sources are registered:

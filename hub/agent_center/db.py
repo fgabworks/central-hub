@@ -326,6 +326,129 @@ _MIGRATIONS: list[tuple[str, str]] = [
         );
         """,
     ),
+    (
+        "013_repobrain_snapshots",
+        """
+        CREATE TABLE IF NOT EXISTS repobrain_snapshots (
+            id TEXT PRIMARY KEY,
+            repository_id TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            repository_name TEXT NOT NULL DEFAULT '',
+            root_path TEXT NOT NULL DEFAULT '',
+            git_commit TEXT NOT NULL DEFAULT '',
+            git_ref TEXT NOT NULL DEFAULT '',
+            state_token TEXT NOT NULL DEFAULT '',
+            generated_at TEXT NOT NULL,
+            build_mode TEXT NOT NULL DEFAULT 'full',
+            changed_files_json TEXT NOT NULL DEFAULT '[]',
+            reused_snapshot_id TEXT NOT NULL DEFAULT '',
+            snapshot_json TEXT NOT NULL DEFAULT '{}',
+            source_references_json TEXT NOT NULL DEFAULT '[]',
+            created_at TEXT NOT NULL,
+            UNIQUE(repository_id, version)
+        );
+        CREATE INDEX IF NOT EXISTS idx_repobrain_snapshots_repo_version
+            ON repobrain_snapshots(repository_id, version DESC);
+        CREATE INDEX IF NOT EXISTS idx_repobrain_snapshots_commit
+            ON repobrain_snapshots(repository_id, git_commit);
+        """,
+    ),
+    (
+        "014_repobrain_cross_snapshots",
+        """
+        CREATE TABLE IF NOT EXISTS repobrain_cross_snapshots (
+            id TEXT PRIMARY KEY,
+            version INTEGER NOT NULL UNIQUE,
+            generated_at TEXT NOT NULL,
+            state_token TEXT NOT NULL DEFAULT '',
+            build_mode TEXT NOT NULL DEFAULT 'full',
+            affected_repositories_json TEXT NOT NULL DEFAULT '[]',
+            input_snapshots_json TEXT NOT NULL DEFAULT '{}',
+            relationships_json TEXT NOT NULL DEFAULT '[]',
+            repository_index_json TEXT NOT NULL DEFAULT '{}',
+            source_references_json TEXT NOT NULL DEFAULT '[]',
+            reused_snapshot_id TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_repobrain_cross_snapshots_version
+            ON repobrain_cross_snapshots(version DESC);
+        CREATE INDEX IF NOT EXISTS idx_repobrain_cross_snapshots_state
+            ON repobrain_cross_snapshots(state_token);
+        """,
+    ),
+    (
+        "015_coding_edit_proposals",
+        """
+        CREATE TABLE IF NOT EXISTS coding_edit_proposals (
+            id TEXT PRIMARY KEY,
+            run_id TEXT NOT NULL UNIQUE,
+            conversation_id TEXT NOT NULL DEFAULT '',
+            workspace TEXT NOT NULL,
+            repository_id TEXT NOT NULL,
+            requested_change TEXT NOT NULL DEFAULT '',
+            plan_json TEXT NOT NULL DEFAULT '[]',
+            affected_files_json TEXT NOT NULL DEFAULT '[]',
+            inspected_files_json TEXT NOT NULL DEFAULT '[]',
+            edits_json TEXT NOT NULL DEFAULT '[]',
+            state TEXT NOT NULL DEFAULT 'pending',
+            decision TEXT NOT NULL DEFAULT '',
+            provider TEXT NOT NULL DEFAULT '',
+            model TEXT NOT NULL DEFAULT '',
+            execution_mode TEXT NOT NULL DEFAULT '',
+            context_scope TEXT NOT NULL DEFAULT '',
+            evidence_provenance_json TEXT NOT NULL DEFAULT '{}',
+            rollback_snapshot_json TEXT NOT NULL DEFAULT '[]',
+            files_changed_json TEXT NOT NULL DEFAULT '[]',
+            resulting_state_json TEXT NOT NULL DEFAULT '[]',
+            error TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            decided_at TEXT,
+            applied_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_coding_edit_proposals_repo_created
+            ON coding_edit_proposals(repository_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_coding_edit_proposals_state
+            ON coding_edit_proposals(state, updated_at DESC);
+        """,
+    ),
+    (
+        "016_coding_test_runs",
+        """
+        ALTER TABLE coding_edit_proposals ADD COLUMN parent_proposal_id TEXT NOT NULL DEFAULT '';
+        ALTER TABLE coding_edit_proposals ADD COLUMN source_test_run_id TEXT NOT NULL DEFAULT '';
+
+        CREATE TABLE IF NOT EXISTS coding_test_runs (
+            id TEXT PRIMARY KEY,
+            proposal_id TEXT NOT NULL,
+            proposal_run_id TEXT NOT NULL,
+            workspace TEXT NOT NULL,
+            repository_id TEXT NOT NULL,
+            profile_id TEXT NOT NULL,
+            profile_name TEXT NOT NULL DEFAULT '',
+            command_json TEXT NOT NULL DEFAULT '[]',
+            cwd TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'pending',
+            started_at TEXT,
+            finished_at TEXT,
+            exit_code INTEGER,
+            stdout TEXT NOT NULL DEFAULT '',
+            stderr TEXT NOT NULL DEFAULT '',
+            timed_out INTEGER NOT NULL DEFAULT 0,
+            cancel_requested INTEGER NOT NULL DEFAULT 0,
+            failed_tests_json TEXT NOT NULL DEFAULT '[]',
+            changed_files_json TEXT NOT NULL DEFAULT '[]',
+            follow_up_run_id TEXT NOT NULL DEFAULT '',
+            follow_up_proposal_id TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_coding_test_runs_proposal
+            ON coding_test_runs(proposal_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_coding_test_runs_status
+            ON coding_test_runs(status, updated_at DESC);
+        """,
+    ),
 ]
 
 

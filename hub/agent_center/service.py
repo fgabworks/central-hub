@@ -33,6 +33,7 @@ from hub.agent_center.profiles import PROFILES, get_profile, normalize_tools
 from hub.agent_center.provider_settings import ProviderSettingsService
 from hub.agent_center.repository_context import agent_requires_repository
 from hub.agent_center.repository_intelligence import RepositoryIntelligenceService
+from hub.agent_center.repobrain import RepoBrainService
 from hub.agent_center.runner import AgentRunner
 from hub.agent_center.store import AgentCenterStore
 from hub.registry.models import Registry
@@ -86,6 +87,10 @@ def _merge_climate_execution(context: dict[str, Any], payload: dict[str, Any]) -
         "sources_used": [str(item)[:100] for item in list(extra.get("sources_used") or [])[:24]],
         "evidence_references": normalize_context_source_list(extra.get("evidence_references")),
         "context_source_failures": normalize_context_source_list(extra.get("context_source_failures")),
+        "repository_evidence_origin": str(extra.get("repository_evidence_origin") or "none")[:40],
+        "repository_evidence_origins": [
+            str(item)[:60] for item in list(extra.get("repository_evidence_origins") or [])[:8]
+        ],
     }
     return merged
 
@@ -138,6 +143,9 @@ class AgentCenterService:
         self.dhis2_reports = dhis2_reports
         self.data_explorer = data_explorer
         self.repository_intelligence = RepositoryIntelligenceService(self.store.db, registry)
+        self.repobrain = RepoBrainService(
+            self.store.db, registry, self.repository_intelligence
+        )
         self.runner = AgentRunner(self.store, audit=audit)
         self.openai_runner = OpenAIRunner(
             self.store,

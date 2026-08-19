@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import difflib
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -73,6 +74,19 @@ class RepositoryEditor:
             "modified_at": path.stat().st_mtime,
         }
 
+    def file_state(self, rel_path: str) -> dict[str, Any]:
+        """Return a bounded exact disk state for stale checks and rollback capture."""
+        data = self.read_for_edit(rel_path)
+        path = safe_join(self.root, rel_path)
+        raw = path.read_bytes()
+        newline = "crlf" if b"\r\n" in raw else "lf"
+        return {
+            **data,
+            "sha256": hashlib.sha256(raw).hexdigest(),
+            "newline": newline,
+            "encoding": "utf-8",
+        }
+
     def preview_save(self, rel_path: str, new_content: str) -> dict[str, Any]:
         path = safe_join(self.root, rel_path)
         rel = self._require_text_file(path)
@@ -101,7 +115,12 @@ class RepositoryEditor:
         if not preview["changed"]:
             return {"path": preview["path"], "saved": False, "detail": "No changes."}
         path = safe_join(self.root, rel_path)
-        path.write_text(new_content, encoding="utf-8", newline="\n")
+        original = path.read_bytes()
+        if b"\r\n" in original:
+            new_content = new_content.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\r\n")
+            path.write_bytes(new_content.encode("utf-8"))
+        else:
+            path.write_text(new_content, encoding="utf-8", newline="\n")
         return {
             "path": preview["path"],
             "saved": True,

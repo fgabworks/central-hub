@@ -188,6 +188,8 @@ def climate_execution_record(
     sources_used: Any = None,
     evidence_references: Any = None,
     context_source_failures: Any = None,
+    repository_evidence_origin: str = "none",
+    repository_evidence_origins: Any = None,
 ) -> dict[str, Any]:
     """Authoritative executed configuration persisted on the Agent Center run."""
     return {
@@ -208,4 +210,8 @@ def climate_execution_record(
         "sources_used": [str(item)[:100] for item in list(sources_used or [])[:24]],
         "evidence_references": normalize_context_source_list(evidence_references),
         "context_source_failures": normalize_context_source_list(context_source_failures),
+        "repository_evidence_origin": str(repository_evidence_origin or "none")[:40],
+        "repository_evidence_origins": [
+            str(item)[:60] for item in list(repository_evidence_origins or [])[:8]
+        ],
     }

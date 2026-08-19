@@ -194,6 +194,24 @@ authorizes writes or overrides runtime DB/DHIS2 evidence.
 Standard scan telemetry enforces deterministic execution, no provider/model invocation, and
 zero AI tokens. Cached repository hits may ground repository/code questions but are never
 accepted as usable authority for runtime database or DHIS2 value queries.
+RepoBrain uses the same read-only jail and exclusions, stores only bounded high-level
+snapshots/source paths in Agent Center SQLite, and never treats a snapshot as exact current
+evidence. Refresh/full-rebuild endpoints are owner-gated and audited as
+`REPOBRAIN_REFRESH` / `REPOBRAIN_FULL_REBUILD`.
+Cross-repository snapshots are derived only from those bounded snapshots, retain
+file/symbol references rather than file bodies, and are audited as
+`REPOBRAIN_CROSS_REFRESH` / `REPOBRAIN_CROSS_FULL_REBUILD`.
+
+Coding Agent Phase 1 provider runs are read-only. Edit output is staged as a bounded
+Specific-Repository proposal in Agent Center SQLite; ordinary ASK and open repository scopes
+cannot stage writes. Proposal paths must be relative and remain inside the configured root.
+Secret, binary/unsupported, vendor, generated, build, and VCS paths are rejected. Accept is
+the only write gate and revalidates the exact raw SHA-256 state of every affected file before
+calling the existing confirmed Repository Workspace save path. Rejection writes nothing;
+stale state is recorded as a conflict. Bounded original content and hashes are retained for
+manual/API-assisted recovery. Audit events are `coding_proposal_created`,
+`coding_proposal_accepted`, `coding_proposal_rejected`, and `coding_proposal_conflict`.
+The agent does not run arbitrary commands, tests, commits, pushes, or automatic rollback.
 
 - JSONL at `CENTRAL_HUB_AUDIT_LOG` plus job rows in SQLite `CENTRAL_HUB_DATABASE`.
 - Job actions: `SUBMIT_JOB`, `START_JOB`, `JOB_*`, `UPLOAD_INPUT`, `DOWNLOAD_RESULT`,
