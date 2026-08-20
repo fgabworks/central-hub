@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -65,8 +66,39 @@ class AgentAdapter(Protocol):
     ) -> list[str]: ...
 
 
-def which_executable(name: str) -> str | None:
-    return shutil.which((name or "").strip()) or None
+def _windows_user_path() -> str:
+    """User PATH from the registry. GUI/Flask processes often miss post-install updates."""
+    if os.name != "nt":
+        return ""
+    try:
+        import winreg
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Environment") as key:
+            value, _typ = winreg.QueryValueEx(key, "Path")
+    except OSError:
+        return ""
+    return os.path.expandvars(str(value or ""))
+
+
+def which_executable(name: str, *, extra_dirs: list[str] | tuple[str, ...] | None = None) -> str | None:
+    """Resolve a bare executable name. On Windows, also search the User PATH."""
+    command = (name or "").strip()
+    if not command:
+        return None
+    found = shutil.which(command)
+    if found:
+        return found
+    extras: list[str] = []
+    if os.name == "nt":
+        extras.append(_windows_user_path())
+    if extra_dirs:
+        extras.extend(str(item) for item in extra_dirs if str(item).strip())
+    extra_path = os.pathsep.join(part for part in extras if part.strip())
+    if not extra_path:
+        return None
+    process_path = os.environ.get("PATH") or ""
+    search = extra_path if not process_path else process_path + os.pathsep + extra_path
+    return shutil.which(command, path=search) or None
 
 
 def public_availability(av: AgentAvailability) -> dict[str, Any]:

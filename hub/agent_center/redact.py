@@ -49,14 +49,23 @@ def classify_provider_error(message: str | None) -> dict[str, Any]:
     lower = raw.lower()
     if not raw.strip():
         return {"code": "execution_error", "detail": "Execution failed"}
-    if (
-        "code-mode-host" in lower
-        or "installation incomplete" in lower
+    spawn_fail = (
+        "failed to spawn" in lower
+        or "os error 2" in lower
+        or "cannot find the file specified" in lower
+        or "enoent" in lower
+    )
+    host_missing = "code-mode-host" in lower or "installation incomplete" in lower
+    if host_missing or (
+        spawn_fail and ("codex" in lower or "code-mode-host" in lower or "failed to spawn" in lower)
     ):
-        return {
-            "code": "incomplete_cli",
-            "detail": "Codex installation incomplete: codex-code-mode-host.exe is missing",
-        }
+        # Keep the exact spawn/host text for Diagnostics; UI maps this to a friendly line.
+        detail = raw if (spawn_fail or "failed to spawn" in lower) else (
+            "Codex installation incomplete: codex-code-mode-host.exe is missing"
+        )
+        if "installation incomplete" in lower and not spawn_fail:
+            detail = "Codex installation incomplete: codex-code-mode-host.exe is missing"
+        return {"code": "incomplete_cli", "detail": detail}
     if (
         ("not found" in lower and ("codex" in lower or "executable" in lower))
         or "no such file" in lower

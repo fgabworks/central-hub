@@ -6,6 +6,7 @@ import json
 import re
 from typing import Any
 
+from hub.agent_center.redact import classify_provider_error
 from hub.agent_center.service import AgentCenterError, AgentCenterService
 from hub.climate.logic_format import (
     format_logic_explanation,
@@ -567,6 +568,12 @@ class ClimateCodingAdapter:
             run = self.agent_center.start_run(payload)
         except AgentCenterError as exc:
             raise ClimateCodingError(str(exc), code=exc.code) from exc
+        except Exception as exc:
+            classified = classify_provider_error(str(exc))
+            raise ClimateCodingError(
+                str(classified.get("detail") or exc),
+                code=str(classified.get("code") or "execution_error"),
+            ) from exc
         public = self._public_run(run, workspace=workspace, repository_id=scoped_repo_id or repository_id)
         public["task_mode"] = mode
         public["provider_invoked"] = True

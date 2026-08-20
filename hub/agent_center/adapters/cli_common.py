@@ -20,6 +20,18 @@ from hub.agent_center.redact import redact_text
 _SUBPROCESS_TEXT = {"text": True, "encoding": "utf-8", "errors": "replace"}
 
 
+def _windows_argv(argv: list[str]) -> list[str]:
+    """Run .cmd/.bat via comspec so CreateProcess can launch Windows shims."""
+    if os.name != "nt" or not argv:
+        return argv
+    first = str(argv[0] or "")
+    lowered = first.lower()
+    if lowered.endswith(".cmd") or lowered.endswith(".bat"):
+        comspec = os.environ.get("COMSPEC") or "cmd.exe"
+        return [comspec, "/d", "/c", *argv]
+    return argv
+
+
 def run_cli_capture(
     argv: list[str],
     *,
@@ -29,7 +41,7 @@ def run_cli_capture(
 ) -> subprocess.CompletedProcess[str]:
     """Run an allowlisted CLI command capturing stdout/stderr as UTF-8 text."""
     return subprocess.run(
-        argv,
+        _windows_argv(argv),
         shell=False,
         capture_output=True,
         timeout=timeout,

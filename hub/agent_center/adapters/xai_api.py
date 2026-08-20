@@ -52,14 +52,29 @@ class XaiApiAdapter:
         return _readonly_capabilities(self.descriptor.modes, api=True)
 
     def connection_status(self, *, force_refresh: bool = False) -> dict[str, Any]:
+        base = {
+            "installed": True,
+            "cli_commands": [],
+            "executable_path": "",
+            "available": False,
+        }
         if not self.settings.api_key:
-            return {"state": "authentication_required", "detail": "Set XAI_API_KEY on the server", "installed": True, "available": False}
+            return {
+                **base,
+                "state": "authentication_required",
+                "detail": "Set XAI_API_KEY on the server",
+            }
         try:
             models, _ = self.client.list_model_ids(force_refresh=force_refresh)
         except OpenAIClientError as exc:
             state = "authentication_required" if exc.code in {"auth", "unauthorized"} else "error"
-            return {"state": state, "detail": str(exc), "installed": True, "available": False}
-        return {"state": "connected", "detail": f"xAI API connected; {len(models)} text models", "installed": True, "available": True}
+            return {**base, "state": state, "detail": str(exc)}
+        return {
+            **base,
+            "state": "connected",
+            "detail": f"xAI API connected; {len(models)} text models",
+            "available": True,
+        }
 
     def test_connection(self) -> dict[str, Any]:
         status = self.connection_status(force_refresh=True)

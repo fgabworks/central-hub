@@ -34,6 +34,7 @@ from hub.agent_center.provider_settings import ProviderSettingsService
 from hub.agent_center.repository_context import agent_requires_repository
 from hub.agent_center.repository_intelligence import RepositoryIntelligenceService
 from hub.agent_center.repobrain import RepoBrainService
+from hub.agent_center.redact import classify_provider_error
 from hub.agent_center.runner import AgentRunner
 from hub.agent_center.store import AgentCenterStore
 from hub.registry.models import Registry
@@ -1254,16 +1255,28 @@ class AgentCenterService:
             if argv and argv[-1] == "-":
                 stdin_path = str(prompt_path)
 
-        self.runner.start(
-            run_id=run["id"],
-            argv=argv,
-            cwd=run_cwd,
-            timeout_seconds=float(payload.get("timeout_seconds") or self.timeout_seconds),
-            stdin_path=stdin_path,
-            jsonl=jsonl,
-            safety_repo=safety_repo,
-            session_reused=bool(provider_session_id),
-        )
+        try:
+            self.runner.start(
+                run_id=run["id"],
+                argv=argv,
+                cwd=run_cwd,
+                timeout_seconds=float(payload.get("timeout_seconds") or self.timeout_seconds),
+                stdin_path=stdin_path,
+                jsonl=jsonl,
+                safety_repo=safety_repo,
+                session_reused=bool(provider_session_id),
+            )
+        except AgentCenterError:
+            raise
+        except Exception as exc:
+            classified = classify_provider_error(str(exc))
+            self.store.update_run(
+                run["id"],
+                status="failed",
+                error=classified["detail"],
+                finished_at=run["created_at"],
+            )
+            raise AgentCenterError(classified["detail"], code=classified["code"]) from exc
         return self.store.get_run(run["id"]) or run
 
     def cancel_run(self, run_id: str, *, profile_id: str = "okarun") -> dict[str, Any]:

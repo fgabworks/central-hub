@@ -365,10 +365,9 @@ class CodexRedactionTests(unittest.TestCase):
             "The system cannot find the file specified. (os error 2)"
         )
         self.assertEqual(classified["code"], "incomplete_cli")
-        self.assertEqual(
-            classified["detail"],
-            "Codex installation incomplete: codex-code-mode-host.exe is missing",
-        )
+        self.assertIn("failed to spawn", classified["detail"])
+        self.assertIn("codex-code-mode-host.exe", classified["detail"])
+        self.assertIn("os error 2", classified["detail"])
 
 
 class CodexRunnerLifecycleTests(unittest.TestCase):

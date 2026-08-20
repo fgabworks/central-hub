@@ -471,6 +471,8 @@ class ClimateUiContractTests(unittest.TestCase):
             'data-surface="workspace"',
             'id="climate-assistant-context"',
             'climate-assistant-ctx',
+            'climate-assistant-ctx-k',
+            'climate-compose-stack',
             'Session total',
             'Provider breakdown',
             'climate-token-quota',
@@ -597,6 +599,9 @@ class ClimateUiContractTests(unittest.TestCase):
         self.assertLess(template.find('id="climate-prompt"'), template.find("climate-assistant-controls"))
         self.assertIn(".climate-assistant-footer", css)
         self.assertIn(".climate-compose-stack", css)
+        self.assertIn(".climate-assistant-ctx-k", css)
+        self.assertIn(".climate-assistant-controls.climate-chat-footer-controls", css)
+        self.assertIn("max-width: min(100%, 42em)", css)
         self.assertIn("climate-chat-footer-controls", template)
         self.assertIn("assistantRoleLabel", script)
         self.assertIn("identityLogoSrc", script)
@@ -615,6 +620,13 @@ class ClimateUiContractTests(unittest.TestCase):
         self.assertIn("renderAssistantDetails", msg_fn)
         self.assertIn("<summary>Sources</summary>", msg_fn)
         self.assertIn("friendlyError", script)
+        self.assertIn("Codex runtime could not start", script)
+        self.assertIn("content-type", script)
+        self.assertIn("html_response", script)
+        self.assertIn("climateFetchError", script)
+        self.assertIn("redactClientText", script)
+        self.assertIn("looksLikeRunnerFailure", msg_fn)
+        self.assertIn("climate-assistant-error", msg_fn)
         self.assertIn("retryFromMessage", script)
         self.assertIn("climate-assistant-retry", script)
         self.assertIn("Attached context", script)

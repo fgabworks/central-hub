@@ -633,28 +633,33 @@ body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:focus {
   text-overflow: ellipsis;
 }
 .climate-assistant-header .climate-token-pill {
-  max-width: 92px;
-  height: 20px;
-  padding: 0 6px;
-  border-color: var(--cl-border);
+  max-width: 76px;
+  height: 18px;
+  padding: 0 5px;
+  border-color: transparent;
   background: transparent;
   color: var(--cl-muted);
   font-size: 10px;
+  opacity: 0.55;
+  font-weight: 400;
 }
+.climate-assistant-header .climate-token-quota { display: none; }
 .climate-assistant-header #climate-token-label {
   font-size: 10px;
+  font-weight: 400;
 }
 .climate-assistant-actions {
   display: flex;
   align-items: center;
-  gap: 1px;
+  gap: 0;
   margin-left: auto;
   flex: 0 0 auto;
 }
-.climate-assistant-actions .climate-icon-btn {
-  width: 22px;
-  height: 22px;
-  min-width: 22px;
+.climate-assistant-actions .climate-icon-btn,
+.climate-assistant-actions .climate-assistant-close {
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
   color: var(--cl-muted);
   border-color: transparent;
   background: transparent;
@@ -694,6 +699,7 @@ body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:focus {
   flex-direction: column;
   flex: 0 0 auto;
   min-width: 0;
+  overflow-x: hidden;
   border-top: 1px solid var(--cl-border);
   background: var(--cl-bg);
 }
@@ -703,36 +709,40 @@ body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:focus {
   gap: 4px;
   min-width: 0;
   width: 100%;
-  padding: 4px 6px 5px;
-  flex-wrap: wrap;
-  border-top: 1px solid color-mix(in srgb, var(--cl-border) 70%, transparent);
-  background: color-mix(in srgb, var(--cl-panel-2, #1c2128) 40%, transparent);
+  padding: 3px 6px 4px;
+  flex-wrap: nowrap;
+  border-top: 1px solid color-mix(in srgb, var(--cl-border) 55%, transparent);
+  background: transparent;
 }
 .climate-assistant-controls .climate-chat-pill {
-  flex: 1 1 104px;
+  flex: 1 1 0;
   min-width: 0;
-  max-width: 100%;
-  height: 24px;
-  padding: 0 6px;
+  max-width: none;
+  height: 22px;
+  padding: 0 5px;
   border-radius: 6px;
   background: transparent;
-  border-color: color-mix(in srgb, var(--cl-border) 80%, transparent);
+  border-color: transparent;
 }
 .climate-assistant-controls .climate-chat-pill-mode {
   flex: 0 0 auto;
-  padding: 0 2px;
+  padding: 0 1px;
   border-color: transparent;
   background: transparent;
 }
 .climate-assistant-controls .climate-chat-pill-model {
-  flex: 1.2 1 120px;
+  flex: 1.15 1 0;
 }
 .climate-assistant-controls .climate-chat-pill-scope {
-  flex: 1.1 1 112px;
+  flex: 1.05 1 0;
+  min-width: 0;
+}
+.climate-assistant-controls .climate-chat-pill-scope .climate-dd {
+  max-width: 100%;
 }
 .climate-assistant-controls .climate-compose-tool {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   flex: 0 0 auto;
 }
 .climate-assistant-controls .climate-mode-switch {
@@ -740,54 +750,86 @@ body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:focus {
   border-radius: 6px;
 }
 .climate-assistant-controls .climate-mode-switch button {
-  padding: 0 7px;
+  padding: 0 6px;
   font-size: 10px;
-  line-height: 20px;
+  line-height: 18px;
   font-weight: 650;
 }
 .climate-assistant-controls .climate-chat-pill select,
 .climate-assistant-controls .climate-dd-trigger {
   font-size: 10px;
+  min-width: 0;
 }
 .climate-assistant-controls .climate-dd {
   min-width: 0;
   width: 100%;
   max-width: 100%;
 }
+.climate-assistant-controls .climate-dd-value,
+.climate-assistant-controls .climate-dd-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .climate-assistant-context {
   display: flex;
   align-items: center;
-  gap: 8px 10px;
+  gap: 6px;
   min-width: 0;
-  padding: 5px 10px 4px;
+  padding: 6px 12px 4px;
   color: var(--cl-text);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.2;
   flex-wrap: wrap;
-  border-bottom: 1px solid color-mix(in srgb, var(--cl-border) 70%, transparent);
-  background: color-mix(in srgb, var(--cl-panel-2, #1c2128) 55%, transparent);
+  border-bottom: 0;
+  background: transparent;
 }
 .climate-assistant-ctx {
   display: inline-flex;
   align-items: baseline;
   gap: 4px;
   min-width: 0;
+  max-width: 100%;
   overflow: hidden;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cl-panel-2, #1c2128) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cl-border) 70%, transparent);
 }
-.climate-assistant-ctx b {
+.climate-assistant-ctx-k {
   flex: 0 0 auto;
   color: var(--cl-muted);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
 }
+.climate-assistant-ctx-k::after { content: ":"; }
 .climate-assistant-ctx span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--cl-text);
 }
+.climate-assistant-ctx.is-muted {
+  color: var(--cl-muted);
+}
+.climate-assistant-ctx.is-muted span { color: var(--cl-muted); }
+.climate-assistant-ctx-add {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 2px 7px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--cl-muted);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+.climate-assistant-ctx-add:hover { color: var(--cl-text); }
 .climate-assistant-dot { flex: 0 0 auto; opacity: 0.55; }
 .climate-assistant-footer .climate-attached {
   margin: 0;
@@ -1308,18 +1350,23 @@ body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:focus {
 .climate-chat-title-row .climate-icon-btn { width: 26px; height: 26px; }
 
 /* keep prior topline rules from being fully overridden */
-.climate-chat-topline .climate-provider-state,
 .climate-assistant-topline .climate-provider-state {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 11px;
+  gap: 5px;
+  font-size: 10px;
   color: var(--cl-muted);
   margin-left: 0;
+  flex: 0 0 auto;
 }
-.climate-chat-topline .climate-provider-state.is-ok,
 .climate-assistant-topline .climate-provider-state.is-ok {
-  color: #d7f5df;
+  color: #9dceb0;
+}
+.climate-assistant-topline .climate-provider-state-text {
+  max-width: 84px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .climate-chat-topline .climate-provider-state.is-ok::before,
 .climate-assistant-topline .climate-provider-state.is-ok::before {
@@ -1329,6 +1376,13 @@ body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:focus {
   border-radius: 50%;
   background: var(--success, #22c55e);
   display: inline-block;
+}
+.climate-assistant-topline .climate-provider-state {
+  gap: 5px;
+  font-size: 10px;
+}
+.climate-assistant-topline .climate-provider-state.is-ok {
+  color: #9dceb0;
 }
 .climate-chat-close,
 .climate-assistant-close { min-width: 22px; height: 22px; }
@@ -1417,7 +1471,7 @@ body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:focus {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  padding: 12px 12px 8px;
+  padding: 14px 16px 18px;
   white-space: normal;
   word-break: break-word;
 }
@@ -1444,9 +1498,10 @@ body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:focus {
 .climate-assistant-msg {
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr);
-  gap: 4px 8px;
-  margin: 0 0 14px;
-  padding: 0;
+  gap: 4px 10px;
+  margin: 0 0 16px;
+  padding: 0 4px 0 0;
+  max-width: min(100%, 42em);
   border-left: 0;
   border-radius: 0;
   background: transparent;
@@ -1534,12 +1589,16 @@ body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:focus {
   0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
   40% { opacity: 1; transform: translateY(-1px); }
 }
-.climate-assistant-body { grid-column: 2; min-width: 0; color: var(--cl-text); font-size: 12.5px; line-height: 1.5; }
+.climate-assistant-body { grid-column: 2; min-width: 0; max-width: 100%; color: var(--cl-text); font-size: 13px; line-height: 1.55; }
 .climate-assistant-msg.is-user .climate-assistant-body { color: #e8eaed; }
-.climate-assistant-msg.is-error .climate-assistant-body { color: #f0aaa6; }
-.climate-assistant-text { min-width: 0; }
+.climate-assistant-msg.is-error .climate-assistant-body { color: var(--cl-text); }
+.climate-assistant-text { min-width: 0; max-width: 100%; }
 .climate-assistant-text.climate-md p { margin: 0 0 0.55em; }
 .climate-assistant-text.climate-md p:last-child { margin-bottom: 0; }
+.climate-assistant-text.climate-md pre {
+  max-width: 100%;
+  overflow-x: auto;
+}
 .climate-assistant-status-pill {
   display: inline-flex;
   align-items: center;
@@ -1620,16 +1679,23 @@ body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:focus {
 }
 .climate-assistant-error {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 8px;
-  margin: 2px 0 4px;
+  margin: 6px 0 8px;
+  padding: 9px 11px;
+  max-width: 100%;
+  border: 1px solid color-mix(in srgb, #ef4444 28%, var(--cl-border));
+  border-radius: 8px;
+  background: color-mix(in srgb, #ef4444 9%, var(--cl-panel-2, #1c2128));
 }
 .climate-assistant-error p {
   margin: 0;
-  color: #f0aaa6;
-  font-size: 12.5px;
-  line-height: 1.4;
+  color: #f0b4b1;
+  font-size: 13px;
+  line-height: 1.45;
+  font-family: var(--cl-font-ui, inherit);
+  white-space: normal;
 }
 .climate-assistant-retry {
   min-height: 24px;
@@ -1856,9 +1922,6 @@ body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:focus {
   cursor: pointer;
   font-size: 13px;
 }
-.climate-assistant-composer .climate-send-fab {
-  background: var(--cl-accent, #3b82f6);
-}
 .climate-stop-btn {
   display: inline-flex;
   align-items: center;
@@ -1917,15 +1980,18 @@ body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:focus {
   position: relative;
 }
 .climate-assistant-composer {
-  background: var(--cl-bg);
-  padding: 0 10px 8px;
+  background: transparent;
+  padding: 0 10px 10px;
   border-top: 0;
 }
 .climate-compose-stack {
   min-width: 0;
-  border: 1px solid color-mix(in srgb, var(--cl-accent, #5b8def) 22%, var(--cl-border));
-  border-radius: 10px;
-  background: var(--cl-panel);
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--cl-accent, #5b8def) 18%, var(--cl-border));
+  border-radius: 12px;
+  background: color-mix(in srgb, #000 28%, var(--cl-bg, #0f141a));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 3%, transparent);
 }
 .climate-compose-box {
   position: relative;
@@ -1934,16 +2000,31 @@ body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:focus {
 }
 .climate-assistant-composer .climate-compose-box {
   border: 0;
-  border-radius: 10px 10px 0 0;
+  border-radius: 12px 12px 0 0;
   background: transparent;
-  padding: 6px 8px 5px;
+  padding: 8px 10px 4px;
 }
 .climate-assistant-composer .climate-chat-footer-controls {
   margin-top: 0;
 }
 .climate-assistant-composer textarea {
-  min-height: 40px;
+  min-height: 44px;
   max-height: 120px;
+}
+.climate-assistant-composer .climate-compose-toolbar {
+  align-items: center;
+  min-height: 28px;
+}
+.climate-assistant-composer .climate-send-fab {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  line-height: 1;
+  font-size: 12px;
+  background: var(--cl-accent, #3b82f6);
 }
 .climate-assistant-composer .climate-compose-tool {
   width: 24px;
@@ -1957,9 +2038,11 @@ body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:focus {
   font-weight: 700;
 }
 .climate-compose-hint-row {
-  margin-top: 6px;
+  margin: 0;
+  padding: 0 8px 6px;
   color: var(--cl-muted);
   font-size: 10px;
+  opacity: 0.8;
 }
 .climate-compose-box textarea {
   display: block;
@@ -2003,6 +2086,10 @@ body > .climate-dd-menu .climate-dd-option[data-unavailable="1"]:focus {
   margin-top: 8px;
   min-width: 0;
   flex-wrap: wrap;
+}
+.climate-assistant-controls.climate-chat-footer-controls {
+  flex-wrap: nowrap;
+  margin-top: 0;
 }
 .climate-chat-pill {
   display: inline-flex;

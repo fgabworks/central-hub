@@ -71,7 +71,11 @@ Scope: personal, local-first tool. Canonical agent rules: [AGENTS.md](AGENTS.md)
   - **AI Connections:** CLI login uses only each provider's browser/device flow. The Hub never
     accepts passwords, browser cookies, private sessions, or CLI tokens. Codex uses
     `codex login`, Claude Code uses `claude auth login`, and Cursor uses
-    `agent login`; their logout/status commands remain provider-owned.
+    `agent login`; their logout/status commands remain provider-owned. Cursor Agent is
+    resolved from PATH (including the Windows User PATH) then
+    `%LOCALAPPDATA%\cursor-agent` (`agent` / `cursor-agent` only — never the IDE `cursor`
+    binary). Status/version probes are read-only; account labels are redacted and tokens
+    are never stored. Grok/xAI stays an API-key provider and does not use the `agent` CLI.
     Gemini, OpenAI, Anthropic, and xAI API keys on this page reuse **Settings → AI Providers** storage
     (`data/ai_provider_secrets.env`); saved values are never returned. Storage is
     local/server-side, not encrypted at rest.

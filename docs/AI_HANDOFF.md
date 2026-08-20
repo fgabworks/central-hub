@@ -4,7 +4,45 @@ Read first: [AGENTS.md](../AGENTS.md) · [AI_REFERENCE.md](../AI_REFERENCE.md).
 
 ## Current milestone
 
-**Code Assistant bottom execution toolbar (2026-08-20)**
+**Code Workspace Codex JSON errors (2026-08-20)**
+
+Code Workspace AiriX and Direct Codex runs both posted `repository_id` in the
+JSON body to `/api/climate/<workspace>/repositories/<repo_id>/runs` and
+`/workspace/runs`. Flask then called `ClimateService.execute(workspace, repo_id, **payload)`,
+which raised `TypeError: got multiple values for argument 'repository_id'`.
+Flask returned its HTML 500 page; `jsonFetch()` parsed it as JSON and showed
+`Unexpected token '<'`. The routes now pop colliding keys, unexpected CLIMATE
+API exceptions return `{ok:false,error,code}` JSON, and the frontend inspects
+status/Content-Type before parsing. Codex spawn/host failures keep the exact
+technical error under Details → Diagnostics and show
+`Codex runtime could not start. Check the local Codex installation/runtime.`
+
+Tests: `tests/test_climate_api_errors.py`, Codex classify, CLIMATE UI contracts.
+
+Prior: **Cursor Agent CLI detection (2026-08-20)**
+
+AI Connections now treats `agent` and `cursor-agent` as the Cursor Agent CLI.
+Windows resolution uses process PATH, then the User PATH, then
+`%LOCALAPPDATA%\cursor-agent`. Authenticated `agent status` (`Logged in as …`)
+marks Cursor Agent Connected; missing login stays Authentication Required.
+The IDE `cursor` binary is rejected. Grok/xAI remains API-key only and never
+claims the Cursor CLI. Codex and Claude Code detection are unchanged.
+
+Tests: `tests/test_airix_coding_cli_connections.py`, Codex/Claude regressions.
+
+Prior: **Code Assistant panel polish (2026-08-20)**
+
+Code Workspace **AiriX · Code Assistant** unifies the composer and execution
+toolbar into one darker Cursor-style card. Context is compact chips
+(`Repo: name`, file, selection, attached), not loud uppercase strips. Provider,
+model, and repository labels truncate with tooltip titles. Conversation copy
+has more padding and a max-width. Runner/spawn failures show a short error card
+with Retry; raw text stays under Details/Diagnostics. Token count and Connected
+are quieter. Chat, persistence, and execution semantics are unchanged.
+
+Tests: `tests/test_climate.py` UI contract, Chat isolation.
+
+Prior: **Code Assistant bottom execution toolbar (2026-08-20)**
 
 Code Workspace **AiriX · Code Assistant** keeps a minimal top header (title,
 connected status, session/history/more/close) and moves AiriX/Direct, Provider,

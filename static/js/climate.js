@@ -77,11 +77,63 @@
   function endpoint(path) { return apiRoot + path; }
   function setStatus(text) { statusEl.textContent = text; }
   function escapeHtml(value) { return String(value == null ? "" : value).replace(/[&<>"']/g, function (c) { return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+  function redactClientText(text) {
+    return String(text || "")
+      .replace(/\bsk-[A-Za-z0-9_\-]{8,}\b/g, "[redacted]")
+      .replace(/\bAIza[0-9A-Za-z_\-]{20,}\b/g, "[redacted]")
+      .replace(/\bxai-[A-Za-z0-9_\-]{8,}\b/g, "[redacted]")
+      .replace(/\bBearer\s+[A-Za-z0-9\-._~+/]+=*/gi, "Bearer [redacted]");
+  }
+  function climateFetchError(message, extras) {
+    extras = extras || {};
+    var err = new Error(message || "Request failed");
+    err.friendly = extras.friendly || message || "The assistant could not complete this reply.";
+    err.diagnostics = extras.diagnostics || compactError(message);
+    err.code = extras.code || "";
+    err.status = extras.status || 0;
+    return err;
+  }
   function jsonFetch(url, options) {
     return fetch(url, options).then(function (response) {
-      return response.json().then(function (data) {
-        if (!response.ok || data.ok === false) throw new Error(data.error || "Request failed");
+      var ctype = String(response.headers.get("content-type") || "");
+      var path = String(url || "").split("?")[0];
+      var nonJsonError = function (body) {
+        var preview = redactClientText(String(body || "").replace(/\s+/g, " ").trim()).slice(0, 280);
+        var diag = "HTTP " + response.status + " " + path + " · " + (ctype || "unknown") + (preview ? (" · " + preview) : "");
+        return climateFetchError("The assistant could not complete this reply.", {
+          friendly: "The assistant could not complete this reply.",
+          diagnostics: diag,
+          code: /doctype|text\/html|<html/i.test(ctype + " " + preview) ? "html_response" : "non_json",
+          status: response.status
+        });
+      };
+      var parseJson = function (rawText) {
+        var data;
+        try {
+          data = JSON.parse(rawText);
+        } catch (_) {
+          throw nonJsonError(rawText);
+        }
+        if (!response.ok || data.ok === false) {
+          var detail = data.error || data.message || ("HTTP " + response.status);
+          throw climateFetchError(detail, {
+            friendly: friendlyError(detail),
+            diagnostics: compactError(detail),
+            code: data.code || "",
+            status: response.status
+          });
+        }
         return data;
+      };
+      if (/application\/json|\+json/i.test(ctype)) {
+        return response.text().then(parseJson);
+      }
+      return response.text().then(function (body) {
+        var trimmed = String(body || "").replace(/^\s+/, "");
+        if (trimmed.charAt(0) === "{" || trimmed.charAt(0) === "[") {
+          return parseJson(body);
+        }
+        throw nonJsonError(body);
       });
     });
   }
@@ -296,18 +348,28 @@
     if (scopeEl) {
       scopeEl.textContent = scopeLabel;
       scopeEl.title = scopeLabel;
+      if (scopeEl.parentElement) scopeEl.parentElement.title = "Repo: " + scopeLabel;
     }
     var nameEl = document.getElementById("climate-current-file-name");
     var fileText = (nameEl && nameEl.textContent) || "No file open";
     if (fileEl) {
       fileEl.textContent = fileText.indexOf("/") >= 0 ? fileText.split("/").pop() : fileText;
       fileEl.title = fileText;
+      if (fileEl.parentElement) fileEl.parentElement.title = fileText;
     }
     var selMeta = document.getElementById("climate-selection-meta");
-    if (selEl) selEl.textContent = (selMeta && selMeta.textContent) || "No selection";
+    var selText = (selMeta && selMeta.textContent) || "No selection";
+    if (selEl) {
+      selEl.textContent = selText;
+      selEl.title = selText;
+      if (selEl.parentElement) selEl.parentElement.title = selText;
+    }
     if (attEl) {
       var n = (state.attachedContext || []).length;
-      attEl.textContent = n ? (n + " attached") : "0 attached";
+      var attText = n ? (n + " attached") : "0 attached";
+      attEl.textContent = attText;
+      attEl.title = attText;
+      if (attEl.parentElement) attEl.parentElement.title = attText;
     }
   }
   function addAttached(item, opts) {
@@ -1161,6 +1223,11 @@
     };
     return map[id] || "";
   }
+  function looksLikeRunnerFailure(value) {
+    var text = String(value || "");
+    if (!text.trim()) return false;
+    return /failed to spawn|os error 2|cannot find the file specified|codex-code-mode-host\.exe/i.test(text);
+  }
   function compactError(value) {
     var line = String(value || "Request failed").trim().split(/\r?\n/)[0].trim();
     if (!line) line = "Request failed";
@@ -1172,6 +1239,12 @@
     if (/rate.?limit|429|quota|resource.?exhaust/.test(lower)) return "The provider is rate-limited. Retry in a moment.";
     if (/timeout|timed out|deadline/.test(lower)) return "The request timed out. You can retry.";
     if (/auth|api.?key|unauthor|401|403|credential|permission/.test(lower)) return "The provider could not authenticate. Check AI Providers.";
+    if (/failed to spawn|os error 2|cannot find the file specified|enoent|codex-code-mode-host|incomplete_cli|codex runtime/.test(lower)) {
+      return "Codex runtime could not start. Check the local Codex installation/runtime.";
+    }
+    if (/doctype|text\/html|<html|not valid json|unexpected token/.test(lower)) {
+      return "The assistant could not complete this reply.";
+    }
     if (/unavailable|503|502|connect|network|econn/.test(lower)) return "The provider is unavailable right now.";
     if (/model/.test(lower) && /not found|invalid|unknown|unsupported/.test(lower)) return "That exact model is not available. Choose another model and retry.";
     if (/cancel/.test(lower)) return "The request was stopped.";
@@ -1182,7 +1255,7 @@
     if (msg.status === "running") return String(msg.text || "").trim() ? "Streaming…" : "Thinking…";
     if (msg.status === "stopping") return "Stopping…";
     if (msg.status === "cancelled" || msg.stoppedByUser) return "Cancelled";
-    if (msg.status === "failed" || msg.role === "error") return "Failed";
+    if (msg.status === "failed" || msg.role === "error" || looksLikeRunnerFailure(msg.text)) return "Failed";
     if (msg.status === "completed") {
       var elapsed = msg.elapsedMs ? formatElapsed(msg.elapsedMs) : "";
       return elapsed ? ("Completed · " + elapsed) : "Completed";
@@ -2424,7 +2497,11 @@
     var menu = dd._menu || dd.querySelector(".climate-dd-menu");
     if (!menu || !valueEl) return;
     var selected = selectEl.options[selectEl.selectedIndex];
-    valueEl.textContent = selected ? selected.textContent : (selectEl.value || "Select");
+    var label = selected ? String(selected.textContent || "").trim() : String(selectEl.value || "Select");
+    valueEl.textContent = label;
+    dd.setAttribute("title", label);
+    var trigger = dd.querySelector(".climate-dd-trigger");
+    if (trigger) trigger.title = label;
     menu.innerHTML = "";
     Array.prototype.forEach.call(selectEl.options, function (opt) {
       var btn = document.createElement("button");
@@ -2738,7 +2815,7 @@
   }
   function renderChatMessage(msg) {
     var isUser = msg.role === "user";
-    var isError = msg.role === "error" || msg.status === "failed";
+    var isError = msg.role === "error" || msg.status === "failed" || looksLikeRunnerFailure(msg.text);
     var isRunning = !isUser && (msg.status === "running" || msg.status === "stopping");
     var isStopped = !isUser && (msg.status === "cancelled" || msg.stoppedByUser);
     var isComplete = !isUser && msg.status === "completed";
@@ -2757,9 +2834,14 @@
     if (isError) bodyText = "";
     if (isRunning && (!bodyText || bodyText === "Working…" || bodyText === "Working...")) bodyText = "";
     var body = "";
+    var errorSource = msg.errorMessage || msg.diagnostics || msg.text;
     if (isError) {
+      var errorSummary = msg.errorMessage || "";
+      if (!errorSummary || looksLikeRunnerFailure(errorSummary) || looksLikeRunnerFailure(errorSource)) {
+        errorSummary = friendlyError(errorSource || errorSummary);
+      }
       body = '<div class="climate-assistant-error"><p>' +
-        escapeHtml(msg.errorMessage || friendlyError(msg.diagnostics || msg.text) || "The assistant could not complete this reply.") +
+        escapeHtml(errorSummary || "The assistant could not complete this reply.") +
         "</p>";
       if (precedingUserPrompt(msg.id)) {
         body += '<button type="button" class="climate-btn climate-assistant-retry" data-retry-id="' + escapeHtml(msg.id) + '">Retry</button>';
@@ -2854,8 +2936,12 @@
       if (tr.status === 'failed' && !tr.follow_up_run_id && !tr.repeated_failure_detected && !chainBlocked) html += '<button type="button" class="climate-btn climate-btn-primary" data-test-action="follow-up" data-msg-id="'+escapeHtml(msg.id)+'">Propose Fix</button>';
       html += '</section>';
     }
-    if (!isUser && (isComplete || isStopped || isError || msg.execution_summary || msg.diagnostics || msg.tokenEfficiency)) {
-      html += renderAssistantDetails(msg, sourceItems);
+    if (!isUser && (isComplete || isStopped || isError || msg.execution_summary || msg.diagnostics || msg.tokenEfficiency || looksLikeRunnerFailure(msg.text))) {
+      var detailMsg = msg;
+      if (isError && looksLikeRunnerFailure(msg.text) && !(msg.diagnostics || "").trim()) {
+        detailMsg = Object.assign({}, msg, { diagnostics: msg.text });
+      }
+      html += renderAssistantDetails(detailMsg, sourceItems);
     }
     html += "</div></article>";
     return html;
@@ -3275,17 +3361,17 @@
       }
       pollRun();
     }).catch(function (error) {
-      var raw = error.message || "Request failed";
+      var raw = error.diagnostics || error.message || "Request failed";
       upsertAssistantMessage({
         status: "failed",
         text: "",
         role: "error",
-        diagnostics: compactError(raw),
-        errorMessage: friendlyError(raw),
+        diagnostics: String(raw).slice(0, 400),
+        errorMessage: error.friendly || friendlyError(error.message || raw),
         stopNotice: ""
       });
-      addProblem({ severity:"error", source:"runtime", path: (currentTab()||{}).path || "", line:1, message:error.message });
-      pushOutput("system", error.message);
+      addProblem({ severity:"error", source:"runtime", path: (currentTab()||{}).path || "", line:1, message:error.friendly || error.message });
+      pushOutput("system", error.friendly || error.message);
       finishRun();
     });
   }
@@ -3538,8 +3624,8 @@
         status: "failed",
         role: "error",
         text: "",
-        diagnostics: compactError(error.message || "Run failed"),
-        errorMessage: friendlyError(error.message || "Run failed")
+        diagnostics: String(error.diagnostics || error.message || "Run failed").slice(0, 400),
+        errorMessage: error.friendly || friendlyError(error.message || "Run failed")
       });
       finishRun();
     });

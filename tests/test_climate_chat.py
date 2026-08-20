@@ -849,6 +849,8 @@ class ClimateChatUiContractTests(unittest.TestCase):
         self.assertIn("img/providers/claude-code.svg", script)
         self.assertIn("img/providers/cursor-agent.svg", script)
         self.assertIn("friendlyError", script)
+        self.assertIn("content-type", script)
+        self.assertIn("Codex runtime could not start", script)
         self.assertIn("retryFromMessage", script)
         self.assertIn("ax-msg-retry", script)
         self.assertIn("Context Scope", script)

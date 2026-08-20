@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
 import unittest
@@ -13,10 +14,16 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from hub.agent_center.adapters.base import AgentDescriptor
+from hub.agent_center.adapters.base import AgentDescriptor, which_executable
 from hub.agent_center.adapters.claude_code import ClaudeCodeAdapter
 from hub.agent_center.adapters.codex import CodexAdapter
-from hub.agent_center.adapters.cursor_agent import CursorAgentAdapter
+from hub.agent_center.adapters.cursor_agent import (
+    CursorAgentAdapter,
+    discover_cursor_agent_executable,
+    looks_like_editor_cli,
+    parse_cursor_status,
+)
+from hub.agent_center.adapters.xai_api import XaiApiAdapter
 from hub.agent_center.connections import AgentConnectionRegistry
 from hub.agent_center.db import AgentCenterDb
 from hub.agent_center.routing import AgentRouterService
@@ -114,6 +121,7 @@ class AuthLifecycleTests(unittest.TestCase):
                 self.assertTrue(ok["authenticated"])
                 self.assertTrue(ok["available"])
                 self.assertEqual(ok["state"], "connected")
+                self.assertEqual(ok["account_label"], "user@example.com")
 
     def test_claude_auth_success_exposes_account(self) -> None:
         adapter = ClaudeCodeAdapter(_desc("claude-code", "claude_code", "claude"))
@@ -276,6 +284,161 @@ class CompactPanelContractTests(unittest.TestCase):
         self.assertEqual(rows[0]["primary_action"], "test")
         self.assertEqual(rows[1]["primary_action"], "connect")
         self.assertEqual(rows[2]["primary_action"], "install_help")
+
+
+def _write_cli(directory: Path, stem: str) -> Path:
+    if os.name == "nt":
+        path = directory / f"{stem}.cmd"
+        path.write_text("@echo off\n", encoding="utf-8")
+        return path
+    path = directory / stem
+    path.write_text("#!/bin/sh\n", encoding="utf-8")
+    path.chmod(0o755)
+    return path
+
+
+class CursorAgentDiscoveryTests(unittest.TestCase):
+    def test_agent_detected_from_path(self) -> None:
+        def fake_which(name, extra_dirs=None):
+            return "/usr/bin/agent" if name == "agent" else None
+
+        with patch("hub.agent_center.adapters.cursor_agent.which_executable", side_effect=fake_which):
+            with patch("hub.agent_center.adapters.cursor_agent.official_cursor_agent_dirs", return_value=[]):
+                self.assertEqual(discover_cursor_agent_executable("agent"), "/usr/bin/agent")
+
+    def test_cursor_agent_fallback_when_agent_missing(self) -> None:
+        def fake_which(name, extra_dirs=None):
+            return "/usr/bin/cursor-agent" if name == "cursor-agent" else None
+
+        with patch("hub.agent_center.adapters.cursor_agent.which_executable", side_effect=fake_which):
+            with patch("hub.agent_center.adapters.cursor_agent.official_cursor_agent_dirs", return_value=[]):
+                self.assertEqual(discover_cursor_agent_executable("agent"), "/usr/bin/cursor-agent")
+
+    def test_official_install_dir_when_path_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cli = _write_cli(root, "agent")
+            with patch("hub.agent_center.adapters.cursor_agent.which_executable", return_value=None):
+                with patch("hub.agent_center.adapters.cursor_agent.official_cursor_agent_dirs", return_value=[root]):
+                    found = discover_cursor_agent_executable("agent")
+            self.assertEqual(Path(found).resolve(), cli.resolve())
+
+    def test_cursor_agent_official_dir_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cli = _write_cli(root, "cursor-agent")
+            with patch("hub.agent_center.adapters.cursor_agent.which_executable", return_value=None):
+                with patch("hub.agent_center.adapters.cursor_agent.official_cursor_agent_dirs", return_value=[root]):
+                    found = discover_cursor_agent_executable("agent")
+            self.assertEqual(Path(found).resolve(), cli.resolve())
+
+    def test_rejects_ide_cursor_binary(self) -> None:
+        self.assertTrue(
+            looks_like_editor_cli(r"C:\Users\x\AppData\Local\Programs\cursor\resources\app\bin\cursor.exe")
+        )
+        self.assertTrue(looks_like_editor_cli("/usr/share/cursor/resources/app/bin/cursor"))
+        self.assertFalse(looks_like_editor_cli(r"C:\Users\x\AppData\Local\cursor-agent\agent.cmd"))
+        self.assertFalse(looks_like_editor_cli("/usr/bin/cursor-agent"))
+
+        def fake_which(name, extra_dirs=None):
+            if name == "agent":
+                return r"C:\Users\x\AppData\Local\Programs\cursor\resources\app\bin\cursor.exe"
+            if name == "cursor-agent":
+                return r"C:\Users\x\AppData\Local\cursor-agent\cursor-agent.cmd"
+            return None
+
+        with patch("hub.agent_center.adapters.cursor_agent.which_executable", side_effect=fake_which):
+            with patch("hub.agent_center.adapters.cursor_agent.official_cursor_agent_dirs", return_value=[]):
+                self.assertEqual(
+                    discover_cursor_agent_executable("agent"),
+                    r"C:\Users\x\AppData\Local\cursor-agent\cursor-agent.cmd",
+                )
+
+    def test_authenticated_and_unauthenticated_status(self) -> None:
+        ok = parse_cursor_status("✓ Logged in as user@example.com", returncode=0)
+        self.assertEqual(ok["state"], "connected")
+        self.assertEqual(ok["account_label"], "user@example.com")
+        self.assertNotIn("token", ok["detail"].lower())
+        logged = parse_cursor_status("Logged in as user@example.com", returncode=0)
+        self.assertEqual(logged["state"], "connected")
+        missing = parse_cursor_status("not logged in", returncode=1)
+        self.assertEqual(missing["state"], "authentication_required")
+        self.assertEqual(missing["account_label"], "")
+        required = parse_cursor_status("Authentication required. Run agent login.", returncode=1)
+        self.assertEqual(required["state"], "authentication_required")
+        tokenish = parse_cursor_status("Logged in as sk-secretvaluehere", returncode=0)
+        self.assertEqual(tokenish["account_label"], "")
+
+    def test_windows_user_path_resolution(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cli = _write_cli(root, "agent")
+            decoy = root / "decoy"
+            decoy.mkdir()
+            with patch.dict(os.environ, {"PATH": str(decoy)}, clear=False):
+                with patch("hub.agent_center.adapters.base._windows_user_path", return_value=str(root)):
+                    found = which_executable("agent")
+            self.assertIsNotNone(found)
+            self.assertEqual(Path(found).resolve(), cli.resolve())
+
+    def test_grok_does_not_claim_cursor_cli(self) -> None:
+        with patch.dict(os.environ, {"XAI_API_KEY": ""}, clear=False):
+            adapter = XaiApiAdapter()
+            with patch(
+                "hub.agent_center.adapters.base.which_executable",
+                return_value=r"C:\Users\x\AppData\Local\cursor-agent\agent.cmd",
+            ) as which:
+                status = adapter.connection_status()
+            which.assert_not_called()
+            self.assertEqual(status.get("cli_commands"), [])
+            self.assertEqual(status.get("executable_path"), "")
+            self.assertIn("XAI_API_KEY", status["detail"])
+            self.assertNotEqual(status["state"], "connected")
+
+            tmp = tempfile.TemporaryDirectory()
+            self.addCleanup(tmp.cleanup)
+            store = AgentCenterStore(AgentCenterDb(Path(tmp.name) / "agent.db"))
+
+            class _Cursor:
+                descriptor = _desc("cursor-agent", "cursor_agent", "agent")
+                authentication_method = "CLI"
+                credential_storage = "CLI"
+                credential_type = "cli"
+
+                def capabilities(self):
+                    return {"modes": ["ask"], "read_only": True}
+
+                def connection_status(self, *, force_refresh: bool = False):
+                    return {
+                        "state": "connected",
+                        "installed": True,
+                        "authenticated": True,
+                        "available": True,
+                        "detail": "ok",
+                        "executable_path": r"C:\Users\x\AppData\Local\cursor-agent\agent.cmd",
+                        "cli_commands": ["agent", "cursor-agent"],
+                        "account_label": "user@example.com",
+                        "version": "2026.08.11-e8db854",
+                    }
+
+                def resolve_executable(self):
+                    return r"C:\Users\x\AppData\Local\cursor-agent\agent.cmd"
+
+                def _cli_command_candidates(self):
+                    return ("agent", "cursor-agent")
+
+            registry = AgentConnectionRegistry([adapter, _Cursor()], store)
+            grok = registry.get("grok", refresh=True)
+            cursor = registry.get("cursor-agent", refresh=True)
+            self.assertEqual(grok["credential_type"], "api_key")
+            self.assertEqual(grok["method_label"], "API Key")
+            self.assertEqual(grok.get("cli_commands"), [])
+            self.assertEqual(grok.get("executable_path"), "")
+            self.assertNotIn("agent", grok.get("cli_commands") or [])
+            self.assertEqual(cursor["method_label"], "CLI")
+            self.assertIn("agent", cursor["cli_commands"])
+            self.assertEqual(cursor["state"], "connected")
+            self.assertIn("cursor-agent\\agent.cmd", cursor["executable_path"].replace("/", "\\"))
 
 
 if __name__ == "__main__":

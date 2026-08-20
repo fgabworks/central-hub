@@ -45,15 +45,64 @@
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
   }
+  function redactClientText(text) {
+    return String(text || "")
+      .replace(/\bsk-[A-Za-z0-9_\-]{8,}\b/g, "[redacted]")
+      .replace(/\bAIza[0-9A-Za-z_\-]{20,}\b/g, "[redacted]")
+      .replace(/\bxai-[A-Za-z0-9_\-]{8,}\b/g, "[redacted]")
+      .replace(/\bBearer\s+[A-Za-z0-9\-._~+/]+=*/gi, "Bearer [redacted]");
+  }
+  function climateFetchError(message, extras) {
+    extras = extras || {};
+    var err = new Error(message || "Request failed");
+    err.friendly = extras.friendly || message || "The assistant could not complete this reply.";
+    err.diagnostics = extras.diagnostics || compactError(message);
+    err.code = extras.code || "";
+    err.status = extras.status || 0;
+    return err;
+  }
   function jsonFetch(url, opts) {
     return fetch(url, opts).then(function (res) {
-      return res.json().then(function (data) {
+      var ctype = String(res.headers.get("content-type") || "");
+      var path = String(url || "").split("?")[0];
+      var nonJsonError = function (body) {
+        var preview = redactClientText(String(body || "").replace(/\s+/g, " ").trim()).slice(0, 280);
+        var diag = "HTTP " + res.status + " " + path + " · " + (ctype || "unknown") + (preview ? (" · " + preview) : "");
+        return climateFetchError("The assistant could not complete this reply.", {
+          friendly: "The assistant could not complete this reply.",
+          diagnostics: diag,
+          code: /doctype|text\/html|<html/i.test(ctype + " " + preview) ? "html_response" : "non_json",
+          status: res.status
+        });
+      };
+      var parseJson = function (rawText) {
+        var data;
+        try {
+          data = JSON.parse(rawText);
+        } catch (_) {
+          throw nonJsonError(rawText);
+        }
         if (!res.ok || data.ok === false) {
-          var err = new Error(data.error || res.statusText || "Request failed");
-          err.code = data.code || "";
+          var detail = data.error || data.message || res.statusText || "Request failed";
+          var err = climateFetchError(detail, {
+            friendly: friendlyError(detail),
+            diagnostics: compactError(detail),
+            code: data.code || "",
+            status: res.status
+          });
           throw err;
         }
         return data;
+      };
+      if (/application\/json|\+json/i.test(ctype)) {
+        return res.text().then(parseJson);
+      }
+      return res.text().then(function (body) {
+        var trimmed = String(body || "").replace(/^\s+/, "");
+        if (trimmed.charAt(0) === "{" || trimmed.charAt(0) === "[") {
+          return parseJson(body);
+        }
+        throw nonJsonError(body);
       });
     });
   }
@@ -431,6 +480,12 @@
     if (/rate.?limit|429|quota|resource.?exhaust/.test(lower)) return "The provider is rate-limited. Retry in a moment.";
     if (/timeout|timed out|deadline/.test(lower)) return "The request timed out. You can retry.";
     if (/auth|api.?key|unauthor|401|403|credential|permission/.test(lower)) return "The provider could not authenticate. Check AI Providers.";
+    if (/failed to spawn|os error 2|cannot find the file specified|enoent|codex-code-mode-host|incomplete_cli|codex runtime/.test(lower)) {
+      return "Codex runtime could not start. Check the local Codex installation/runtime.";
+    }
+    if (/doctype|text\/html|<html|not valid json|unexpected token/.test(lower)) {
+      return "The assistant could not complete this reply.";
+    }
     if (/unavailable|503|502|connect|network|econn/.test(lower)) return "The provider is unavailable right now.";
     if (/model/.test(lower) && /not found|invalid|unknown|unsupported/.test(lower)) return "That exact model is not available. Choose another model and retry.";
     if (/cancel/.test(lower)) return "The request was stopped.";
@@ -822,13 +877,13 @@
       setRunControls("idle");
       loadConversations(state.activeId);
     }).catch(function (err) {
-      var raw = err.message || "Run failed";
+      var raw = err.diagnostics || err.message || "Run failed";
       upsertAssistant({
         text: "",
         status: "failed",
         error: true,
-        diagnostics: compactError(raw),
-        errorMessage: friendlyError(raw),
+        diagnostics: String(raw).slice(0, 400),
+        errorMessage: err.friendly || friendlyError(err.message || raw),
         sealed: true
       });
       state.runActive = false;
@@ -901,13 +956,13 @@
       state.runId = run.id;
       pollRun();
     }).catch(function (err) {
-      var raw = err.message || "Request failed";
+      var raw = err.diagnostics || err.message || "Request failed";
       upsertAssistant({
         text: "",
         status: "failed",
         error: true,
-        diagnostics: compactError(raw),
-        errorMessage: friendlyError(raw),
+        diagnostics: String(raw).slice(0, 400),
+        errorMessage: err.friendly || friendlyError(err.message || raw),
         sealed: true
       });
       state.runActive = false;

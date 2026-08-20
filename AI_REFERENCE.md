@@ -1,6 +1,6 @@
 # AI_REFERENCE.md — Verified Current State
 
-Last verified: 2026-08-20 (Code Assistant bottom execution toolbar).
+Last verified: 2026-08-20 (Code Workspace Codex JSON errors).
 Canonical agent rules: [AGENTS.md](AGENTS.md). Handoff: [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md).
 
 ## Status
@@ -82,14 +82,18 @@ panel (not the standalone Chat shell). Scope defaults to the active explorer
 repository (Specific). General and All Repositories are opt-in and do not
 inherit VANTA. Files are never attached silently: Explorer **Add to Chat**,
 composer attach actions, and `@filename` create removable chips. The top header
-stays identity-only (title, connected status, session actions). Execution
-controls sit in a compact toolbar attached under the composer. A separate
-Repo / File / Sel / Attached strip sits just above the composer. Replies lead with the
+stays identity-only (title, quiet token count, compact connected status, session
+actions). Execution controls sit in one darker composer card under the prompt.
+A separate chip strip (`Repo: name`, file, selection, attached) sits just above
+the composer. Replies lead with the
 answer, `Completed · Ns`, one collapsed Sources fold (clickable file/line
 refs), and one collapsed Details fold (Token Efficiency nested). Attached
 context and Retrieved context are labeled separately when both exist. AiriX
 uses the uploaded icon-only avatar; Direct uses provider icons. Failed replies
 show a friendly line plus Retry. Composer placeholder is `Ask about your code...`.
+`/api/climate/*` coding runs return JSON `{ok,error,code}` on failure (never Flask HTML).
+`jsonFetch` inspects status and Content-Type before parsing. Codex spawn/host failures
+keep the technical error under Details → Diagnostics.
 Attached files are high-priority bounded context (not whole
 repositories). Specific-repository EDIT/ASK behavior is unchanged.
 
@@ -362,7 +366,7 @@ or the OpenAI Responses API with read-only function tools when enabled.
 | Workspace Console | Bottom panel under main content only (`left: var(--sidebar-w)`); bounded height; Ctrl+J; collapsed by default |
 | Activity Rail | Far-right icons for AI Assistant, Quick Notepad, Workspace Console (future utilities placeholders); reduces main width only |
 | App shell | Fixed sidebar 210–216px + `padding-left` on `.app-shell`; `.main-column` / `.content` `flex:1; min-width:0`; `.sidebar-scroll` for nav; restrained CSS atmosphere (`climate-sky`) on Dashboard/Settings/AI Connections/Chat; quiet/static on Code Workspace |
-| AI Connections | `/system/ai-connections`; CLIMATE provider cards with local logos, API Key/CLI method, Test Connection + Manage; Gemini/OpenAI/Anthropic/xAI keys reuse `data/ai_provider_secrets.env` (never returned, not encrypted); CLI auth unchanged; compact split AI Defaults for CLIMATE Chat (General) and Code Workspace (Coding) plus a one-row Provider Overrides (Auto) grid |
+| AI Connections | `/system/ai-connections`; CLIMATE provider cards with local logos, API Key/CLI method, Test Connection + Manage; Gemini/OpenAI/Anthropic/xAI keys reuse `data/ai_provider_secrets.env` (never returned, not encrypted); Cursor Agent CLI is `agent`/`cursor-agent` (PATH + Windows User PATH + `%LOCALAPPDATA%\cursor-agent`); Grok is API-key only; compact split AI Defaults for CLIMATE Chat (General) and Code Workspace (Coding) plus a one-row Provider Overrides (Auto) grid |
 | Settings shell | Compact shared layout (`settings-layout`, max 1080px): left nav, `settings-card` / `settings-form` / banners; live pages General, Branding, AI Providers; planned placeholders Appearance / Integrations / Security / Notifications / Advanced |
 | AI Provider Settings | `/settings/ai-providers`; Settings submenu + registry-driven cards for Gemini, Grok/xAI, OpenAI, Claude/Anthropic, Local Models (UI-ready); Add/Replace/Remove key + Test Connection; secrets in gitignored `data/ai_provider_secrets.env`; APIs return metadata only; CLI providers stay on AI Connections |
 | CLIMATE Branding | `/settings/branding`; two local files under `data/branding/` (`logo.*` app branding, `avatar.*` AiriX icon) plus display JSON (not base64); Wordmark / Full logo for sidebar/header with contain-fit only; AiriX avatar is a dedicated padded icon (`avatar_url`, default `climate-mark.png`, never the full logo); Replace/Remove per asset; live header + Chat + Code Assistant previews; Direct provider icons unchanged |
@@ -504,6 +508,9 @@ authenticated Codex default model only (`__provider_default__`, no discovery yet
 read-only JSONL `codex exec` runs at the approved repo cwd. Windows discovery prefers PATH,
 then `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin`, and requires sibling
 `codex-code-mode-host.exe` (incomplete `.sandbox-bin` is skipped).
+Cursor Agent CLI discovery prefers `agent` then `cursor-agent` on PATH
+(including Windows User PATH), then `%LOCALAPPDATA%\cursor-agent`; the IDE
+`cursor` binary is never used. Grok/xAI does not share that CLI.
 Non-conversation runs stay
 ephemeral; same-conversation VANTA runs use official explicit `codex exec resume <UUID>`
 continuation while retaining `--sandbox read-only`. Cursor uses

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ climate.context_label }} · CLIMATE{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/climate.css') }}?v=48">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/climate.css') }}?v=50">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/styles/github-dark.min.css">
 {% endblock %}
 {% block content %}
@@ -308,10 +308,20 @@
 
       <div class="climate-assistant-footer" id="climate-assistant-footer">
         <div class="climate-assistant-context" id="climate-assistant-context" aria-label="Coding context">
-          <span class="climate-assistant-ctx"><b>Repo</b> <span id="climate-assistant-context-scope">Repository</span></span>
-          <span class="climate-assistant-ctx"><b>File</b> <span id="climate-assistant-context-file">No file open</span></span>
-          <span class="climate-assistant-ctx"><b>Sel</b> <span id="climate-assistant-context-sel">No selection</span></span>
-          <span class="climate-assistant-ctx"><b>Attached</b> <span id="climate-assistant-context-attached">0 attached</span></span>
+          <span class="climate-assistant-ctx is-repo">
+            <span class="climate-assistant-ctx-k">Repo</span>
+            <span id="climate-assistant-context-scope">Repository</span>
+          </span>
+          <span class="climate-assistant-ctx" id="climate-assistant-context-file-chip">
+            <span id="climate-assistant-context-file">No file open</span>
+          </span>
+          <span class="climate-assistant-ctx is-muted" id="climate-assistant-context-sel-chip">
+            <span id="climate-assistant-context-sel">No selection</span>
+          </span>
+          <span class="climate-assistant-ctx is-muted" id="climate-assistant-context-attached-chip">
+            <span id="climate-assistant-context-attached">0 attached</span>
+          </span>
+          <button type="button" class="climate-assistant-ctx-add" id="climate-attached-add" title="Add file, folder, or code selection">+ Attach</button>
         </div>
         <div class="climate-attached" id="climate-attached" hidden>
           <div class="climate-attached-head">
@@ -320,9 +330,6 @@
           </div>
           <div class="climate-attached-chips" id="climate-attached-chips"></div>
         </div>
-        <button type="button" class="climate-attached-add" id="climate-attached-add">
-          <span aria-hidden="true">📎</span> Add file, folder, or code selection
-        </button>
       <div class="climate-assistant-composer" id="climate-chat-composer">
         <div class="climate-compose-stack">
         <div class="climate-compose-box">
@@ -370,8 +377,8 @@
           </div>
           <button type="button" class="climate-compose-tool" id="climate-model-refresh" title="Refresh models">↻</button>
         </div>
-        </div>
         <div class="climate-compose-hint-row">@ to reference files, / for commands</div>
+        </div>
         <div class="climate-context-popover" id="climate-context-panel" hidden>
           <div class="climate-field-label">CONTEXT SCOPE</div>
           <p class="climate-context-summary" id="climate-context-summary">Specific repository — only this repository is used.</p>
@@ -416,6 +423,6 @@
 <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
 <script src="{{ url_for('static', filename='js/wc_terminal.js') }}?v=climate-5"></script>
 <script src="{{ url_for('static', filename='js/climate_markdown.js') }}?v=3"></script>
-<script src="{{ url_for('static', filename='js/climate_select.js') }}?v=3"></script>
-<script src="{{ url_for('static', filename='js/climate.js') }}?v=40"></script>
+<script src="{{ url_for('static', filename='js/climate_select.js') }}?v=4"></script>
+<script src="{{ url_for('static', filename='js/climate.js') }}?v=43"></script>
 {% endblock %}

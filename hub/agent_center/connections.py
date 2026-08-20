@@ -429,22 +429,26 @@ class AgentConnectionRegistry:
         status["authentication_method"] = getattr(adapter, "authentication_method", "")
         status["credential_storage"] = getattr(adapter, "credential_storage", "Provider-managed")
         status["account_label"] = redact_text(str(status.get("account_label") or ""), limit=160)
-        exe_path = str(status.get("executable_path") or "")
-        if not exe_path and hasattr(adapter, "resolve_executable"):
-            try:
-                exe_path = str(adapter.resolve_executable() or "")
-            except Exception:  # noqa: BLE001
-                exe_path = ""
-        status["executable_path"] = redact_text(exe_path, limit=240)
-        commands = status.get("cli_commands")
-        if not commands and hasattr(adapter, "_cli_command_candidates"):
-            try:
-                commands = list(adapter._cli_command_candidates())
-            except Exception:  # noqa: BLE001
-                commands = []
-        if not commands and adapter.descriptor.executable:
-            commands = [adapter.descriptor.executable]
-        status["cli_commands"] = [str(c) for c in (commands or []) if str(c).strip()]
+        if credential_type_for(adapter) == "api_key":
+            status["executable_path"] = ""
+            status["cli_commands"] = []
+        else:
+            exe_path = str(status.get("executable_path") or "")
+            if not exe_path and hasattr(adapter, "resolve_executable"):
+                try:
+                    exe_path = str(adapter.resolve_executable() or "")
+                except Exception:  # noqa: BLE001
+                    exe_path = ""
+            status["executable_path"] = redact_text(exe_path, limit=240)
+            commands = status.get("cli_commands")
+            if not commands and hasattr(adapter, "_cli_command_candidates"):
+                try:
+                    commands = list(adapter._cli_command_candidates())
+                except Exception:  # noqa: BLE001
+                    commands = []
+            if not commands and adapter.descriptor.executable:
+                commands = [adapter.descriptor.executable]
+            status["cli_commands"] = [str(c) for c in (commands or []) if str(c).strip()]
         help_text = str(status.get("install_help") or "")
         if not help_text and hasattr(adapter, "_install_help"):
             try:

@@ -126,10 +126,14 @@
     if (!menu || !valueEl) return;
     var selected = selectEl.options[selectEl.selectedIndex];
     var selectedIcon = selected ? optionIcon(selected.getAttribute("data-icon")) : "";
+    var label = selected ? String(selected.textContent || "").trim() : String(selectEl.value || "Select");
     valueEl.innerHTML = selectedIcon + '<span class="climate-dd-label">' +
-      escapeHtml(selected ? selected.textContent : (selectEl.value || "Select")) + "</span>";
+      escapeHtml(label) + "</span>";
     valueEl.classList.toggle("is-placeholder", !selectEl.value);
     dd.classList.toggle("is-disabled", !!selectEl.disabled);
+    dd.setAttribute("title", label);
+    var trigger = dd.querySelector(".climate-dd-trigger");
+    if (trigger) trigger.title = label;
     dd.setAttribute("data-scope", selectEl.value || "general");
     if (selectEl.getAttribute("data-rich-menu")) {
       menu.classList.add("is-rich");

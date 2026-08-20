@@ -382,7 +382,7 @@ class AgentCenterTests(unittest.TestCase):
 
     def test_hub_simulator_and_cursor_not_editor(self):
         from hub.agent_center.adapters import build_adapters
-        from hub.agent_center.adapters.cursor_agent import CursorAgentAdapter
+        from hub.agent_center.adapters.cursor_agent import CursorAgentAdapter, looks_like_editor_cli
 
         adapters = {a.descriptor.id: a for a in build_adapters()}
         self.assertIn("hub-simulator", adapters)
@@ -392,7 +392,9 @@ class AgentCenterTests(unittest.TestCase):
 
         cursor = adapters["cursor-agent"]
         self.assertIsInstance(cursor, CursorAgentAdapter)
-        av = cursor.availability()
+        self.assertTrue(looks_like_editor_cli(r"C:\Users\x\AppData\Local\Programs\cursor\resources\app\bin\cursor.exe"))
+        with mock.patch.object(cursor, "resolve_executable", return_value=None):
+            av = cursor.availability()
         self.assertEqual(av.status, "unavailable")
         self.assertIn("IDE", av.detail)
 
